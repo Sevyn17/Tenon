@@ -96,9 +96,15 @@ type Hooks struct {
 // Factory 为会话构造 agent（模型、工具、存储、显示回调已配好）与新会话配置。
 type Factory func(id string) (*agent.Agent, *session.Config, error)
 
+// Store 宿主用到的存储能力：会话 + 输入队列。
+type Store interface {
+	store.SessionStore
+	store.InboxStore
+}
+
 // Host 进程内会话表。
 type Host struct {
-	DB     store.Store
+	DB     Store
 	New    Factory
 	Child  Factory // 子智能体会话的构造（可空 = New）；通常去掉委派工具以限制深度
 	Hooks  Hooks

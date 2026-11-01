@@ -43,12 +43,18 @@ type Hooks struct {
 	OnConfirm    func(callID, tool, reason string) // 挂起式确认开始（HumanRequested）
 }
 
+// PersistStore agent 用到的存储能力：会话日志 + 工具确认决定。
+type PersistStore interface {
+	store.SessionStore
+	store.ToolResultStore
+}
+
 // Agent 一个会话的运行体（非并发安全，单一调用方）。
 type Agent struct {
 	Core      *session.Core
 	Model     Model
 	Hooks     Hooks
-	Store     store.Store // nil = 不持久化
+	Store     PersistStore // nil = 不持久化
 	SessionID string
 
 	committed int              // 存储里已提交的 log_len（条件写期望值）
@@ -295,4 +301,3 @@ func History(c *session.Core) []session.Message {
 	}
 	return req.Messages
 }
-

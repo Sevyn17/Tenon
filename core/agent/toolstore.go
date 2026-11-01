@@ -10,8 +10,8 @@ import (
 	"ybase-kernel/core/toolhub"
 )
 
-// ToolStore 把 store.Store 包装成 toolhub.Store。
-type ToolStore struct{ DB store.Store }
+// ToolStore 把 store.ToolResultStore 包装成 toolhub.Store。
+type ToolStore struct{ DB store.ToolResultStore }
 
 // Lookup 读记录。
 func (s ToolStore) Lookup(ctx context.Context, sid, cid string) (toolhub.Record, bool, error) {
