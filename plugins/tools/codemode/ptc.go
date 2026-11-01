@@ -1,6 +1,6 @@
 // Package ptc 程序化工具调用（Programmatic Tool Calling）：run_code 工具在 JS 沙盒（goja）里执行模型写的程序，
 // 程序内的工具调用回到 tool-hub 调用栈（Guard / 幂等 / 产物 / 确认照常），子调用 id 为 `<父调用 id>#<n>`，
-// 结果只进工具结果存储，不进会话日志（kernel/docs/10 - 框架模块/04 - 工具管理器.md D5）。
+// 结果只进工具结果存储，不进会话日志（kernel/docs/90 - 归档/10 - 框架模块/04 - 工具管理器.md D5）。
 package codemode
 
 import (

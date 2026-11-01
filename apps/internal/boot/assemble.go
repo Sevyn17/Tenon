@@ -1,6 +1,6 @@
 package boot
 
-// 应用装配（原 apps/ybase/assemble.go，00 - 总体架构 第六节）：按 profile 装配插件，取出内核循环要用的服务。
+// 应用装配（原 apps/ybase/assemble.go，docs/90 - 归档/00 - 总体架构.md 第六节）：按 profile 装配插件，取出内核循环要用的服务。
 // CLI（apps/ybase）与桌面端（apps/desktop）共用。
 
 import (

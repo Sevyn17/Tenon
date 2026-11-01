@@ -138,6 +138,6 @@ type Run interface {
 |---|---|---|
 | 应用通过 `runtime.Builder` 拼装，接口偏内部 | `ybase.New` + 选项 | T1 |
 | 没有对外承诺的接口边界 | 本篇列出的接口加版本规则 | T1 定稿，T2 起执行 |
-| 界面已经走应用接口层 `core/appapi`（protocol 1，21 条命令，`App.Call` 分发；api-server 走 WebSocket JSON 帧，见 [10 - 框架模块/12](<../10 - 框架模块/12 - 应用接口层.md>)、[14](<../10 - 框架模块/14 - 网页服务.md>)）。但命令按会话 id + 文本设计（`session.send`），没有信封、地址、租户和用户 | appapi 是 7.4 协议的前身：T1 把 `appapi.App` 改成包在 `ybase.App` 外面的薄适配；T3 有了信封和地址后，命令改成 `Send(to, body)`、事件改用 7.5 的名字，protocol 升到 2 | T1 适配，T3 换协议 |
+| 界面已经走应用接口层 `core/appapi`（protocol 1，21 条命令，`App.Call` 分发；api-server 走 WebSocket JSON 帧，见 [10 - 框架模块/12](<../90 - 归档/10 - 框架模块/12 - 应用接口层.md>)、[14](<../90 - 归档/10 - 框架模块/14 - 网页服务.md>)）。但命令按会话 id + 文本设计（`session.send`），没有信封、地址、租户和用户 | appapi 是 7.4 协议的前身：T1 把 `appapi.App` 改成包在 `ybase.App` 外面的薄适配；T3 有了信封和地址后，命令改成 `Send(to, body)`、事件改用 7.5 的名字，protocol 升到 2 | T1 适配，T3 换协议 |
 | api-server 只有随机令牌 + Host/Origin 检查，只认本机 | `server.WithAuthenticator` 返回租户和用户 | T3（随 `WithTenant` / `WithUser` 一起做） |
 | appapi 错误码 `busy`、`not_idle`、`conflict`、`not_found` 等 | 7.3 的错误类型；appapi 码按类型映射 | T1 |

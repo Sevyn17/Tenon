@@ -16,7 +16,7 @@ import (
 	"ybase-kernel/core/toolhub"
 )
 
-// AGENTS.md 默认预算（docs/20 - 插件/01 - AGENTS.md 指令.md）。
+// AGENTS.md 默认预算（docs/90 - 归档/20 - 插件/01 - AGENTS.md 指令.md）。
 const (
 	AgentsMaxBytes = 64 << 10
 	AgentsMaxFile  = 32 << 10

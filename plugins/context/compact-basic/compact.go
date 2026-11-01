@@ -1,4 +1,4 @@
-// Package compact：压缩 basic（tasks 5.7，docs/20 - 插件/02 - 上下文压缩.md）。
+// Package compact：压缩 basic（tasks 5.7，docs/90 - 归档/20 - 插件/02 - 上下文压缩.md）。
 //
 // 机制：每次模型调用前估算请求 token，超过阈值就把较早的日志用侧调用总结成摘要，
 // 本步请求按"假设压缩"视图发出（BuildWithCompaction），摘要以 Core.Compact 暂存、步边界落条目。
@@ -17,7 +17,7 @@ import (
 	"ybase-kernel/core/session"
 )
 
-// 默认值（DSH dsh-compaction-basic / pi-mono 对照见 kernel/docs/20 - 插件/02 - 上下文压缩.md）。
+// 默认值（DSH dsh-compaction-basic / pi-mono 对照见 kernel/docs/90 - 归档/20 - 插件/02 - 上下文压缩.md）。
 const (
 	DefaultHeadroom  = 16384 // 阈值里给工具结果与下一步留的余量
 	DefaultKeepRatio = 0.16  // 保留最近 (W−O)×16% 的 token

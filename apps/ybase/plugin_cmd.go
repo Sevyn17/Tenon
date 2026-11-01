@@ -1,6 +1,6 @@
 package main
 
-// ybase plugin 子命令（插件包，见 docs/10 - 框架模块/15 - 插件包.md）：
+// ybase plugin 子命令（插件包，见 docs/90 - 归档/10 - 框架模块/15 - 插件包.md）：
 //
 //	ybase plugin list                 列出已加载的插件包（用户级、受信时的项目级）
 //	ybase plugin new <名字> [-project] 在 ~/.ybase/plugins/<名字>（或 <dir>/.ybase/plugins/<名字>）生成骨架

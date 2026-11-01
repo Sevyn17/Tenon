@@ -1,4 +1,4 @@
-// Package permission：权限 Guard（docs/20 - 插件/05 - 权限.md，30 - 计划与报告/06 - 工具权限设计方案.md，安全项）。
+// Package permission：权限 Guard（docs/90 - 归档/20 - 插件/05 - 权限.md，docs/90 - 归档/30 - 计划与报告/06 - 工具权限设计方案.md，安全项）。
 //
 // 档位就是配置文件（modes.go）：内置 read-only / ask / workspace（缺省）/ full，另可自定义。
 // 判定顺序：deny 规则 → ask 规则 → allow 规则（公共 + 档位 + 本会话）→ 档位 [tools] → 档位 [effects] → 询问。

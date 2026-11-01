@@ -9,7 +9,7 @@ import (
 	"ybase-kernel/core/store/sqlite"
 )
 
-// 错误码（docs/10 - 框架模块/12 - 应用接口层.md §五）。同版本内只增不改。
+// 错误码（docs/90 - 归档/10 - 框架模块/12 - 应用接口层.md §五）。同版本内只增不改。
 const (
 	CodeBadRequest   = "bad_request"  // 参数不合法
 	CodeNotFound     = "not_found"    // 会话 / 档位 / 工件不存在

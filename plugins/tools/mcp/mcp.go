@@ -1,6 +1,6 @@
 // Package mcp MCP 客户端：把外部 MCP 服务的工具注册为 toolhub 工具（动态来源，默认延迟显露）。
 //
-// 纯 Go 的 JSON-RPC 2.0；传输支持 stdio 与 Streamable HTTP。见 docs/20 - 插件/13 - MCP 客户端.md。
+// 纯 Go 的 JSON-RPC 2.0；传输支持 stdio 与 Streamable HTTP。见 docs/90 - 归档/20 - 插件/13 - MCP 客户端.md。
 package mcp
 
 import (

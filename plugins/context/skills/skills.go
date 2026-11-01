@@ -14,7 +14,7 @@ import (
 	"ybase-kernel/core/toolhub"
 )
 
-// 技能默认预算（docs/20 - 插件/03 - 技能.md）。
+// 技能默认预算（docs/90 - 归档/20 - 插件/03 - 技能.md）。
 const (
 	SkillNameMax       = 64
 	SkillDescMax       = 1024 // 规范上限，超出视为无效

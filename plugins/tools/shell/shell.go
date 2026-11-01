@@ -1,6 +1,6 @@
 package shell
 
-// 5.3：shell / job_output / job_kill（docs/20 - 插件/10 - 命令执行.md）。
+// 5.3：shell / job_output / job_kill（docs/90 - 归档/20 - 插件/10 - 命令执行.md）。
 // 每次调用新进程；超时或取消时杀整个进程树；后台 job 只存在于本进程内存。
 
 import (
@@ -279,7 +279,7 @@ func (s *Shell) denyHint(cx *toolhub.Cx, raw json.RawMessage, out string) string
 	}
 	hint := ""
 	if strings.Contains(strings.ToLower(out), "spawn eperm") {
-		// 写受限令牌下 node/libuv 的命名管道 stdio 打不开（已知限制，见 docs/20 - 插件/06 - 沙箱.md）
+		// 写受限令牌下 node/libuv 的命名管道 stdio 打不开（已知限制，见 docs/90 - 归档/20 - 插件/06 - 沙箱.md）
 		hint = "node 在沙箱内不能用管道启动子进程；"
 	}
 	return fmt.Sprintf("\n[可能被沙箱 %s 拒绝：%s如确需越出，用同一命令加 sandbox_permissions:%q 重试，需用户批准，仅本次有效]", mode, hint, next)

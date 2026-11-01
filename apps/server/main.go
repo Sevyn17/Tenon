@@ -1,6 +1,6 @@
 // ybase-server：YBase 网页服务。把 kernel/web 的共享前端（嵌入）和应用接口层（appapi）
 // 经 HTTP + WebSocket 提供给浏览器、IDE 等本机客户端。缺省只监听 127.0.0.1，启动时生成随机令牌。
-// 做成应用而非插件：appapi.App 在应用层装配（boot.BuildApp），插件拿不到 App；见 docs/10 - 框架模块/14 - 网页服务.md。
+// 做成应用而非插件：appapi.App 在应用层装配（boot.BuildApp），插件拿不到 App；见 docs/90 - 归档/10 - 框架模块/14 - 网页服务.md。
 package main
 
 import (

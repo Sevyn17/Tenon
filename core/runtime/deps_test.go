@@ -1,6 +1,6 @@
 package runtime
 
-// 依赖规则（00 - 总体架构 第六节）：内核包（core/）不得 import 插件包（plugins/）；插件之间不互相 import。
+// 依赖规则（docs/90 - 归档/00 - 总体架构.md 第六节）：内核包（core/）不得 import 插件包（plugins/）；插件之间不互相 import。
 // 应用（apps/）负责装配，可以 import 任何包。规则写成测试，防止以后退化。
 
 import (

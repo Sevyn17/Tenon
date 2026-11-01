@@ -1,4 +1,4 @@
-// Package sandbox：子进程 OS 级沙箱（docs/20 - 插件/06 - 沙箱.md，安全项）。
+// Package sandbox：子进程 OS 级沙箱（docs/90 - 归档/20 - 插件/06 - 沙箱.md，安全项）。
 //
 // 机制：Apply 在进程启动前把 exec.Cmd 放进给定模式的沙箱；无法强制执行时返回
 // ErrUnavailable，调用方必须拒绝执行（不降级）。

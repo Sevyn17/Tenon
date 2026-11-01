@@ -1,6 +1,6 @@
 package fs
 
-// 5.2：read_file（行范围）/ grep / glob。纯 Go，不依赖 rg / fd（docs/20 - 插件/09 - 搜索与读取.md）。
+// 5.2：read_file（行范围）/ grep / glob。纯 Go，不依赖 rg / fd（docs/90 - 归档/20 - 插件/09 - 搜索与读取.md）。
 
 import (
 	"bufio"

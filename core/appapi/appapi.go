@@ -1,4 +1,4 @@
-// Package appapi 应用接口层（docs/10 - 框架模块/12 - 应用接口层.md）。
+// Package appapi 应用接口层（docs/90 - 归档/10 - 框架模块/12 - 应用接口层.md）。
 //
 // CLI、桌面端（Wails）、api-server 都只调这一层：命令是 App 的方法（进程内直接调），
 // 也可经 Call(cmd, args JSON) 统一分发；事件经 Events（易失）与 Follow（可靠，回放 + 实时）取得。
@@ -190,7 +190,7 @@ func (a *App) PluginsList(_ context.Context, _ NoArgs) ([]PluginInfo, error) {
 	return out, nil
 }
 
-// PackageInfo packages.list 的一行（插件包，见 docs/10 - 框架模块/15 - 插件包.md）。
+// PackageInfo packages.list 的一行（插件包，见 docs/90 - 归档/10 - 框架模块/15 - 插件包.md）。
 type PackageInfo struct {
 	Name        string `json:"name"`
 	Version     string `json:"version"`

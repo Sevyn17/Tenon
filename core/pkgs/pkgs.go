@@ -1,4 +1,4 @@
-// Package pkgs 插件包（外置插件第一级，见 docs/10 - 框架模块/15 - 插件包.md）。
+// Package pkgs 插件包（外置插件第一级，见 docs/90 - 归档/10 - 框架模块/15 - 插件包.md）。
 //
 // 插件包是一个带清单 ybase-plugin.toml 的目录，打包 MCP 服务、用户钩子、技能、提示词片段与内置插件的缺省配置。
 // 不引入新协议：包里的内容交给对应的内置插件（mcp / hooks / skills / prompt）按原有规则生效，
@@ -390,7 +390,7 @@ func (p *Package) PromptText() (string, error) {
 }
 
 // scaffoldManifest 骨架清单（注释说明各段，可直接删改）。
-const scaffoldManifest = `# 插件包清单（见 docs/10 - 框架模块/15 - 插件包.md）。改完重启生效。
+const scaffoldManifest = `# 插件包清单（见 docs/90 - 归档/10 - 框架模块/15 - 插件包.md）。改完重启生效。
 name = "%s"
 version = "0.1.0"
 description = ""
