@@ -1,0 +1,98 @@
+package runtime
+
+// [kernel] 配置节（plugin-switch-plan §1，登记见 docs/03 - 约束清单.md「[kernel] 配置节」）：
+// 内核机制参数，不改会话语义；未写的键用内核缺省值。
+
+import (
+	"encoding/json"
+	"fmt"
+	"sort"
+	"time"
+
+	"ybase-kernel/core/session"
+	"ybase-kernel/core/toolhub"
+)
+
+// Kernel 解析后的 [kernel] 节。
+type Kernel struct {
+	Policy          session.Policy
+	ToolTimeout     time.Duration
+	ConfirmDeadline time.Duration
+	Thresholds      toolhub.Thresholds
+}
+
+// DefaultKernel 内核缺省值。
+func DefaultKernel() Kernel {
+	return Kernel{Policy: session.DefaultPolicy(), ToolTimeout: toolhub.DefaultTimeout,
+		ConfirmDeadline: toolhub.DefaultConfirmDeadline, Thresholds: toolhub.DefaultThresholds}
+}
+
+// ParseKernel 把 profile 的 [kernel] 节解析到缺省值上；未知键报错。
+func ParseKernel(m map[string]any) (Kernel, error) {
+	k := DefaultKernel()
+	keys := make([]string, 0, len(m))
+	for key := range m {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		v := m[key]
+		var err error
+		switch key {
+		case "max_steps":
+			err = setUint(v, func(n uint64) { k.Policy.MaxSteps = uint32(n) }, 1<<31)
+		case "max_tool_calls_per_step":
+			err = setUint(v, func(n uint64) { k.Policy.MaxToolCallsPerStep = uint32(n) }, 1<<31)
+		case "max_result_bytes":
+			err = setUint(v, func(n uint64) { k.Policy.MaxResultBytes = n }, 1<<40)
+		case "tool_timeout":
+			err = setDur(v, &k.ToolTimeout)
+		case "confirm_deadline":
+			err = setDur(v, &k.ConfirmDeadline)
+		case "spill_bytes":
+			err = setUint(v, func(n uint64) { k.Thresholds.Bytes = int(n) }, 1<<31)
+		case "spill_lines":
+			err = setUint(v, func(n uint64) { k.Thresholds.Lines = int(n) }, 1<<31)
+		case "preview_bytes":
+			err = setUint(v, func(n uint64) { k.Thresholds.Preview = int(n) }, 1<<31)
+		case "page_lines":
+			err = setUint(v, func(n uint64) { k.Thresholds.PageLines = int(n) }, 1<<31)
+		default:
+			return k, fmt.Errorf("[kernel] 未知配置项 %q", key)
+		}
+		if err != nil {
+			return k, fmt.Errorf("[kernel] %s: %w", key, err)
+		}
+	}
+	if k.Policy.MaxToolCallsPerStep == 0 {
+		return k, fmt.Errorf("[kernel] max_tool_calls_per_step 不能为 0")
+	}
+	return k, nil
+}
+
+func setUint(v any, set func(uint64), max uint64) error {
+	b, _ := json.Marshal(v)
+	var n json.Number
+	if err := json.Unmarshal(b, &n); err != nil {
+		return fmt.Errorf("应为非负整数，得到 %v", v)
+	}
+	var u uint64
+	if _, err := fmt.Sscan(n.String(), &u); err != nil || u > max {
+		return fmt.Errorf("应为不超过 %d 的非负整数，得到 %v", max, v)
+	}
+	set(u)
+	return nil
+}
+
+func setDur(v any, d *time.Duration) error {
+	s, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("应为时长字符串（如 \"120s\"），得到 %v", v)
+	}
+	x, err := time.ParseDuration(s)
+	if err != nil || x <= 0 {
+		return fmt.Errorf("无效时长 %q", s)
+	}
+	*d = x
+	return nil
+}

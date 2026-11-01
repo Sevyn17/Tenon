@@ -1,0 +1,306 @@
+[
+  {
+    "Model": "m",
+    "System": null,
+    "Messages": [
+      {
+        "Role": "user",
+        "Content": [
+          {
+            "kind": "text",
+            "text": "[补报] "
+          },
+          {
+            "kind": "text",
+            "text": "后台任务完成"
+          },
+          {
+            "kind": "text",
+            "text": "你好"
+          }
+        ],
+        "ToolCalls": null,
+        "ToolCallID": ""
+      }
+    ],
+    "Tools": [
+      {
+        "Name": "echo",
+        "Description": "",
+        "Schema": {
+          "type": "object"
+        }
+      }
+    ],
+    "Params": {
+      "Temperature": null,
+      "MaxTokens": null,
+      "ToolChoice": null,
+      "Reasoning": null,
+      "Extra": null
+    }
+  },
+  {
+    "Model": "m",
+    "System": null,
+    "Messages": [
+      {
+        "Role": "user",
+        "Content": [
+          {
+            "kind": "text",
+            "text": "[补报] "
+          },
+          {
+            "kind": "text",
+            "text": "后台任务完成"
+          },
+          {
+            "kind": "text",
+            "text": "你好"
+          }
+        ],
+        "ToolCalls": null,
+        "ToolCallID": ""
+      },
+      {
+        "Role": "assistant",
+        "Content": [
+          {
+            "kind": "text",
+            "text": "re:[补报] 后台任务完成你好"
+          }
+        ],
+        "ToolCalls": null,
+        "ToolCallID": ""
+      },
+      {
+        "Role": "user",
+        "Content": [
+          {
+            "kind": "text",
+            "text": "用 tool"
+          }
+        ],
+        "ToolCalls": null,
+        "ToolCallID": ""
+      }
+    ],
+    "Tools": [
+      {
+        "Name": "echo",
+        "Description": "",
+        "Schema": {
+          "type": "object"
+        }
+      }
+    ],
+    "Params": {
+      "Temperature": null,
+      "MaxTokens": null,
+      "ToolChoice": null,
+      "Reasoning": null,
+      "Extra": null
+    }
+  },
+  {
+    "Model": "m",
+    "System": null,
+    "Messages": [
+      {
+        "Role": "user",
+        "Content": [
+          {
+            "kind": "text",
+            "text": "[补报] "
+          },
+          {
+            "kind": "text",
+            "text": "后台任务完成"
+          },
+          {
+            "kind": "text",
+            "text": "你好"
+          }
+        ],
+        "ToolCalls": null,
+        "ToolCallID": ""
+      },
+      {
+        "Role": "assistant",
+        "Content": [
+          {
+            "kind": "text",
+            "text": "re:[补报] 后台任务完成你好"
+          }
+        ],
+        "ToolCalls": null,
+        "ToolCallID": ""
+      },
+      {
+        "Role": "user",
+        "Content": [
+          {
+            "kind": "text",
+            "text": "用 tool"
+          }
+        ],
+        "ToolCalls": null,
+        "ToolCallID": ""
+      },
+      {
+        "Role": "assistant",
+        "Content": null,
+        "ToolCalls": [
+          {
+            "ID": "id1",
+            "WireID": "id1",
+            "Name": "echo",
+            "Args": {
+              "s": "x"
+            }
+          }
+        ],
+        "ToolCallID": ""
+      },
+      {
+        "Role": "tool",
+        "Content": [
+          {
+            "kind": "text",
+            "text": "echoed"
+          }
+        ],
+        "ToolCalls": null,
+        "ToolCallID": "id1"
+      }
+    ],
+    "Tools": [
+      {
+        "Name": "echo",
+        "Description": "",
+        "Schema": {
+          "type": "object"
+        }
+      }
+    ],
+    "Params": {
+      "Temperature": null,
+      "MaxTokens": null,
+      "ToolChoice": null,
+      "Reasoning": null,
+      "Extra": null
+    }
+  },
+  {
+    "Model": "m",
+    "System": null,
+    "Messages": [
+      {
+        "Role": "user",
+        "Content": [
+          {
+            "kind": "text",
+            "text": "[补报] "
+          },
+          {
+            "kind": "text",
+            "text": "后台任务完成"
+          },
+          {
+            "kind": "text",
+            "text": "你好"
+          }
+        ],
+        "ToolCalls": null,
+        "ToolCallID": ""
+      },
+      {
+        "Role": "assistant",
+        "Content": [
+          {
+            "kind": "text",
+            "text": "re:[补报] 后台任务完成你好"
+          }
+        ],
+        "ToolCalls": null,
+        "ToolCallID": ""
+      },
+      {
+        "Role": "user",
+        "Content": [
+          {
+            "kind": "text",
+            "text": "用 tool"
+          }
+        ],
+        "ToolCalls": null,
+        "ToolCallID": ""
+      },
+      {
+        "Role": "assistant",
+        "Content": null,
+        "ToolCalls": [
+          {
+            "ID": "id1",
+            "WireID": "id1",
+            "Name": "echo",
+            "Args": {
+              "s": "x"
+            }
+          }
+        ],
+        "ToolCallID": ""
+      },
+      {
+        "Role": "tool",
+        "Content": [
+          {
+            "kind": "text",
+            "text": "echoed"
+          }
+        ],
+        "ToolCalls": null,
+        "ToolCallID": "id1"
+      },
+      {
+        "Role": "assistant",
+        "Content": [
+          {
+            "kind": "text",
+            "text": "done"
+          }
+        ],
+        "ToolCalls": null,
+        "ToolCallID": ""
+      },
+      {
+        "Role": "user",
+        "Content": [
+          {
+            "kind": "text",
+            "text": "谢谢"
+          }
+        ],
+        "ToolCalls": null,
+        "ToolCallID": ""
+      }
+    ],
+    "Tools": [
+      {
+        "Name": "echo",
+        "Description": "",
+        "Schema": {
+          "type": "object"
+        }
+      }
+    ],
+    "Params": {
+      "Temperature": null,
+      "MaxTokens": null,
+      "ToolChoice": null,
+      "Reasoning": null,
+      "Extra": null
+    }
+  }
+]

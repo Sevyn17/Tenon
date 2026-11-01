@@ -1,0 +1,117 @@
+# 内置目录快照（model-hub D3，最低层）。用户 models.toml 可整条覆盖任一键。
+# 单价未内置（避免过期数据误导成本统计），需要节省金额投影时在 models.toml 里补 price。
+
+[provider.deepseek]
+protocol = "openai-chat"
+base_url = "https://api.deepseek.com/v1"
+key = "env:DEEPSEEK_API_KEY"
+[provider.deepseek.compat]
+reasoning_field = "reasoning_content"
+
+# 同一 DeepSeek 账号的另外两种协议端点；模型写成 deepseek-responses/<name> 或 deepseek-anthropic/<name>。
+[provider.deepseek-responses]
+protocol = "openai-responses"
+base_url = "https://api.deepseek.com"
+key = "env:DEEPSEEK_API_KEY"
+
+[provider.deepseek-anthropic]
+protocol = "anthropic-messages"
+base_url = "https://api.deepseek.com/anthropic/v1"
+key = "env:DEEPSEEK_API_KEY"
+
+[provider.openai]
+protocol = "openai-chat"
+base_url = "https://api.openai.com/v1"
+key = "env:OPENAI_API_KEY"
+[provider.openai.compat]
+prompt_cache_key = true
+max_tokens_field = "max_completion_tokens"
+
+# 同一 OpenAI 账号走 /responses（推理模型的加密推理回放）；模型写成 openai-responses/<name>。
+[provider.openai-responses]
+protocol = "openai-responses"
+base_url = "https://api.openai.com/v1"
+key = "env:OPENAI_API_KEY"
+[provider.openai-responses.compat]
+prompt_cache_key = true
+
+[provider.anthropic]
+protocol = "anthropic-messages"
+base_url = "https://api.anthropic.com/v1"
+key = "env:ANTHROPIC_API_KEY"
+
+[provider.openrouter]
+protocol = "openai-chat"
+base_url = "https://openrouter.ai/api/v1"
+key = "env:OPENROUTER_API_KEY"
+[provider.openrouter.compat]
+reasoning_field = "reasoning"
+
+[provider.ollama]
+protocol = "openai-chat"
+base_url = "http://127.0.0.1:11434/v1"
+key = ""
+
+[model."deepseek/deepseek-chat"]
+context_window = 128000
+max_output = 8192
+
+[model."deepseek/deepseek-reasoner"]
+context_window = 128000
+max_output = 32768
+[model."deepseek/deepseek-reasoner".caps]
+reasoning = true
+
+# V4 系列（/models 报告 context_window 1048576、max_output_tokens 393216，2026-10-29）。
+[model."deepseek/deepseek-flash"]
+context_window = 1048576
+max_output = 393216
+[model."deepseek/deepseek-flash".caps]
+reasoning = true
+
+[model."deepseek/deepseek-v4-pro"]
+context_window = 1048576
+max_output = 393216
+[model."deepseek/deepseek-v4-pro".caps]
+reasoning = true
+
+[model."deepseek-responses/deepseek-flash"]
+context_window = 1048576
+max_output = 393216
+[model."deepseek-responses/deepseek-flash".caps]
+reasoning = true
+
+[model."deepseek-responses/deepseek-v4-pro"]
+context_window = 1048576
+max_output = 393216
+[model."deepseek-responses/deepseek-v4-pro".caps]
+reasoning = true
+
+[model."deepseek-anthropic/deepseek-flash"]
+context_window = 1048576
+max_output = 393216
+[model."deepseek-anthropic/deepseek-flash".caps]
+reasoning = true
+
+[model."deepseek-anthropic/deepseek-v4-pro"]
+context_window = 1048576
+max_output = 393216
+[model."deepseek-anthropic/deepseek-v4-pro".caps]
+reasoning = true
+
+# 同名模型挂在三个提供方下，裸名默认走 chat completions。
+[alias.deepseek-flash]
+plan = [{ model = "deepseek/deepseek-flash" }]
+
+[alias.deepseek-v4-pro]
+plan = [{ model = "deepseek/deepseek-v4-pro" }]
+
+[model."openai/gpt-4o-mini"]
+context_window = 128000
+max_output = 16384
+
+[model."anthropic/claude-sonnet-4-5"]
+context_window = 200000
+max_output = 64000
+[model."anthropic/claude-sonnet-4-5".caps]
+reasoning = true
