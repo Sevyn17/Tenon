@@ -12,7 +12,7 @@ import (
 
 	"ybase-kernel/core/plugin"
 	kr "ybase-kernel/core/runtime"
-	"ybase-kernel/core/store/sqlite"
+	"ybase-kernel/core/store"
 	"ybase-kernel/core/toolhub"
 )
 
@@ -114,7 +114,7 @@ func ModeDirs(project string) []string {
 // Open 合并用户级与项目级 permissions.toml，读档位注册表，套用强制档位 / 固定沙箱，
 // 会话首次用到时经 db 读取其 Ext 里的档位与会话规则（db 返回 nil 时不读）。
 // project 为空时不读项目级配置与项目档位（项目不受信）。
-func Open(root, project, force, fixedSandbox string, db func() *sqlite.DB) (*Sessions, error) {
+func Open(root, project, force, fixedSandbox string, db func() store.Store) (*Sessions, error) {
 	var cfgs []Config
 	if h := userHome(); h != "" {
 		c, err := LoadConfig(filepath.Join(h, "permissions.toml"))

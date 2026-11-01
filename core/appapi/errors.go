@@ -6,7 +6,7 @@ import (
 
 	"ybase-kernel/core/host"
 	"ybase-kernel/core/session"
-	"ybase-kernel/core/store/sqlite"
+	"ybase-kernel/core/store"
 )
 
 // 错误码（docs/90 - 归档/10 - 框架模块/12 - 应用接口层.md §五）。同版本内只增不改。
@@ -15,7 +15,7 @@ const (
 	CodeNotFound     = "not_found"    // 会话 / 档位 / 工件不存在
 	CodeBusy         = "busy"         // 命令队列满（host.ErrBusy），可重试
 	CodeNotIdle      = "not_idle"     // 需空闲时使用的命令在回合中调用
-	CodeConflict     = "conflict"     // 会话被另一进程写入（sqlite.ErrConflict）或目标已存在
+	CodeConflict     = "conflict"     // 会话被另一进程写入（store.ErrConflict）或目标已存在
 	CodeUnauthorized = "unauthorized" // api-server 令牌 / Origin / Host 检查失败
 	CodeUnsupported  = "unsupported"  // 协议版本、命令或能力不支持
 	CodeInternal     = "internal"     // 其他
@@ -51,9 +51,9 @@ func AsError(err error) *Error {
 	switch {
 	case errors.Is(err, host.ErrBusy):
 		code, retry = CodeBusy, true
-	case errors.Is(err, sqlite.ErrConflict):
+	case errors.Is(err, store.ErrConflict):
 		code = CodeConflict
-	case errors.Is(err, sqlite.ErrNotFound), errors.Is(err, host.ErrClosed):
+	case errors.Is(err, store.ErrNotFound), errors.Is(err, host.ErrClosed):
 		code = CodeNotFound
 	case errors.Is(err, session.ErrNotIdle), errors.Is(err, session.ErrNotWaiting), errors.Is(err, session.ErrState):
 		code = CodeNotIdle

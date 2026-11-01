@@ -10,7 +10,7 @@ import (
 	"ybase-kernel/core/host"
 	"ybase-kernel/core/reqlog"
 	"ybase-kernel/core/session"
-	"ybase-kernel/core/store/sqlite"
+	"ybase-kernel/core/store"
 )
 
 // SessionArgs 只带会话 id 的参数。
@@ -61,8 +61,8 @@ type ListArgs struct {
 
 // ListResult sessions.list 结果。Next = 0 表示没有下一页。
 type ListResult struct {
-	Items []sqlite.SessionInfo `json:"items"`
-	Next  int64                `json:"next"`
+	Items []store.SessionInfo `json:"items"`
+	Next  int64               `json:"next"`
 }
 
 // SessionsList 按更新时间倒序分页列会话（缺省只列顶层会话）。
@@ -77,7 +77,7 @@ func (a *App) SessionsList(ctx context.Context, in ListArgs) (ListResult, error)
 	}
 	out := ListResult{Items: items}
 	if out.Items == nil {
-		out.Items = []sqlite.SessionInfo{}
+		out.Items = []store.SessionInfo{}
 	}
 	if len(items) == limit {
 		out.Next = items[len(items)-1].UpdatedAt

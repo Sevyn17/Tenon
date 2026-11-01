@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"ybase-kernel/core/session"
-	"ybase-kernel/core/store/sqlite"
+	"ybase-kernel/core/store"
 	"ybase-kernel/core/toolhub"
 )
 
@@ -65,7 +65,7 @@ func (a *Agent) HubSpan(ev toolhub.SpanEvent) {
 		parent = "tool-" + ev.CallID[:i]
 	}
 	a.spanMu.Lock()
-	a.hubSpans = append(a.hubSpans, sqlite.Span{ID: "tool-" + ev.CallID, Parent: parent, Kind: "tool", Name: ev.Tool,
+	a.hubSpans = append(a.hubSpans, store.Span{ID: "tool-" + ev.CallID, Parent: parent, Kind: "tool", Name: ev.Tool,
 		Status: ev.Status, Start: ev.Start, End: ev.End, Attrs: b})
 	a.spanMu.Unlock()
 }

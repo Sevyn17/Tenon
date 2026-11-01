@@ -11,7 +11,7 @@ import (
 	"ybase-kernel/core/agent"
 	"ybase-kernel/core/modelhub"
 	"ybase-kernel/core/session"
-	"ybase-kernel/core/store/sqlite"
+	"ybase-kernel/core/store"
 	"ybase-kernel/core/toolhub"
 )
 
@@ -37,7 +37,7 @@ type (
 
 // Builder 会话构造器。Tools / Layers / Blocks 按登记顺序生效：工具顺序即暴露顺序，层由外到内。
 type Builder struct {
-	DB        *sqlite.DB
+	DB        store.Store
 	Artifacts toolhub.Artifacts
 	Models    *modelhub.Hub
 	Model     string

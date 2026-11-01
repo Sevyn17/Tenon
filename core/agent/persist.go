@@ -1,6 +1,6 @@
 package agent
 
-// 持久化（M1.7–1.9）：每次停顿一个 SQLite 事务（store/sqlite.Commit）。
+// 持久化（M1.7–1.9）：每次停顿一个 SQLite 事务（store.Store.Commit）。
 //
 // 时机（session-host H11 / H17）：
 //   - 模型调用前：新条目 + 头部（含 pending_model_request_id）+ 请求记录，同一事务；
@@ -19,22 +19,22 @@ import (
 
 	"ybase-kernel/core/reqlog"
 	"ybase-kernel/core/session"
-	"ybase-kernel/core/store/sqlite"
+	"ybase-kernel/core/store"
 )
 
 // Open 打开会话：存在则恢复（返回 true），不存在则用 cfg 新建。
 // 恢复出的待满足需求留给 Recover 继续驱动。
 func (a *Agent) Open(ctx context.Context, cfg *session.Config) (bool, error) {
-	return a.OpenAs(ctx, cfg, sqlite.SessionMeta{ID: a.SessionID})
+	return a.OpenAs(ctx, cfg, store.SessionMeta{ID: a.SessionID})
 }
 
 // OpenAs 同 Open；新建时用给定的会话行字段（子智能体：ParentID + Origin=subagent）。
-func (a *Agent) OpenAs(ctx context.Context, cfg *session.Config, meta sqlite.SessionMeta) (bool, error) {
+func (a *Agent) OpenAs(ctx context.Context, cfg *session.Config, meta store.SessionMeta) (bool, error) {
 	if a.Store == nil || a.SessionID == "" {
 		return false, errors.New("agent: 未配置存储或会话 id")
 	}
 	l, err := a.Store.Load(ctx, a.SessionID, nil)
-	if errors.Is(err, sqlite.ErrNotFound) {
+	if errors.Is(err, store.ErrNotFound) {
 		a.Core = session.New(cfg)
 		meta.ID = a.SessionID
 		if err := a.Store.CreateSession(ctx, meta, a.Core.Snapshot().Header, nil); err != nil {
@@ -98,7 +98,7 @@ func (a *Agent) checkpoint(ctx context.Context, run string, rec *reqlog.Record) 
 	// 持久化不随回合取消中止：取消后的收尾（cancel 条目、回合结束头部）也必须落库。
 	ctx = context.WithoutCancel(ctx)
 	s := a.Core.Snapshot()
-	cp := sqlite.Checkpoint{SessionID: a.SessionID, ExpectLogLen: a.committed, Header: s.Header, RunState: run}
+	cp := store.Checkpoint{SessionID: a.SessionID, ExpectLogLen: a.committed, Header: s.Header, RunState: run}
 	from := a.committed
 	if s.Header.LogLen < a.committed { // rewind 后立即 checkpoint，截断点即新 log_len
 		t := s.Header.LogLen
@@ -121,7 +121,7 @@ func (a *Agent) checkpoint(ctx context.Context, run string, rec *reqlog.Record) 
 	}
 	cp.ConsumeInbox = a.consume
 	a.spanMu.Lock()
-	cp.Spans = append(append([]sqlite.Span(nil), a.pendingSpans...), a.hubSpans...)
+	cp.Spans = append(append([]store.Span(nil), a.pendingSpans...), a.hubSpans...)
 	hubN := len(a.hubSpans)
 	a.spanMu.Unlock()
 	if err := a.Store.Commit(ctx, cp); err != nil {
@@ -136,13 +136,13 @@ func (a *Agent) checkpoint(ctx context.Context, run string, rec *reqlog.Record) 
 	return nil
 }
 
-func toStore(r *reqlog.Record) (*sqlite.RequestRecord, error) {
+func toStore(r *reqlog.Record) (*store.RequestRecord, error) {
 	body, err := json.Marshal(r.Shell)
 	if err != nil {
 		return nil, err
 	}
 	sum := sha256.Sum256(body)
-	sr := &sqlite.RequestRecord{RequestID: r.RequestID, ShellHash: hex.EncodeToString(sum[:]), ShellBody: body,
+	sr := &store.RequestRecord{RequestID: r.RequestID, ShellHash: hex.EncodeToString(sum[:]), ShellBody: body,
 		PrefixBase: r.PrefixBase, PrefixEnd: r.PrefixEnd, FinalHash: r.FinalHash}
 	if r.View != nil {
 		if sr.CompactionView, err = json.Marshal(r.View); err != nil {
@@ -160,7 +160,7 @@ func toStore(r *reqlog.Record) (*sqlite.RequestRecord, error) {
 	return sr, nil
 }
 
-func (a *Agent) fromStore(ctx context.Context, sr *sqlite.RequestRecord) (*reqlog.Record, error) {
+func (a *Agent) fromStore(ctx context.Context, sr *store.RequestRecord) (*reqlog.Record, error) {
 	body, err := a.Store.ShellBody(ctx, sr.ShellHash)
 	if err != nil {
 		return nil, err

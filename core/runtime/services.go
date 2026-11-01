@@ -9,7 +9,8 @@ import (
 	"strings"
 
 	"ybase-kernel/core/modelhub"
-	"ybase-kernel/core/store/sqlite"
+	"ybase-kernel/core/store"
+	"ybase-kernel/core/toolhub"
 )
 
 // 插槽键。
@@ -31,13 +32,14 @@ const (
 	ServiceCompactor = "service:compactor" // 实现 agent.Compactor；可实现 Redactable（compact-basic）
 )
 
-// PointOnSessionDelete 删除会话时的清理回调（data-contract D2）：登记 sqlite.Cleaner。
+// PointOnSessionDelete 删除会话时的清理回调（data-contract D2）：登记 store.Cleaner。
 const PointOnSessionDelete = "on_session_delete"
 
 // DBHandle 存储句柄：Start 之前 DB() 返回 nil。
+// 需要 SQL 的插件（现有 p_<名>_ 表）暂时把 DB() 断言成 *sqlite.DB；T1b-1b 改为声明 Requires{SQL: true}。
 type DBHandle interface {
-	DB() *sqlite.DB
-	Blobs() *sqlite.Blobs
+	DB() store.Store
+	Blobs() toolhub.Artifacts
 }
 
 // Models modelhub 服务：Hub + 默认模型（别名）。协议适配器插件在 Setup 里向 Hub 登记。

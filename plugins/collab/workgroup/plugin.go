@@ -14,6 +14,7 @@ import (
 	"ybase-kernel/core/plugin"
 	kr "ybase-kernel/core/runtime"
 	"ybase-kernel/core/session"
+	"ybase-kernel/core/store/sqlite"
 	"ybase-kernel/core/toolhub"
 )
 
@@ -84,7 +85,11 @@ func (p *plug) Start(sc *plugin.Scope) error {
 		}
 		return f(id)
 	}
-	g, err := New(context.Background(), p.h, p.store.DB(), member)
+	db, ok := p.store.DB().(*sqlite.DB) // 自有 p_workgroup_ 表要 SQL（T1b-1b 改声明 Requires{SQL: true}）
+	if !ok {
+		return fmt.Errorf("workgroup: 需要 SQLite 存储")
+	}
+	g, err := New(context.Background(), p.h, db, member)
 	if err != nil {
 		return err
 	}

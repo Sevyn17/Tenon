@@ -17,7 +17,7 @@ import (
 	"ybase-kernel/core/plugin"
 	"ybase-kernel/core/runtime"
 	"ybase-kernel/core/session"
-	"ybase-kernel/core/store/sqlite"
+	"ybase-kernel/core/store"
 	"ybase-kernel/plugins/security/permission"
 )
 
@@ -152,7 +152,7 @@ type AppOptions struct {
 // Built BuildApp 的结果。
 type Built struct {
 	API     *appapi.App
-	DB      *sqlite.DB
+	DB      store.Store
 	Model   string
 	Perms   *permission.Sessions // 未装 permission 插件时为 nil
 	Builder *runtime.Builder

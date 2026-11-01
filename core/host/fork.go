@@ -12,7 +12,7 @@ import (
 	"github.com/google/uuid"
 
 	"ybase-kernel/core/session"
-	"ybase-kernel/core/store/sqlite"
+	"ybase-kernel/core/store"
 )
 
 // Fork 从 src 的 [0, upto) 分出新会话 dst；upto < 0 表示整段日志。返回新会话句柄。
@@ -63,7 +63,7 @@ func (h *Host) Fork(ctx context.Context, src, dst string, upto int, origin strin
 	}
 	hdr.LastEntryID = last
 	hdr.PendingModelRequestID = ""
-	m := sqlite.SessionMeta{ID: dst, ParentID: src, Origin: origin, ForkUpto: hdr.LogLen, AgentID: l.Meta.AgentID,
+	m := store.SessionMeta{ID: dst, ParentID: src, Origin: origin, ForkUpto: hdr.LogLen, AgentID: l.Meta.AgentID,
 		AgentHash: l.Meta.AgentHash, Creator: l.Meta.Creator, Title: l.Meta.Title,
 		Meta: l.Meta.Meta, UseConfig: l.Meta.UseConfig} // 会话键不复制：分叉是新会话，键唯一
 	if err := h.DB.CreateSession(ctx, m, hdr, entries); err != nil {

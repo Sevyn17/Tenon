@@ -61,7 +61,7 @@ func (db *DB) CreateSession(ctx context.Context, m SessionMeta, hdr session.Head
 		if err != nil {
 			return err
 		}
-		_, err = tx.ExecContext(ctx, `UPDATE sessions SET log_len = ?, next_sync_seq = ? WHERE id = ?`, len(entries), seq, m.ID)
+		_, err = tx.ExecContext(ctx, `UPDATE sessions SET log_len = ?, next_sync_seq = ? WHERE tenant = ? AND id = ?`, len(entries), seq, Tenant, m.ID)
 		return err
 	})
 }
@@ -84,11 +84,11 @@ func (db *DB) Commit(ctx context.Context, cp Checkpoint) error {
 		}
 		if cp.TruncateFrom != nil {
 			if _, err := tx.ExecContext(ctx, `INSERT INTO session_entries_archive(tenant, session_id, idx, id, body, truncated_at, rewind_seq)
-				SELECT tenant, session_id, idx, id, body, ?, ? FROM session_entries WHERE session_id = ? AND idx >= ?`,
-				now, seq, cp.SessionID, *cp.TruncateFrom); err != nil {
+				SELECT tenant, session_id, idx, id, body, ?, ? FROM session_entries WHERE tenant = ? AND session_id = ? AND idx >= ?`,
+				now, seq, Tenant, cp.SessionID, *cp.TruncateFrom); err != nil {
 				return err
 			}
-			if _, err := tx.ExecContext(ctx, `DELETE FROM session_entries WHERE session_id = ? AND idx >= ?`, cp.SessionID, *cp.TruncateFrom); err != nil {
+			if _, err := tx.ExecContext(ctx, `DELETE FROM session_entries WHERE tenant = ? AND session_id = ? AND idx >= ?`, Tenant, cp.SessionID, *cp.TruncateFrom); err != nil {
 				return err
 			}
 			evs = append(evs, bus.Envelope{V: bus.Version, Seq: int64(seq), At: now, Session: cp.SessionID, Kind: EventRewind,
@@ -128,7 +128,7 @@ func (db *DB) Commit(ctx context.Context, cp Checkpoint) error {
 			}
 		}
 		for _, id := range cp.ConsumeInbox {
-			if _, err := tx.ExecContext(ctx, `UPDATE session_inbox SET consumed_at = ? WHERE session_id = ? AND item_id = ? AND consumed_at = 0`, now, cp.SessionID, id); err != nil {
+			if _, err := tx.ExecContext(ctx, `UPDATE session_inbox SET consumed_at = ? WHERE tenant = ? AND session_id = ? AND item_id = ? AND consumed_at = 0`, now, Tenant, cp.SessionID, id); err != nil {
 				return err
 			}
 		}
@@ -142,8 +142,8 @@ func (db *DB) Commit(ctx context.Context, cp Checkpoint) error {
 			run = "idle"
 		}
 		res, err := tx.ExecContext(ctx, `UPDATE sessions SET header = ?, shell_hash = ?, log_len = ?, next_sync_seq = ?, run_state = ?,
-			preview = CASE WHEN ? = '' THEN preview ELSE ? END, updated_at = ? WHERE id = ? AND log_len = ?`,
-			hb, hs.hash, cp.Header.LogLen, seq, run, cp.Preview, cp.Preview, now, cp.SessionID, cp.ExpectLogLen)
+			preview = CASE WHEN ? = '' THEN preview ELSE ? END, updated_at = ? WHERE tenant = ? AND id = ? AND log_len = ?`,
+			hb, hs.hash, cp.Header.LogLen, seq, run, cp.Preview, cp.Preview, now, Tenant, cp.SessionID, cp.ExpectLogLen)
 		if err != nil {
 			return err
 		}

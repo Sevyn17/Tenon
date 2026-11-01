@@ -11,7 +11,7 @@ import (
 
 	"ybase-kernel/core/agent"
 	"ybase-kernel/core/session"
-	"ybase-kernel/core/store/sqlite"
+	"ybase-kernel/core/store"
 )
 
 // Get 返回已打开会话的句柄。
@@ -52,7 +52,7 @@ func (h *Host) SpawnAs(ctx context.Context, parent, id, origin string, f Factory
 		}
 	} else {
 		hd, err = h.open(ctx, id, f, func(ag *agent.Agent, cfg *session.Config) error {
-			_, err := ag.OpenAs(ctx, cfg, sqlite.SessionMeta{ParentID: parent, Origin: origin})
+			_, err := ag.OpenAs(ctx, cfg, store.SessionMeta{ParentID: parent, Origin: origin})
 			return err
 		})
 		if err != nil {

@@ -9,7 +9,9 @@ import (
 
 	"ybase-kernel/core/plugin"
 	kr "ybase-kernel/core/runtime"
+	"ybase-kernel/core/store"
 	"ybase-kernel/core/store/sqlite"
+	"ybase-kernel/core/toolhub"
 )
 
 // Store 存储句柄（实现 runtime.DBHandle）：Setup 时登记，Start 时打开（plugin-manager §5.1）。
@@ -20,16 +22,22 @@ type Store struct {
 }
 
 // DB 已打开的数据库；Start 之前返回 nil。
-func (s *Store) DB() *sqlite.DB {
+func (s *Store) DB() store.Store {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.db == nil {
+		return nil // 不能返回带类型的 nil 接口
+	}
 	return s.db
 }
 
 // Blobs 工件存储。
-func (s *Store) Blobs() *sqlite.Blobs {
+func (s *Store) Blobs() toolhub.Artifacts {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.blobs == nil {
+		return nil
+	}
 	return s.blobs
 }
 

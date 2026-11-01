@@ -9,20 +9,20 @@ import (
 
 	"github.com/google/uuid"
 
-	"ybase-kernel/core/store/sqlite"
+	"ybase-kernel/core/store"
 )
 
 // span 一个进行中的观测区间。
 type span struct {
 	a     *Agent
-	s     sqlite.Span
+	s     store.Span
 	attrs map[string]any
 }
 
 // startSpan 开一个 span；parent 为空表示顶层。
 func (a *Agent) startSpan(kind, name, parent string) *span {
 	id, _ := uuid.NewV7()
-	return &span{a: a, s: sqlite.Span{ID: id.String(), Parent: parent, Kind: kind, Name: name, Start: a.clock()},
+	return &span{a: a, s: store.Span{ID: id.String(), Parent: parent, Kind: kind, Name: name, Start: a.clock()},
 		attrs: map[string]any{}}
 }
 

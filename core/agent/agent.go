@@ -14,7 +14,7 @@ import (
 	"ybase-kernel/core/modelhub"
 	"ybase-kernel/core/reqlog"
 	"ybase-kernel/core/session"
-	"ybase-kernel/core/store/sqlite"
+	"ybase-kernel/core/store"
 	"ybase-kernel/core/toolhub"
 )
 
@@ -48,7 +48,7 @@ type Agent struct {
 	Core      *session.Core
 	Model     Model
 	Hooks     Hooks
-	Store     *sqlite.DB // nil = 不持久化
+	Store     store.Store // nil = 不持久化
 	SessionID string
 
 	committed int              // 存储里已提交的 log_len（条件写期望值）
@@ -63,14 +63,14 @@ type Agent struct {
 	// Now 时钟（测试注入）；nil = time.Now。
 	Now func() time.Time
 
-	pendingSpans []sqlite.Span // 待随下一次 checkpoint 提交的 span（G2）
+	pendingSpans []store.Span // 待随下一次 checkpoint 提交的 span（G2）
 
 	// Hub 工具管理器（必需：调用栈、并行、幂等、确认、存工件）；Toolset 为会话工具视图（可空）。
 	Hub     *toolhub.Hub
 	Toolset *toolhub.Toolset
 
 	spanMu   sync.Mutex
-	hubSpans []sqlite.Span
+	hubSpans []store.Span
 
 	// TurnSpanID 宿主设置的当前 turn span（step span 的父）；stepID 当前 step span（attempt / tool 的父）。
 	TurnSpanID string

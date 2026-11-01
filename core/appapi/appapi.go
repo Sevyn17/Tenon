@@ -19,7 +19,7 @@ import (
 	"ybase-kernel/core/plugin"
 	"ybase-kernel/core/runtime"
 	"ybase-kernel/core/session"
-	"ybase-kernel/core/store/sqlite"
+	"ybase-kernel/core/store"
 )
 
 // Protocol 协议版本：同版本只加字段和命令；改语义或删字段升版本（§六）。
@@ -32,7 +32,7 @@ const Server = "ybase-kernel"
 type Options struct {
 	Host *host.Host
 	Bus  *bus.Bus
-	DB   *sqlite.DB
+	DB   store.Store
 	// Builder 会话构造器：非空时 New 用它设置 Host.New / Host.Child，并在其钩子上并入流式事件（StreamHooks）。
 	// 为空时 Host.New / Host.Child 须由应用自己设置。
 	Builder *runtime.Builder
@@ -130,7 +130,7 @@ func (a *App) HasCompactor() bool { return a.o.Compactor != nil }
 func (a *App) Host() *host.Host { return a.o.Host }
 
 // DB 底层存储。
-func (a *App) DB() *sqlite.DB { return a.o.DB }
+func (a *App) DB() store.Store { return a.o.DB }
 
 // Bus 事件总线。
 func (a *App) Bus() *bus.Bus { return a.o.Bus }

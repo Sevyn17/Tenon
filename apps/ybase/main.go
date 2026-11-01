@@ -34,6 +34,7 @@ import (
 	"ybase-kernel/core/reqlog"
 	"ybase-kernel/core/runtime"
 	"ybase-kernel/core/session"
+	"ybase-kernel/core/store"
 	"ybase-kernel/core/store/sqlite"
 	"ybase-kernel/plugins/security/permission"
 	"ybase-kernel/plugins/security/sandbox"
@@ -238,7 +239,7 @@ func withRuntime(o opts, f func(*app) error) error {
 type cli struct {
 	o        opts
 	rt       *assembled
-	db       *sqlite.DB
+	db       store.Store
 	h        *host.Host
 	api      *appapi.App
 	cur      host.Handle

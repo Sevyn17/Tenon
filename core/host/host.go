@@ -21,7 +21,7 @@ import (
 	"ybase-kernel/core/agent"
 	"ybase-kernel/core/bus"
 	"ybase-kernel/core/session"
-	"ybase-kernel/core/store/sqlite"
+	"ybase-kernel/core/store"
 	"ybase-kernel/core/toolhub"
 )
 
@@ -98,7 +98,7 @@ type Factory func(id string) (*agent.Agent, *session.Config, error)
 
 // Host 进程内会话表。
 type Host struct {
-	DB     *sqlite.DB
+	DB     store.Store
 	New    Factory
 	Child  Factory // 子智能体会话的构造（可空 = New）；通常去掉委派工具以限制深度
 	Hooks  Hooks
@@ -303,12 +303,12 @@ func (a *actor) enqueue(c Command) error {
 		if c.ItemID == "" {
 			c.ItemID = NewItemID()
 		}
-		kind := sqlite.InboxInput
+		kind := store.InboxInput
 		if c.Kind == Note {
-			kind = sqlite.InboxNote
+			kind = store.InboxNote
 		}
 		body, _ := json.Marshal(session.Content{session.NewTextPart(c.Text)})
-		fresh, err := a.h.DB.Admit(context.Background(), a.id, sqlite.InboxItem{ItemID: c.ItemID, Kind: kind,
+		fresh, err := a.h.DB.Admit(context.Background(), a.id, store.InboxItem{ItemID: c.ItemID, Kind: kind,
 			Input: string(body), Trust: c.Trust})
 		if err != nil {
 			return err
@@ -432,10 +432,10 @@ func (a *actor) drainInbox(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		var notes []sqlite.InboxItem
-		var input *sqlite.InboxItem
+		var notes []store.InboxItem
+		var input *store.InboxItem
 		for i := range items {
-			if items[i].Kind == sqlite.InboxNote {
+			if items[i].Kind == store.InboxNote {
 				notes = append(notes, items[i])
 				continue
 			}
@@ -453,7 +453,7 @@ func (a *actor) drainInbox(ctx context.Context) error {
 			if err := json.Unmarshal([]byte(it.Input), &c); err != nil {
 				return err
 			}
-			if it.Kind == sqlite.InboxNote {
+			if it.Kind == store.InboxNote {
 				c = append(session.Content{session.NewTextPart("[补报] ")}, c...)
 			}
 			content = append(content, c...)
