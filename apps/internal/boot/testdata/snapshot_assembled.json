@@ -1,0 +1,3336 @@
+[
+  {
+    "Role": "lead",
+    "Requests": [
+      {
+        "Model": "deepseek-chat",
+        "System": [
+          {
+            "Text": "你是一个在用户本机工作目录中工作的编程助手。\n需要了解代码时用 grep（搜内容）/ glob（找文件）/ list_dir 定位，再用 read_file 读（大文件按 offset/limit 分段），再动手；修改已有文件用 edit（精确替换），新建或整体重写才用 write_file；需要运行命令用 shell。\n回答简洁，完成后用一两句话说明做了什么。\n工作目录：<dir0>",
+            "Breakpoint": false,
+            "Source": "agent"
+          }
+        ],
+        "Messages": [
+          {
+            "Role": "user",
+            "Content": [
+              {
+                "kind": "text",
+                "text": "请派成员"
+              }
+            ],
+            "ToolCalls": null,
+            "ToolCallID": ""
+          }
+        ],
+        "Tools": [
+          {
+            "Name": "read_artifact",
+            "Description": "按行读取已存为工件的超大工具结果",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "ref": {
+                  "type": "string",
+                  "description": "artifact://\u003csha256\u003e"
+                },
+                "offset": {
+                  "type": "integer",
+                  "description": "起始行（从 1 开始）"
+                },
+                "limit": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "ref"
+              ]
+            }
+          },
+          {
+            "Name": "read_file",
+            "Description": "读取文本文件（路径相对工作目录）。offset 为起始行（1 起），limit 为行数；默认最多 2000 行 / 50KB，截断时按提示用 offset 继续。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "offset": {
+                  "type": "integer",
+                  "description": "起始行号，1 起"
+                },
+                "limit": {
+                  "type": "integer",
+                  "description": "最多读取的行数"
+                }
+              },
+              "required": [
+                "path"
+              ]
+            }
+          },
+          {
+            "Name": "grep",
+            "Description": "在文件内容中搜索（正则或字面量），返回 路径:行号: 内容。遵守 .gitignore，跳过二进制文件。默认最多 100 条匹配。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "pattern": {
+                  "type": "string",
+                  "description": "正则（RE2 语法）或字面量"
+                },
+                "path": {
+                  "type": "string",
+                  "description": "目录或文件（默认工作目录）"
+                },
+                "glob": {
+                  "type": "string",
+                  "description": "文件过滤，如 *.go 或 **/*_test.go"
+                },
+                "ignore_case": {
+                  "type": "boolean"
+                },
+                "literal": {
+                  "type": "boolean",
+                  "description": "把 pattern 当字面量"
+                },
+                "context": {
+                  "type": "integer",
+                  "description": "匹配前后各显示几行"
+                },
+                "limit": {
+                  "type": "integer",
+                  "description": "最多返回的匹配数"
+                }
+              },
+              "required": [
+                "pattern"
+              ]
+            }
+          },
+          {
+            "Name": "glob",
+            "Description": "按文件名模式查找文件（如 **/*.go、cmd/**/main.go；不含 / 的模式匹配任意层的文件名），按修改时间由新到旧，遵守 .gitignore。默认最多 200 条。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "pattern": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string",
+                  "description": "搜索起点目录（默认工作目录）"
+                },
+                "limit": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "pattern"
+              ]
+            }
+          },
+          {
+            "Name": "edit",
+            "Description": "精确编辑文件：按 old_text → new_text 替换，可一次多处（在原文件上匹配、全部成功才写入）。old_text 为空表示新建文件。修改已有文件优先用它，不要整文件重写。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "文件路径（相对工作目录）"
+                },
+                "edits": {
+                  "type": "array",
+                  "description": "一处或多处替换。每处 old_text 在原文件中必须唯一、互不重叠；相邻改动合并成一处。",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "old_text": {
+                        "type": "string",
+                        "description": "要替换的原文（精确匹配；尽量短但要唯一）。为空表示新建文件"
+                      },
+                      "new_text": {
+                        "type": "string",
+                        "description": "替换后的文本"
+                      }
+                    },
+                    "required": [
+                      "old_text",
+                      "new_text"
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "path",
+                "edits"
+              ]
+            }
+          },
+          {
+            "Name": "write_file",
+            "Description": "写入文本文件（新建或整体覆盖，自动创建父目录；路径相对工作目录）。修改已有文件请用 edit。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "content": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "path",
+                "content"
+              ]
+            }
+          },
+          {
+            "Name": "list_dir",
+            "Description": "列出目录内容（路径相对工作目录，默认工作目录；目录名以 / 结尾）。递归查找文件用 glob。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          {
+            "Name": "ask_user",
+            "Description": "需求有歧义或决定代价大时向用户提问。options 可给出选项。能自行合理决定的不要问。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "question": {
+                  "type": "string"
+                },
+                "options": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "question"
+              ]
+            }
+          },
+          {
+            "Name": "shell",
+            "Description": "在工作目录执行一条 PowerShell 命令（不是 bash：不支持 \u003c\u003c\u003c、heredoc、export、反引号命令替换；用 ; 分隔语句，用 $env:NAME 读写环境变量，用 2\u003e\u00261 合并输出）。返回合并的 stdout/stderr 与退出码。每次调用是新进程，已在工作目录执行（不必先 cd），cd 与环境变量不保留。timeout 秒（默认 120，最大 600），超时杀整个进程树。长时间运行（服务、监听）用 background:true，返回 job id，再用 job_output 读取输出、job_kill 终止。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "command": {
+                  "type": "string"
+                },
+                "timeout": {
+                  "type": "integer",
+                  "description": "超时秒数"
+                },
+                "background": {
+                  "type": "boolean",
+                  "description": "后台运行，立即返回 job id"
+                },
+                "sandbox_permissions": {
+                  "type": "string",
+                  "enum": [
+                    "read-only",
+                    "workspace-write",
+                    "danger-full-access"
+                  ],
+                  "description": "仅在命令被沙箱拒绝后使用：为本次调用申请更宽的沙箱，需要用户批准"
+                }
+              },
+              "required": [
+                "command"
+              ]
+            }
+          },
+          {
+            "Name": "job_output",
+            "Description": "读取后台 job 自上次读取以来的新输出与状态。wait:true 时等到 job 结束或 timeout 秒（默认 30）。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "wait": {
+                  "type": "boolean"
+                },
+                "timeout": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "id"
+              ]
+            }
+          },
+          {
+            "Name": "job_kill",
+            "Description": "终止一个后台 job（连同其子进程）。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id"
+              ]
+            }
+          },
+          {
+            "Name": "subagent",
+            "Description": "把一个独立、边界清楚的子任务委派给子智能体（全新上下文，同样的工具）。task 要自包含：子智能体看不到当前对话。返回子智能体的最终回答与子会话 id；传 session 可继续同一个子会话追问。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "task": {
+                  "type": "string",
+                  "description": "自包含的任务说明"
+                },
+                "session": {
+                  "type": "string",
+                  "description": "可选：续用的子会话 id"
+                }
+              },
+              "required": [
+                "task"
+              ]
+            }
+          },
+          {
+            "Name": "team_spawn",
+            "Description": "派一个工作组成员（独立会话、同样的基础工具 + 看板）去做自包含的任务，立即返回，不等结果。成员做完时它的最终回答会作为一条新消息送回给你。同名成员已存在则把 task 作为下一条消息发给它。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "成员名，小写字母数字和连字符"
+                },
+                "task": {
+                  "type": "string",
+                  "description": "自包含的任务说明"
+                }
+              },
+              "required": [
+                "name",
+                "task"
+              ]
+            }
+          },
+          {
+            "Name": "team_send",
+            "Description": "给工作组里的另一位发消息：to 为 \"lead\"（领导）或成员名。消息进入对方 inbox，对方空闲时立即处理。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "to": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "to",
+                "message"
+              ]
+            }
+          },
+          {
+            "Name": "task_create",
+            "Description": "在工作组看板上新建任务（pending、无负责人）。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "subject": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "subject"
+              ]
+            }
+          },
+          {
+            "Name": "task_list",
+            "Description": "列出工作组看板上的全部任务（id、状态、负责人、结果）。",
+            "Schema": {
+              "type": "object",
+              "properties": {}
+            }
+          },
+          {
+            "Name": "task_claim",
+            "Description": "领取一个 pending 任务（成为负责人，状态改为 in_progress）。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "id"
+              ]
+            }
+          },
+          {
+            "Name": "task_complete",
+            "Description": "把自己负责的任务标为完成，附一句结果。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "integer"
+                },
+                "result": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id"
+              ]
+            }
+          }
+        ],
+        "Params": {
+          "Temperature": null,
+          "MaxTokens": null,
+          "ToolChoice": null,
+          "Reasoning": null,
+          "Extra": null
+        }
+      },
+      {
+        "Model": "deepseek-chat",
+        "System": [
+          {
+            "Text": "你是一个在用户本机工作目录中工作的编程助手。\n需要了解代码时用 grep（搜内容）/ glob（找文件）/ list_dir 定位，再用 read_file 读（大文件按 offset/limit 分段），再动手；修改已有文件用 edit（精确替换），新建或整体重写才用 write_file；需要运行命令用 shell。\n回答简洁，完成后用一两句话说明做了什么。\n工作目录：<dir0>",
+            "Breakpoint": false,
+            "Source": "agent"
+          }
+        ],
+        "Messages": [
+          {
+            "Role": "user",
+            "Content": [
+              {
+                "kind": "text",
+                "text": "请派成员"
+              }
+            ],
+            "ToolCalls": null,
+            "ToolCallID": ""
+          },
+          {
+            "Role": "assistant",
+            "Content": null,
+            "ToolCalls": [
+              {
+                "ID": "id1",
+                "WireID": "id1",
+                "Name": "team_spawn",
+                "Args": {
+                  "name": "alice",
+                  "task": "成员任务"
+                }
+              }
+            ],
+            "ToolCallID": ""
+          },
+          {
+            "Role": "tool",
+            "Content": [
+              {
+                "kind": "text",
+                "text": "已派成员 alice（会话 lead/m-alice），完成后结果会作为新消息送达。"
+              }
+            ],
+            "ToolCalls": null,
+            "ToolCallID": "id1"
+          }
+        ],
+        "Tools": [
+          {
+            "Name": "read_artifact",
+            "Description": "按行读取已存为工件的超大工具结果",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "ref": {
+                  "type": "string",
+                  "description": "artifact://\u003csha256\u003e"
+                },
+                "offset": {
+                  "type": "integer",
+                  "description": "起始行（从 1 开始）"
+                },
+                "limit": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "ref"
+              ]
+            }
+          },
+          {
+            "Name": "read_file",
+            "Description": "读取文本文件（路径相对工作目录）。offset 为起始行（1 起），limit 为行数；默认最多 2000 行 / 50KB，截断时按提示用 offset 继续。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "offset": {
+                  "type": "integer",
+                  "description": "起始行号，1 起"
+                },
+                "limit": {
+                  "type": "integer",
+                  "description": "最多读取的行数"
+                }
+              },
+              "required": [
+                "path"
+              ]
+            }
+          },
+          {
+            "Name": "grep",
+            "Description": "在文件内容中搜索（正则或字面量），返回 路径:行号: 内容。遵守 .gitignore，跳过二进制文件。默认最多 100 条匹配。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "pattern": {
+                  "type": "string",
+                  "description": "正则（RE2 语法）或字面量"
+                },
+                "path": {
+                  "type": "string",
+                  "description": "目录或文件（默认工作目录）"
+                },
+                "glob": {
+                  "type": "string",
+                  "description": "文件过滤，如 *.go 或 **/*_test.go"
+                },
+                "ignore_case": {
+                  "type": "boolean"
+                },
+                "literal": {
+                  "type": "boolean",
+                  "description": "把 pattern 当字面量"
+                },
+                "context": {
+                  "type": "integer",
+                  "description": "匹配前后各显示几行"
+                },
+                "limit": {
+                  "type": "integer",
+                  "description": "最多返回的匹配数"
+                }
+              },
+              "required": [
+                "pattern"
+              ]
+            }
+          },
+          {
+            "Name": "glob",
+            "Description": "按文件名模式查找文件（如 **/*.go、cmd/**/main.go；不含 / 的模式匹配任意层的文件名），按修改时间由新到旧，遵守 .gitignore。默认最多 200 条。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "pattern": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string",
+                  "description": "搜索起点目录（默认工作目录）"
+                },
+                "limit": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "pattern"
+              ]
+            }
+          },
+          {
+            "Name": "edit",
+            "Description": "精确编辑文件：按 old_text → new_text 替换，可一次多处（在原文件上匹配、全部成功才写入）。old_text 为空表示新建文件。修改已有文件优先用它，不要整文件重写。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "文件路径（相对工作目录）"
+                },
+                "edits": {
+                  "type": "array",
+                  "description": "一处或多处替换。每处 old_text 在原文件中必须唯一、互不重叠；相邻改动合并成一处。",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "old_text": {
+                        "type": "string",
+                        "description": "要替换的原文（精确匹配；尽量短但要唯一）。为空表示新建文件"
+                      },
+                      "new_text": {
+                        "type": "string",
+                        "description": "替换后的文本"
+                      }
+                    },
+                    "required": [
+                      "old_text",
+                      "new_text"
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "path",
+                "edits"
+              ]
+            }
+          },
+          {
+            "Name": "write_file",
+            "Description": "写入文本文件（新建或整体覆盖，自动创建父目录；路径相对工作目录）。修改已有文件请用 edit。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "content": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "path",
+                "content"
+              ]
+            }
+          },
+          {
+            "Name": "list_dir",
+            "Description": "列出目录内容（路径相对工作目录，默认工作目录；目录名以 / 结尾）。递归查找文件用 glob。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          {
+            "Name": "ask_user",
+            "Description": "需求有歧义或决定代价大时向用户提问。options 可给出选项。能自行合理决定的不要问。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "question": {
+                  "type": "string"
+                },
+                "options": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "question"
+              ]
+            }
+          },
+          {
+            "Name": "shell",
+            "Description": "在工作目录执行一条 PowerShell 命令（不是 bash：不支持 \u003c\u003c\u003c、heredoc、export、反引号命令替换；用 ; 分隔语句，用 $env:NAME 读写环境变量，用 2\u003e\u00261 合并输出）。返回合并的 stdout/stderr 与退出码。每次调用是新进程，已在工作目录执行（不必先 cd），cd 与环境变量不保留。timeout 秒（默认 120，最大 600），超时杀整个进程树。长时间运行（服务、监听）用 background:true，返回 job id，再用 job_output 读取输出、job_kill 终止。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "command": {
+                  "type": "string"
+                },
+                "timeout": {
+                  "type": "integer",
+                  "description": "超时秒数"
+                },
+                "background": {
+                  "type": "boolean",
+                  "description": "后台运行，立即返回 job id"
+                },
+                "sandbox_permissions": {
+                  "type": "string",
+                  "enum": [
+                    "read-only",
+                    "workspace-write",
+                    "danger-full-access"
+                  ],
+                  "description": "仅在命令被沙箱拒绝后使用：为本次调用申请更宽的沙箱，需要用户批准"
+                }
+              },
+              "required": [
+                "command"
+              ]
+            }
+          },
+          {
+            "Name": "job_output",
+            "Description": "读取后台 job 自上次读取以来的新输出与状态。wait:true 时等到 job 结束或 timeout 秒（默认 30）。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "wait": {
+                  "type": "boolean"
+                },
+                "timeout": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "id"
+              ]
+            }
+          },
+          {
+            "Name": "job_kill",
+            "Description": "终止一个后台 job（连同其子进程）。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id"
+              ]
+            }
+          },
+          {
+            "Name": "subagent",
+            "Description": "把一个独立、边界清楚的子任务委派给子智能体（全新上下文，同样的工具）。task 要自包含：子智能体看不到当前对话。返回子智能体的最终回答与子会话 id；传 session 可继续同一个子会话追问。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "task": {
+                  "type": "string",
+                  "description": "自包含的任务说明"
+                },
+                "session": {
+                  "type": "string",
+                  "description": "可选：续用的子会话 id"
+                }
+              },
+              "required": [
+                "task"
+              ]
+            }
+          },
+          {
+            "Name": "team_spawn",
+            "Description": "派一个工作组成员（独立会话、同样的基础工具 + 看板）去做自包含的任务，立即返回，不等结果。成员做完时它的最终回答会作为一条新消息送回给你。同名成员已存在则把 task 作为下一条消息发给它。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "成员名，小写字母数字和连字符"
+                },
+                "task": {
+                  "type": "string",
+                  "description": "自包含的任务说明"
+                }
+              },
+              "required": [
+                "name",
+                "task"
+              ]
+            }
+          },
+          {
+            "Name": "team_send",
+            "Description": "给工作组里的另一位发消息：to 为 \"lead\"（领导）或成员名。消息进入对方 inbox，对方空闲时立即处理。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "to": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "to",
+                "message"
+              ]
+            }
+          },
+          {
+            "Name": "task_create",
+            "Description": "在工作组看板上新建任务（pending、无负责人）。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "subject": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "subject"
+              ]
+            }
+          },
+          {
+            "Name": "task_list",
+            "Description": "列出工作组看板上的全部任务（id、状态、负责人、结果）。",
+            "Schema": {
+              "type": "object",
+              "properties": {}
+            }
+          },
+          {
+            "Name": "task_claim",
+            "Description": "领取一个 pending 任务（成为负责人，状态改为 in_progress）。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "id"
+              ]
+            }
+          },
+          {
+            "Name": "task_complete",
+            "Description": "把自己负责的任务标为完成，附一句结果。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "integer"
+                },
+                "result": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id"
+              ]
+            }
+          }
+        ],
+        "Params": {
+          "Temperature": null,
+          "MaxTokens": null,
+          "ToolChoice": null,
+          "Reasoning": null,
+          "Extra": null
+        }
+      },
+      {
+        "Model": "deepseek-chat",
+        "System": [
+          {
+            "Text": "你是一个在用户本机工作目录中工作的编程助手。\n需要了解代码时用 grep（搜内容）/ glob（找文件）/ list_dir 定位，再用 read_file 读（大文件按 offset/limit 分段），再动手；修改已有文件用 edit（精确替换），新建或整体重写才用 write_file；需要运行命令用 shell。\n回答简洁，完成后用一两句话说明做了什么。\n工作目录：<dir0>",
+            "Breakpoint": false,
+            "Source": "agent"
+          }
+        ],
+        "Messages": [
+          {
+            "Role": "user",
+            "Content": [
+              {
+                "kind": "text",
+                "text": "请派成员"
+              }
+            ],
+            "ToolCalls": null,
+            "ToolCallID": ""
+          },
+          {
+            "Role": "assistant",
+            "Content": null,
+            "ToolCalls": [
+              {
+                "ID": "id1",
+                "WireID": "id1",
+                "Name": "team_spawn",
+                "Args": {
+                  "name": "alice",
+                  "task": "成员任务"
+                }
+              }
+            ],
+            "ToolCallID": ""
+          },
+          {
+            "Role": "tool",
+            "Content": [
+              {
+                "kind": "text",
+                "text": "已派成员 alice（会话 lead/m-alice），完成后结果会作为新消息送达。"
+              }
+            ],
+            "ToolCalls": null,
+            "ToolCallID": "id1"
+          },
+          {
+            "Role": "assistant",
+            "Content": [
+              {
+                "kind": "text",
+                "text": "done"
+              }
+            ],
+            "ToolCalls": null,
+            "ToolCallID": ""
+          },
+          {
+            "Role": "user",
+            "Content": [
+              {
+                "kind": "text",
+                "text": "[成员 alice 完成]\nre:成员任务"
+              }
+            ],
+            "ToolCalls": null,
+            "ToolCallID": ""
+          }
+        ],
+        "Tools": [
+          {
+            "Name": "read_artifact",
+            "Description": "按行读取已存为工件的超大工具结果",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "ref": {
+                  "type": "string",
+                  "description": "artifact://\u003csha256\u003e"
+                },
+                "offset": {
+                  "type": "integer",
+                  "description": "起始行（从 1 开始）"
+                },
+                "limit": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "ref"
+              ]
+            }
+          },
+          {
+            "Name": "read_file",
+            "Description": "读取文本文件（路径相对工作目录）。offset 为起始行（1 起），limit 为行数；默认最多 2000 行 / 50KB，截断时按提示用 offset 继续。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "offset": {
+                  "type": "integer",
+                  "description": "起始行号，1 起"
+                },
+                "limit": {
+                  "type": "integer",
+                  "description": "最多读取的行数"
+                }
+              },
+              "required": [
+                "path"
+              ]
+            }
+          },
+          {
+            "Name": "grep",
+            "Description": "在文件内容中搜索（正则或字面量），返回 路径:行号: 内容。遵守 .gitignore，跳过二进制文件。默认最多 100 条匹配。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "pattern": {
+                  "type": "string",
+                  "description": "正则（RE2 语法）或字面量"
+                },
+                "path": {
+                  "type": "string",
+                  "description": "目录或文件（默认工作目录）"
+                },
+                "glob": {
+                  "type": "string",
+                  "description": "文件过滤，如 *.go 或 **/*_test.go"
+                },
+                "ignore_case": {
+                  "type": "boolean"
+                },
+                "literal": {
+                  "type": "boolean",
+                  "description": "把 pattern 当字面量"
+                },
+                "context": {
+                  "type": "integer",
+                  "description": "匹配前后各显示几行"
+                },
+                "limit": {
+                  "type": "integer",
+                  "description": "最多返回的匹配数"
+                }
+              },
+              "required": [
+                "pattern"
+              ]
+            }
+          },
+          {
+            "Name": "glob",
+            "Description": "按文件名模式查找文件（如 **/*.go、cmd/**/main.go；不含 / 的模式匹配任意层的文件名），按修改时间由新到旧，遵守 .gitignore。默认最多 200 条。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "pattern": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string",
+                  "description": "搜索起点目录（默认工作目录）"
+                },
+                "limit": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "pattern"
+              ]
+            }
+          },
+          {
+            "Name": "edit",
+            "Description": "精确编辑文件：按 old_text → new_text 替换，可一次多处（在原文件上匹配、全部成功才写入）。old_text 为空表示新建文件。修改已有文件优先用它，不要整文件重写。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "文件路径（相对工作目录）"
+                },
+                "edits": {
+                  "type": "array",
+                  "description": "一处或多处替换。每处 old_text 在原文件中必须唯一、互不重叠；相邻改动合并成一处。",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "old_text": {
+                        "type": "string",
+                        "description": "要替换的原文（精确匹配；尽量短但要唯一）。为空表示新建文件"
+                      },
+                      "new_text": {
+                        "type": "string",
+                        "description": "替换后的文本"
+                      }
+                    },
+                    "required": [
+                      "old_text",
+                      "new_text"
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "path",
+                "edits"
+              ]
+            }
+          },
+          {
+            "Name": "write_file",
+            "Description": "写入文本文件（新建或整体覆盖，自动创建父目录；路径相对工作目录）。修改已有文件请用 edit。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "content": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "path",
+                "content"
+              ]
+            }
+          },
+          {
+            "Name": "list_dir",
+            "Description": "列出目录内容（路径相对工作目录，默认工作目录；目录名以 / 结尾）。递归查找文件用 glob。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          {
+            "Name": "ask_user",
+            "Description": "需求有歧义或决定代价大时向用户提问。options 可给出选项。能自行合理决定的不要问。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "question": {
+                  "type": "string"
+                },
+                "options": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "question"
+              ]
+            }
+          },
+          {
+            "Name": "shell",
+            "Description": "在工作目录执行一条 PowerShell 命令（不是 bash：不支持 \u003c\u003c\u003c、heredoc、export、反引号命令替换；用 ; 分隔语句，用 $env:NAME 读写环境变量，用 2\u003e\u00261 合并输出）。返回合并的 stdout/stderr 与退出码。每次调用是新进程，已在工作目录执行（不必先 cd），cd 与环境变量不保留。timeout 秒（默认 120，最大 600），超时杀整个进程树。长时间运行（服务、监听）用 background:true，返回 job id，再用 job_output 读取输出、job_kill 终止。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "command": {
+                  "type": "string"
+                },
+                "timeout": {
+                  "type": "integer",
+                  "description": "超时秒数"
+                },
+                "background": {
+                  "type": "boolean",
+                  "description": "后台运行，立即返回 job id"
+                },
+                "sandbox_permissions": {
+                  "type": "string",
+                  "enum": [
+                    "read-only",
+                    "workspace-write",
+                    "danger-full-access"
+                  ],
+                  "description": "仅在命令被沙箱拒绝后使用：为本次调用申请更宽的沙箱，需要用户批准"
+                }
+              },
+              "required": [
+                "command"
+              ]
+            }
+          },
+          {
+            "Name": "job_output",
+            "Description": "读取后台 job 自上次读取以来的新输出与状态。wait:true 时等到 job 结束或 timeout 秒（默认 30）。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "wait": {
+                  "type": "boolean"
+                },
+                "timeout": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "id"
+              ]
+            }
+          },
+          {
+            "Name": "job_kill",
+            "Description": "终止一个后台 job（连同其子进程）。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id"
+              ]
+            }
+          },
+          {
+            "Name": "subagent",
+            "Description": "把一个独立、边界清楚的子任务委派给子智能体（全新上下文，同样的工具）。task 要自包含：子智能体看不到当前对话。返回子智能体的最终回答与子会话 id；传 session 可继续同一个子会话追问。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "task": {
+                  "type": "string",
+                  "description": "自包含的任务说明"
+                },
+                "session": {
+                  "type": "string",
+                  "description": "可选：续用的子会话 id"
+                }
+              },
+              "required": [
+                "task"
+              ]
+            }
+          },
+          {
+            "Name": "team_spawn",
+            "Description": "派一个工作组成员（独立会话、同样的基础工具 + 看板）去做自包含的任务，立即返回，不等结果。成员做完时它的最终回答会作为一条新消息送回给你。同名成员已存在则把 task 作为下一条消息发给它。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "成员名，小写字母数字和连字符"
+                },
+                "task": {
+                  "type": "string",
+                  "description": "自包含的任务说明"
+                }
+              },
+              "required": [
+                "name",
+                "task"
+              ]
+            }
+          },
+          {
+            "Name": "team_send",
+            "Description": "给工作组里的另一位发消息：to 为 \"lead\"（领导）或成员名。消息进入对方 inbox，对方空闲时立即处理。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "to": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "to",
+                "message"
+              ]
+            }
+          },
+          {
+            "Name": "task_create",
+            "Description": "在工作组看板上新建任务（pending、无负责人）。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "subject": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "subject"
+              ]
+            }
+          },
+          {
+            "Name": "task_list",
+            "Description": "列出工作组看板上的全部任务（id、状态、负责人、结果）。",
+            "Schema": {
+              "type": "object",
+              "properties": {}
+            }
+          },
+          {
+            "Name": "task_claim",
+            "Description": "领取一个 pending 任务（成为负责人，状态改为 in_progress）。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "id"
+              ]
+            }
+          },
+          {
+            "Name": "task_complete",
+            "Description": "把自己负责的任务标为完成，附一句结果。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "integer"
+                },
+                "result": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id"
+              ]
+            }
+          }
+        ],
+        "Params": {
+          "Temperature": null,
+          "MaxTokens": null,
+          "ToolChoice": null,
+          "Reasoning": null,
+          "Extra": null
+        }
+      }
+    ]
+  },
+  {
+    "Role": "main",
+    "Requests": [
+      {
+        "Model": "deepseek-chat",
+        "System": [
+          {
+            "Text": "你是一个在用户本机工作目录中工作的编程助手。\n需要了解代码时用 grep（搜内容）/ glob（找文件）/ list_dir 定位，再用 read_file 读（大文件按 offset/limit 分段），再动手；修改已有文件用 edit（精确替换），新建或整体重写才用 write_file；需要运行命令用 shell。\n回答简洁，完成后用一两句话说明做了什么。\n工作目录：<dir0>",
+            "Breakpoint": false,
+            "Source": "agent"
+          }
+        ],
+        "Messages": [
+          {
+            "Role": "user",
+            "Content": [
+              {
+                "kind": "text",
+                "text": "你好"
+              }
+            ],
+            "ToolCalls": null,
+            "ToolCallID": ""
+          }
+        ],
+        "Tools": [
+          {
+            "Name": "read_artifact",
+            "Description": "按行读取已存为工件的超大工具结果",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "ref": {
+                  "type": "string",
+                  "description": "artifact://\u003csha256\u003e"
+                },
+                "offset": {
+                  "type": "integer",
+                  "description": "起始行（从 1 开始）"
+                },
+                "limit": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "ref"
+              ]
+            }
+          },
+          {
+            "Name": "read_file",
+            "Description": "读取文本文件（路径相对工作目录）。offset 为起始行（1 起），limit 为行数；默认最多 2000 行 / 50KB，截断时按提示用 offset 继续。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "offset": {
+                  "type": "integer",
+                  "description": "起始行号，1 起"
+                },
+                "limit": {
+                  "type": "integer",
+                  "description": "最多读取的行数"
+                }
+              },
+              "required": [
+                "path"
+              ]
+            }
+          },
+          {
+            "Name": "grep",
+            "Description": "在文件内容中搜索（正则或字面量），返回 路径:行号: 内容。遵守 .gitignore，跳过二进制文件。默认最多 100 条匹配。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "pattern": {
+                  "type": "string",
+                  "description": "正则（RE2 语法）或字面量"
+                },
+                "path": {
+                  "type": "string",
+                  "description": "目录或文件（默认工作目录）"
+                },
+                "glob": {
+                  "type": "string",
+                  "description": "文件过滤，如 *.go 或 **/*_test.go"
+                },
+                "ignore_case": {
+                  "type": "boolean"
+                },
+                "literal": {
+                  "type": "boolean",
+                  "description": "把 pattern 当字面量"
+                },
+                "context": {
+                  "type": "integer",
+                  "description": "匹配前后各显示几行"
+                },
+                "limit": {
+                  "type": "integer",
+                  "description": "最多返回的匹配数"
+                }
+              },
+              "required": [
+                "pattern"
+              ]
+            }
+          },
+          {
+            "Name": "glob",
+            "Description": "按文件名模式查找文件（如 **/*.go、cmd/**/main.go；不含 / 的模式匹配任意层的文件名），按修改时间由新到旧，遵守 .gitignore。默认最多 200 条。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "pattern": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string",
+                  "description": "搜索起点目录（默认工作目录）"
+                },
+                "limit": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "pattern"
+              ]
+            }
+          },
+          {
+            "Name": "edit",
+            "Description": "精确编辑文件：按 old_text → new_text 替换，可一次多处（在原文件上匹配、全部成功才写入）。old_text 为空表示新建文件。修改已有文件优先用它，不要整文件重写。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "文件路径（相对工作目录）"
+                },
+                "edits": {
+                  "type": "array",
+                  "description": "一处或多处替换。每处 old_text 在原文件中必须唯一、互不重叠；相邻改动合并成一处。",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "old_text": {
+                        "type": "string",
+                        "description": "要替换的原文（精确匹配；尽量短但要唯一）。为空表示新建文件"
+                      },
+                      "new_text": {
+                        "type": "string",
+                        "description": "替换后的文本"
+                      }
+                    },
+                    "required": [
+                      "old_text",
+                      "new_text"
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "path",
+                "edits"
+              ]
+            }
+          },
+          {
+            "Name": "write_file",
+            "Description": "写入文本文件（新建或整体覆盖，自动创建父目录；路径相对工作目录）。修改已有文件请用 edit。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "content": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "path",
+                "content"
+              ]
+            }
+          },
+          {
+            "Name": "list_dir",
+            "Description": "列出目录内容（路径相对工作目录，默认工作目录；目录名以 / 结尾）。递归查找文件用 glob。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          {
+            "Name": "ask_user",
+            "Description": "需求有歧义或决定代价大时向用户提问。options 可给出选项。能自行合理决定的不要问。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "question": {
+                  "type": "string"
+                },
+                "options": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "question"
+              ]
+            }
+          },
+          {
+            "Name": "shell",
+            "Description": "在工作目录执行一条 PowerShell 命令（不是 bash：不支持 \u003c\u003c\u003c、heredoc、export、反引号命令替换；用 ; 分隔语句，用 $env:NAME 读写环境变量，用 2\u003e\u00261 合并输出）。返回合并的 stdout/stderr 与退出码。每次调用是新进程，已在工作目录执行（不必先 cd），cd 与环境变量不保留。timeout 秒（默认 120，最大 600），超时杀整个进程树。长时间运行（服务、监听）用 background:true，返回 job id，再用 job_output 读取输出、job_kill 终止。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "command": {
+                  "type": "string"
+                },
+                "timeout": {
+                  "type": "integer",
+                  "description": "超时秒数"
+                },
+                "background": {
+                  "type": "boolean",
+                  "description": "后台运行，立即返回 job id"
+                },
+                "sandbox_permissions": {
+                  "type": "string",
+                  "enum": [
+                    "read-only",
+                    "workspace-write",
+                    "danger-full-access"
+                  ],
+                  "description": "仅在命令被沙箱拒绝后使用：为本次调用申请更宽的沙箱，需要用户批准"
+                }
+              },
+              "required": [
+                "command"
+              ]
+            }
+          },
+          {
+            "Name": "job_output",
+            "Description": "读取后台 job 自上次读取以来的新输出与状态。wait:true 时等到 job 结束或 timeout 秒（默认 30）。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "wait": {
+                  "type": "boolean"
+                },
+                "timeout": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "id"
+              ]
+            }
+          },
+          {
+            "Name": "job_kill",
+            "Description": "终止一个后台 job（连同其子进程）。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id"
+              ]
+            }
+          },
+          {
+            "Name": "subagent",
+            "Description": "把一个独立、边界清楚的子任务委派给子智能体（全新上下文，同样的工具）。task 要自包含：子智能体看不到当前对话。返回子智能体的最终回答与子会话 id；传 session 可继续同一个子会话追问。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "task": {
+                  "type": "string",
+                  "description": "自包含的任务说明"
+                },
+                "session": {
+                  "type": "string",
+                  "description": "可选：续用的子会话 id"
+                }
+              },
+              "required": [
+                "task"
+              ]
+            }
+          },
+          {
+            "Name": "team_spawn",
+            "Description": "派一个工作组成员（独立会话、同样的基础工具 + 看板）去做自包含的任务，立即返回，不等结果。成员做完时它的最终回答会作为一条新消息送回给你。同名成员已存在则把 task 作为下一条消息发给它。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "成员名，小写字母数字和连字符"
+                },
+                "task": {
+                  "type": "string",
+                  "description": "自包含的任务说明"
+                }
+              },
+              "required": [
+                "name",
+                "task"
+              ]
+            }
+          },
+          {
+            "Name": "team_send",
+            "Description": "给工作组里的另一位发消息：to 为 \"lead\"（领导）或成员名。消息进入对方 inbox，对方空闲时立即处理。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "to": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "to",
+                "message"
+              ]
+            }
+          },
+          {
+            "Name": "task_create",
+            "Description": "在工作组看板上新建任务（pending、无负责人）。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "subject": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "subject"
+              ]
+            }
+          },
+          {
+            "Name": "task_list",
+            "Description": "列出工作组看板上的全部任务（id、状态、负责人、结果）。",
+            "Schema": {
+              "type": "object",
+              "properties": {}
+            }
+          },
+          {
+            "Name": "task_claim",
+            "Description": "领取一个 pending 任务（成为负责人，状态改为 in_progress）。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "id"
+              ]
+            }
+          },
+          {
+            "Name": "task_complete",
+            "Description": "把自己负责的任务标为完成，附一句结果。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "integer"
+                },
+                "result": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id"
+              ]
+            }
+          }
+        ],
+        "Params": {
+          "Temperature": null,
+          "MaxTokens": null,
+          "ToolChoice": null,
+          "Reasoning": null,
+          "Extra": null
+        }
+      },
+      {
+        "Model": "deepseek-chat",
+        "System": [
+          {
+            "Text": "你是一个在用户本机工作目录中工作的编程助手。\n需要了解代码时用 grep（搜内容）/ glob（找文件）/ list_dir 定位，再用 read_file 读（大文件按 offset/limit 分段），再动手；修改已有文件用 edit（精确替换），新建或整体重写才用 write_file；需要运行命令用 shell。\n回答简洁，完成后用一两句话说明做了什么。\n工作目录：<dir0>",
+            "Breakpoint": false,
+            "Source": "agent"
+          }
+        ],
+        "Messages": [
+          {
+            "Role": "user",
+            "Content": [
+              {
+                "kind": "text",
+                "text": "你好"
+              }
+            ],
+            "ToolCalls": null,
+            "ToolCallID": ""
+          },
+          {
+            "Role": "assistant",
+            "Content": [
+              {
+                "kind": "text",
+                "text": "re:你好"
+              }
+            ],
+            "ToolCalls": null,
+            "ToolCallID": ""
+          },
+          {
+            "Role": "user",
+            "Content": [
+              {
+                "kind": "text",
+                "text": "请派子智能体"
+              }
+            ],
+            "ToolCalls": null,
+            "ToolCallID": ""
+          }
+        ],
+        "Tools": [
+          {
+            "Name": "read_artifact",
+            "Description": "按行读取已存为工件的超大工具结果",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "ref": {
+                  "type": "string",
+                  "description": "artifact://\u003csha256\u003e"
+                },
+                "offset": {
+                  "type": "integer",
+                  "description": "起始行（从 1 开始）"
+                },
+                "limit": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "ref"
+              ]
+            }
+          },
+          {
+            "Name": "read_file",
+            "Description": "读取文本文件（路径相对工作目录）。offset 为起始行（1 起），limit 为行数；默认最多 2000 行 / 50KB，截断时按提示用 offset 继续。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "offset": {
+                  "type": "integer",
+                  "description": "起始行号，1 起"
+                },
+                "limit": {
+                  "type": "integer",
+                  "description": "最多读取的行数"
+                }
+              },
+              "required": [
+                "path"
+              ]
+            }
+          },
+          {
+            "Name": "grep",
+            "Description": "在文件内容中搜索（正则或字面量），返回 路径:行号: 内容。遵守 .gitignore，跳过二进制文件。默认最多 100 条匹配。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "pattern": {
+                  "type": "string",
+                  "description": "正则（RE2 语法）或字面量"
+                },
+                "path": {
+                  "type": "string",
+                  "description": "目录或文件（默认工作目录）"
+                },
+                "glob": {
+                  "type": "string",
+                  "description": "文件过滤，如 *.go 或 **/*_test.go"
+                },
+                "ignore_case": {
+                  "type": "boolean"
+                },
+                "literal": {
+                  "type": "boolean",
+                  "description": "把 pattern 当字面量"
+                },
+                "context": {
+                  "type": "integer",
+                  "description": "匹配前后各显示几行"
+                },
+                "limit": {
+                  "type": "integer",
+                  "description": "最多返回的匹配数"
+                }
+              },
+              "required": [
+                "pattern"
+              ]
+            }
+          },
+          {
+            "Name": "glob",
+            "Description": "按文件名模式查找文件（如 **/*.go、cmd/**/main.go；不含 / 的模式匹配任意层的文件名），按修改时间由新到旧，遵守 .gitignore。默认最多 200 条。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "pattern": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string",
+                  "description": "搜索起点目录（默认工作目录）"
+                },
+                "limit": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "pattern"
+              ]
+            }
+          },
+          {
+            "Name": "edit",
+            "Description": "精确编辑文件：按 old_text → new_text 替换，可一次多处（在原文件上匹配、全部成功才写入）。old_text 为空表示新建文件。修改已有文件优先用它，不要整文件重写。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "文件路径（相对工作目录）"
+                },
+                "edits": {
+                  "type": "array",
+                  "description": "一处或多处替换。每处 old_text 在原文件中必须唯一、互不重叠；相邻改动合并成一处。",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "old_text": {
+                        "type": "string",
+                        "description": "要替换的原文（精确匹配；尽量短但要唯一）。为空表示新建文件"
+                      },
+                      "new_text": {
+                        "type": "string",
+                        "description": "替换后的文本"
+                      }
+                    },
+                    "required": [
+                      "old_text",
+                      "new_text"
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "path",
+                "edits"
+              ]
+            }
+          },
+          {
+            "Name": "write_file",
+            "Description": "写入文本文件（新建或整体覆盖，自动创建父目录；路径相对工作目录）。修改已有文件请用 edit。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "content": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "path",
+                "content"
+              ]
+            }
+          },
+          {
+            "Name": "list_dir",
+            "Description": "列出目录内容（路径相对工作目录，默认工作目录；目录名以 / 结尾）。递归查找文件用 glob。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          {
+            "Name": "ask_user",
+            "Description": "需求有歧义或决定代价大时向用户提问。options 可给出选项。能自行合理决定的不要问。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "question": {
+                  "type": "string"
+                },
+                "options": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "question"
+              ]
+            }
+          },
+          {
+            "Name": "shell",
+            "Description": "在工作目录执行一条 PowerShell 命令（不是 bash：不支持 \u003c\u003c\u003c、heredoc、export、反引号命令替换；用 ; 分隔语句，用 $env:NAME 读写环境变量，用 2\u003e\u00261 合并输出）。返回合并的 stdout/stderr 与退出码。每次调用是新进程，已在工作目录执行（不必先 cd），cd 与环境变量不保留。timeout 秒（默认 120，最大 600），超时杀整个进程树。长时间运行（服务、监听）用 background:true，返回 job id，再用 job_output 读取输出、job_kill 终止。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "command": {
+                  "type": "string"
+                },
+                "timeout": {
+                  "type": "integer",
+                  "description": "超时秒数"
+                },
+                "background": {
+                  "type": "boolean",
+                  "description": "后台运行，立即返回 job id"
+                },
+                "sandbox_permissions": {
+                  "type": "string",
+                  "enum": [
+                    "read-only",
+                    "workspace-write",
+                    "danger-full-access"
+                  ],
+                  "description": "仅在命令被沙箱拒绝后使用：为本次调用申请更宽的沙箱，需要用户批准"
+                }
+              },
+              "required": [
+                "command"
+              ]
+            }
+          },
+          {
+            "Name": "job_output",
+            "Description": "读取后台 job 自上次读取以来的新输出与状态。wait:true 时等到 job 结束或 timeout 秒（默认 30）。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "wait": {
+                  "type": "boolean"
+                },
+                "timeout": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "id"
+              ]
+            }
+          },
+          {
+            "Name": "job_kill",
+            "Description": "终止一个后台 job（连同其子进程）。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id"
+              ]
+            }
+          },
+          {
+            "Name": "subagent",
+            "Description": "把一个独立、边界清楚的子任务委派给子智能体（全新上下文，同样的工具）。task 要自包含：子智能体看不到当前对话。返回子智能体的最终回答与子会话 id；传 session 可继续同一个子会话追问。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "task": {
+                  "type": "string",
+                  "description": "自包含的任务说明"
+                },
+                "session": {
+                  "type": "string",
+                  "description": "可选：续用的子会话 id"
+                }
+              },
+              "required": [
+                "task"
+              ]
+            }
+          },
+          {
+            "Name": "team_spawn",
+            "Description": "派一个工作组成员（独立会话、同样的基础工具 + 看板）去做自包含的任务，立即返回，不等结果。成员做完时它的最终回答会作为一条新消息送回给你。同名成员已存在则把 task 作为下一条消息发给它。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "成员名，小写字母数字和连字符"
+                },
+                "task": {
+                  "type": "string",
+                  "description": "自包含的任务说明"
+                }
+              },
+              "required": [
+                "name",
+                "task"
+              ]
+            }
+          },
+          {
+            "Name": "team_send",
+            "Description": "给工作组里的另一位发消息：to 为 \"lead\"（领导）或成员名。消息进入对方 inbox，对方空闲时立即处理。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "to": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "to",
+                "message"
+              ]
+            }
+          },
+          {
+            "Name": "task_create",
+            "Description": "在工作组看板上新建任务（pending、无负责人）。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "subject": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "subject"
+              ]
+            }
+          },
+          {
+            "Name": "task_list",
+            "Description": "列出工作组看板上的全部任务（id、状态、负责人、结果）。",
+            "Schema": {
+              "type": "object",
+              "properties": {}
+            }
+          },
+          {
+            "Name": "task_claim",
+            "Description": "领取一个 pending 任务（成为负责人，状态改为 in_progress）。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "id"
+              ]
+            }
+          },
+          {
+            "Name": "task_complete",
+            "Description": "把自己负责的任务标为完成，附一句结果。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "integer"
+                },
+                "result": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id"
+              ]
+            }
+          }
+        ],
+        "Params": {
+          "Temperature": null,
+          "MaxTokens": null,
+          "ToolChoice": null,
+          "Reasoning": null,
+          "Extra": null
+        }
+      },
+      {
+        "Model": "deepseek-chat",
+        "System": [
+          {
+            "Text": "你是一个在用户本机工作目录中工作的编程助手。\n需要了解代码时用 grep（搜内容）/ glob（找文件）/ list_dir 定位，再用 read_file 读（大文件按 offset/limit 分段），再动手；修改已有文件用 edit（精确替换），新建或整体重写才用 write_file；需要运行命令用 shell。\n回答简洁，完成后用一两句话说明做了什么。\n工作目录：<dir0>",
+            "Breakpoint": false,
+            "Source": "agent"
+          }
+        ],
+        "Messages": [
+          {
+            "Role": "user",
+            "Content": [
+              {
+                "kind": "text",
+                "text": "你好"
+              }
+            ],
+            "ToolCalls": null,
+            "ToolCallID": ""
+          },
+          {
+            "Role": "assistant",
+            "Content": [
+              {
+                "kind": "text",
+                "text": "re:你好"
+              }
+            ],
+            "ToolCalls": null,
+            "ToolCallID": ""
+          },
+          {
+            "Role": "user",
+            "Content": [
+              {
+                "kind": "text",
+                "text": "请派子智能体"
+              }
+            ],
+            "ToolCalls": null,
+            "ToolCallID": ""
+          },
+          {
+            "Role": "assistant",
+            "Content": null,
+            "ToolCalls": [
+              {
+                "ID": "id1",
+                "WireID": "id1",
+                "Name": "subagent",
+                "Args": {
+                  "task": "子任务"
+                }
+              }
+            ],
+            "ToolCallID": ""
+          },
+          {
+            "Role": "tool",
+            "Content": [
+              {
+                "kind": "text",
+                "text": "[子会话 main/sub-X]\nre:子任务"
+              }
+            ],
+            "ToolCalls": null,
+            "ToolCallID": "id1"
+          }
+        ],
+        "Tools": [
+          {
+            "Name": "read_artifact",
+            "Description": "按行读取已存为工件的超大工具结果",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "ref": {
+                  "type": "string",
+                  "description": "artifact://\u003csha256\u003e"
+                },
+                "offset": {
+                  "type": "integer",
+                  "description": "起始行（从 1 开始）"
+                },
+                "limit": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "ref"
+              ]
+            }
+          },
+          {
+            "Name": "read_file",
+            "Description": "读取文本文件（路径相对工作目录）。offset 为起始行（1 起），limit 为行数；默认最多 2000 行 / 50KB，截断时按提示用 offset 继续。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "offset": {
+                  "type": "integer",
+                  "description": "起始行号，1 起"
+                },
+                "limit": {
+                  "type": "integer",
+                  "description": "最多读取的行数"
+                }
+              },
+              "required": [
+                "path"
+              ]
+            }
+          },
+          {
+            "Name": "grep",
+            "Description": "在文件内容中搜索（正则或字面量），返回 路径:行号: 内容。遵守 .gitignore，跳过二进制文件。默认最多 100 条匹配。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "pattern": {
+                  "type": "string",
+                  "description": "正则（RE2 语法）或字面量"
+                },
+                "path": {
+                  "type": "string",
+                  "description": "目录或文件（默认工作目录）"
+                },
+                "glob": {
+                  "type": "string",
+                  "description": "文件过滤，如 *.go 或 **/*_test.go"
+                },
+                "ignore_case": {
+                  "type": "boolean"
+                },
+                "literal": {
+                  "type": "boolean",
+                  "description": "把 pattern 当字面量"
+                },
+                "context": {
+                  "type": "integer",
+                  "description": "匹配前后各显示几行"
+                },
+                "limit": {
+                  "type": "integer",
+                  "description": "最多返回的匹配数"
+                }
+              },
+              "required": [
+                "pattern"
+              ]
+            }
+          },
+          {
+            "Name": "glob",
+            "Description": "按文件名模式查找文件（如 **/*.go、cmd/**/main.go；不含 / 的模式匹配任意层的文件名），按修改时间由新到旧，遵守 .gitignore。默认最多 200 条。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "pattern": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string",
+                  "description": "搜索起点目录（默认工作目录）"
+                },
+                "limit": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "pattern"
+              ]
+            }
+          },
+          {
+            "Name": "edit",
+            "Description": "精确编辑文件：按 old_text → new_text 替换，可一次多处（在原文件上匹配、全部成功才写入）。old_text 为空表示新建文件。修改已有文件优先用它，不要整文件重写。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "文件路径（相对工作目录）"
+                },
+                "edits": {
+                  "type": "array",
+                  "description": "一处或多处替换。每处 old_text 在原文件中必须唯一、互不重叠；相邻改动合并成一处。",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "old_text": {
+                        "type": "string",
+                        "description": "要替换的原文（精确匹配；尽量短但要唯一）。为空表示新建文件"
+                      },
+                      "new_text": {
+                        "type": "string",
+                        "description": "替换后的文本"
+                      }
+                    },
+                    "required": [
+                      "old_text",
+                      "new_text"
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "path",
+                "edits"
+              ]
+            }
+          },
+          {
+            "Name": "write_file",
+            "Description": "写入文本文件（新建或整体覆盖，自动创建父目录；路径相对工作目录）。修改已有文件请用 edit。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "content": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "path",
+                "content"
+              ]
+            }
+          },
+          {
+            "Name": "list_dir",
+            "Description": "列出目录内容（路径相对工作目录，默认工作目录；目录名以 / 结尾）。递归查找文件用 glob。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          {
+            "Name": "ask_user",
+            "Description": "需求有歧义或决定代价大时向用户提问。options 可给出选项。能自行合理决定的不要问。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "question": {
+                  "type": "string"
+                },
+                "options": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "question"
+              ]
+            }
+          },
+          {
+            "Name": "shell",
+            "Description": "在工作目录执行一条 PowerShell 命令（不是 bash：不支持 \u003c\u003c\u003c、heredoc、export、反引号命令替换；用 ; 分隔语句，用 $env:NAME 读写环境变量，用 2\u003e\u00261 合并输出）。返回合并的 stdout/stderr 与退出码。每次调用是新进程，已在工作目录执行（不必先 cd），cd 与环境变量不保留。timeout 秒（默认 120，最大 600），超时杀整个进程树。长时间运行（服务、监听）用 background:true，返回 job id，再用 job_output 读取输出、job_kill 终止。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "command": {
+                  "type": "string"
+                },
+                "timeout": {
+                  "type": "integer",
+                  "description": "超时秒数"
+                },
+                "background": {
+                  "type": "boolean",
+                  "description": "后台运行，立即返回 job id"
+                },
+                "sandbox_permissions": {
+                  "type": "string",
+                  "enum": [
+                    "read-only",
+                    "workspace-write",
+                    "danger-full-access"
+                  ],
+                  "description": "仅在命令被沙箱拒绝后使用：为本次调用申请更宽的沙箱，需要用户批准"
+                }
+              },
+              "required": [
+                "command"
+              ]
+            }
+          },
+          {
+            "Name": "job_output",
+            "Description": "读取后台 job 自上次读取以来的新输出与状态。wait:true 时等到 job 结束或 timeout 秒（默认 30）。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "wait": {
+                  "type": "boolean"
+                },
+                "timeout": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "id"
+              ]
+            }
+          },
+          {
+            "Name": "job_kill",
+            "Description": "终止一个后台 job（连同其子进程）。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id"
+              ]
+            }
+          },
+          {
+            "Name": "subagent",
+            "Description": "把一个独立、边界清楚的子任务委派给子智能体（全新上下文，同样的工具）。task 要自包含：子智能体看不到当前对话。返回子智能体的最终回答与子会话 id；传 session 可继续同一个子会话追问。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "task": {
+                  "type": "string",
+                  "description": "自包含的任务说明"
+                },
+                "session": {
+                  "type": "string",
+                  "description": "可选：续用的子会话 id"
+                }
+              },
+              "required": [
+                "task"
+              ]
+            }
+          },
+          {
+            "Name": "team_spawn",
+            "Description": "派一个工作组成员（独立会话、同样的基础工具 + 看板）去做自包含的任务，立即返回，不等结果。成员做完时它的最终回答会作为一条新消息送回给你。同名成员已存在则把 task 作为下一条消息发给它。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "成员名，小写字母数字和连字符"
+                },
+                "task": {
+                  "type": "string",
+                  "description": "自包含的任务说明"
+                }
+              },
+              "required": [
+                "name",
+                "task"
+              ]
+            }
+          },
+          {
+            "Name": "team_send",
+            "Description": "给工作组里的另一位发消息：to 为 \"lead\"（领导）或成员名。消息进入对方 inbox，对方空闲时立即处理。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "to": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "to",
+                "message"
+              ]
+            }
+          },
+          {
+            "Name": "task_create",
+            "Description": "在工作组看板上新建任务（pending、无负责人）。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "subject": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "subject"
+              ]
+            }
+          },
+          {
+            "Name": "task_list",
+            "Description": "列出工作组看板上的全部任务（id、状态、负责人、结果）。",
+            "Schema": {
+              "type": "object",
+              "properties": {}
+            }
+          },
+          {
+            "Name": "task_claim",
+            "Description": "领取一个 pending 任务（成为负责人，状态改为 in_progress）。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "id"
+              ]
+            }
+          },
+          {
+            "Name": "task_complete",
+            "Description": "把自己负责的任务标为完成，附一句结果。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "integer"
+                },
+                "result": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id"
+              ]
+            }
+          }
+        ],
+        "Params": {
+          "Temperature": null,
+          "MaxTokens": null,
+          "ToolChoice": null,
+          "Reasoning": null,
+          "Extra": null
+        }
+      }
+    ]
+  },
+  {
+    "Role": "member",
+    "Requests": [
+      {
+        "Model": "deepseek-chat",
+        "System": [
+          {
+            "Text": "你是一个在用户本机工作目录中工作的编程助手。\n需要了解代码时用 grep（搜内容）/ glob（找文件）/ list_dir 定位，再用 read_file 读（大文件按 offset/limit 分段），再动手；修改已有文件用 edit（精确替换），新建或整体重写才用 write_file；需要运行命令用 shell。\n回答简洁，完成后用一两句话说明做了什么。\n工作目录：<dir0>",
+            "Breakpoint": false,
+            "Source": "agent"
+          }
+        ],
+        "Messages": [
+          {
+            "Role": "user",
+            "Content": [
+              {
+                "kind": "text",
+                "text": "成员任务"
+              }
+            ],
+            "ToolCalls": null,
+            "ToolCallID": ""
+          }
+        ],
+        "Tools": [
+          {
+            "Name": "read_artifact",
+            "Description": "按行读取已存为工件的超大工具结果",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "ref": {
+                  "type": "string",
+                  "description": "artifact://\u003csha256\u003e"
+                },
+                "offset": {
+                  "type": "integer",
+                  "description": "起始行（从 1 开始）"
+                },
+                "limit": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "ref"
+              ]
+            }
+          },
+          {
+            "Name": "read_file",
+            "Description": "读取文本文件（路径相对工作目录）。offset 为起始行（1 起），limit 为行数；默认最多 2000 行 / 50KB，截断时按提示用 offset 继续。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "offset": {
+                  "type": "integer",
+                  "description": "起始行号，1 起"
+                },
+                "limit": {
+                  "type": "integer",
+                  "description": "最多读取的行数"
+                }
+              },
+              "required": [
+                "path"
+              ]
+            }
+          },
+          {
+            "Name": "grep",
+            "Description": "在文件内容中搜索（正则或字面量），返回 路径:行号: 内容。遵守 .gitignore，跳过二进制文件。默认最多 100 条匹配。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "pattern": {
+                  "type": "string",
+                  "description": "正则（RE2 语法）或字面量"
+                },
+                "path": {
+                  "type": "string",
+                  "description": "目录或文件（默认工作目录）"
+                },
+                "glob": {
+                  "type": "string",
+                  "description": "文件过滤，如 *.go 或 **/*_test.go"
+                },
+                "ignore_case": {
+                  "type": "boolean"
+                },
+                "literal": {
+                  "type": "boolean",
+                  "description": "把 pattern 当字面量"
+                },
+                "context": {
+                  "type": "integer",
+                  "description": "匹配前后各显示几行"
+                },
+                "limit": {
+                  "type": "integer",
+                  "description": "最多返回的匹配数"
+                }
+              },
+              "required": [
+                "pattern"
+              ]
+            }
+          },
+          {
+            "Name": "glob",
+            "Description": "按文件名模式查找文件（如 **/*.go、cmd/**/main.go；不含 / 的模式匹配任意层的文件名），按修改时间由新到旧，遵守 .gitignore。默认最多 200 条。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "pattern": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string",
+                  "description": "搜索起点目录（默认工作目录）"
+                },
+                "limit": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "pattern"
+              ]
+            }
+          },
+          {
+            "Name": "edit",
+            "Description": "精确编辑文件：按 old_text → new_text 替换，可一次多处（在原文件上匹配、全部成功才写入）。old_text 为空表示新建文件。修改已有文件优先用它，不要整文件重写。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "文件路径（相对工作目录）"
+                },
+                "edits": {
+                  "type": "array",
+                  "description": "一处或多处替换。每处 old_text 在原文件中必须唯一、互不重叠；相邻改动合并成一处。",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "old_text": {
+                        "type": "string",
+                        "description": "要替换的原文（精确匹配；尽量短但要唯一）。为空表示新建文件"
+                      },
+                      "new_text": {
+                        "type": "string",
+                        "description": "替换后的文本"
+                      }
+                    },
+                    "required": [
+                      "old_text",
+                      "new_text"
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "path",
+                "edits"
+              ]
+            }
+          },
+          {
+            "Name": "write_file",
+            "Description": "写入文本文件（新建或整体覆盖，自动创建父目录；路径相对工作目录）。修改已有文件请用 edit。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "content": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "path",
+                "content"
+              ]
+            }
+          },
+          {
+            "Name": "list_dir",
+            "Description": "列出目录内容（路径相对工作目录，默认工作目录；目录名以 / 结尾）。递归查找文件用 glob。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          {
+            "Name": "ask_user",
+            "Description": "需求有歧义或决定代价大时向用户提问。options 可给出选项。能自行合理决定的不要问。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "question": {
+                  "type": "string"
+                },
+                "options": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "question"
+              ]
+            }
+          },
+          {
+            "Name": "shell",
+            "Description": "在工作目录执行一条 PowerShell 命令（不是 bash：不支持 \u003c\u003c\u003c、heredoc、export、反引号命令替换；用 ; 分隔语句，用 $env:NAME 读写环境变量，用 2\u003e\u00261 合并输出）。返回合并的 stdout/stderr 与退出码。每次调用是新进程，已在工作目录执行（不必先 cd），cd 与环境变量不保留。timeout 秒（默认 120，最大 600），超时杀整个进程树。长时间运行（服务、监听）用 background:true，返回 job id，再用 job_output 读取输出、job_kill 终止。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "command": {
+                  "type": "string"
+                },
+                "timeout": {
+                  "type": "integer",
+                  "description": "超时秒数"
+                },
+                "background": {
+                  "type": "boolean",
+                  "description": "后台运行，立即返回 job id"
+                },
+                "sandbox_permissions": {
+                  "type": "string",
+                  "enum": [
+                    "read-only",
+                    "workspace-write",
+                    "danger-full-access"
+                  ],
+                  "description": "仅在命令被沙箱拒绝后使用：为本次调用申请更宽的沙箱，需要用户批准"
+                }
+              },
+              "required": [
+                "command"
+              ]
+            }
+          },
+          {
+            "Name": "job_output",
+            "Description": "读取后台 job 自上次读取以来的新输出与状态。wait:true 时等到 job 结束或 timeout 秒（默认 30）。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "wait": {
+                  "type": "boolean"
+                },
+                "timeout": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "id"
+              ]
+            }
+          },
+          {
+            "Name": "job_kill",
+            "Description": "终止一个后台 job（连同其子进程）。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id"
+              ]
+            }
+          },
+          {
+            "Name": "team_send",
+            "Description": "给工作组里的另一位发消息：to 为 \"lead\"（领导）或成员名。消息进入对方 inbox，对方空闲时立即处理。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "to": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "to",
+                "message"
+              ]
+            }
+          },
+          {
+            "Name": "task_create",
+            "Description": "在工作组看板上新建任务（pending、无负责人）。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "subject": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "subject"
+              ]
+            }
+          },
+          {
+            "Name": "task_list",
+            "Description": "列出工作组看板上的全部任务（id、状态、负责人、结果）。",
+            "Schema": {
+              "type": "object",
+              "properties": {}
+            }
+          },
+          {
+            "Name": "task_claim",
+            "Description": "领取一个 pending 任务（成为负责人，状态改为 in_progress）。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "id"
+              ]
+            }
+          },
+          {
+            "Name": "task_complete",
+            "Description": "把自己负责的任务标为完成，附一句结果。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "integer"
+                },
+                "result": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id"
+              ]
+            }
+          }
+        ],
+        "Params": {
+          "Temperature": null,
+          "MaxTokens": null,
+          "ToolChoice": null,
+          "Reasoning": null,
+          "Extra": null
+        }
+      }
+    ]
+  },
+  {
+    "Role": "subagent",
+    "Requests": [
+      {
+        "Model": "deepseek-chat",
+        "System": [
+          {
+            "Text": "你是一个在用户本机工作目录中工作的编程助手。\n需要了解代码时用 grep（搜内容）/ glob（找文件）/ list_dir 定位，再用 read_file 读（大文件按 offset/limit 分段），再动手；修改已有文件用 edit（精确替换），新建或整体重写才用 write_file；需要运行命令用 shell。\n回答简洁，完成后用一两句话说明做了什么。\n工作目录：<dir0>",
+            "Breakpoint": false,
+            "Source": "agent"
+          }
+        ],
+        "Messages": [
+          {
+            "Role": "user",
+            "Content": [
+              {
+                "kind": "text",
+                "text": "子任务"
+              }
+            ],
+            "ToolCalls": null,
+            "ToolCallID": ""
+          }
+        ],
+        "Tools": [
+          {
+            "Name": "read_artifact",
+            "Description": "按行读取已存为工件的超大工具结果",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "ref": {
+                  "type": "string",
+                  "description": "artifact://\u003csha256\u003e"
+                },
+                "offset": {
+                  "type": "integer",
+                  "description": "起始行（从 1 开始）"
+                },
+                "limit": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "ref"
+              ]
+            }
+          },
+          {
+            "Name": "read_file",
+            "Description": "读取文本文件（路径相对工作目录）。offset 为起始行（1 起），limit 为行数；默认最多 2000 行 / 50KB，截断时按提示用 offset 继续。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "offset": {
+                  "type": "integer",
+                  "description": "起始行号，1 起"
+                },
+                "limit": {
+                  "type": "integer",
+                  "description": "最多读取的行数"
+                }
+              },
+              "required": [
+                "path"
+              ]
+            }
+          },
+          {
+            "Name": "grep",
+            "Description": "在文件内容中搜索（正则或字面量），返回 路径:行号: 内容。遵守 .gitignore，跳过二进制文件。默认最多 100 条匹配。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "pattern": {
+                  "type": "string",
+                  "description": "正则（RE2 语法）或字面量"
+                },
+                "path": {
+                  "type": "string",
+                  "description": "目录或文件（默认工作目录）"
+                },
+                "glob": {
+                  "type": "string",
+                  "description": "文件过滤，如 *.go 或 **/*_test.go"
+                },
+                "ignore_case": {
+                  "type": "boolean"
+                },
+                "literal": {
+                  "type": "boolean",
+                  "description": "把 pattern 当字面量"
+                },
+                "context": {
+                  "type": "integer",
+                  "description": "匹配前后各显示几行"
+                },
+                "limit": {
+                  "type": "integer",
+                  "description": "最多返回的匹配数"
+                }
+              },
+              "required": [
+                "pattern"
+              ]
+            }
+          },
+          {
+            "Name": "glob",
+            "Description": "按文件名模式查找文件（如 **/*.go、cmd/**/main.go；不含 / 的模式匹配任意层的文件名），按修改时间由新到旧，遵守 .gitignore。默认最多 200 条。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "pattern": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string",
+                  "description": "搜索起点目录（默认工作目录）"
+                },
+                "limit": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "pattern"
+              ]
+            }
+          },
+          {
+            "Name": "edit",
+            "Description": "精确编辑文件：按 old_text → new_text 替换，可一次多处（在原文件上匹配、全部成功才写入）。old_text 为空表示新建文件。修改已有文件优先用它，不要整文件重写。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "文件路径（相对工作目录）"
+                },
+                "edits": {
+                  "type": "array",
+                  "description": "一处或多处替换。每处 old_text 在原文件中必须唯一、互不重叠；相邻改动合并成一处。",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "old_text": {
+                        "type": "string",
+                        "description": "要替换的原文（精确匹配；尽量短但要唯一）。为空表示新建文件"
+                      },
+                      "new_text": {
+                        "type": "string",
+                        "description": "替换后的文本"
+                      }
+                    },
+                    "required": [
+                      "old_text",
+                      "new_text"
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "path",
+                "edits"
+              ]
+            }
+          },
+          {
+            "Name": "write_file",
+            "Description": "写入文本文件（新建或整体覆盖，自动创建父目录；路径相对工作目录）。修改已有文件请用 edit。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "content": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "path",
+                "content"
+              ]
+            }
+          },
+          {
+            "Name": "list_dir",
+            "Description": "列出目录内容（路径相对工作目录，默认工作目录；目录名以 / 结尾）。递归查找文件用 glob。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          {
+            "Name": "ask_user",
+            "Description": "需求有歧义或决定代价大时向用户提问。options 可给出选项。能自行合理决定的不要问。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "question": {
+                  "type": "string"
+                },
+                "options": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "question"
+              ]
+            }
+          },
+          {
+            "Name": "shell",
+            "Description": "在工作目录执行一条 PowerShell 命令（不是 bash：不支持 \u003c\u003c\u003c、heredoc、export、反引号命令替换；用 ; 分隔语句，用 $env:NAME 读写环境变量，用 2\u003e\u00261 合并输出）。返回合并的 stdout/stderr 与退出码。每次调用是新进程，已在工作目录执行（不必先 cd），cd 与环境变量不保留。timeout 秒（默认 120，最大 600），超时杀整个进程树。长时间运行（服务、监听）用 background:true，返回 job id，再用 job_output 读取输出、job_kill 终止。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "command": {
+                  "type": "string"
+                },
+                "timeout": {
+                  "type": "integer",
+                  "description": "超时秒数"
+                },
+                "background": {
+                  "type": "boolean",
+                  "description": "后台运行，立即返回 job id"
+                },
+                "sandbox_permissions": {
+                  "type": "string",
+                  "enum": [
+                    "read-only",
+                    "workspace-write",
+                    "danger-full-access"
+                  ],
+                  "description": "仅在命令被沙箱拒绝后使用：为本次调用申请更宽的沙箱，需要用户批准"
+                }
+              },
+              "required": [
+                "command"
+              ]
+            }
+          },
+          {
+            "Name": "job_output",
+            "Description": "读取后台 job 自上次读取以来的新输出与状态。wait:true 时等到 job 结束或 timeout 秒（默认 30）。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "wait": {
+                  "type": "boolean"
+                },
+                "timeout": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "id"
+              ]
+            }
+          },
+          {
+            "Name": "job_kill",
+            "Description": "终止一个后台 job（连同其子进程）。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id"
+              ]
+            }
+          }
+        ],
+        "Params": {
+          "Temperature": null,
+          "MaxTokens": null,
+          "ToolChoice": null,
+          "Reasoning": null,
+          "Extra": null
+        }
+      }
+    ]
+  }
+]
