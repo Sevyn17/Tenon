@@ -118,8 +118,8 @@ func TestDefinitionsVersioned(t *testing.T) {
 	if _, _, err := db.GetDefinition(ctx, "agent", "a", 0); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("应 NotFound: %v", err)
 	}
-	v1, _ := db.PutDefinition(ctx, "agent", "a", "one")
-	v2, _ := db.PutDefinition(ctx, "agent", "a", "two")
+	v1, _, _ := db.PutDefinition(ctx, "agent", "a", "one")
+	v2, _, _ := db.PutDefinition(ctx, "agent", "a", "two")
 	if v1 != 1 || v2 != 2 {
 		t.Fatalf("版本号: %d %d", v1, v2)
 	}

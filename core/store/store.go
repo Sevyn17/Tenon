@@ -99,8 +99,11 @@ type ToolResultStore interface {
 
 // DefinitionStore 定义类数据：每次修改插入新版本，不原地更新。
 type DefinitionStore interface {
-	// PutDefinition 写入新版本，返回版本号（从 1 起）。
-	PutDefinition(ctx context.Context, kind, id, body string) (int, error)
+	// PutDefinition 写入新版本，返回版本号（从 1 起）与内容哈希（body 的 sha256 十六进制）。
+	//
+	// body 是定义的规范字节串：智能体定义用 agentdef.Encode(files)，因此这里的哈希
+	// 与 agentdef.Hash(files) 恒等，会话行记的 agent_hash 直接用它（09 9.3）。
+	PutDefinition(ctx context.Context, kind, id, body string) (version int, hash string, err error)
 	// GetDefinition 读指定版本；version <= 0 取最新。不存在返回 ErrNotFound。
 	GetDefinition(ctx context.Context, kind, id string, version int) (string, int, error)
 }

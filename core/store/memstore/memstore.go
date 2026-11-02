@@ -707,14 +707,15 @@ func rawOrNil(b json.RawMessage) any {
 // —— 定义 ——//
 
 // PutDefinition 写入新版本，返回版本号（从 1 起）；同时记整包内容哈希。
-func (s *Store) PutDefinition(ctx context.Context, kind, id, body string) (int, error) {
+func (s *Store) PutDefinition(ctx context.Context, kind, id, body string) (int, string, error) {
 	if err := s.lock(); err != nil {
-		return 0, err
+		return 0, "", err
 	}
 	defer s.mu.Unlock()
 	k := kind + "\x00" + id
-	s.defs[k] = append(s.defs[k], def{body: body, hash: store.HashBytes([]byte(body)), at: s.now()})
-	return len(s.defs[k]), nil
+	h := store.HashBytes([]byte(body))
+	s.defs[k] = append(s.defs[k], def{body: body, hash: h, at: s.now()})
+	return len(s.defs[k]), h, nil
 }
 
 // GetDefinition 读指定版本；version <= 0 取最新。不存在返回 ErrNotFound。

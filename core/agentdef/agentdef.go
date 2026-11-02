@@ -222,12 +222,14 @@ func checkPath(n string) error {
 	return nil
 }
 
-// Hash 整包内容哈希：所有文件（含 agent.toml）按路径字典序，依次写入
-// 路径长度、路径、内容长度、内容（长度为 8 字节大端），取 sha256 十六进制。
-// 规范化：不含 NUL 字节的文件（按文本处理）把 CRLF 换成 LF，
-// 这样同一份定义在 Windows（git autocrlf）和 Linux 上得到同一个版本；含 NUL 的文件按原始字节计算。
-func Hash(files Files) string {
-	h := sha256.New()
+// Encode 把定义包编成规范字节串，用于入库与哈希：所有文件（含 agent.toml）按路径字典序，
+// 依次写入 路径长度（8 字节大端）、路径、内容长度（8 字节大端）、内容。
+//
+// 规范化：不含 NUL 字节的文件（按文本处理）把 CRLF 换成 LF，这样同一份定义在 Windows
+// （git autocrlf）和 Linux 上得到同一个版本；含 NUL 的文件按原始字节。字节串不含时间戳等
+// 易变信息，同一份定义永远编出同一串字节，所以可以直接当入库内容的规范形式（Decode 可逆）。
+func Encode(files Files) []byte {
+	var buf bytes.Buffer
 	var n [8]byte
 	for _, name := range files.Names() {
 		b := files[name]
@@ -235,11 +237,60 @@ func Hash(files Files) string {
 			b = bytes.ReplaceAll(b, []byte("\r\n"), []byte("\n"))
 		}
 		binary.BigEndian.PutUint64(n[:], uint64(len(name)))
-		h.Write(n[:])
-		h.Write([]byte(name))
+		buf.Write(n[:])
+		buf.WriteString(name)
 		binary.BigEndian.PutUint64(n[:], uint64(len(b)))
-		h.Write(n[:])
-		h.Write(b)
+		buf.Write(n[:])
+		buf.Write(b)
 	}
-	return hex.EncodeToString(h.Sum(nil))
+	return buf.Bytes()
+}
+
+// Decode 解析 Encode 的字节串。字节串被截断、路径非法或重名时返回错误。
+func Decode(b []byte) (Files, error) {
+	files := Files{}
+	for len(b) > 0 {
+		if len(b) < 8 {
+			return nil, errors.New("agentdef: 定义包字节串被截断（路径长度）")
+		}
+		n := binary.BigEndian.Uint64(b[:8])
+		b = b[8:]
+		if n == 0 || n > uint64(len(b)) {
+			return nil, errors.New("agentdef: 定义包字节串被截断（路径）")
+		}
+		name := string(b[:n])
+		b = b[n:]
+		if len(b) < 8 {
+			return nil, errors.New("agentdef: 定义包字节串被截断（内容长度）")
+		}
+		m := binary.BigEndian.Uint64(b[:8])
+		b = b[8:]
+		if m > uint64(len(b)) {
+			return nil, errors.New("agentdef: 定义包字节串被截断（内容）")
+		}
+		if err := checkPath(name); err != nil {
+			return nil, fmt.Errorf("agentdef: %s：%w", name, err)
+		}
+		if _, dup := files[name]; dup {
+			return nil, fmt.Errorf("agentdef: 定义包内路径重复 %s", name)
+		}
+		files[name] = append([]byte(nil), b[:m]...)
+		b = b[m:]
+	}
+	if len(files) == 0 {
+		return nil, errors.New("agentdef: 定义包为空")
+	}
+	if _, ok := files[ManifestName]; !ok {
+		return nil, errors.New("agentdef: 定义包缺 " + ManifestName)
+	}
+	return files, nil
+}
+
+// Hash 整包内容哈希 = sha256(Encode(files)) 的十六进制。
+//
+// 与 Encode 同源：入库内容就是 Encode 的字节串，所以存储算出的 sha256(body)
+// 与这里的结果恒等，会话行记的定义哈希、definitions.hash、定义包内容三者一致。
+func Hash(files Files) string {
+	sum := sha256.Sum256(Encode(files))
+	return hex.EncodeToString(sum[:])
 }

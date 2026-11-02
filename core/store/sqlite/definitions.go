@@ -11,21 +11,22 @@ import (
 	"time"
 )
 
-// PutDefinition 写入新版本，返回版本号（从 1 起）。
-func (db *DB) PutDefinition(ctx context.Context, kind, id, body string) (int, error) {
+// PutDefinition 写入新版本，返回版本号（从 1 起）与内容哈希。
+func (db *DB) PutDefinition(ctx context.Context, kind, id, body string) (int, string, error) {
 	var v int
+	sum := sha256.Sum256([]byte(body))
+	hash := hex.EncodeToString(sum[:])
 	err := db.tx(ctx, func(tx *sql.Tx) error {
 		if err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(version), 0) FROM definitions WHERE tenant = ? AND kind = ? AND id = ?`,
 			Tenant, kind, id).Scan(&v); err != nil {
 			return err
 		}
 		v++
-		sum := sha256.Sum256([]byte(body))
 		_, err := tx.ExecContext(ctx, `INSERT INTO definitions(tenant, kind, id, version, body, hash, created_at) VALUES(?,?,?,?,?,?,?)`,
-			Tenant, kind, id, v, body, hex.EncodeToString(sum[:]), time.Now().UnixMilli())
+			Tenant, kind, id, v, body, hash, time.Now().UnixMilli())
 		return err
 	})
-	return v, err
+	return v, hash, err
 }
 
 // GetDefinition 读指定版本；version <= 0 取最新。不存在返回 ErrNotFound。

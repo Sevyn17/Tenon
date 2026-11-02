@@ -302,12 +302,15 @@ func testDefinitions(t *testing.T, db store.Store) {
 	if _, _, err := db.GetDefinition(ctx, "agent", "a", 0); !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("不存在应 ErrNotFound: %v", err)
 	}
-	v1, _ := db.PutDefinition(ctx, "agent", "a", "one")
-	v2, _ := db.PutDefinition(ctx, "agent", "a", "two")
+	v1, h1, _ := db.PutDefinition(ctx, "agent", "a", "one")
+	v2, h2, _ := db.PutDefinition(ctx, "agent", "a", "two")
 	if v1 != 1 || v2 != 2 {
 		t.Fatalf("版本号: %d %d", v1, v2)
 	}
-	if v, _ := db.PutDefinition(ctx, "tool", "a", "x"); v != 1 {
+	if h1 == "" || h1 == h2 || h2 != store.HashBytes([]byte("two")) {
+		t.Fatalf("哈希: %q %q", h1, h2)
+	}
+	if v, _, _ := db.PutDefinition(ctx, "tool", "a", "x"); v != 1 {
 		t.Fatalf("不同 kind 各自计版本: %d", v)
 	}
 	if body, v, _ := db.GetDefinition(ctx, "agent", "a", 0); body != "two" || v != 2 {

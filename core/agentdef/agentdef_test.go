@@ -1,7 +1,10 @@
 package agentdef
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"os"
 	"path/filepath"
@@ -371,5 +374,58 @@ func TestHashNormalizesCRLF(t *testing.T) {
 	bin2 := Files{"x.bin": []byte("a\x00\n")}
 	if Hash(bin1) == Hash(bin2) {
 		t.Fatal("含 NUL 的文件应按原始字节计算")
+	}
+}
+
+// Encode / Decode 是可逆的规范形式：入库内容就是它，所以存储算的 sha256 与 Hash 一致。
+func TestEncodeDecodeRoundTrip(t *testing.T) {
+	f := basicFiles()
+	f["bin/logo.png"] = append([]byte{0x89, 0x50, 0x4e, 0x47, 0x00}, 13, 10)
+	b := Encode(f)
+	back, err := Decode(b)
+	if err != nil {
+		t.Fatalf("Decode：%v", err)
+	}
+	for name, want := range f {
+		got, ok := back[name]
+		if !ok {
+			t.Fatalf("丢了 %s", name)
+		}
+		// 文本文件按 LF 规范化，二进制按原字节。
+		if bytes.IndexByte(want, 0) >= 0 {
+			if string(got) != string(want) {
+				t.Fatalf("%s 二进制内容变了", name)
+			}
+			continue
+		}
+		lf := bytes.ReplaceAll(want, []byte{13, 10}, []byte{10})
+		if string(got) != string(lf) {
+			t.Fatalf("%s = %q", name, got)
+		}
+	}
+	if Hash(back) != Hash(f) {
+		t.Fatal("往返之后哈希应不变（规范化后的内容才是规范形式）")
+	}
+	// 同一份内容编两次得到同一串字节（没有时间戳等易变信息）。
+	if string(Encode(basicFiles())) != string(Encode(basicFiles())) {
+		t.Fatal("Encode 不稳定")
+	}
+	sum := sha256.Sum256(Encode(f))
+	if hex.EncodeToString(sum[:]) != Hash(f) {
+		t.Fatal("Hash 应等于 sha256(Encode)")
+	}
+}
+
+func TestDecodeRejectsBroken(t *testing.T) {
+	good := Encode(basicFiles())
+	for name, b := range map[string][]byte{
+		"路径长度被截断": good[:4],
+		"路径被截断":   good[:12],
+		"缺清单":     Encode(Files{"x.md": []byte("x")}),
+		"空":       {},
+	} {
+		if _, err := Decode(b); err == nil {
+			t.Fatalf("%s：应当报错", name)
+		}
 	}
 }

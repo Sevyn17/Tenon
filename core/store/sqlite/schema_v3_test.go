@@ -117,7 +117,7 @@ func TestSessionKeyUnique(t *testing.T) {
 func TestDefinitionHash(t *testing.T) {
 	db := openTest(t)
 	ctx := context.Background()
-	if _, err := db.PutDefinition(ctx, "agent", "a", "one"); err != nil {
+	if _, _, err := db.PutDefinition(ctx, "agent", "a", "one"); err != nil {
 		t.Fatal(err)
 	}
 	var h string
