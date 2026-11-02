@@ -96,4 +96,16 @@ var coreMigrations = []migration{
 		// 定义整包内容哈希（D1）；version 整数列保留作排序用。
 		`ALTER TABLE definitions ADD COLUMN hash TEXT NOT NULL DEFAULT ''`,
 	}},
+	// v4：T3 信封与待回复表（11 信封表 / 11.2 待回复表 / 13 13.3）。
+	// inbox 增加 envelope 列存整封 JSON（旧行留空，按纯文本处理）；session_pending 不复用
+	// session_requests（那张是模型请求日志）。
+	{version: 4, stmts: []string{
+		`ALTER TABLE session_inbox ADD COLUMN envelope TEXT NOT NULL DEFAULT ''`,
+		`CREATE TABLE session_pending(
+			tenant TEXT NOT NULL, corr TEXT NOT NULL PRIMARY KEY,
+			session_id TEXT NOT NULL, reply_to TEXT NOT NULL DEFAULT '', trace TEXT NOT NULL DEFAULT '',
+			issued_idx INTEGER NOT NULL DEFAULT 0, deadline INTEGER NOT NULL DEFAULT 0,
+			used INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL)`,
+		`CREATE INDEX session_pending_s ON session_pending(session_id, issued_idx)`,
+	}},
 }

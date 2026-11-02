@@ -14,8 +14,8 @@ func (db *DB) Admit(ctx context.Context, sessionID string, it InboxItem) (bool, 
 	if it.Trust == "" {
 		it.Trust = "trusted"
 	}
-	res, err := db.sql.ExecContext(ctx, `INSERT INTO session_inbox(tenant, session_id, item_id, kind, input, trust, created_at)
-		VALUES(?,?,?,?,?,?,?) ON CONFLICT DO NOTHING`, Tenant, sessionID, it.ItemID, it.Kind, it.Input, it.Trust, time.Now().UnixMilli())
+	res, err := db.sql.ExecContext(ctx, `INSERT INTO session_inbox(tenant, session_id, item_id, kind, input, trust, envelope, created_at)
+		VALUES(?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING`, Tenant, sessionID, it.ItemID, it.Kind, it.Input, it.Trust, it.Envelope, time.Now().UnixMilli())
 	if err != nil {
 		return false, err
 	}
@@ -25,7 +25,7 @@ func (db *DB) Admit(ctx context.Context, sessionID string, it InboxItem) (bool, 
 
 // Inbox 按准入顺序列出未消费项。
 func (db *DB) Inbox(ctx context.Context, sessionID string) ([]InboxItem, error) {
-	rows, err := db.sql.QueryContext(ctx, `SELECT item_id, kind, input, trust, created_at FROM session_inbox
+	rows, err := db.sql.QueryContext(ctx, `SELECT item_id, kind, input, trust, envelope, created_at FROM session_inbox
 		WHERE tenant = ? AND session_id = ? AND consumed_at = 0 ORDER BY created_at, rowid`, Tenant, sessionID)
 	if err != nil {
 		return nil, err
@@ -35,7 +35,7 @@ func (db *DB) Inbox(ctx context.Context, sessionID string) ([]InboxItem, error) 
 	for rows.Next() {
 		var it InboxItem
 		var at int64
-		if err := rows.Scan(&it.ItemID, &it.Kind, &it.Input, &it.Trust, &at); err != nil {
+		if err := rows.Scan(&it.ItemID, &it.Kind, &it.Input, &it.Trust, &it.Envelope, &at); err != nil {
 			return nil, err
 		}
 		it.At = time.UnixMilli(at)

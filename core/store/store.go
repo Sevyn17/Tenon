@@ -47,6 +47,7 @@ type Store interface {
 	LeaseStore
 	SleepStore
 	InboxStore
+	CorrStore
 	ToolResultStore
 	DefinitionStore
 	// OnCommit 设置提交成功后的持久事件回调；回调在提交的 goroutine 里同步执行，须很快返回。
@@ -117,6 +118,35 @@ type SleepStore interface {
 	SetSessionStatus(ctx context.Context, sessionID, from, to string, epoch int64) error
 	// SessionsWithStatus 列出某状态的会话 id（按 id 升序，limit<=0 表示不限）。
 	SessionsWithStatus(ctx context.Context, status string, limit int) ([]string, error)
+}
+
+// ErrCorrRejected：回信核对失败（不存在、已过期、已用过、发送者不是预期回复方）。
+var ErrCorrRejected = errors.New("store: corr 回信核对失败")
+
+// Pending 待回复登记（11 11.2 待回复表 / 13 13.3 D3）：请求时内核签发 corr 并登记，
+// 回信带上它回到请求会话；只收第一条。
+type Pending struct {
+	Corr      string
+	SessionID string // 发出请求的会话：回信回到这里
+	ReplyTo   string // 预期回复方地址
+	Trace     string
+	IssuedIdx int   // 签发时该会话的日志长度：Rewind 到更早位置后作废（11 11.2）
+	Deadline  int64 // Unix 毫秒，0 = 无期限（超时视为无回复）
+	Used      bool
+}
+
+// CorrStore 待回复表（session_pending）。corr 不可猜，由内核签发。
+type CorrStore interface {
+	// IssueCorr 登记一条待回复。
+	IssueCorr(ctx context.Context, p Pending) error
+	// ClaimCorr 核对并占用一条待回复：存在、未过期、未用过、发送者 = 预期回复方；
+	// 成功时标记已用并返回登记内容，失败返回 ErrCorrRejected。
+	ClaimCorr(ctx context.Context, corr, sessionID, from string) (Pending, error)
+	// PendingCorr 读一条登记（不存在返回 ErrNotFound）。
+	PendingCorr(ctx context.Context, corr string) (Pending, error)
+	// VoidCorrAfter 作废某会话在日志位置 idx 及之后签发的未用 corr（Rewind）；
+	// 返回作废条数。
+	VoidCorrAfter(ctx context.Context, sessionID string, idx int) (int, error)
 }
 
 // ToolResultStore 工具幂等 / 挂起记录（tool-hub D4）。
@@ -212,8 +242,10 @@ type Cleaner func(ctx context.Context, sessionID string) error
 
 // Inbox 种类。
 const (
-	InboxInput = "input" // 开回合的输入
-	InboxNote  = "note"  // 补报：拼在下次输入前，不单独开回合
+	InboxInput   = "input"   // 开回合的输入（wake 信封）
+	InboxNote    = "note"    // 补报：拼在下次输入前，不单独开回合
+	InboxContext = "context" // 背景：不开回合，等下一次 wake 一起进模型（13 13.3）
+	InboxNotice  = "notice"  // 通知：进下一次状态更新（12）
 )
 
 // InboxItem 一条待处理输入。Input 为内容 JSON（session.Content）。
@@ -222,7 +254,9 @@ type InboxItem struct {
 	Kind   string
 	Input  string
 	Trust  string
-	At     time.Time
+	// Envelope 信封的 JSON（core/mail.Envelope）；空 = 旧格式（T1b/T2 的纯文本补报/输入）。
+	Envelope string
+	At       time.Time
 }
 
 // 工具记录状态。

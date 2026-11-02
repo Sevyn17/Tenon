@@ -40,6 +40,7 @@ func Run(t *testing.T, open func(t *testing.T) store.Store) {
 		{"Export", testExport},
 		{"LeaseFencing", testLeaseFencing},
 		{"SleepStatus", testSleepStatus},
+		{"PendingCorr", testPendingCorr},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) { c.f(t, open(t)) })
@@ -351,10 +352,14 @@ func testInbox(t *testing.T, db store.Store) {
 	if ok, _ := db.Admit(ctx, "s1", store.InboxItem{ItemID: "i1", Kind: store.InboxInput, Input: `[]`}); ok {
 		t.Fatal("待处理时重放应被拒")
 	}
-	_, _ = db.Admit(ctx, "s1", store.InboxItem{ItemID: "i2", Kind: store.InboxNote, Input: `[]`, Trust: "untrusted"})
+	_, _ = db.Admit(ctx, "s1", store.InboxItem{ItemID: "i2", Kind: store.InboxNote, Input: `[]`, Trust: "untrusted",
+		Envelope: `{"id":"i2","from":{"kind":"human","id":"u1"}}`})
 	items, _ := db.Inbox(ctx, "s1")
 	if len(items) != 2 || items[0].ItemID != "i1" || items[0].Trust != "trusted" || items[1].Trust != "untrusted" || items[0].At.IsZero() {
 		t.Fatalf("顺序 / 信任: %+v", items)
+	}
+	if items[1].Envelope == "" || items[0].Envelope != "" {
+		t.Fatalf("信封列往返: %+v", items)
 	}
 	if in, _ := db.InInbox(ctx, "s1", "i1"); !in {
 		t.Fatal("i1 应待处理")
@@ -800,5 +805,54 @@ func testSleepStatus(t *testing.T, db store.Store) {
 	}
 	if ids, _ := db.SessionsWithStatus(ctx, store.StatusSleeping, 0); len(ids) != 0 {
 		t.Fatalf("唤醒后不应再有休眠会话: %v", ids)
+	}
+}
+
+// —— 待回复表（pending corr） ——//
+
+func testPendingCorr(t *testing.T, db store.Store) {
+	ctx := context.Background()
+	c := newCore()
+	create(t, db, store.SessionMeta{ID: "s1"}, c)
+	p := store.Pending{Corr: "corr-1", SessionID: "s1", ReplyTo: "agent:worker", IssuedIdx: 5, Trace: "t1"}
+	if err := db.IssueCorr(ctx, p); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := db.PendingCorr(ctx, "corr-1"); err != nil || got.SessionID != "s1" || got.Used {
+		t.Fatalf("读登记: %+v %v", got, err)
+	}
+	// 发送者不是预期回复方 → 拒。
+	if _, err := db.ClaimCorr(ctx, "corr-1", "s1", "agent:other"); !errors.Is(err, store.ErrCorrRejected) {
+		t.Fatalf("预期回复方不符应拒: %v", err)
+	}
+	// 正确回信 → 占用；只收第一条。
+	if _, err := db.ClaimCorr(ctx, "corr-1", "s1", "agent:worker"); err != nil {
+		t.Fatalf("首条回信: %v", err)
+	}
+	if _, err := db.ClaimCorr(ctx, "corr-1", "s1", "agent:worker"); !errors.Is(err, store.ErrCorrRejected) {
+		t.Fatal("重放的回信应被拒")
+	}
+	// Rewind 到更早位置：其后签发的未用 corr 作废。
+	if err := db.IssueCorr(ctx, store.Pending{Corr: "corr-2", SessionID: "s1", IssuedIdx: 6}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.IssueCorr(ctx, store.Pending{Corr: "corr-3", SessionID: "s1", IssuedIdx: 2}); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := db.VoidCorrAfter(ctx, "s1", 5); err != nil || n != 1 {
+		t.Fatalf("作废数: %d %v", n, err)
+	}
+	if _, err := db.ClaimCorr(ctx, "corr-2", "s1", ""); !errors.Is(err, store.ErrCorrRejected) {
+		t.Fatal("作废后应拒")
+	}
+	if _, err := db.ClaimCorr(ctx, "corr-3", "s1", ""); err != nil {
+		t.Fatalf("有签发位置更早，应该仍可回信: %v", err)
+	}
+	// 过期：deadline 已过 → 拒。
+	if err := db.IssueCorr(ctx, store.Pending{Corr: "corr-4", SessionID: "s1", Deadline: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ClaimCorr(ctx, "corr-4", "s1", ""); !errors.Is(err, store.ErrCorrRejected) {
+		t.Fatal("过期回信应被拒")
 	}
 }

@@ -38,8 +38,9 @@ type Store struct {
 	shells   map[string][]byte
 	defs     map[string][]def // kind + "\x00" + id → 版本列表（下标 = 版本 - 1）
 	// inbox 与工具记录按会话 id 存，不要求会话行存在（与 sqlite 无外键一致）。
-	inbox map[string][]inboxRow          // 会话 → 准入顺序
-	tools map[string]map[string]*toolRow // 会话 → call_id → 记录
+	inbox   map[string][]inboxRow          // 会话 → 准入顺序
+	tools   map[string]map[string]*toolRow // 会话 → call_id → 记录
+	pending map[string]store.Pending       // corr → 待回复登记（11 11.2）
 
 	cbMu     sync.Mutex
 	onCommit func(bus.Envelope)
@@ -109,7 +110,7 @@ type def struct {
 // New 创建空存储。
 func New() *Store {
 	return &Store{sessions: map[string]*sess{}, shells: map[string][]byte{}, defs: map[string][]def{},
-		inbox: map[string][]inboxRow{}, tools: map[string]map[string]*toolRow{}}
+		inbox: map[string][]inboxRow{}, tools: map[string]map[string]*toolRow{}, pending: map[string]store.Pending{}}
 }
 
 // Close 关闭；之后的调用返回 ErrClosed。
@@ -499,6 +500,11 @@ func (s *Store) DeleteSession(ctx context.Context, id string, cleaners []store.C
 	delete(s.sessions, id)
 	delete(s.inbox, id)
 	delete(s.tools, id)
+	for corr, p := range s.pending {
+		if p.SessionID == id {
+			delete(s.pending, corr)
+		}
+	}
 	s.mu.Unlock()
 	return nil
 }

@@ -20,6 +20,7 @@ import (
 
 	"ybase-kernel/core/agent"
 	"ybase-kernel/core/bus"
+	"ybase-kernel/core/mail"
 	"ybase-kernel/core/session"
 	"ybase-kernel/core/store"
 	"ybase-kernel/core/toolhub"
@@ -49,6 +50,8 @@ const (
 	Rewind    Kind = "rewind"
 	Close     Kind = "close"
 	Drain     Kind = "drain"
+	// Deliver 信封已落 inbox，叫醒 actor 去 drainInbox（投递本身走 Host.Deliver）。
+	Deliver Kind = "deliver"
 )
 
 // Command 一条命令。
@@ -59,13 +62,14 @@ type Command struct {
 	Trust    string // trusted / untrusted
 	Source   string // user / agent / system …
 	Mode     session.SteerMode
-	CallID   string  // Confirm
-	Approve  bool    // Confirm
-	To       int     // Rewind
-	Upto     int     // Compact
-	Key      string  // SetExt
-	Value    any     // SetExt
-	MaxSteps *uint32 // SetConfig：单回合步数上限，0 = 不限
+	CallID   string         // Confirm
+	Approve  bool           // Confirm
+	To       int            // Rewind
+	Upto     int            // Compact
+	Key      string         // SetExt
+	Value    any            // SetExt
+	MaxSteps *uint32        // SetConfig：单回合步数上限，0 = 不限
+	Env      *mail.Envelope // Deliver / 信封携带（内核字段已由投递方写入）
 	done     chan error
 }
 
@@ -105,6 +109,7 @@ type Store interface {
 	store.LeaseStore
 	store.SleepStore
 	store.InboxStore
+	store.CorrStore
 }
 
 // Host 进程内会话表。
@@ -129,6 +134,8 @@ type Host struct {
 	TreePolicy string
 	// TreeRestarts restart 策略下的最大重跑次数（<=0 按 1）。
 	TreeRestarts int
+	// Guard 投递前守卫（08 8.1）：返回错误即拒绝投递并发布 guard.denied；nil = 不拦。
+	Guard func(*mail.Envelope) error
 
 	mu     sync.Mutex
 	actors map[string]*actor
@@ -367,6 +374,14 @@ func (a *actor) enqueue(c Command) error {
 		default:
 		}
 		reply(c, nil)
+		return nil
+	case Deliver:
+		// 信封已由 Host.Deliver 落 inbox；这里只叫醒 actor（队列满时留给 actor 自己 drainInbox）。
+		reply(c, nil)
+		select {
+		case a.in <- c:
+		default:
+		}
 		return nil
 	case Send, Note:
 		if c.ItemID == "" {
@@ -610,7 +625,7 @@ func (h *Host) cancelChildren(ctx context.Context, parent string) {
 func (a *actor) idle(ctx context.Context, c Command) (bool, error) {
 	core := a.ag.Core
 	switch c.Kind {
-	case Send, Note, "barrier":
+	case Send, Note, Deliver, "barrier":
 		return false, nil // 已落 inbox，由 drainInbox 处理
 	case Resume:
 		// 预算挂起 → 恢复（02 2.2）：不重开回合，回到活跃并交给主循环处理信箱。
@@ -666,8 +681,10 @@ func (a *actor) idle(ctx context.Context, c Command) (bool, error) {
 		if err := a.ag.Commit(ctx); err != nil {
 			return false, err
 		}
-		a.h.publish(a.id, "session.rewound", map[string]any{"to": c.To})
-		// 所属树（02 2.2）：回退点之后派生出的子会话取消；作废其 corr 随 T3 信封一起做。
+		// Rewind 作废回退点之后签发的 corr（11 11.2、09 9.6）。
+		voided, _ := a.h.DB.VoidCorrAfter(ctx, a.id, c.To)
+		a.h.publish(a.id, "session.rewound", map[string]any{"to": c.To, "corr_voided": voided})
+		// 所属树（02 2.2）：回退点之后派生出的子会话取消。
 		a.h.cancelChildren(ctx, a.id)
 		return false, nil
 	case Drain:
@@ -679,7 +696,8 @@ func (a *actor) idle(ctx context.Context, c Command) (bool, error) {
 	return false, fmt.Errorf("host: 未知命令 %q", c.Kind)
 }
 
-// drainInbox 处理 inbox：note 拼在 input 前，逐个 input 开回合（H7 / H10）。只有 note 时留到下一个输入。
+// drainInbox 处理 inbox：通知进状态更新，wake/context 按权限主体合并成一条用户消息后开回合
+// （13 13.3）；只有背景/通知时不开回合，等下一次 wake。旧格式 note 仍拼在输入前（H7 / H10）。
 func (a *actor) drainInbox(ctx context.Context) error {
 	// 预算挂起：信箱保留、不开新回合（02 2.2：补足预算或显式 Resume 后从检查点继续）。
 	if st, err := a.h.DB.SessionStatus(ctx, a.id); err == nil && st == store.StatusSuspended {
@@ -690,41 +708,26 @@ func (a *actor) drainInbox(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		var notes []store.InboxItem
-		var input *store.InboxItem
-		for i := range items {
-			if items[i].Kind == store.InboxNote {
-				notes = append(notes, items[i])
-				continue
-			}
-			input = &items[i]
-			break
-		}
-		if input == nil {
+		if len(items) == 0 {
 			return nil
 		}
-		var content session.Content
-		untrusted := false
-		consume := []string{}
-		for _, it := range append(notes, *input) {
-			var c session.Content
-			if err := json.Unmarshal([]byte(it.Input), &c); err != nil {
-				return err
-			}
-			if it.Kind == store.InboxNote {
-				c = append(session.Content{session.NewTextPart("[补报] ")}, c...)
-			}
-			content = append(content, c...)
-			if it.Trust == "untrusted" {
-				untrusted = true // 取最低（H10：防不可信补报被洗白）
-			}
-			consume = append(consume, it.ItemID)
+		// 通知类信封先应用（12：notice 进下一次状态更新），并确认消费。
+		if done, err := a.applyNotices(ctx, items); err != nil {
+			return err
+		} else if done {
+			continue
+		}
+		batch := collectInboxBatch(items, a.processing)
+		if batch == nil {
+			return nil
+		}
+		content, env, untrusted := renderBatch(batch)
+		consume := make([]string, len(batch))
+		for i, it := range batch {
+			consume[i] = it.ItemID
 		}
 		a.processing = inboxSet(consume) // 本条正在被本回合消费：回合中插入不得重复取它
-		m := map[string]any{session.MetaSource: "user", session.MetaTrust: "trusted"}
-		if untrusted {
-			m[session.MetaTrust] = "untrusted"
-		}
+		m := envelopeMeta(env, untrusted)
 		if hk := a.h.Hooks.BeforeTurn; hk != nil {
 			nc, d, err := hk(a.id, content, untrusted)
 			if err != nil {
@@ -896,6 +899,9 @@ func (a *actor) between(need *session.Need) (*session.Need, error) {
 			if err == nil && n != nil {
 				need = n // WaitingTools 改向：未执行调用补 Redirected，直接进入下一步
 			}
+		case Deliver:
+			// 信封已落 inbox：插入逻辑在同批 inbox 项上做（insertInput），这里不单独处理。
+			reply(c, nil)
 		case Send, Note:
 			// 运行中到达的用户消息：在下一次调模型前插入当前回合（09 9.4）。
 			// 已到 Done 边界时留给下一回合，inbox 不动。
@@ -1021,37 +1027,13 @@ func (a *actor) insertInput(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	var notes []store.InboxItem
-	var input *store.InboxItem
-	for i := range items {
-		if a.processing[items[i].ItemID] {
-			continue // 本回合正在消费的项（drainInbox 已取），不重复插入
-		}
-		if items[i].Kind == store.InboxNote {
-			notes = append(notes, items[i])
-			continue
-		}
-		input = &items[i]
-		break
-	}
-	if input == nil {
+	batch := collectInboxBatch(items, a.processing)
+	if batch == nil {
 		return nil
 	}
-	var content session.Content
-	untrusted := false
+	content, env, untrusted := renderBatch(batch)
 	var ids []string
-	for _, it := range append(notes, *input) {
-		var c session.Content
-		if err := json.Unmarshal([]byte(it.Input), &c); err != nil {
-			return err
-		}
-		if it.Kind == store.InboxNote {
-			c = append(session.Content{session.NewTextPart("[补报] ")}, c...)
-		}
-		content = append(content, c...)
-		if it.Trust == "untrusted" {
-			untrusted = true
-		}
+	for _, it := range batch {
 		ids = append(ids, it.ItemID)
 	}
 	// 守卫仍要过：拒绝时不插入，留给回合后的正常处理（那里会发布 turn_denied 并消费）。
@@ -1062,10 +1044,7 @@ func (a *actor) insertInput(ctx context.Context) error {
 		}
 		content = nc
 	}
-	m := map[string]any{session.MetaSource: "user", session.MetaTrust: "trusted"}
-	if untrusted {
-		m[session.MetaTrust] = "untrusted"
-	}
+	m := envelopeMeta(env, untrusted)
 	if _, err := a.ag.Core.MidInput(content, m); err != nil {
 		if errors.Is(err, session.ErrNotWaiting) {
 			return nil // 回合刚好结束：inbox 留给下一回合
