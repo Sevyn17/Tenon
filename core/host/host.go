@@ -53,6 +53,8 @@ const (
 	Drain     Kind = "drain"
 	// Deliver 信封已落 inbox，叫醒 actor 去 drainInbox（投递本身走 Host.Deliver）。
 	Deliver Kind = "deliver"
+	// Suspend 预算挂起（02 2.2）：Idle 命令；回合进行中到达时排到本回合结束后执行。Text = 原因。
+	Suspend Kind = "suspend"
 )
 
 // Command 一条命令。
@@ -598,20 +600,31 @@ func (h *Host) ScanLoop(ctx context.Context, every time.Duration) {
 
 // Suspend 预算挂起（02 2.2）：停在检查点、不再开新回合，信箱里的信件保留；
 // 补足预算或应用显式 Resume 后从检查点继续（T3 起由守卫在预算用尽时调用）。
+//
+// 挂起在会话自己的 actor 里执行（会话核心只由 actor 改）：回合进行中调用时等本回合结束后
+// 再挂起，返回时已生效。ctx 只约束等待。
 func (h *Host) Suspend(ctx context.Context, id, reason string) error {
-	h.mu.Lock()
-	a := h.actors[id]
-	h.mu.Unlock()
-	if a == nil {
+	hd, ok := h.Get(id)
+	if !ok {
 		return fmt.Errorf("host: 会话 %s 没打开，不能挂起", id)
 	}
-	a.mu.Lock()
-	busy := a.inTurn
-	a.mu.Unlock()
-	if busy {
-		return fmt.Errorf("host: 会话 %s 正在运行，不能在回合中途挂起", id)
+	c := Command{Kind: Suspend, Text: reason, done: make(chan error, 1)}
+	if err := hd.a.enqueue(c); err != nil {
+		return err
 	}
-	if err := h.DB.SetSessionStatus(ctx, id, store.StatusActive, store.StatusSuspended, a.epoch); err != nil {
+	select {
+	case err := <-c.done:
+		return err
+	case <-hd.a.exit:
+		return ErrClosed
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// suspend 在 actor 里执行挂起（见 Host.Suspend）。
+func (a *actor) suspend(ctx context.Context, reason string) error {
+	if err := a.h.DB.SetSessionStatus(ctx, a.id, store.StatusActive, store.StatusSuspended, a.epoch); err != nil {
 		return err
 	}
 	if err := a.ag.Core.SetExt("rt.suspended", reason); err != nil {
@@ -620,7 +633,7 @@ func (h *Host) Suspend(ctx context.Context, id, reason string) error {
 	if err := a.ag.CommitRun(ctx, "suspended"); err != nil {
 		return err
 	}
-	h.publish(id, "session.suspended", map[string]any{"reason": reason})
+	a.h.publish(a.id, "session.suspended", map[string]any{"reason": reason})
 	return nil
 }
 
@@ -710,6 +723,8 @@ func (a *actor) idle(ctx context.Context, c Command) (bool, error) {
 		// 所属树（02 2.2）：回退点之后派生出的子会话取消。
 		a.h.cancelChildren(ctx, a.id)
 		return false, nil
+	case Suspend:
+		return false, a.suspend(ctx, c.Text)
 	case Drain:
 		_ = core.SetExt("rt.drained", true) // 区分正常退出与崩溃（D1）
 		return true, a.ag.Commit(ctx)
@@ -851,11 +866,7 @@ func inboxSet(ids []string) map[string]bool {
 
 // turn 跑一个回合：可取消的 ctx、turn span、after_turn、回合中排队的 Idle 命令在回合后处理。
 func (a *actor) turn(ctx context.Context, f func(context.Context) (session.EndReason, error)) (session.EndReason, error) {
-	release, err := a.acquireSlot(ctx)
-	if err != nil {
-		return session.EndReason{}, err
-	}
-	defer release()
+	// 先登记取消函数再排并发槽位：排队期间到达的 Cancel 要能取消这一轮（02 2.4）。
 	tctx, cancel := context.WithCancel(ctx)
 	a.mu.Lock()
 	a.cancel, a.inTurn = cancel, true
@@ -866,6 +877,15 @@ func (a *actor) turn(ctx context.Context, f func(context.Context) (session.EndRe
 		a.cancel, a.inTurn = nil, false
 		a.mu.Unlock()
 	}()
+	release, err := a.acquireSlot(tctx)
+	if err != nil {
+		if tctx.Err() != nil && ctx.Err() == nil {
+			// 排队时被取消：这一轮不跑，按取消处理（回合已开、需求已发出的交给 drive 收尾）。
+			return f(tctx)
+		}
+		return session.EndReason{}, err
+	}
+	defer release()
 	// trace 事件落库（08 8.7 explain）：回合结束统一写，不参与恢复；用独立 ctx 避免被取消。
 	defer func() {
 		for _, ev := range a.ag.TakeTraceEvents() {
@@ -1054,34 +1074,46 @@ func (a *actor) requeue() {
 // wireConfirm 把 toolhub 的人工确认接到 human: 地址（11 11.2 D3）：
 // 内核签发 corr、登记待回复、发布 human.asked；回答可以是 envelope 回信（corr），
 // 也可以是既有的 Confirm 命令（call_id），两条路都落到同一个等待通道。
+//
+// 等待者的生命周期（C4/C5）：ask 的 ctx 结束（回合取消、截止）或 actor 退出时立即返回；
+// 返回时（任何路径）按身份删掉自己登记的等待者，并作废这次签发的 corr——之后到达的
+// 迟到回信核对不过，不会被当成普通消息开新回合。
 func (a *actor) wireConfirm() {
-	a.ag.Hub.SetAwait(a.ag.AwaitFunc(func(cx *toolhub.Cx, reason string) bool {
+	a.ag.Hub.SetAwait(a.ag.AwaitFunc(func(ctx context.Context, cx *toolhub.Cx, reason string, deadline time.Time) bool {
 		corr := mail.NewID()
-		deadline := time.Now().Add(toolhub.DefaultConfirmDeadline)
 		idx := 0
 		if core := a.ag.Core; core != nil {
 			c := core.Context()
 			idx = c.Base + len(c.Items)
 		}
-		_ = a.h.DB.IssueCorr(context.Background(), store.Pending{Corr: corr, SessionID: a.id,
-			Trace: a.ag.TraceID(), IssuedIdx: idx, Deadline: deadline.UnixMilli()})
+		if err := a.h.DB.IssueCorr(context.Background(), store.Pending{Corr: corr, SessionID: a.id,
+			Trace: a.ag.TraceID(), IssuedIdx: idx, Deadline: deadline.UnixMilli()}); err != nil {
+			corr = "" // 登记失败：只发 call_id，回信路径不可用，Confirm 命令照常
+		}
 		w := make(chan bool, 1)
 		a.mu.Lock()
 		a.waiters[cx.CallID] = w
 		a.mu.Unlock()
-		a.h.humanMu.Lock()
-		if a.h.humanWait == nil {
-			a.h.humanWait = map[string]chan bool{}
+		if corr != "" {
+			a.h.humanMu.Lock()
+			if a.h.humanWait == nil {
+				a.h.humanWait = map[string]chan bool{}
+			}
+			a.h.humanWait[corr] = w
+			a.h.humanMu.Unlock()
 		}
-		a.h.humanWait[corr] = w
-		a.h.humanMu.Unlock()
 		defer func() {
 			a.mu.Lock()
-			delete(a.waiters, cx.CallID)
+			if a.waiters[cx.CallID] == w { // 按身份删：恢复后同一调用重问时登记的是新的等待者
+				delete(a.waiters, cx.CallID)
+			}
 			a.mu.Unlock()
-			a.h.humanMu.Lock()
-			delete(a.h.humanWait, corr)
-			a.h.humanMu.Unlock()
+			if corr != "" {
+				a.h.humanMu.Lock()
+				delete(a.h.humanWait, corr)
+				a.h.humanMu.Unlock()
+				_ = a.h.DB.VoidCorr(context.Background(), corr)
+			}
 		}()
 		a.h.publish(a.id, "human_requested", map[string]any{"call_id": cx.CallID, "tool": cx.Tool.Spec.Name,
 			"reason": reason, "args": string(cx.Args), "corr": corr, "deadline": deadline.UnixMilli()})
@@ -1089,9 +1121,9 @@ func (a *actor) wireConfirm() {
 		select {
 		case ok := <-w:
 			return ok
-		case <-a.exit:
+		case <-ctx.Done():
 			return false
-		case <-time.After(time.Until(deadline)):
+		case <-a.exit:
 			return false
 		}
 	}))

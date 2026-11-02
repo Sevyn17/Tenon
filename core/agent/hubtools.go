@@ -15,12 +15,13 @@ import (
 )
 
 // Ask 向人询问是否批准一次调用（CLI 实现）。
-type Ask func(call *toolhub.Cx, reason string) bool
+type Ask func(ctx context.Context, call *toolhub.Cx, reason string, deadline time.Time) bool
 
 // AwaitFunc 构造 toolhub.Await：询问 → 决定落库（pending → delivered）→ 返回。
 // 等待期间进程被杀，记录保持 pending，恢复后同一调用重新询问（session-host D3）。
+// ask 收到的 ctx 在回合取消 / 截止时结束：应答者据此停止等待并清理（不留悬挂的等待者）。
 func (a *Agent) AwaitFunc(ask Ask) toolhub.Await {
-	return func(ctx context.Context, cx *toolhub.Cx, reason string, _ time.Time) (bool, error) {
+	return func(ctx context.Context, cx *toolhub.Cx, reason string, deadline time.Time) (bool, error) {
 		if a.Hooks.OnConfirm != nil {
 			a.Hooks.OnConfirm(cx.CallID, cx.Tool.Spec.Name, reason)
 		}
@@ -29,7 +30,7 @@ func (a *Agent) AwaitFunc(ask Ask) toolhub.Await {
 		}
 		type ans struct{ ok bool }
 		ch := make(chan ans, 1)
-		go func() { ch <- ans{ask(cx, reason)} }()
+		go func() { ch <- ans{ask(ctx, cx, reason, deadline)} }()
 		select {
 		case <-ctx.Done():
 			return false, ctx.Err()

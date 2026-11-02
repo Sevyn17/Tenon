@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"ybase-kernel/core/session"
 	"ybase-kernel/core/store/sqlite"
@@ -122,7 +123,7 @@ func tempStore(t *testing.T) *sqlite.DB {
 func TestToolLoopEndToEnd(t *testing.T) {
 	db := tempStore(t)
 	approvals := 0
-	a := newAgent(t, db, agentOpts{ask: func(*toolhub.Cx, string) bool { approvals++; return true }})
+	a := newAgent(t, db, agentOpts{ask: func(context.Context, *toolhub.Cx, string, time.Time) bool { approvals++; return true }})
 	var text strings.Builder
 	a.Hooks.OnText = func(d string) { text.WriteString(d) }
 

@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -43,6 +44,7 @@ func Run(t *testing.T, open func(t *testing.T) store.Store) {
 		{"PendingCorr", testPendingCorr},
 		{"FindSessionByKey", testFindSessionByKey},
 		{"Outbox", testOutbox},
+		{"OutboxClaim", testOutboxClaim},
 		{"TraceEvents", testTraceEvents},
 		{"SubStoresAndTx", testSubStoresAndTx},
 	}
@@ -868,6 +870,22 @@ func testPendingCorr(t *testing.T, db store.Store) {
 	if _, err := db.ClaimCorr(ctx, "corr-4", "s1", ""); !errors.Is(err, store.ErrCorrRejected) {
 		t.Fatal("过期回信应被拒")
 	}
+	// 单条作废：之后的回信被拒；对已作废 / 不存在的 corr 再作废不报错。
+	if err := db.IssueCorr(ctx, store.Pending{Corr: "corr-5", SessionID: "s1"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.VoidCorr(ctx, "corr-5"); err != nil {
+		t.Fatalf("VoidCorr: %v", err)
+	}
+	if _, err := db.ClaimCorr(ctx, "corr-5", "s1", ""); !errors.Is(err, store.ErrCorrRejected) {
+		t.Fatal("作废后的回信应被拒")
+	}
+	if err := db.VoidCorr(ctx, "corr-5"); err != nil {
+		t.Fatalf("重复作废不应报错: %v", err)
+	}
+	if err := db.VoidCorr(ctx, "no-such"); err != nil {
+		t.Fatalf("作废不存在的 corr 不应报错: %v", err)
+	}
 }
 
 // FindSessionByKey 按会话键查会话（13 13.3 B19 的原子查或建基础）。
@@ -930,6 +948,92 @@ func testOutbox(t *testing.T, db store.Store) {
 	items, _ = db.Outbox(ctx, 0)
 	if len(items) != 1 || items[0].ID != "m2" {
 		t.Fatalf("标记后 Outbox = %+v", items)
+	}
+	// 已派发的行保留：同 id 重提交不会再入队；标记未知 id 不报错。
+	cp.ExpectLogLen, cp.Outbox = 0, []store.OutboxItem{{ID: "m1", Envelope: []byte(`{"id":"m1"}`), CreatedAt: now + 5}}
+	if err := db.Commit(ctx, cp); err != nil {
+		t.Fatalf("重提交: %v", err)
+	}
+	if items, _ = db.Outbox(ctx, 0); len(items) != 1 || items[0].ID != "m2" {
+		t.Fatalf("已派发的 m1 不应重新入队：%+v", items)
+	}
+	if err := db.MarkOutbox(ctx, "no-such"); err != nil {
+		t.Fatalf("标记未知 id 不应报错: %v", err)
+	}
+}
+
+// testOutboxClaim 检查发件箱认领（C6）：认领后别人拿不到；认领到期可被重新认领；
+// 交还后可再认领；死信不再派发；尝试次数逐次累加。
+func testOutboxClaim(t *testing.T, db store.Store) {
+	ctx := context.Background()
+	h := newCore().Snapshot().Header
+	if err := db.CreateSession(ctx, store.SessionMeta{ID: "oc"}, h, nil); err != nil {
+		t.Fatal(err)
+	}
+	cp := store.Checkpoint{SessionID: "oc", Header: h, RunState: "idle", Outbox: []store.OutboxItem{
+		{ID: "c1", Envelope: []byte(`{}`), CreatedAt: 1}, {ID: "c2", Envelope: []byte(`{}`), CreatedAt: 2},
+		{ID: "c3", Envelope: []byte(`{}`), CreatedAt: 3}}}
+	if err := db.Commit(ctx, cp); err != nil {
+		t.Fatal(err)
+	}
+	ids := func(xs []store.OutboxItem) string {
+		var s []string
+		for _, x := range xs {
+			s = append(s, x.ID)
+		}
+		return strings.Join(s, ",")
+	}
+	a, err := db.ClaimOutbox(ctx, "A", time.Hour, 2)
+	if err != nil || ids(a) != "c1,c2" || a[0].Attempts != 1 {
+		t.Fatalf("A 认领 = %+v %v", a, err)
+	}
+	b, _ := db.ClaimOutbox(ctx, "B", time.Hour, 0)
+	if ids(b) != "c3" {
+		t.Fatalf("B 只应拿到未认领的 c3，得 %s", ids(b))
+	}
+	if more, _ := db.ClaimOutbox(ctx, "B", time.Hour, 0); len(more) != 0 {
+		t.Fatalf("全部已认领时不应再拿到：%s", ids(more))
+	}
+	// 交还：只有认领者本人能交还。
+	if err := db.ReleaseOutbox(ctx, "c1", "B"); err != nil {
+		t.Fatal(err)
+	}
+	if again, _ := db.ClaimOutbox(ctx, "B", time.Hour, 0); len(again) != 0 {
+		t.Fatalf("别人交还不算数：%s", ids(again))
+	}
+	if err := db.ReleaseOutbox(ctx, "c1", "A"); err != nil {
+		t.Fatal(err)
+	}
+	if again, _ := db.ClaimOutbox(ctx, "B", time.Hour, 0); ids(again) != "c1" || again[0].Attempts != 2 {
+		t.Fatalf("交还后应可再认领、尝试次数 2：%+v", again)
+	}
+	// 认领到期（派发者崩溃）：可被重新认领。
+	if err := db.ReleaseOutbox(ctx, "c2", "A"); err != nil {
+		t.Fatal(err)
+	}
+	if exp, _ := db.ClaimOutbox(ctx, "A", -time.Second, 0); ids(exp) != "c2" {
+		t.Fatalf("应认领到 c2：%s", ids(exp))
+	}
+	if re, _ := db.ClaimOutbox(ctx, "C", time.Hour, 0); ids(re) != "c2" {
+		t.Fatalf("到期的认领应可被重新认领：%s", ids(re))
+	}
+	// 死信：不再派发，也不出现在 Outbox 里。
+	if err := db.DeadOutbox(ctx, "c3", "bad"); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.ReleaseOutbox(ctx, "c3", "B"); err != nil {
+		t.Fatal(err)
+	}
+	for _, it := range func() []store.OutboxItem { x, _ := db.Outbox(ctx, 0); return x }() {
+		if it.ID == "c3" {
+			t.Fatal("死信不应出现在待派发里")
+		}
+	}
+	if err := db.MarkOutbox(ctx, "c1"); err != nil {
+		t.Fatal(err)
+	}
+	if done, _ := db.ClaimOutbox(ctx, "Z", -time.Second, 0); strings.Contains(ids(done), "c1") || strings.Contains(ids(done), "c3") {
+		t.Fatalf("已派发 / 死信不应被认领：%s", ids(done))
 	}
 }
 

@@ -200,6 +200,43 @@ func TestConcurrencyLimitQueues(t *testing.T) {
 	}
 }
 
+// C3：排队等并发槽位时到达的 Cancel 要生效（旧实现：取消函数在拿到槽位后才登记，Cancel 落空，回合照跑）。
+func TestCancelWhileQueuedForSlot(t *testing.T) {
+	m := &scriptedModel{start: make(chan int, 4), gate: make(chan struct{})}
+	r := newT2Rig(t, filepath.Join(t.TempDir(), "s.db"), m, 1, nil)
+	a, b := mustOpen(t, r.h, "s1"), mustOpen(t, r.h, "s2")
+	if err := a.Do(Command{Kind: Send, Text: "一"}); err != nil {
+		t.Fatal(err)
+	}
+	waitStarted(t, m.start, "第一个会话")
+	if err := b.Do(Command{Kind: Send, Text: "二"}); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(100 * time.Millisecond) // s2 正在等槽位
+	if err := b.Do(Command{Kind: Cancel}); err != nil {
+		t.Fatal(err)
+	}
+	close(m.gate)
+	if err := a.Wait(); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.Wait(); err != nil {
+		t.Fatalf("排队中被取消的会话应正常空闲: %v", err)
+	}
+	if n := m.getCalls(); n != 1 {
+		t.Fatalf("被取消的 s2 不应调模型，calls=%d", n)
+	}
+	if err := b.Do(Command{Kind: Send, Text: "三"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.Wait(); err != nil {
+		t.Fatal(err)
+	}
+	if n := m.getCalls(); n != 2 {
+		t.Fatalf("取消后会话应可继续，calls=%d", n)
+	}
+}
+
 // 09 9.4 ②：运行中到达的用户消息排队，在下一次调模型前插入当前回合。
 func TestMidTurnUserMessageInserted(t *testing.T) {
 	m := &scriptedModel{firstTool: true}

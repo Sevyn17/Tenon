@@ -69,7 +69,7 @@ func TestInboxMergeByPermissionSubject(t *testing.T) {
 	if r.m.calls != 2 { // u1 一条、u2 一条
 		t.Fatalf("合并后应两轮，实际 calls=%d", r.m.calls)
 	}
-	first := textOfMsg(t, agent.History(hd.Agent().Core)[0])
+	first := textOfMsg(t, hd.Agent().CommittedHistory()[0])
 	for _, want := range []string{`from="u1"`, "第一条", `from="u1"`, "背景", `from="u1"`, "第二条"} {
 		if !strings.Contains(first, want) {
 			t.Fatalf("第一轮缺 %q：%s", want, first)
@@ -78,7 +78,7 @@ func TestInboxMergeByPermissionSubject(t *testing.T) {
 	if strings.Contains(first, "别人的") {
 		t.Fatalf("不同权限主体不应合并：%s", first)
 	}
-	second := textOfMsg(t, agent.History(hd.Agent().Core)[2])
+	second := textOfMsg(t, hd.Agent().CommittedHistory()[2])
 	if !strings.Contains(second, "别人的") || strings.Contains(second, "第一条") {
 		t.Fatalf("第二轮: %s", second)
 	}
@@ -115,7 +115,7 @@ func TestDeliverContextWaitsForWake(t *testing.T) {
 	if r.m.calls != 1 {
 		t.Fatalf("wake 应开一轮：calls=%d", r.m.calls)
 	}
-	u := textOfMsg(t, agent.History(hd.Agent().Core)[0])
+	u := textOfMsg(t, hd.Agent().CommittedHistory()[0])
 	if !strings.Contains(u, "背景资料") || !strings.Contains(u, "开始") {
 		t.Fatalf("背景应随 wake 一起进模型：%s", u)
 	}
@@ -153,7 +153,7 @@ func TestDeliverNoticeBecomesStatusEntry(t *testing.T) {
 		t.Fatal(err)
 	}
 	var statusText string
-	for _, e := range hd.Agent().Core.Snapshot().Entries {
+	for _, e := range hd.Agent().Committed().Entries {
 		if e.Item.Kind == session.KindStatus && e.Item.Injection != nil {
 			statusText += e.Item.Injection.Text
 		}
@@ -203,7 +203,7 @@ func TestDeliverReplyCorrCheck(t *testing.T) {
 	if err := hd.Wait(); err != nil {
 		t.Fatal(err)
 	}
-	u := textOfMsg(t, agent.History(hd.Agent().Core)[0])
+	u := textOfMsg(t, hd.Agent().CommittedHistory()[0])
 	if !strings.Contains(u, `from="worker"`) || !strings.Contains(u, "结果") {
 		t.Fatalf("回信内容: %s", u)
 	}
@@ -268,7 +268,7 @@ func TestRewindVoidsCorr(t *testing.T) {
 	if err := hd.Wait(); err != nil {
 		t.Fatal(err)
 	}
-	hidx := hd.Agent().Core.Snapshot().Header.LogLen // 4
+	hidx := hd.Agent().Committed().Header.LogLen // 4
 	if err := r.db.IssueCorr(ctx, store.Pending{Corr: "old", SessionID: "s1", ReplyTo: "agent:a", IssuedIdx: 0}); err != nil {
 		t.Fatal(err)
 	}
@@ -423,9 +423,9 @@ func TestOutboxDispatchedAfterCommit(t *testing.T) {
 }
 
 // toolResults 把历史里的工具结果文本拼起来（caps 测试用）。
-func toolResults(c *session.Core) string {
+func toolResults(a *agent.Agent) string {
 	var b strings.Builder
-	for _, m := range agent.History(c) {
+	for _, m := range a.CommittedHistory() {
 		if m.Role != "tool" {
 			continue
 		}
@@ -486,7 +486,7 @@ func TestCapsRestrictToolCall(t *testing.T) {
 		}
 	}
 	deliver([]string{"read_file"}) // echo 不在范围
-	if got := toolResults(hd.Agent().Core); !strings.Contains(got, "不在本轮授权范围") {
+	if got := toolResults(hd.Agent()); !strings.Contains(got, "不在本轮授权范围") {
 		t.Fatalf("超出 caps 的调用应被拒绝：%s", got)
 	}
 	if *executed != 0 {
@@ -496,7 +496,7 @@ func TestCapsRestrictToolCall(t *testing.T) {
 		t.Fatalf("回合结束后 caps 应清空，得到 %v", got)
 	}
 	deliver([]string{"echo"}) // 放行
-	got := toolResults(hd.Agent().Core)
+	got := toolResults(hd.Agent())
 	if !strings.Contains(got, "echoed") || *executed != 1 {
 		t.Fatalf("caps 放行后应执行，执行 %d 次：%s", *executed, got)
 	}

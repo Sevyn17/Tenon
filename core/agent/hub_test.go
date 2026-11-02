@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"ybase-kernel/core/session"
 	"ybase-kernel/core/store/sqlite"
@@ -26,7 +27,7 @@ func TestHubConfirmSurvivesCrash(t *testing.T) {
 	runs := 0
 
 	db1 := openStore(t, path)
-	a1 := hubAgent(t, db1, &runs, func(*toolhub.Cx, string) bool { return true })
+	a1 := hubAgent(t, db1, &runs, func(context.Context, *toolhub.Cx, string, time.Time) bool { return true })
 	a1.crashAt = "awaiting_confirm"
 	if _, err := a1.Send(context.Background(), "ping"); !errors.Is(err, errCrash) {
 		t.Fatalf("应在等确认时崩溃: %v", err)
@@ -35,7 +36,7 @@ func TestHubConfirmSurvivesCrash(t *testing.T) {
 
 	db2 := openStore(t, path)
 	asked := 0
-	a2 := hubAgent(t, db2, &runs, func(*toolhub.Cx, string) bool { asked++; return true })
+	a2 := hubAgent(t, db2, &runs, func(context.Context, *toolhub.Cx, string, time.Time) bool { asked++; return true })
 	if !a2.Pending() {
 		t.Fatal("恢复后应有未完成回合")
 	}
@@ -53,7 +54,7 @@ func TestHubConfirmSurvivesCrash(t *testing.T) {
 func TestHubConfirmDenied(t *testing.T) {
 	runs := 0
 	db := openStore(t, filepath.Join(t.TempDir(), "state.db"))
-	a := hubAgent(t, db, &runs, func(*toolhub.Cx, string) bool { return false })
+	a := hubAgent(t, db, &runs, func(context.Context, *toolhub.Cx, string, time.Time) bool { return false })
 	var text strings.Builder
 	a.Hooks.OnText = func(d string) { text.WriteString(d) }
 	if _, err := a.Send(context.Background(), "ping"); err != nil {

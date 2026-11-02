@@ -86,12 +86,11 @@ func (h *Host) SpawnAs(ctx context.Context, parent, id, origin, def string, f Fa
 	if err != nil {
 		return "", err
 	}
-	return lastAssistant(hd.Agent().Core)
+	return lastAssistant(hd.Agent().CommittedHistory())
 }
 
-// lastAssistant 最后一条助手消息的文本。
-func lastAssistant(c *session.Core) (string, error) {
-	ms := agent.History(c)
+// lastAssistant 最后一条助手消息的文本（读提交快照：子会话 actor 可能已开下一回合）。
+func lastAssistant(ms []session.Message) (string, error) {
 	for i := len(ms) - 1; i >= 0; i-- {
 		if ms[i].Role != "assistant" {
 			continue

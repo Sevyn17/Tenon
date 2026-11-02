@@ -88,7 +88,7 @@ func newRig(t *testing.T, path string, m *fakeModel) *rig {
 
 func messages(t *testing.T, hd Handle) []session.Message {
 	t.Helper()
-	return agent.History(hd.Agent().Core)
+	return hd.Agent().CommittedHistory()
 }
 
 func TestSendIdempotentAndNoteMerge(t *testing.T) {
@@ -138,7 +138,7 @@ func TestCancelMidTurn(t *testing.T) {
 	if err := hd.Wait(); err != nil {
 		t.Fatal(err)
 	}
-	if end.Kind != session.EndCancelled || hd.Agent().Core.Status() != session.StatusIdle {
+	if end.Kind != session.EndCancelled || hd.Agent().Committed().Header.Status != session.StatusIdle {
 		t.Fatalf("应以 Cancelled 结束并回 Idle: %s", end)
 	}
 }
@@ -265,8 +265,8 @@ func TestForkAndSide(t *testing.T) {
 	if got := len(messages(t, f)); got != 2 {
 		t.Fatalf("fork 应带 2 条前缀消息，得 %d", got)
 	}
-	srcEntries := src.Agent().Core.Context().Items
-	fEntries := f.Agent().Core.Context().Items
+	srcEntries := src.Agent().Committed().Entries
+	fEntries := f.Agent().Committed().Entries
 	if srcEntries[0].ID == fEntries[0].ID {
 		t.Fatal("fork 条目 id 应重新分配")
 	}

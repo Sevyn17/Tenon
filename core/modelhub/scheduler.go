@@ -242,6 +242,9 @@ func (h *Hub) runStep(ctx context.Context, r *Request, si int, step PlanStep, ou
 	shell := shellHash(r.Req)
 	delay := h.pol.Initial
 	var last *Failure
+	// 熔断按「请求」计数，不按「尝试」（C9）：本项重试的中间失败不记；本项最终成功记一次成功、
+	// 最终以可重试错误失败记一次失败。否则单个请求自己的 5 次重试就能把熔断打开，殃及所有会话，
+	// 而且第 5 次重试会因为熔断已开被跳过。
 	for at := 0; at <= retries; at++ {
 		rr := *r
 		rr.AttemptKey = attemptKey
@@ -253,19 +256,20 @@ func (h *Hub) runStep(ctx context.Context, r *Request, si int, step PlanStep, ou
 		}
 		last = f
 		if !f.Code.Retryable() || ctx.Err() != nil {
-			if f.Code.Retryable() {
+			if f.Code.Retryable() && ctx.Err() == nil {
 				h.record(key, false)
 			}
 			return f
 		}
-		h.record(key, false)
-		if at == retries || h.isOpen(key) {
+		if at == retries {
+			h.record(key, false)
 			break
 		}
 		wait := backoff(delay)
 		if f.RetryAfter > 0 {
 			if f.RetryAfter > h.pol.MaxRetryAfter {
-				return f // 超上限：换下一项
+				h.record(key, false) // 本项到此为止：按一次失败记
+				return f             // 超上限：换下一项
 			}
 			wait = f.RetryAfter
 		}

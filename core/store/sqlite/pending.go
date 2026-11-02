@@ -50,6 +50,12 @@ func (db *DB) PendingCorr(ctx context.Context, corr string) (store.Pending, erro
 }
 
 // VoidCorrAfter 作废某会话在日志位置 idx 及之后签发的未用 corr（Rewind 语义，11 11.2）。
+// VoidCorr 作废一条 corr；已用过或不存在时什么也不做。
+func (db *DB) VoidCorr(ctx context.Context, corr string) error {
+	_, err := db.q().ExecContext(ctx, `UPDATE session_pending SET used = 1 WHERE tenant = ? AND corr = ? AND used = 0`, Tenant, corr)
+	return err
+}
+
 func (db *DB) VoidCorrAfter(ctx context.Context, sessionID string, idx int) (int, error) {
 	res, err := db.q().ExecContext(ctx, `UPDATE session_pending SET used = 1
 		WHERE tenant = ? AND session_id = ? AND issued_idx >= ? AND used = 0`, Tenant, sessionID, idx)

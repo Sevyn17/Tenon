@@ -169,6 +169,9 @@ type CorrStore interface {
 	// VoidCorrAfter 作废某会话在日志位置 idx 及之后签发的未用 corr（Rewind）；
 	// 返回作废条数。
 	VoidCorrAfter(ctx context.Context, sessionID string, idx int) (int, error)
+	// VoidCorr 作废一条 corr（等它的人已经不等了：确认已由别的路径应答、回合取消、截止）。
+	// 已用过或不存在时什么也不做。
+	VoidCorr(ctx context.Context, corr string) error
 }
 
 // ToolResultStore 工具幂等 / 挂起记录（tool-hub D4）。
@@ -289,6 +292,8 @@ type OutboxItem struct {
 	SessionID string          `json:"session_id"`
 	Envelope  json.RawMessage `json:"envelope"`
 	CreatedAt int64           `json:"created_at"`
+	// Attempts 已尝试派发的次数（ClaimOutbox 每认领一次加一）。
+	Attempts int `json:"attempts,omitempty"`
 }
 
 // OutboxStore 是会话发件箱。Commit 把 OutboxItem 与检查点写在同一事务里；
@@ -298,6 +303,14 @@ type OutboxStore interface {
 	Outbox(ctx context.Context, limit int) ([]OutboxItem, error)
 	// MarkOutbox 标记一条外发信封已派发。
 	MarkOutbox(ctx context.Context, id string) error
+	// ClaimOutbox 原子认领最多 limit 条待派发信封（多个派发者 / 多个进程同时派发也不会拿到同一条）：
+	// 未认领、或认领已过期（上一个派发者崩溃）的行，记为 holder 认领到 now+lease，尝试次数加一，
+	// 按创建顺序返回。派发完调 MarkOutbox；临时失败调 ReleaseOutbox 交还。
+	ClaimOutbox(ctx context.Context, holder string, lease time.Duration, limit int) ([]OutboxItem, error)
+	// ReleaseOutbox 交还一条认领（临时失败，留给下次重试）；只有认领者本人能交还。
+	ReleaseOutbox(ctx context.Context, id, holder string) error
+	// DeadOutbox 把一条信封标为死信（永久失败或重试次数用尽）：不再派发，reason 留作排查。
+	DeadOutbox(ctx context.Context, id, reason string) error
 }
 
 // 工具记录状态。

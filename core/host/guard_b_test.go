@@ -104,7 +104,7 @@ func TestDisjointCapsDenyAll(t *testing.T) {
 	if *executed != 0 {
 		t.Fatalf("caps 交集为空时工具不应执行，执行了 %d 次", *executed)
 	}
-	if got := toolResults(hd.Agent().Core); !strings.Contains(got, "不在本轮授权范围") {
+	if got := toolResults(hd.Agent()); !strings.Contains(got, "不在本轮授权范围") {
 		t.Fatalf("应回 caps 拒绝：%s", got)
 	}
 }
@@ -184,7 +184,7 @@ func TestOutboundCapsFromSenderPermissions(t *testing.T) {
 	if *executed != 0 {
 		t.Fatalf("高权限会话不应执行发送方没有的工具，执行了 %d 次", *executed)
 	}
-	if got := toolResults(high.Agent().Core); !strings.Contains(got, "不在本轮授权范围") {
+	if got := toolResults(high.Agent()); !strings.Contains(got, "不在本轮授权范围") {
 		t.Fatalf("应回 caps 拒绝：%s", got)
 	}
 }

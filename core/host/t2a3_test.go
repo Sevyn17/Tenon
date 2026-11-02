@@ -159,3 +159,39 @@ func TestSuspendStopsTurnsUntilResume(t *testing.T) {
 		t.Fatalf("Resume 后状态 = %q，期望 active", st)
 	}
 }
+
+// C1：Suspend 在会话自己的 actor 里执行（不在调用方 goroutine 里改会话核心）；
+// 回合进行中调用时等回合结束后再挂起。用 -race 跑能看出旧实现的数据竞争。
+func TestSuspendRunsInActor(t *testing.T) {
+	ctx := context.Background()
+	m := &scriptedModel{start: make(chan int, 4), gate: make(chan struct{})}
+	r := newT2Rig(t, filepath.Join(t.TempDir(), "s.db"), m, 0, nil)
+	hd := mustOpen(t, r.h, "s1")
+	if err := hd.Do(Command{Kind: Send, Text: "一"}); err != nil {
+		t.Fatal(err)
+	}
+	waitStarted(t, m.start, "回合开始")
+	done := make(chan error, 1)
+	go func() { done <- r.h.Suspend(ctx, "s1", "budget") }() // 回合中：排到回合结束后
+	// 并发改头部（回合中 SetExt 在步边界受理，模型阻塞时会一直排着，所以放后台）。
+	exts := make(chan struct{})
+	go func() {
+		defer close(exts)
+		for i := 0; i < 20; i++ {
+			_ = hd.Do(Command{Kind: SetExt, Key: "app.k", Value: i})
+		}
+	}()
+	close(m.gate)
+	<-exts
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("回合结束后挂起应成功: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Suspend 没有在回合结束后执行")
+	}
+	if st, _ := r.db.SessionStatus(ctx, "s1"); st != store.StatusSuspended {
+		t.Fatalf("状态 = %q，期望 suspended", st)
+	}
+}

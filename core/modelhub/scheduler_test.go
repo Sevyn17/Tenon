@@ -177,6 +177,7 @@ func TestRetryAfterBoundAndExhaust(t *testing.T) {
 	}
 }
 
+// 熔断按请求计数（C9）：BreakAfter 个请求在同一模型上最终失败后打开，之后的请求直接跳过它。
 func TestCircuitOpensAndSkips(t *testing.T) {
 	ad := &fakeAdapter{script: func(_ int, ep Endpoint) []Event {
 		if ep.Model == "m1" {
@@ -186,13 +187,39 @@ func TestCircuitOpensAndSkips(t *testing.T) {
 	}}
 	h, _ := testHub(t, ad, twoModels)
 	h.pol.BreakAfter = 3
-	for i := 0; i < 2; i++ { // 每次 m1 失败 3 次（retries=2）
+	for i := 0; i < 3; i++ { // 3 个请求在 m1 上最终失败（每个请求内部重试 3 次，只记一次失败）
 		collect(h.Call(context.Background(), req("n")))
 	}
 	before := len(ad.calls)
 	collect(h.Call(context.Background(), req("n")))
 	if got := ad.calls[before:]; len(got) != 1 || got[0][:2] != "m2" {
 		t.Fatalf("熔断打开后应直接跳过 m1: %v", got)
+	}
+}
+
+// C9：单个请求自己的重试不会打开熔断，重试次数也不会被熔断截断
+// （旧实现：BreakAfter = Retries 时，第 N 次失败就打开熔断、跳过最后一次重试，并殃及别的请求）。
+func TestOneRequestRetriesDoNotOpenCircuit(t *testing.T) {
+	ad := &fakeAdapter{script: func(_ int, ep Endpoint) []Event {
+		if ep.Model == "m1" {
+			return []Event{fail(CodeServer)}
+		}
+		return []Event{done("ok")}
+	}}
+	h, _ := testHub(t, ad, twoModels)
+	h.pol.BreakAfter = 2 // 小于单个请求的尝试次数（retries=2 → 3 次）
+	collect(h.Call(context.Background(), req("n")))
+	m1 := 0
+	for _, c := range ad.calls {
+		if c[:2] == "m1" {
+			m1++
+		}
+	}
+	if m1 != 3 {
+		t.Fatalf("单个请求应把重试用完（3 次），实际 m1 被调 %d 次", m1)
+	}
+	if h.isOpen("a/m1") {
+		t.Fatal("单个请求的重试不应打开熔断")
 	}
 }
 

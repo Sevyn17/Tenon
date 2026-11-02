@@ -41,7 +41,7 @@ type Store struct {
 	inbox   map[string][]inboxRow          // 会话 → 准入顺序
 	tools   map[string]map[string]*toolRow // 会话 → call_id → 记录
 	pending map[string]store.Pending
-	outbox  []store.OutboxItem // corr → 待回复登记（11 11.2）
+	outbox  []outboxRow         // 发件箱（08 9.6）：派发后保留行（sent），与 sqlite 一致
 	traces  []store.TraceEvent // trace 事件（08 8.7 explain）
 
 	cbMu     sync.Mutex
@@ -87,6 +87,16 @@ type archived struct {
 type request struct {
 	r         store.RequestRecord
 	createdAt int64
+}
+
+// outboxRow 一条外发信封及其派发状态（与 sqlite 的 sent / claimed_by / claim_until / dead 同语义）。
+type outboxRow struct {
+	store.OutboxItem
+	sent       bool
+	claimedBy  string
+	claimUntil int64
+	dead       bool
+	deadReason string
 }
 
 type inboxRow struct {
@@ -333,7 +343,7 @@ func (s *Store) Commit(ctx context.Context, cp store.Checkpoint) error {
 		if it.CreatedAt == 0 {
 			it.CreatedAt = now
 		}
-		s.outbox = append(s.outbox, it)
+		s.outbox = append(s.outbox, outboxRow{OutboxItem: it})
 	}
 	run := cp.RunState
 	if run == "" {
@@ -527,7 +537,7 @@ func (s *Store) DeleteSession(ctx context.Context, id string, cleaners []store.C
 		}
 	}
 	kept := s.outbox[:0]
-	for _, o := range s.outbox {
+	for _, o := range s.outbox { // outboxRow
 		if o.SessionID != id {
 			kept = append(kept, o)
 		}

@@ -327,7 +327,7 @@ func chat(o opts, a *app) error {
 		if err := hd.Do(host.Command{Kind: host.SetConfig, MaxSteps: &n}); err != nil {
 			return fmt.Errorf("设置步数上限：%w", err)
 		}
-	} else if cfg := hd.Agent().Core.Snapshot().Header.Config; cfg != nil && cfg.Policy.MaxSteps == legacyMaxSteps {
+	} else if cfg := hd.Agent().Committed().Header.Config; cfg != nil && cfg.Policy.MaxSteps == legacyMaxSteps {
 		// 旧版缺省值 24 写进了会话配置：改回现缺省（不限），用户可再用 /max-steps 设置。
 		n := uint32(0)
 		if err := hd.Do(host.Command{Kind: host.SetConfig, MaxSteps: &n}); err != nil {
@@ -337,7 +337,7 @@ func chat(o opts, a *app) error {
 	}
 	// 装配快照：会话头 Ext 记下本次开启的插件；恢复时与上次不同就提示（工具 / 提示词可能变了）。
 	now := onNames(a.profile)
-	if prev, ok := hd.Agent().Core.Snapshot().Header.Ext[extAssembly]; ok {
+	if prev, ok := hd.Agent().Committed().Header.Ext[extAssembly]; ok {
 		if d := assemblyDiff(prev, now); d != "" {
 			fmt.Println("[注意] 本会话上次的插件装配与这次不同：" + d)
 		}
@@ -714,7 +714,7 @@ func (c *cli) modeText(m permission.Mode) string {
 // maxSteps /max-steps 查看或设置单回合步数上限（存在会话配置里，重启后仍生效；回合中到下一步边界生效）。
 func (c *cli) maxSteps(args []string) error {
 	if len(args) == 0 {
-		cur := c.cur.Agent().Core.Snapshot().Header.Config.Policy.MaxSteps
+		cur := c.cur.Agent().Committed().Header.Config.Policy.MaxSteps
 		if cur == 0 {
 			fmt.Println("当前步数上限：不限（/max-steps <n> 设置，0 = 不限）")
 		} else {

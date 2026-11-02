@@ -103,10 +103,13 @@ type Agent struct {
 	Statuses []inject.Reg
 
 	// caps 本轮的授权工具范围（信封 caps 交集，T3）；nil/空 = 不限。
-	capsMu      sync.RWMutex
-	traceMu     sync.Mutex
-	trace       string
-	turnOrigin  TurnOrigin
+	capsMu     sync.RWMutex
+	traceMu    sync.Mutex
+	trace      string
+	turnOrigin TurnOrigin
+	// snap 最近一次提交的快照（Committed 用；actor 之外的读者不碰 Core）。
+	snapMu      sync.RWMutex
+	snap        *session.Snapshot
 	traceEvents []store.TraceEvent
 	caps        []string
 	capsGuarded bool
@@ -157,6 +160,10 @@ func (a *Agent) drive(ctx context.Context, need *session.Need) (session.EndReaso
 			return need.Done.Reason, nil
 
 		case session.NeedModel:
+			if ctx.Err() != nil { // 已取消（如排队等并发槽位时）：不再调模型，按取消结束回合
+				_, need, err = a.Core.Cancel()
+				break
+			}
 			a.endStep("ok")
 			a.beginStep(need.Model.Step)
 			need, err = a.callModel(ctx, need)
@@ -347,6 +354,19 @@ func (a *Agent) sendModel(ctx context.Context, need *session.Need, req session.R
 // History 返回会话可见消息（用于恢复后回显）。
 func History(c *session.Core) []session.Message {
 	req, err := session.BuildRequest(c.Context())
+	if err != nil {
+		return nil
+	}
+	return req.Messages
+}
+
+// CommittedHistory 最近一次提交时的对话消息（actor 之外读历史用，见 Committed）。
+func (a *Agent) CommittedHistory() []session.Message {
+	s := a.Committed()
+	if s.Header.Config == nil {
+		return nil
+	}
+	req, err := session.BuildRequest(session.Context{Config: s.Header.Config, Items: s.Entries, Base: s.Base, Ext: s.Header.Ext})
 	if err != nil {
 		return nil
 	}

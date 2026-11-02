@@ -47,6 +47,7 @@ func (a *Agent) OpenAs(ctx context.Context, cfg *session.Config, meta store.Sess
 		}
 		a.committed = 0
 		a.bindCtx(meta)
+		a.publishSnapshot(a.Core.Snapshot())
 		return false, nil
 	}
 	if err != nil {
@@ -60,6 +61,7 @@ func (a *Agent) OpenAs(ctx context.Context, cfg *session.Config, meta store.Sess
 	a.Origin = l.Meta.Origin
 	a.bindCtx(l.Meta)
 	a.committed = l.Snapshot.Header.LogLen
+	a.publishSnapshot(c.Snapshot())
 	a.resume = c.Resumed()
 	if a.resume != nil && a.resume.Kind == session.NeedModel {
 		a.recovered = a.recoverRequest(ctx, a.resume.Model.RequestID)
@@ -163,7 +165,28 @@ func (a *Agent) checkpoint(ctx context.Context, run string, rec *reqlog.Record) 
 	a.hubSpans = a.hubSpans[hubN:]
 	a.spanMu.Unlock()
 	a.committed = s.Header.LogLen
+	a.publishSnapshot(s)
 	return nil
+}
+
+// publishSnapshot 记下最近一次提交（或打开时恢复）的会话快照，供 actor 之外的读者用（Committed）。
+// 条目切片复制一份：Core 截断（Rewind）后再追加会改写原底层数组里的位置。条目本身只读、共享。
+func (a *Agent) publishSnapshot(s session.Snapshot) {
+	s.Entries = append([]*session.Entry(nil), s.Entries...)
+	a.snapMu.Lock()
+	a.snap = &s
+	a.snapMu.Unlock()
+}
+
+// Committed 最近一次提交的会话快照（只读）。actor 之外读会话状态一律用它，不要直接读 Core——
+// Core 只由会话自己的 actor 改，从别的 goroutine 读是数据竞争。会话还没打开时返回零值。
+func (a *Agent) Committed() session.Snapshot {
+	a.snapMu.RLock()
+	defer a.snapMu.RUnlock()
+	if a.snap == nil {
+		return session.Snapshot{}
+	}
+	return *a.snap
 }
 
 func toStore(r *reqlog.Record) (*store.RequestRecord, error) {

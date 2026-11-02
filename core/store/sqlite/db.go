@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -25,6 +26,8 @@ type DB struct {
 	events   []bus.Envelope
 	mu       sync.Mutex
 	onCommit func(bus.Envelope)
+	// txActive 外层句柄上有 Tx 在进行（见 Tx / q）。
+	txActive atomic.Bool
 }
 
 // execer 是 *sql.DB 与 *sql.Tx 的公共子集，子存储方法通过 q() 取执行器。
@@ -34,12 +37,66 @@ type execer interface {
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 }
 
-// q 返回当前执行器：事务视图内走 tx，否则直连。
+// q 返回当前执行器：事务视图内走 tx，否则直连。Tx 进行中的外层句柄走 guarded（见 Tx）。
 func (db *DB) q() execer {
 	if db.tx != nil {
 		return db.tx
 	}
+	if db.txActive.Load() {
+		return guarded{db}
+	}
 	return db.sql
+}
+
+// ErrOuterInTx Tx 进行中用外层句柄、在 TxConnWait 内等不到连接（多半是 Tx 的 fn 误用了外层句柄）。
+var ErrOuterInTx = errors.New("sqlite: 事务进行中，外层句柄等不到连接（Tx 的 fn 里请用传进来的 Store）")
+
+// TxConnWait Tx 进行中外层句柄等连接的上限（约束清单「存储」）。
+const TxConnWait = 2 * time.Second
+
+// guarded Tx 进行中的外层执行器：先等 Tx 结束（最多 TxConnWait），等不到报 ErrOuterInTx，
+// 而不是一直卡在连接池上。等到了再照常执行，查询本身不受这个期限约束。
+type guarded struct{ db *DB }
+
+// wait 等外层句柄上的 Tx 结束。
+func (g guarded) wait(ctx context.Context) error {
+	deadline := time.Now().Add(TxConnWait)
+	for g.db.txActive.Load() {
+		if time.Now().After(deadline) {
+			return ErrOuterInTx
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(5 * time.Millisecond):
+		}
+	}
+	return nil
+}
+
+func (g guarded) ExecContext(ctx context.Context, q string, args ...any) (sql.Result, error) {
+	if err := g.wait(ctx); err != nil {
+		return nil, err
+	}
+	return g.db.sql.ExecContext(ctx, q, args...)
+}
+
+func (g guarded) QueryContext(ctx context.Context, q string, args ...any) (*sql.Rows, error) {
+	if err := g.wait(ctx); err != nil {
+		return nil, err
+	}
+	return g.db.sql.QueryContext(ctx, q, args...)
+}
+
+// QueryRowContext 等不到时返回一个必然出错的 Row（*sql.Row 没有公开构造，借一个已取消的 ctx 产生错误）；
+// 这时 Scan 报 context.Canceled。调用方据此知道没查成——比卡死好；Exec / Query 路径给的是 ErrOuterInTx。
+func (g guarded) QueryRowContext(ctx context.Context, q string, args ...any) *sql.Row {
+	if err := g.wait(ctx); err != nil {
+		c, cancel := context.WithCancel(ctx)
+		cancel()
+		return g.db.sql.QueryRowContext(c, q, args...)
+	}
+	return g.db.sql.QueryRowContext(ctx, q, args...)
 }
 
 // Options 打开选项。

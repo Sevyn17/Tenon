@@ -124,4 +124,12 @@ var coreMigrations = []migration{
 			kind TEXT NOT NULL, detail TEXT NOT NULL DEFAULT '')`,
 		`CREATE INDEX trace_events_t ON trace_events(trace, at)`,
 	}},
+	// v7：发件箱认领与死信（2026-11-02 C6）。多个派发者（同进程多会话、多进程共用一个库）
+	// 原子认领再投递；认领带期限，派发者崩溃后到期可被重新认领；重试用尽或永久失败记死信。
+	{version: 7, stmts: []string{
+		`ALTER TABLE session_outbox ADD COLUMN claimed_by TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE session_outbox ADD COLUMN claim_until INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE session_outbox ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE session_outbox ADD COLUMN dead TEXT NOT NULL DEFAULT ''`,
+	}},
 }

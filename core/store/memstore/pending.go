@@ -61,6 +61,19 @@ func (s *Store) PendingCorr(ctx context.Context, corr string) (store.Pending, er
 }
 
 // VoidCorrAfter 作废某会话在日志位置 idx 及之后签发的未用 corr（Rewind 语义）。
+// VoidCorr 作废一条 corr；已用过或不存在时什么也不做。
+func (s *Store) VoidCorr(ctx context.Context, corr string) error {
+	if err := s.lock(); err != nil {
+		return err
+	}
+	defer s.mu.Unlock()
+	if p, ok := s.pending[corr]; ok && !p.Used {
+		p.Used = true
+		s.pending[corr] = p
+	}
+	return nil
+}
+
 func (s *Store) VoidCorrAfter(ctx context.Context, sessionID string, idx int) (int, error) {
 	if err := s.lock(); err != nil {
 		return 0, err

@@ -3,6 +3,7 @@ package host
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -30,6 +31,97 @@ func TestOutboxControlToSelfDoesNotDeadlock(t *testing.T) {
 	case <-hd.Done(): // close 生效：actor 退出
 	case <-time.After(5 * time.Second):
 		t.Fatal("actor 卡在派发发件箱里（control 等自己受理命令）")
+	}
+}
+
+// C6：永久失败的毒消息记死信、不再重试，不会堵住后面的信（旧实现：不支持的地址被当成临时错误，
+// 每次派发都重试；发件箱每次只取 64 条，毒消息够多时正常的信永远派不出去）。
+func TestOutboxPoisonDeadLettered(t *testing.T) {
+	ctx := context.Background()
+	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{})
+	hd := mustOpen(t, r.h, "s1")
+	mustOpen(t, r.h, "s2")
+	put := func(env mail.Envelope) {
+		t.Helper()
+		if err := env.Normalize(); err != nil {
+			t.Fatal(err)
+		}
+		b, _ := json.Marshal(env)
+		hd.Agent().EnqueueOutbox(env.ID, b)
+	}
+	for i := 0; i < OutboxBatch+5; i++ { // 一批以上的毒消息：发给还不支持的 component: 地址
+		put(mail.Envelope{From: mail.Address{Kind: mail.AddrComponent, ID: "t"}, To: mail.Address{Kind: mail.AddrComponent, ID: "x"}, Body: "poison"})
+	}
+	put(mail.Envelope{From: mail.Address{Kind: mail.AddrComponent, ID: "t"}, To: mail.Address{Kind: mail.AddrSession, ID: "s2"},
+		Kind: mail.KindNotify, Mode: mail.ModeContext, Body: "正常的信"})
+	if err := hd.Agent().Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 3; i++ {
+		if _, err := r.h.FlushOutbox(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if items, _ := r.db.Outbox(ctx, 0); len(items) != 0 {
+		t.Fatalf("毒消息应记死信、正常的信应已派发，剩 %d 条", len(items))
+	}
+	inbox, _ := r.db.Inbox(ctx, "s2")
+	if len(inbox) != 1 {
+		t.Fatalf("正常的信应送到 s2：%+v", inbox)
+	}
+}
+
+// C7：agent: 投递被联系名单拒绝时不留下会话（旧实现先建会话、开了 actor，再在投递时拒绝）。
+func TestDeliverAgentRejectedLeavesNoSession(t *testing.T) {
+	ctx := context.Background()
+	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{})
+	for i := 0; i < 3; i++ {
+		err := r.h.Deliver(ctx, mail.Envelope{From: mail.Address{Kind: mail.AddrAgent, ID: "stranger"},
+			To: mail.Address{Kind: mail.AddrAgent, ID: "worker"}, Body: "hi"})
+		if !errors.Is(err, ErrNotAllowed) {
+			t.Fatalf("agent 直投 agent: 应被联系名单拒绝，得 %v", err)
+		}
+	}
+	if list, _ := r.db.ListSessions(ctx, 0, 100, false); len(list) != 0 {
+		t.Fatalf("被拒的投递不应留下会话：%d 个", len(list))
+	}
+	r.h.mu.Lock()
+	n := len(r.h.actors)
+	r.h.mu.Unlock()
+	if n != 0 {
+		t.Fatalf("被拒的投递不应留下运行中的 actor：%d 个", n)
+	}
+}
+
+// A9 / C6：两个宿主（两个进程）共用一个库同时派发，同一条外发只投递一次。
+func TestOutboxTwoHostsDeliverOnce(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "s.db")
+	r1 := newRig(t, path, &fakeModel{})
+	r2 := newRig(t, path, &fakeModel{})
+	hd := mustOpen(t, r1.h, "s1")
+	env := mail.Envelope{From: mail.Address{Kind: mail.AddrComponent, ID: "test"},
+		To: mail.Address{Kind: mail.AddrAgent, ID: "worker"}, Body: "任务"}
+	if err := env.Normalize(); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := json.Marshal(env)
+	hd.Agent().EnqueueOutbox(env.ID, b)
+	if err := hd.Agent().Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+	before, _ := r1.db.ListSessions(ctx, 0, 100, false)
+	var wg sync.WaitGroup
+	for i := 0; i < 4; i++ {
+		for _, h := range []*Host{r1.h, r2.h} {
+			wg.Add(1)
+			go func(h *Host) { defer wg.Done(); _, _ = h.FlushOutbox(ctx) }(h)
+		}
+	}
+	wg.Wait()
+	after, _ := r1.db.ListSessions(ctx, 0, 100, false)
+	if got := len(after) - len(before); got != 1 {
+		t.Fatalf("两个宿主并发派发，同一条外发应只投递一次，新建了 %d 个会话", got)
 	}
 }
 

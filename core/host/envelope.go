@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"ybase-kernel/core/agent"
 	"ybase-kernel/core/mail"
@@ -73,7 +74,7 @@ func (h *Host) deliver(ctx context.Context, env mail.Envelope) error {
 	case mail.AddrHuman:
 		return h.deliverHuman(ctx, env)
 	default:
-		return fmt.Errorf("host: 暂不支持投递到 %s（后一分片提供）", env.To.String())
+		return fmt.Errorf("%w：%s", ErrUnsupportedAddr, env.To.String())
 	}
 }
 
@@ -99,8 +100,23 @@ func (h *Host) deliverAgent(ctx context.Context, env mail.Envelope) error {
 		h.publish("", "guard.denied", map[string]any{"from": env.From.String(), "to": env.To.String(), "agent": env.To.ID, "reason": why})
 		return fmt.Errorf("%w: %s", ErrNotAllowed, why)
 	}
+	// 联系名单与投递守卫在建会话之前就过一遍（C7）：新会话的创建者就是本信的发送者，
+	// 按它算一遍 deliverSession 会做的检查——被拒的信不该留下一个已经打开的空会话。
 	id := "ag-" + NewItemID()
 	meta := store.SessionMeta{ID: id, AgentID: env.To.ID, Creator: creator, SessionKey: env.Key, Origin: "agent"}
+	probe := env
+	probe.To = mail.Address{Kind: mail.AddrSession, ID: id}
+	verdict, reason := h.evalGuard(plugin.GuardRequest{Point: plugin.GuardDeliver, Envelope: &probe})
+	if verdict == plugin.Deny {
+		h.recordTrace(env.Trace, "", "guard_denied", reason)
+		h.publish("", "guard.denied", map[string]any{"from": env.From.String(), "to": env.To.String(), "reason": reason})
+		return fmt.Errorf("%w: %s", ErrNotAllowed, reason)
+	}
+	if err := guardContact(probe, meta, verdict == plugin.Allow); err != nil {
+		h.recordTrace(env.Trace, "", "guard_denied", err.Error())
+		h.publish("", "guard.denied", map[string]any{"from": env.From.String(), "to": env.To.String(), "reason": err.Error()})
+		return err
+	}
 	pre := func(ag *agent.Agent, cfg *session.Config) error {
 		if ag.Def != nil {
 			meta.AgentID, meta.AgentHash = ag.Def.ID, ag.Def.Version
@@ -574,7 +590,9 @@ func (h *Host) kickFlush() {
 func (h *Host) FlushOutbox(ctx context.Context) (int, error) {
 	h.flushRun.Lock()
 	defer h.flushRun.Unlock()
-	items, err := h.DB.Outbox(ctx, 64)
+	// 原子认领（C6 / A9）：同进程多个派发者、多个进程共用一个库都不会投同一条；
+	// 认领带期限，派发者崩溃后到期由别人接手。
+	items, err := h.DB.ClaimOutbox(ctx, h.leaseHolder(), OutboxClaimLease, OutboxBatch)
 	if err != nil {
 		return 0, err
 	}
@@ -582,21 +600,44 @@ func (h *Host) FlushOutbox(ctx context.Context) (int, error) {
 	for _, it := range items {
 		var env mail.Envelope
 		if err := json.Unmarshal(it.Envelope, &env); err != nil {
-			_ = h.DB.MarkOutbox(ctx, it.ID)
+			_ = h.DB.DeadOutbox(ctx, it.ID, "信封无法解析："+err.Error())
 			continue
 		}
 		err := h.deliverQueued(ctx, env)
-		permanent := errors.Is(err, ErrSessionNotFound) || errors.Is(err, ErrClosed) ||
-			errors.Is(err, ErrNotAllowed) || errors.Is(err, ErrTooManyHops) || errors.Is(err, store.ErrCorrRejected)
-		if err == nil {
+		switch {
+		case err == nil:
 			sent++
-			permanent = true
-		}
-		if permanent {
 			if merr := h.DB.MarkOutbox(ctx, it.ID); merr != nil {
 				return sent, merr
 			}
+		case permanentDeliverErr(err):
+			// 永久失败（会话不存在 / 已关闭 / 不在联系名单 / 跳数超限 / corr 不符 / 信封不合法 / 地址不支持）：
+			// 记死信、不再重试，免得毒消息反复占着队头。
+			_ = h.DB.DeadOutbox(ctx, it.ID, err.Error())
+			h.publish(it.SessionID, "mail.dead", map[string]any{"id": it.ID, "error": err.Error()})
+		case it.Attempts >= OutboxMaxAttempts:
+			_ = h.DB.DeadOutbox(ctx, it.ID, fmt.Sprintf("重试 %d 次仍失败：%v", it.Attempts, err))
+			h.publish(it.SessionID, "mail.dead", map[string]any{"id": it.ID, "error": err.Error()})
+		default: // 临时失败（如队列满）：交还，下次派发再试
+			_ = h.DB.ReleaseOutbox(ctx, it.ID, h.leaseHolder())
 		}
 	}
 	return sent, nil
 }
+
+// 发件箱派发参数（约束清单「信封与守卫」）。
+const (
+	OutboxBatch       = 64               // 每次认领条数
+	OutboxClaimLease  = 30 * time.Second // 认领期限：派发者崩溃后多久可被别人接手
+	OutboxMaxAttempts = 10               // 临时失败的最多尝试次数，用尽记死信
+)
+
+// permanentDeliverErr 投递错误是否是永久的（重试也不会成功）。
+func permanentDeliverErr(err error) bool {
+	return errors.Is(err, ErrSessionNotFound) || errors.Is(err, ErrClosed) ||
+		errors.Is(err, ErrNotAllowed) || errors.Is(err, ErrTooManyHops) || errors.Is(err, store.ErrCorrRejected) ||
+		errors.Is(err, mail.ErrInvalid) || errors.Is(err, ErrUnsupportedAddr)
+}
+
+// ErrUnsupportedAddr 投递目标的地址类型还不支持（如 component:）。
+var ErrUnsupportedAddr = errors.New("host: 不支持投递到该地址")

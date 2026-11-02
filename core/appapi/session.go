@@ -100,7 +100,7 @@ func (a *App) Open(ctx context.Context, in SessionArgs) (OpenResult, error) {
 	if err != nil {
 		return OpenResult{}, err
 	}
-	snap := hd.Agent().Core.Snapshot()
+	snap := hd.Agent().Committed()
 	out := OpenResult{ID: hd.ID(), RunState: snap.Header.Status.String(), LogLen: snap.Header.LogLen, Base: snap.Header.CompactionBase}
 	if a.o.Modes != nil {
 		out.Mode = a.o.Modes.Get(hd.ID()).Mode
@@ -483,7 +483,7 @@ func (a *App) MaxSteps(ctx context.Context, in MaxStepsArgs) (MaxStepsResult, er
 	}
 	if in.N == nil {
 		var n uint32
-		if cfg := hd.Agent().Core.Snapshot().Header.Config; cfg != nil {
+		if cfg := hd.Agent().Committed().Header.Config; cfg != nil {
 			n = cfg.Policy.MaxSteps
 		}
 		return MaxStepsResult{N: n}, nil
