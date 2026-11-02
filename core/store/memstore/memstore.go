@@ -42,6 +42,7 @@ type Store struct {
 	tools   map[string]map[string]*toolRow // 会话 → call_id → 记录
 	pending map[string]store.Pending
 	outbox  []store.OutboxItem // corr → 待回复登记（11 11.2）
+	traces  []store.TraceEvent // trace 事件（08 8.7 explain）
 
 	cbMu     sync.Mutex
 	onCommit func(bus.Envelope)

@@ -104,6 +104,9 @@ type Agent struct {
 
 	// caps 本轮的授权工具范围（信封 caps 交集，T3）；nil/空 = 不限。
 	capsMu      sync.RWMutex
+	traceMu     sync.Mutex
+	trace       string
+	traceEvents []store.TraceEvent
 	caps        []string
 	capsGuarded bool
 

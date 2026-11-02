@@ -34,9 +34,13 @@ func (h *Host) Deliver(ctx context.Context, env mail.Envelope) error {
 	if err := env.Normalize(); err != nil {
 		return err
 	}
+	if env.Trace == "" { // 一次任务共享 trace id（08 8.7）：缺省由内核分配，调用方传值忽略。
+		env.Trace = mail.NewID()
+	}
 	// 跳数（08 D4）：每投递一次加一，超过上限截断并记 guard.denied。
 	env.Hop++
 	if env.Hop > MaxHop {
+		h.recordTrace(env.Trace, env.To.ID, "guard_denied", "hop")
 		h.publish(env.To.ID, "guard.denied", map[string]any{"from": env.From.String(), "to": env.To.String(), "reason": "hop"})
 		return fmt.Errorf("%w: %d > %d", ErrTooManyHops, env.Hop, MaxHop)
 	}
@@ -68,6 +72,7 @@ func (h *Host) deliverAgent(ctx context.Context, env mail.Envelope) error {
 	}
 	// 新建会话前守卫（08 8.1）：可联系名单、所属树深度等由组件规则表达。
 	if v, why := h.evalGuard(plugin.GuardRequest{Point: plugin.GuardSessionOpen, Envelope: &env, Agent: env.To.ID}); v == plugin.Deny {
+		h.recordTrace(env.Trace, "", "guard_denied", why)
 		h.publish("", "guard.denied", map[string]any{"from": env.From.String(), "to": env.To.String(), "agent": env.To.ID, "reason": why})
 		return fmt.Errorf("%w: %s", ErrNotAllowed, why)
 	}
@@ -122,6 +127,7 @@ func (h *Host) deliverSession(ctx context.Context, env mail.Envelope) error {
 	// 组件登记的 Allow 规则只能放开这条「往 session: 投递」的缺省限制（D4）。
 	verdict, reason := h.evalGuard(plugin.GuardRequest{Point: plugin.GuardDeliver, Envelope: &env})
 	if verdict == plugin.Deny {
+		h.recordTrace(env.Trace, id, "guard_denied", reason)
 		h.publish(id, "guard.denied", map[string]any{"from": env.From.String(), "to": env.To.String(), "reason": reason})
 		return fmt.Errorf("%w: %s", ErrNotAllowed, reason)
 	}
@@ -130,12 +136,14 @@ func (h *Host) deliverSession(ctx context.Context, env mail.Envelope) error {
 		return err
 	}
 	if err := guardContact(env, l.Meta, verdict == plugin.Allow); err != nil {
+		h.recordTrace(env.Trace, id, "guard_denied", err.Error())
 		h.publish(id, "guard.denied", map[string]any{"from": env.From.String(), "to": env.To.String(), "reason": err.Error()})
 		return err
 	}
 	// 回信核对（11 回信核对）：存在、未过期、未用过、发送者 = 预期回复方，只收第一条。
 	if env.Kind == mail.KindReply {
 		if _, err := h.DB.ClaimCorr(ctx, env.Corr, id, env.From.String()); err != nil {
+			h.recordTrace(env.Trace, id, "guard_denied", "corr")
 			h.publish(id, "guard.denied", map[string]any{"from": env.From.String(), "to": env.To.String(),
 				"corr": env.Corr, "reason": "corr"})
 			return fmt.Errorf("%w: corr %s", err, env.Corr)
@@ -144,6 +152,7 @@ func (h *Host) deliverSession(ctx context.Context, env mail.Envelope) error {
 	// 内核守卫（T3 分片二接入联系名单 / caps / hop）。
 	if h.Guard != nil {
 		if err := h.Guard(&env); err != nil {
+			h.recordTrace(env.Trace, id, "guard_denied", err.Error())
 			h.publish(id, "guard.denied", map[string]any{"from": env.From.String(), "to": env.To.String(),
 				"reason": err.Error()})
 			return err
@@ -175,6 +184,7 @@ func (h *Host) deliverSession(ctx context.Context, env mail.Envelope) error {
 	}
 	h.publish(id, "mail.delivered", map[string]any{"from": env.From.String(), "kind": string(env.Kind),
 		"mode": string(env.Mode), "trace": env.Trace})
+	h.recordTrace(env.Trace, id, "envelope", fmt.Sprintf("%s -> %s (%s/%s)", env.From, env.To, env.Kind, env.Mode))
 	// 未打开的会话（休眠或从没在本节点开过）：Open 抢租约、恢复，drainInbox 会取信。
 	if _, open := h.Get(id); !open {
 		if _, err := h.Open(ctx, id); err != nil {
@@ -199,10 +209,12 @@ func (h *Host) control(ctx context.Context, id string, env mail.Envelope) error 
 		return err
 	}
 	if env.Origin == mail.OriginExternal { // 外部来源不能发 control（08 联系名单：外部一律降权，不能控制会话）
+		h.recordTrace(env.Trace, id, "guard_denied", "control_external")
 		h.publish(id, "guard.denied", map[string]any{"from": env.From.String(), "reason": "control_external"})
 		return fmt.Errorf("host: 外部来源 %s 不能发送 control 信封", env.From)
 	}
 	if !controlAllowed(env.From, l.Meta) {
+		h.recordTrace(env.Trace, id, "guard_denied", "control")
 		h.publish(id, "guard.denied", map[string]any{"from": env.From.String(), "reason": "control"})
 		return fmt.Errorf("host: %s 无权发送 control 信封", env.From)
 	}

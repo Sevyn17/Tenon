@@ -16,6 +16,7 @@ func (s *Store) Leases() store.LeaseStore           { return s }
 func (s *Store) Sleeps() store.SleepStore           { return s }
 func (s *Store) Pending() store.CorrStore           { return s }
 func (s *Store) OutboxQueue() store.OutboxStore     { return s }
+func (s *Store) Traces() store.TraceStore           { return s }
 
 // Tx 在内存实现里只是把 fn 执行一遍（各写操作本身立即生效，没有回滚），
 // 用于在两种实现上跑同一套一致性用例；需要真事务的调用方必须在 sqlite 上跑。

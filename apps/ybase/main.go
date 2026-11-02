@@ -101,6 +101,17 @@ func main() {
 	case "mode": // ybase mode list | copy <源> <新名> [-project]
 		err = modeCmd(flag.Args()[1:], o.workdir)
 	case "explain":
+		if args := flag.Args(); len(args) >= 3 && args[1] == "trace" {
+			err = withRuntime(o, func(a *app) error {
+				out, err := host.ExplainTrace(context.Background(), a.rt.Store.DB(), args[2])
+				if err != nil {
+					return err
+				}
+				fmt.Print(out)
+				return nil
+			})
+			break
+		}
 		err = withRuntime(o, func(a *app) error {
 			fmt.Printf("项目信任：%v（%s）\n", a.trusted, a.trustWhy)
 			for _, n := range a.notes {

@@ -117,4 +117,11 @@ var coreMigrations = []migration{
 			created_at INTEGER NOT NULL, sent INTEGER NOT NULL DEFAULT 0)`,
 		`CREATE INDEX session_outbox_s ON session_outbox(tenant, sent, created_at)`,
 	}},
+	// v6：trace 事件（08 8.7 explain）。观测数据，只增不改；一次任务的信封共享 trace id。
+	{version: 6, stmts: []string{
+		`CREATE TABLE trace_events(
+			trace TEXT NOT NULL, at INTEGER NOT NULL, session TEXT NOT NULL DEFAULT '',
+			kind TEXT NOT NULL, detail TEXT NOT NULL DEFAULT '')`,
+		`CREATE INDEX trace_events_t ON trace_events(trace, at)`,
+	}},
 }

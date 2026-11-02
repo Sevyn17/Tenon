@@ -112,6 +112,7 @@ type Store interface {
 	store.InboxStore
 	store.OutboxStore
 	store.CorrStore
+	store.TraceStore
 }
 
 // Host 进程内会话表。
@@ -743,6 +744,10 @@ func (a *actor) drainInbox(ctx context.Context) error {
 		for _, id := range consume {     // 本回合消费的项不算「早先排队」——它们就是本条消息
 			delete(a.turnQueued, id)
 		}
+		if env.Trace != "" {
+			a.ag.SetTrace(env.Trace)
+			a.h.recordTrace(env.Trace, a.id, "session", "")
+		}
 		m := envelopeMeta(env, untrusted)
 		if hk := a.h.Hooks.BeforeTurn; hk != nil {
 			nc, d, err := hk(a.id, content, untrusted)
@@ -843,6 +848,12 @@ func (a *actor) turn(ctx context.Context, f func(context.Context) (session.EndRe
 		a.mu.Lock()
 		a.cancel, a.inTurn = nil, false
 		a.mu.Unlock()
+	}()
+	// trace 事件落库（08 8.7 explain）：回合结束统一写，不参与恢复；用独立 ctx 避免被取消。
+	defer func() {
+		for _, ev := range a.ag.TakeTraceEvents() {
+			_ = a.h.DB.RecordTrace(context.Background(), ev)
+		}
 	}()
 	sp := a.ag.StartSpan("turn", "", "")
 	a.ag.TurnSpanID = sp.ID()

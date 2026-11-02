@@ -88,3 +88,36 @@ func (a *Agent) EnqueueOutbox(id string, envelope []byte) {
 		CreatedAt: time.Now().UnixMilli(),
 	})
 }
+
+// SetTrace 设置当前回合的 trace id（host 在取信时从信封上拿到；为空表示不记录）。
+func (a *Agent) SetTrace(trace string) {
+	a.traceMu.Lock()
+	a.trace = trace
+	a.traceMu.Unlock()
+}
+
+// TraceID 返回当前回合的 trace id。
+func (a *Agent) TraceID() string {
+	a.traceMu.Lock()
+	defer a.traceMu.Unlock()
+	return a.trace
+}
+
+// AddTraceEvent 记一条 trace 事件，等本回合结束时由 host 落库（避免和 checkpoint 抢写）。
+func (a *Agent) AddTraceEvent(kind, detail string) {
+	a.traceMu.Lock()
+	defer a.traceMu.Unlock()
+	if a.trace == "" {
+		return
+	}
+	a.traceEvents = append(a.traceEvents, store.TraceEvent{Trace: a.trace, Session: a.SessionID, Kind: kind, Detail: detail})
+}
+
+// TakeTraceEvents 取走缓存的 trace 事件。
+func (a *Agent) TakeTraceEvents() []store.TraceEvent {
+	a.traceMu.Lock()
+	defer a.traceMu.Unlock()
+	out := a.traceEvents
+	a.traceEvents = nil
+	return out
+}

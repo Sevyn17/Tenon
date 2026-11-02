@@ -43,6 +43,7 @@ func Run(t *testing.T, open func(t *testing.T) store.Store) {
 		{"PendingCorr", testPendingCorr},
 		{"FindSessionByKey", testFindSessionByKey},
 		{"Outbox", testOutbox},
+		{"TraceEvents", testTraceEvents},
 		{"SubStoresAndTx", testSubStoresAndTx},
 	}
 	for _, c := range cases {
@@ -959,5 +960,31 @@ func testSubStoresAndTx(t *testing.T, db store.Store) {
 	}
 	if _, err := db.Sessions().Exists(ctx, "tx-1"); err != nil {
 		t.Fatalf("Sessions().Exists: %v", err)
+	}
+}
+
+func testTraceEvents(t *testing.T, db store.Store) {
+	ctx := context.Background()
+	for _, ev := range []store.TraceEvent{
+		{Trace: "t1", Session: "s1", Kind: "envelope", Detail: "human:u1 -> session:s1", At: 100},
+		{Trace: "t1", Session: "s1", Kind: "tool", Detail: "echo ok", At: 200},
+		{Trace: "t2", Session: "s2", Kind: "envelope", Detail: "other", At: 150},
+	} {
+		if err := db.RecordTrace(ctx, ev); err != nil {
+			t.Fatalf("RecordTrace: %v", err)
+		}
+	}
+	got, err := db.TraceEvents(ctx, "t1")
+	if err != nil || len(got) != 2 {
+		t.Fatalf("TraceEvents: %v %+v", err, got)
+	}
+	if got[0].Kind != "envelope" || got[1].Kind != "tool" || got[1].Detail != "echo ok" {
+		t.Fatalf("TraceEvents order/content: %+v", got)
+	}
+	if got[0].Trace != "t1" || got[0].Session != "s1" {
+		t.Fatalf("TraceEvents fields: %+v", got[0])
+	}
+	if empty, err := db.TraceEvents(ctx, "none"); err != nil || len(empty) != 0 {
+		t.Fatalf("empty trace: %v %+v", err, empty)
 	}
 }

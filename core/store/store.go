@@ -49,6 +49,7 @@ type Store interface {
 	InboxStore
 	CorrStore
 	OutboxStore
+	TraceStore
 	ToolResultStore
 	DefinitionStore
 	// OnCommit 设置提交成功后的持久事件回调；回调在提交的 goroutine 里同步执行，须很快返回。
@@ -66,6 +67,8 @@ type Store interface {
 	Pending() CorrStore
 	// OutboxQueue 返回外发队列（OutboxStore 的 Outbox 方法名冲突，故访问器带 Queue 后缀）。
 	OutboxQueue() OutboxStore
+	// Traces 返回 trace 事件表（08 8.7 explain 按 trace 还原路径）。
+	Traces() TraceStore
 	// Tx 在一个存储事务里执行 fn：fn 内通过子存储访问器的写入与最外层一起提交，出错整体回滚。
 	// 已在事务里时直接加入外层；具体隔离级别由实现决定（memstore 不保证回滚）。
 	Tx(ctx context.Context, fn func(Store) error) error
@@ -423,4 +426,22 @@ func ShellHash(c *session.Config) (string, error) {
 func HashBytes(b []byte) string {
 	sum := sha256.Sum256(b)
 	return hex.EncodeToString(sum[:])
+}
+
+// TraceStore 是 trace 事件表（08 8.7）：一次任务的全部信封共享 trace id，
+// explain 按 trace 列出经过的会话、信封、工具与拒绝原因。事件只用于观测，不参与恢复。
+type TraceStore interface {
+	// RecordTrace 追加一条 trace 事件（At 为零时由实现补当前时间）。
+	RecordTrace(ctx context.Context, ev TraceEvent) error
+	// TraceEvents 按发生顺序列出某个 trace 的全部事件。
+	TraceEvents(ctx context.Context, trace string) ([]TraceEvent, error)
+}
+
+// TraceEvent 一条 trace 记录。Kind 约定：envelope / session / tool / guard_denied。
+type TraceEvent struct {
+	Trace   string
+	Session string
+	Kind    string
+	Detail  string
+	At      int64 // 毫秒
 }

@@ -68,6 +68,7 @@ func (a *Agent) HubSpan(ev toolhub.SpanEvent) {
 	a.hubSpans = append(a.hubSpans, store.Span{ID: "tool-" + ev.CallID, Parent: parent, Kind: "tool", Name: ev.Tool,
 		Status: ev.Status, Start: ev.Start, End: ev.End, Attrs: b})
 	a.spanMu.Unlock()
+	a.AddTraceEvent("tool", ev.Tool+" "+ev.Status)
 }
 
 // runToolsHub 一步的工具：并行执行、按序提交。
