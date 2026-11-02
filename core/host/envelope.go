@@ -421,3 +421,34 @@ func guardContact(env mail.Envelope, meta store.SessionMeta) error {
 	}
 	return nil
 }
+
+// FlushOutbox 派发待外发信封（08 9.6）：检查点提交后调用。派发成功才标记已发；
+// 被永久拒绝的（会话不存在/已关闭/不在联系名单/跳数超限/corr 不符）也标记，
+// 避免毒消息反复重试。临时错误留在表里等下次重试。
+func (h *Host) FlushOutbox(ctx context.Context) (int, error) {
+	items, err := h.DB.Outbox(ctx, 64)
+	if err != nil {
+		return 0, err
+	}
+	sent := 0
+	for _, it := range items {
+		var env mail.Envelope
+		if err := json.Unmarshal(it.Envelope, &env); err != nil {
+			_ = h.DB.MarkOutbox(ctx, it.ID)
+			continue
+		}
+		err := h.Deliver(ctx, env)
+		permanent := errors.Is(err, ErrSessionNotFound) || errors.Is(err, ErrClosed) ||
+			errors.Is(err, ErrNotAllowed) || errors.Is(err, ErrTooManyHops) || errors.Is(err, store.ErrCorrRejected)
+		if err == nil {
+			sent++
+			permanent = true
+		}
+		if permanent {
+			if merr := h.DB.MarkOutbox(ctx, it.ID); merr != nil {
+				return sent, merr
+			}
+		}
+	}
+	return sent, nil
+}

@@ -40,7 +40,8 @@ type Store struct {
 	// inbox 与工具记录按会话 id 存，不要求会话行存在（与 sqlite 无外键一致）。
 	inbox   map[string][]inboxRow          // 会话 → 准入顺序
 	tools   map[string]map[string]*toolRow // 会话 → call_id → 记录
-	pending map[string]store.Pending       // corr → 待回复登记（11 11.2）
+	pending map[string]store.Pending
+	outbox  []store.OutboxItem // corr → 待回复登记（11 11.2）
 
 	cbMu     sync.Mutex
 	onCommit func(bus.Envelope)
@@ -110,7 +111,7 @@ type def struct {
 // New 创建空存储。
 func New() *Store {
 	return &Store{sessions: map[string]*sess{}, shells: map[string][]byte{}, defs: map[string][]def{},
-		inbox: map[string][]inboxRow{}, tools: map[string]map[string]*toolRow{}, pending: map[string]store.Pending{}}
+		inbox: map[string][]inboxRow{}, tools: map[string]map[string]*toolRow{}, pending: map[string]store.Pending{}, outbox: nil}
 }
 
 // Close 关闭；之后的调用返回 ErrClosed。
@@ -314,6 +315,24 @@ func (s *Store) Commit(ctx context.Context, cp store.Checkpoint) error {
 	for _, sp := range cp.Spans {
 		s.putSpan(cp.SessionID, sp)
 	}
+	for _, o := range cp.Outbox {
+		dup := false
+		for i := range s.outbox {
+			if s.outbox[i].ID == o.ID {
+				dup = true
+				break
+			}
+		}
+		if dup {
+			continue
+		}
+		it := o
+		it.SessionID = cp.SessionID
+		if it.CreatedAt == 0 {
+			it.CreatedAt = now
+		}
+		s.outbox = append(s.outbox, it)
+	}
 	run := cp.RunState
 	if run == "" {
 		run = "idle"
@@ -505,6 +524,13 @@ func (s *Store) DeleteSession(ctx context.Context, id string, cleaners []store.C
 			delete(s.pending, corr)
 		}
 	}
+	kept := s.outbox[:0]
+	for _, o := range s.outbox {
+		if o.SessionID != id {
+			kept = append(kept, o)
+		}
+	}
+	s.outbox = kept
 	s.mu.Unlock()
 	return nil
 }

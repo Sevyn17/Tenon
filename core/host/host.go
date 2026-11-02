@@ -109,6 +109,7 @@ type Store interface {
 	store.LeaseStore
 	store.SleepStore
 	store.InboxStore
+	store.OutboxStore
 	store.CorrStore
 }
 
@@ -814,7 +815,15 @@ func (a *actor) turn(ctx context.Context, f func(context.Context) (session.EndRe
 		a.h.Hooks.AfterTurn(a.id, end)
 	}
 	a.h.publish(a.id, "turn_end", map[string]any{"reason": end.String()})
-	return end, a.ag.Commit(ctx) // span 与 after_turn 的修改落库
+	if err := a.ag.Commit(ctx); err != nil { // span 与 after_turn 的修改落库
+		return end, err
+	}
+	// 外发与检查点同事务（08 9.6）：提交成功后再派发；派发失败不影响回合结果，
+	// 未标记的外发行会在下次 FlushOutbox 时重试。
+	if _, err := a.h.FlushOutbox(ctx); err != nil {
+		a.h.publish(a.id, "mail.failed", map[string]any{"error": err.Error()})
+	}
+	return end, nil
 }
 
 // turnErr 把「回合以失败收尾」（drive 正常返回、EndReason 是 Failed）转成错误，供所属树策略处理。

@@ -81,6 +81,9 @@ type Agent struct {
 
 	pendingSpans []store.Span // 待随下一次 checkpoint 提交的 span（G2）
 
+	// outbox 待随下一次 checkpoint 一起提交的外发信封（08 9.6：外发与检查点同事务）。
+	outbox []store.OutboxItem
+
 	// Hub 工具管理器（必需：调用栈、并行、幂等、确认、存工件）；Toolset 为会话工具视图（可空）。
 	Hub     *toolhub.Hub
 	Toolset *toolhub.Toolset

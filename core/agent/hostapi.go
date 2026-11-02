@@ -4,8 +4,10 @@ package agent
 
 import (
 	"context"
+	"time"
 
 	"ybase-kernel/core/session"
+	"ybase-kernel/core/store"
 )
 
 // SendContent 用给定内容与 meta 开回合；consume 为本回合消费的 inbox 项，随回合开始的 checkpoint 同事务删除（H7）。
@@ -75,3 +77,14 @@ func (s *Span) End(status string) { (*span)(s).End(status) }
 
 // ID span id（子 span 的 parent）。
 func (s *Span) ID() string { return s.s.ID }
+
+// EnqueueOutbox 把一封待外发的信封记入本轮检查点：它与历史、工具结果在同一次提交里
+// 落库（08 9.6），提交成功后才由 Host 派发，崩溃时不会出现「信发了但回合没落库」。
+// 信封由调用方序列化成 JSON（通常来自 mail.Envelope）。
+func (a *Agent) EnqueueOutbox(id string, envelope []byte) {
+	a.outbox = append(a.outbox, store.OutboxItem{
+		ID:        id,
+		Envelope:  append([]byte(nil), envelope...),
+		CreatedAt: time.Now().UnixMilli(),
+	})
+}

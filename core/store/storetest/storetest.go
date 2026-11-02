@@ -42,6 +42,7 @@ func Run(t *testing.T, open func(t *testing.T) store.Store) {
 		{"SleepStatus", testSleepStatus},
 		{"PendingCorr", testPendingCorr},
 		{"FindSessionByKey", testFindSessionByKey},
+		{"Outbox", testOutbox},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) { c.f(t, open(t)) })
@@ -882,5 +883,41 @@ func testFindSessionByKey(t *testing.T, db store.Store) {
 	}
 	if _, err := db.FindSessionByKey(ctx, "b", "u", "key-1"); !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("换定义 err = %v，期望 ErrNotFound", err)
+	}
+}
+
+// testOutbox 检查发件箱：与检查点同事务写入（Commit 的 Outbox），派发后标记不再返回。
+func testOutbox(t *testing.T, db store.Store) {
+	t.Helper()
+	ctx := context.Background()
+	h := newCore().Snapshot().Header
+	if err := db.CreateSession(ctx, store.SessionMeta{ID: "o1"}, h, nil); err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	now := int64(1000)
+	cp := store.Checkpoint{SessionID: "o1", Header: h, RunState: "idle",
+		Outbox: []store.OutboxItem{
+			{ID: "m1", Envelope: []byte(`{"id":"m1"}`), CreatedAt: now},
+			{ID: "m2", Envelope: []byte(`{"id":"m2"}`), CreatedAt: now + 1},
+		}}
+	if err := db.Commit(ctx, cp); err != nil {
+		t.Fatalf("Commit: %v", err)
+	}
+	items, err := db.Outbox(ctx, 0)
+	if err != nil {
+		t.Fatalf("Outbox: %v", err)
+	}
+	if len(items) != 2 || items[0].ID != "m1" || items[1].ID != "m2" {
+		t.Fatalf("Outbox = %+v", items)
+	}
+	if items[0].SessionID != "o1" {
+		t.Fatalf("session_id = %q", items[0].SessionID)
+	}
+	if err := db.MarkOutbox(ctx, "m1"); err != nil {
+		t.Fatalf("MarkOutbox: %v", err)
+	}
+	items, _ = db.Outbox(ctx, 0)
+	if len(items) != 1 || items[0].ID != "m2" {
+		t.Fatalf("标记后 Outbox = %+v", items)
 	}
 }

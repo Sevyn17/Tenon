@@ -48,6 +48,7 @@ type Store interface {
 	SleepStore
 	InboxStore
 	CorrStore
+	OutboxStore
 	ToolResultStore
 	DefinitionStore
 	// OnCommit 设置提交成功后的持久事件回调；回调在提交的 goroutine 里同步执行，须很快返回。
@@ -231,6 +232,8 @@ type Checkpoint struct {
 	ConsumeInbox []string
 	Spans        []Span
 	Preview      string
+	// Outbox 本轮运行中要外发的信封：与检查点同事务写入，提交后再派发（08 9.6）。
+	Outbox []OutboxItem
 }
 
 // Loaded 读取结果。
@@ -260,6 +263,23 @@ type InboxItem struct {
 	// Envelope 信封的 JSON（core/mail.Envelope）；空 = 旧格式（T1b/T2 的纯文本补报/输入）。
 	Envelope string
 	At       time.Time
+}
+
+// OutboxItem 是一条待外发的信封（08 9.6：外发与检查点同事务、提交后派发）。
+type OutboxItem struct {
+	ID        string          `json:"id"`
+	SessionID string          `json:"session_id"`
+	Envelope  json.RawMessage `json:"envelope"`
+	CreatedAt int64           `json:"created_at"`
+}
+
+// OutboxStore 是会话发件箱。Commit 把 OutboxItem 与检查点写在同一事务里；
+// 派发成功后由 MarkOutbox 标记已发，崩溃后未发的仍会被重试。
+type OutboxStore interface {
+	// Outbox 返回待外发的信封（按创建顺序，limit<=0 不限）。
+	Outbox(ctx context.Context, limit int) ([]OutboxItem, error)
+	// MarkOutbox 标记一条外发信封已派发。
+	MarkOutbox(ctx context.Context, id string) error
 }
 
 // 工具记录状态。

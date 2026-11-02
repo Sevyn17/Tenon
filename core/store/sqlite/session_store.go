@@ -141,6 +141,17 @@ func (db *DB) Commit(ctx context.Context, cp Checkpoint) error {
 				return err
 			}
 		}
+		for _, o := range cp.Outbox {
+			at := o.CreatedAt
+			if at == 0 {
+				at = now
+			}
+			if _, err := tx.ExecContext(ctx, `INSERT INTO session_outbox(tenant, id, session_id, envelope, created_at, sent)
+				VALUES(?,?,?,?,?,0) ON CONFLICT(id) DO NOTHING`,
+				Tenant, o.ID, cp.SessionID, string(o.Envelope), at); err != nil {
+				return err
+			}
+		}
 		run := cp.RunState
 		if run == "" {
 			run = "idle"

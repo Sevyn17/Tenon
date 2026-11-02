@@ -368,3 +368,40 @@ func TestGuardContactAndHop(t *testing.T) {
 		t.Fatalf("跳数超限应被拒，得到 %v", err)
 	}
 }
+
+// TestOutboxDispatchedAfterCommit：外发与检查点同事务（08 9.6）——回合提交后
+// 才派发出站信封，派发成功后发件箱清空。
+func TestOutboxDispatchedAfterCommit(t *testing.T) {
+	ctx := context.Background()
+	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{})
+	h1 := mustOpen(t, r.h, "s1")
+	h2 := mustOpen(t, r.h, "s2")
+	env := mail.Envelope{From: mail.Address{Kind: mail.AddrComponent, ID: "test"},
+		To: mail.Address{Kind: mail.AddrSession, ID: "s2"}, Body: "外发消息"}
+	if err := env.Normalize(); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := json.Marshal(env)
+	h1.Agent().EnqueueOutbox(env.ID, b)
+	if err := h1.Do(Command{Kind: Send, Text: "你好"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := h1.Wait(); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, func() bool {
+		for _, m := range messages(t, h2) {
+			if strings.Contains(textOfMsg(t, m), "外发消息") {
+				return true
+			}
+		}
+		return false
+	})
+	items, err := r.h.DB.Outbox(ctx, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 0 {
+		t.Fatalf("派发后发件箱应为空，得到 %+v", items)
+	}
+}

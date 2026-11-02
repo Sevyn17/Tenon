@@ -108,4 +108,13 @@ var coreMigrations = []migration{
 			used INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL)`,
 		`CREATE INDEX session_pending_s ON session_pending(session_id, issued_idx)`,
 	}},
+	// v5：会话发件箱（08 9.6 外发与检查点同事务）。Commit 在同一个事务里写这张表，
+	// 提交后由 Host 派发并标记 sent；崩溃后未发的行仍会被重试。
+	{version: 5, stmts: []string{
+		`CREATE TABLE session_outbox(
+			tenant TEXT NOT NULL, id TEXT NOT NULL PRIMARY KEY,
+			session_id TEXT NOT NULL, envelope TEXT NOT NULL,
+			created_at INTEGER NOT NULL, sent INTEGER NOT NULL DEFAULT 0)`,
+		`CREATE INDEX session_outbox_s ON session_outbox(tenant, sent, created_at)`,
+	}},
 }

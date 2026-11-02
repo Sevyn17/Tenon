@@ -146,6 +146,9 @@ func (a *Agent) checkpoint(ctx context.Context, run string, rec *reqlog.Record) 
 		cp.Request = sr
 	}
 	cp.ConsumeInbox = a.consume
+	if len(a.outbox) > 0 {
+		cp.Outbox = append([]store.OutboxItem(nil), a.outbox...)
+	}
 	a.spanMu.Lock()
 	cp.Spans = append(append([]store.Span(nil), a.pendingSpans...), a.hubSpans...)
 	hubN := len(a.hubSpans)
@@ -154,6 +157,7 @@ func (a *Agent) checkpoint(ctx context.Context, run string, rec *reqlog.Record) 
 		return err
 	}
 	a.pendingSpans = nil
+	a.outbox = nil
 	a.consume = nil
 	a.spanMu.Lock()
 	a.hubSpans = a.hubSpans[hubN:]
