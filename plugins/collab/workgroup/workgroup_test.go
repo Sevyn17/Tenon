@@ -17,22 +17,36 @@ import (
 	"ybase-kernel/core/toolhub"
 )
 
-// echoModel 回显最后一条用户消息。
+// echoModel 回显用户消息；seen 记录请求里出现的每一条用户消息（T2a-1 起运行中到达的
+// 用户消息会插入当前回合，两个收件人消息可能落在同一次请求里，只看最后一条会漏）。
 type echoModel struct {
 	mu   sync.Mutex
 	seen []string
 }
 
 func (m *echoModel) Stream(ctx context.Context, req session.Request, onText func(string)) (session.AssistantItem, session.StopReason, error) {
-	last := req.Messages[len(req.Messages)-1]
-	txt := ""
-	for _, p := range last.Content {
-		txt += p.Text
+	last := ""
+	var users []string
+	for _, msg := range req.Messages {
+		if msg.Role != "user" {
+			continue
+		}
+		txt := ""
+		for _, p := range msg.Content {
+			txt += p.Text
+		}
+		users = append(users, txt)
+		last = txt
+	}
+	if last == "" { // 没有用户消息（不应发生）：取最后一条
+		for _, p := range req.Messages[len(req.Messages)-1].Content {
+			last += p.Text
+		}
 	}
 	m.mu.Lock()
-	m.seen = append(m.seen, txt)
+	m.seen = append(m.seen, users...)
 	m.mu.Unlock()
-	return session.AssistantItem{Content: session.Content{session.NewTextPart("re:" + txt)}}, session.StopReason{V: "stop"}, nil
+	return session.AssistantItem{Content: session.Content{session.NewTextPart("re:" + last)}}, session.StopReason{V: "stop"}, nil
 }
 
 func (m *echoModel) has(sub string) bool {

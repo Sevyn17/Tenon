@@ -99,10 +99,11 @@ type Hooks struct {
 // 空 = 无定义会话，如用户直接新建的会话）。
 type Factory func(id, def string) (*agent.Agent, *session.Config, error)
 
-// Store 宿主用到的存储能力：会话 + 写租约 + 输入队列。
+// Store 宿主用到的存储能力：会话 + 写租约 + 输入队列 + 休眠状态。
 type Store interface {
 	store.SessionStore
 	store.LeaseStore
+	store.SleepStore
 	store.InboxStore
 }
 
@@ -120,6 +121,9 @@ type Host struct {
 	Holder string
 	// Limit 同时推理的会话数上限（0 = 不限）；超出上限的回合排队等待，不报错（02 2.4）。
 	Limit int
+	// SleepAfter 空闲多久后休眠（0 = 不休眠）。休眠的会话释放进程内对象与写租约，
+	// 只剩存储里的几行；有新信件时任一节点抢到租约即可唤醒（02 2.2）。
+	SleepAfter time.Duration
 
 	mu     sync.Mutex
 	actors map[string]*actor
@@ -238,6 +242,23 @@ func (h *Host) open(ctx context.Context, id, def string, f Factory, pre func(*ag
 	if err != nil {
 		h.remove(id)
 		return Handle{}, err
+	}
+	// 休眠中的会话：抢到租约即唤醒（02 2.2）。状态迁移也带新纪元，旧节点迟到的迁移被拒。
+	st, err := h.DB.SessionStatus(ctx, id)
+	if err == nil {
+		switch st {
+		case store.StatusSleeping:
+			if err := h.DB.SetSessionStatus(ctx, id, store.StatusSleeping, store.StatusActive, epoch); err != nil {
+				_ = h.DB.ReleaseLease(ctx, id, holder, epoch)
+				h.remove(id)
+				return Handle{}, err
+			}
+			h.publish(id, "session_wake", map[string]any{"epoch": epoch})
+		case "deleted":
+			_ = h.DB.ReleaseLease(ctx, id, holder, epoch)
+			h.remove(id)
+			return Handle{}, ErrClosed
+		}
 	}
 	ag.Epoch = epoch
 	a.epoch, a.holder = epoch, holder
@@ -404,7 +425,30 @@ func (a *actor) run() {
 		a.exitErr = err
 		return
 	}
-	for c := range a.in {
+	for {
+		var sleepC <-chan time.Time
+		var timer *time.Timer
+		if a.h.SleepAfter > 0 {
+			timer = time.NewTimer(a.h.SleepAfter)
+			sleepC = timer.C
+		}
+		var c Command
+		select {
+		case c = <-a.in:
+			if timer != nil {
+				timer.Stop()
+			}
+		case <-sleepC:
+			slept, err := a.sleep(ctx)
+			if err != nil {
+				a.exitErr = err
+				return
+			}
+			if slept {
+				return
+			}
+			continue
+		}
 		stop, err := a.idle(ctx, c)
 		if c.Kind != "barrier" {
 			reply(c, err)
@@ -419,6 +463,83 @@ func (a *actor) run() {
 		}
 		if c.Kind == "barrier" { // Wait：inbox 处理完才返回
 			reply(c, nil)
+		}
+	}
+}
+
+// sleep 空闲超时：把会话置为休眠并让 actor 退出（defer 释放租约与对象，02 2.2）。
+// 还有未完成回合、未处理信件或刚到的命令时不休眠。返回 true 表示已休眠。
+func (a *actor) sleep(ctx context.Context) (bool, error) {
+	if a.ag.Pending() {
+		return false, nil
+	}
+	items, err := a.h.DB.Inbox(ctx, a.id)
+	if err != nil {
+		return false, err
+	}
+	if len(items) > 0 {
+		return false, nil
+	}
+	// 队列里可能有刚到的 Idle 命令：放回去继续处理，不睡。
+	select {
+	case c := <-a.in:
+		select {
+		case a.in <- c:
+		default:
+		}
+		return false, nil
+	default:
+	}
+	a.mu.Lock()
+	busy := a.inTurn
+	a.mu.Unlock()
+	if busy {
+		return false, nil
+	}
+	// 条件迁移带自己的纪元：状态被别人推进（如已唤醒）或纪元不符时留在 active 继续等。
+	if err := a.h.DB.SetSessionStatus(ctx, a.id, store.StatusActive, store.StatusSleeping, a.epoch); err != nil {
+		if errors.Is(err, store.ErrStateMismatch) {
+			return false, nil
+		}
+		return false, err
+	}
+	a.h.publish(a.id, "session_sleep", map[string]any{"epoch": a.epoch})
+	return true, nil
+}
+
+// ScanOnce 兜底扫描：唤醒信箱里有信件的休眠会话（02 2.2）。并发扫描由租约决定谁生效。
+func (h *Host) ScanOnce(ctx context.Context) (int, error) {
+	ids, err := h.DB.SessionsWithStatus(ctx, store.StatusSleeping, 64)
+	if err != nil {
+		return 0, err
+	}
+	woke := 0
+	for _, id := range ids {
+		items, err := h.DB.Inbox(ctx, id)
+		if err != nil || len(items) == 0 {
+			continue // 已关闭 / 被删 / 没有信件：跳过
+		}
+		if _, err := h.Open(ctx, id); err != nil {
+			continue // 已被别的节点接管或已关闭：跳过
+		}
+		woke++
+	}
+	return woke, nil
+}
+
+// ScanLoop 周期跑 ScanOnce，直到 ctx 取消。
+func (h *Host) ScanLoop(ctx context.Context, every time.Duration) {
+	if every <= 0 {
+		every = 5 * time.Second
+	}
+	t := time.NewTicker(every)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			_, _ = h.ScanOnce(ctx)
 		}
 	}
 }

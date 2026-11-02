@@ -34,10 +34,17 @@ var ErrStateMismatch = errors.New("store: 工具记录状态不符")
 // ErrLeaseLost：本写者不再持有会话写租约（纪元不符）——旧节点的迟到写入被拒（02 2.2 fencing）。
 var ErrLeaseLost = errors.New("store: 会话写租约已失效")
 
+// 会话生命周期状态（02 2.2）。deleted 由 DeleteSession 置墓碑。
+const (
+	StatusActive   = "active"
+	StatusSleeping = "sleeping"
+)
+
 // Store 内核用到的全部存储能力。
 type Store interface {
 	SessionStore
 	LeaseStore
+	SleepStore
 	InboxStore
 	ToolResultStore
 	DefinitionStore
@@ -97,6 +104,18 @@ type LeaseStore interface {
 	RenewLease(ctx context.Context, sessionID, holder string, epoch int64) error
 	// ReleaseLease 释放租约：holder/epoch 匹配才清空持有者；不匹配忽略（幂等释放）。
 	ReleaseLease(ctx context.Context, sessionID, holder string, epoch int64) error
+}
+
+// SleepStore 会话休眠状态（02 2.2）：空闲会话释放进程内对象与租约，只剩存储里的几行；
+// 新信封到达时任一节点抢到租约即可唤醒（从检查点恢复）。
+type SleepStore interface {
+	// SessionStatus 读会话生命周期状态（active / sleeping / deleted）。
+	SessionStatus(ctx context.Context, sessionID string) (string, error)
+	// SetSessionStatus 条件迁移：当前状态必须等于 from 才改为 to；epoch 非零时还要求持有
+	// 该纪元的租约（休眠必须在自己持租约时写，唤醒在抢到租约后写）。不满足返回 ErrStateMismatch。
+	SetSessionStatus(ctx context.Context, sessionID, from, to string, epoch int64) error
+	// SessionsWithStatus 列出某状态的会话 id（按 id 升序，limit<=0 表示不限）。
+	SessionsWithStatus(ctx context.Context, status string, limit int) ([]string, error)
 }
 
 // ToolResultStore 工具幂等 / 挂起记录（tool-hub D4）。

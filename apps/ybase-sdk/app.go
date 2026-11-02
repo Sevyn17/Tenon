@@ -49,6 +49,12 @@ func (a *App) Start(ctx context.Context) error {
 		return fmt.Errorf("%w: 存储没有打开", ErrInvalid)
 	}
 	a.host.DB = db
+	a.host.SleepAfter = a.sleepAfter
+	if a.sleepAfter > 0 { // 休眠会话的兜底扫描（02 2.2）
+		scanCtx, cancel := context.WithCancel(context.Background())
+		a.sleepStop = cancel
+		go a.host.ScanLoop(scanCtx, a.sleepAfter)
+	}
 	kern, err := kr.ParseKernel(nil)
 	if err != nil {
 		return fmt.Errorf("ybase: 内核配置: %w", err)
@@ -103,8 +109,12 @@ func (a *App) Close(ctx context.Context) error {
 	}
 	a.closed = true
 	scope := a.scope
+	stop := a.sleepStop
 	a.mu.Unlock()
 	var errs []error
+	if stop != nil {
+		stop()
+	}
 	if scope != nil {
 		if err := scope.Close(ctx); err != nil {
 			errs = append(errs, err)

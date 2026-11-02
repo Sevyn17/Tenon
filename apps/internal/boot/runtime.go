@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"time"
 
 	"ybase-kernel/core/agent"
 	"ybase-kernel/core/appapi"
@@ -78,7 +79,8 @@ type Runtime struct {
 	// Packages 已加载的插件包（用户级在前、项目级在后）。
 	Packages []*pkgs.Package
 
-	proc *plugin.Scope
+	proc      *plugin.Scope
+	sleepStop context.CancelFunc // 兜底扫描循环的取消函数（SleepAfter>0 时）
 }
 
 // StartOptions Start 的参数。
@@ -88,6 +90,8 @@ type StartOptions struct {
 	AskTrust func(key string) bool
 	// UI 用总线构造界面服务（service:ui）；必填。
 	UI func(b *bus.Bus) runtime.UI
+	// SleepAfter 空闲会话的休眠超时（0 = 不休眠，02 2.2）。>0 时同时启动兜底扫描。
+	SleepAfter time.Duration
 }
 
 // Start 读信任与 profile、装配并启动进程作用域。失败时已建的资源全部回收。
@@ -124,11 +128,21 @@ func Start(o StartOptions) (*Runtime, error) {
 		return nil, err
 	}
 	r.Host.DB = r.Rt.Store.DB() // 数据库在 store-sqlite 启动后才打开
+	r.Host.SleepAfter = o.SleepAfter
+	if o.SleepAfter > 0 { // 休眠会话的兜底扫描（02 2.2）：有信件的休眠会话定期唤醒
+		ctx, cancel := context.WithCancel(context.Background())
+		r.sleepStop = cancel
+		go r.Host.ScanLoop(ctx, o.SleepAfter)
+	}
 	return r, nil
 }
 
 // Close 关闭进程作用域与总线（先插件后总线，与原 withRuntime 的 defer 顺序一致）。
 func (r *Runtime) Close() {
+	if r.sleepStop != nil {
+		r.sleepStop()
+		r.sleepStop = nil
+	}
 	if r.proc != nil {
 		r.proc.Close(context.Background())
 		r.proc = nil

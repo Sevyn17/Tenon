@@ -23,6 +23,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"ybase-kernel/core/agentdef"
 	"ybase-kernel/core/bus"
@@ -74,6 +75,8 @@ type config struct {
 	agents     []agentdef.Source // WithAgents
 	workdir    string
 	ui         kr.UI
+	// sleepAfter 空闲会话休眠超时（0 = 不休眠，02 2.2）；>0 时启动兜底扫描。
+	sleepAfter time.Duration
 }
 
 // Default 标准组件预设（10 10.2）：内核、上下文、模型、工具、权限、沙箱、协作。
@@ -176,6 +179,18 @@ func WithUI(ui kr.UI) Option {
 			return fmt.Errorf("%w: WithUI 传了 nil", ErrInvalid)
 		}
 		c.ui = ui
+		return nil
+	}
+}
+
+// WithSleepAfter 空闲会话的休眠超时（02 2.2）：>0 时空闲会话释放对象与租约，
+// 有新信件时唤醒；同时启动兜底扫描。0（缺省）= 不休眠。
+func WithSleepAfter(d time.Duration) Option {
+	return func(c *config) error {
+		if d < 0 {
+			return fmt.Errorf("%w: WithSleepAfter 不能为负", ErrInvalid)
+		}
+		c.sleepAfter = d
 		return nil
 	}
 }
@@ -334,7 +349,7 @@ func build(c *config) (*App, error) {
 	if err != nil {
 		return nil, fmt.Errorf("ybase: 定义: %w", err)
 	}
-	app := &App{asm: asm, defs: defs, host: h, bus: b, handle: st, workdir: workdir, ui: ui}
+	app := &App{asm: asm, defs: defs, host: h, bus: b, handle: st, workdir: workdir, ui: ui, sleepAfter: c.sleepAfter}
 	if v, ok := asm.Value(kr.ServiceModelhub); ok {
 		app.models, _ = v.(*kr.Models)
 	}
@@ -385,8 +400,11 @@ type App struct {
 	ui      kr.UI
 	scope   *plugin.Scope
 	builder *kr.Builder
-	started bool
-	closed  bool
+	// sleepAfter / sleepStop：空闲休眠超时与兜底扫描的取消函数（02 2.2）。
+	sleepAfter time.Duration
+	sleepStop  context.CancelFunc
+	started    bool
+	closed     bool
 }
 
 // —— 存储句柄：外部 store.Store + 内存工件 —— //

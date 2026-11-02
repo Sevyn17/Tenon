@@ -39,6 +39,7 @@ func Run(t *testing.T, open func(t *testing.T) store.Store) {
 		{"Stats", testStats},
 		{"Export", testExport},
 		{"LeaseFencing", testLeaseFencing},
+		{"SleepStatus", testSleepStatus},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) { c.f(t, open(t)) })
@@ -752,5 +753,52 @@ func testLeaseFencing(t *testing.T, db store.Store) {
 	}
 	if err := db.RenewLease(ctx, id, "node-b", epoch2); !errors.Is(err, store.ErrLeaseLost) {
 		t.Fatalf("释放后续租应失败: %v", err)
+	}
+}
+
+func testSleepStatus(t *testing.T, db store.Store) {
+	ctx := context.Background()
+	id := "s1"
+	create(t, db, store.SessionMeta{ID: id}, newCore())
+
+	if st, err := db.SessionStatus(ctx, id); err != nil || st != store.StatusActive {
+		t.Fatalf("新建会话状态: %q %v", st, err)
+	}
+	if _, err := db.SessionStatus(ctx, "none"); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("缺失会话状态: %v", err)
+	}
+	if err := db.SetSessionStatus(ctx, id, store.StatusSleeping, store.StatusActive, 0); !errors.Is(err, store.ErrStateMismatch) {
+		t.Fatalf("active 会话不能按 sleeping→active 迁移: %v", err)
+	}
+	epoch, err := db.AcquireLease(ctx, id, "node-a")
+	if err != nil {
+		t.Fatalf("抢租约: %v", err)
+	}
+	// 休眠：持租约时 active→sleeping，带纪元。
+	if err := db.SetSessionStatus(ctx, id, store.StatusActive, store.StatusSleeping, epoch); err != nil {
+		t.Fatalf("休眠: %v", err)
+	}
+	if st, _ := db.SessionStatus(ctx, id); st != store.StatusSleeping {
+		t.Fatalf("休眠后状态: %q", st)
+	}
+	if ids, err := db.SessionsWithStatus(ctx, store.StatusSleeping, 10); err != nil || len(ids) != 1 || ids[0] != id {
+		t.Fatalf("列休眠会话: %v %v", ids, err)
+	}
+	// 换节点接管后纪元变新：旧纪元不能唤醒，新纪元可以。
+	epoch2, err := db.AcquireLease(ctx, id, "node-b")
+	if err != nil || epoch2 == epoch {
+		t.Fatalf("接管: epoch=%d err=%v", epoch2, err)
+	}
+	if err := db.SetSessionStatus(ctx, id, store.StatusSleeping, store.StatusActive, epoch); !errors.Is(err, store.ErrStateMismatch) {
+		t.Fatalf("旧纪元唤醒应失败: %v", err)
+	}
+	if err := db.SetSessionStatus(ctx, id, store.StatusSleeping, store.StatusActive, epoch2); err != nil {
+		t.Fatalf("唤醒: %v", err)
+	}
+	if st, _ := db.SessionStatus(ctx, id); st != store.StatusActive {
+		t.Fatalf("唤醒后状态: %q", st)
+	}
+	if ids, _ := db.SessionsWithStatus(ctx, store.StatusSleeping, 0); len(ids) != 0 {
+		t.Fatalf("唤醒后不应再有休眠会话: %v", ids)
 	}
 }
