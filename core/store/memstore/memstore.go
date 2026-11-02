@@ -232,13 +232,14 @@ func (s *Store) Commit(ctx context.Context, cp store.Checkpoint) error {
 		s.mu.Unlock()
 		return store.ErrNotFound
 	}
-	if x.logLen != cp.ExpectLogLen {
-		s.mu.Unlock()
-		return fmt.Errorf("%w: 期望 log_len=%d，实际 %d", store.ErrConflict, cp.ExpectLogLen, x.logLen)
-	}
+	// 先校验纪元再校验 log_len（与 sqlite 一致，02 2.2 fencing）。
 	if cp.Epoch != 0 && x.leaseEpoch != cp.Epoch {
 		s.mu.Unlock()
 		return fmt.Errorf("%w: 期望纪元 %d，实际 %d", store.ErrLeaseLost, cp.Epoch, x.leaseEpoch)
+	}
+	if x.logLen != cp.ExpectLogLen {
+		s.mu.Unlock()
+		return fmt.Errorf("%w: 期望 log_len=%d，实际 %d", store.ErrConflict, cp.ExpectLogLen, x.logLen)
 	}
 	// 先把可能失败的序列化全部做完，再动数据。
 	hash, shell, hb, err := splitHeader(cp.Header)

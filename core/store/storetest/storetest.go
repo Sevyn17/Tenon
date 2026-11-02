@@ -753,9 +753,18 @@ func testLeaseFencing(t *testing.T, db store.Store) {
 	if err := db.RenewLease(ctx, id, "node-a", epoch1); !errors.Is(err, store.ErrLeaseLost) {
 		t.Fatalf("旧持有者续租应失败: %v", err)
 	}
-	// 新纪元写入成功；释放后不能再用。
-	if err := db.Commit(ctx, store.Checkpoint{SessionID: id, ExpectLogLen: 0, Epoch: epoch2, Header: hdr}); err != nil {
+	// 新纪元写入成功（接管者推进日志）；释放后不能再用。
+	c2 := newCore()
+	_, _, _ = c2.Input(txt("接管者写入"), nil)
+	s2 := c2.Snapshot()
+	if err := db.Commit(ctx, store.Checkpoint{SessionID: id, ExpectLogLen: 0, Epoch: epoch2, Header: s2.Header,
+		Append: s2.Entries, AppendFrom: 0}); err != nil {
 		t.Fatalf("新纪元提交: %v", err)
+	}
+	// 接管者推进日志后，旧节点的迟到写入纪元和 log_len 都不符：应报租约失效，不是普通冲突。
+	err = db.Commit(ctx, store.Checkpoint{SessionID: id, ExpectLogLen: 0, Epoch: epoch1, Header: hdr})
+	if !errors.Is(err, store.ErrLeaseLost) {
+		t.Fatalf("旧纪元 + 过期 log_len 应报租约失效: %v", err)
 	}
 	if err := db.ReleaseLease(ctx, id, "node-b", epoch2); err != nil {
 		t.Fatalf("释放: %v", err)

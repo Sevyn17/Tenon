@@ -84,11 +84,13 @@ func (db *DB) Commit(ctx context.Context, cp Checkpoint) error {
 		if err != nil {
 			return err
 		}
-		if logLen != cp.ExpectLogLen {
-			return fmt.Errorf("%w: 期望 log_len=%d，实际 %d", ErrConflict, cp.ExpectLogLen, logLen)
-		}
+		// 先校验纪元再校验 log_len：接管者推进过日志后，旧持有者的迟到写入两条都不符，
+		// 应报租约失效而不是普通冲突（02 2.2 fencing）。
 		if cp.Epoch != 0 && leaseEpoch != cp.Epoch {
 			return fmt.Errorf("%w: 期望纪元 %d，实际 %d", ErrLeaseLost, cp.Epoch, leaseEpoch)
+		}
+		if logLen != cp.ExpectLogLen {
+			return fmt.Errorf("%w: 期望 log_len=%d，实际 %d", ErrConflict, cp.ExpectLogLen, logLen)
 		}
 		if cp.TruncateFrom != nil {
 			if _, err := tx.ExecContext(ctx, `INSERT INTO session_entries_archive(tenant, session_id, idx, id, body, truncated_at, rewind_seq)

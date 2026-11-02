@@ -68,6 +68,32 @@ func TestExplainTraceListsPath(t *testing.T) {
 	}
 }
 
+// 信封回合之后的普通 Send 回合不沿用上一回合的 trace（否则工具事件会记到旧任务名下）。
+func TestTraceNotCarriedIntoPlainTurn(t *testing.T) {
+	h, _ := newExplainRig(t, &scriptedModel{})
+	hd := mustOpen(t, h, "s1")
+	if err := h.Deliver(context.Background(), mail.Envelope{Trace: "tr3",
+		From: mail.Address{Kind: mail.AddrHuman, ID: "u1"}, To: mail.Address{Kind: mail.AddrSession, ID: "s1"},
+		Kind: mail.KindRequest, Body: "hi"}); err != nil {
+		t.Fatalf("Deliver: %v", err)
+	}
+	if err := hd.Wait(); err != nil {
+		t.Fatalf("Wait: %v", err)
+	}
+	if got := hd.Agent().TraceID(); got != "tr3" {
+		t.Fatalf("信封回合的 trace = %q，期望 tr3", got)
+	}
+	if err := hd.Do(Command{Kind: Send, ItemID: NewItemID(), Text: "第二轮"}); err != nil {
+		t.Fatalf("Do: %v", err)
+	}
+	if err := hd.Wait(); err != nil {
+		t.Fatalf("Wait: %v", err)
+	}
+	if got := hd.Agent().TraceID(); got != "" {
+		t.Fatalf("普通 Send 回合不应沿用旧 trace，得 %q", got)
+	}
+}
+
 func TestExplainTraceGuardDenied(t *testing.T) {
 	h, db := newExplainRig(t, &scriptedModel{})
 	mustOpen(t, h, "s1")

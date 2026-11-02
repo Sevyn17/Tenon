@@ -749,8 +749,9 @@ func (a *actor) drainInbox(ctx context.Context) error {
 		for _, id := range consume {     // 本回合消费的项不算「早先排队」——它们就是本条消息
 			delete(a.turnQueued, id)
 		}
+		// 每回合都按本批信封重设 trace：非信封输入（Send/Note）置空，免得沿用上一回合的 trace。
+		a.ag.SetTrace(env.Trace)
 		if env.Trace != "" {
-			a.ag.SetTrace(env.Trace)
 			a.h.recordTrace(env.Trace, a.id, "session", "")
 		}
 		m := envelopeMeta(env, untrusted)

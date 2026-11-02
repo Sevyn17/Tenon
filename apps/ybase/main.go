@@ -426,7 +426,7 @@ func chat(o opts, a *app) error {
 			}
 		case <-c.cur.Done():
 			if err := c.cur.Err(); err != nil {
-				if errors.Is(err, sqlite.ErrConflict) { // session-host D4：另一进程已推进该会话
+				if errors.Is(err, sqlite.ErrConflict) || errors.Is(err, sqlite.ErrLeaseLost) { // session-host D4：另一进程已推进或接管该会话
 					return fmt.Errorf("会话 %s 已被另一个进程写入，本进程停止写入（未提交的修改已丢弃）；请关闭其他进程后重开", c.cur.ID())
 				}
 				return err
