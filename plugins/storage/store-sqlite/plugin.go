@@ -59,7 +59,7 @@ func (p *storePlugin) Meta() plugin.Meta {
 		Provides: []string{kr.SlotSessionStore, kr.SlotToolResultStore, kr.SlotBlobStore, kr.SlotAgentStore, kr.ServiceDB}}
 }
 
-func (p *storePlugin) Setup(cx *plugin.SetupCx) error {
+func (p *storePlugin) Setup(cx *plugin.Registrar) error {
 	p.h, p.cfg = &Store{}, cx.Config().(*Config)
 	for _, s := range []string{"session_store", "tool_result_store", "blob_store", "agent_store"} {
 		if err := cx.FillSlot(s, p.h); err != nil {

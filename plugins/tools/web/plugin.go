@@ -16,7 +16,7 @@ func (*plug) Meta() plugin.Meta {
 	return plugin.Meta{Name: "web", Version: "0.1.0", Effects: []string{plugin.EffectTools, plugin.EffectNetwork}}
 }
 
-func (*plug) Setup(cx *plugin.SetupCx) error {
+func (*plug) Setup(cx *plugin.Registrar) error {
 	w := &Web{Search: NewDeepSeekSearch()}
 	for _, it := range Items() {
 		cx.Register(kr.PointPermItems, it.ID, it)

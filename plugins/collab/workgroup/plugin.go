@@ -32,7 +32,7 @@ func (*plug) Meta() plugin.Meta {
 		Requires: []string{kr.ServiceHost, kr.ServiceDB, kr.ServiceUI}}
 }
 
-func (p *plug) Setup(cx *plugin.SetupCx) error {
+func (p *plug) Setup(cx *plugin.Registrar) error {
 	var err error
 	if p.h, err = plugin.Use[*host.Host](cx, kr.ServiceHost); err != nil {
 		return err

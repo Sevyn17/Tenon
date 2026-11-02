@@ -1,6 +1,6 @@
 package runtime
 
-// 会话级插件点位（thin-kernel-plan §3）。插件在 Setup 里用 SetupCx.Register(点位, 名字, 实现) 登记，
+// 会话级插件点位（thin-kernel-plan §3）。插件在 Setup 里用 Registrar.Register(点位, 名字, 实现) 登记，
 // 应用装配后用 Collect 把登记项填进 Builder。
 
 import (
@@ -36,7 +36,7 @@ const (
 )
 
 // ProjectTrusted 取 service:trust；插件须在 Requires 里写 "?service:trust"。
-func ProjectTrusted(cx *plugin.SetupCx) bool {
+func ProjectTrusted(cx *plugin.Registrar) bool {
 	v, ok, err := plugin.UseOptional[bool](cx, ServiceTrust)
 	if err != nil {
 		return false // 类型不符等异常按不受信处理

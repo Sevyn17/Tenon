@@ -13,6 +13,7 @@ import (
 	_ "modernc.org/sqlite"
 
 	"ybase-kernel/core/bus"
+	"ybase-kernel/core/store"
 )
 
 // DB 一个存储文件。
@@ -67,10 +68,18 @@ func (db *DB) Migrate(ctx context.Context, owner string, ms []Migration) error {
 	return db.migrate(ctx, owner, in)
 }
 
-// Migration 插件迁移。
-type Migration struct {
-	Version int
-	Stmts   []string
+// Migration 插件迁移（与 store.Migration 同一类型）。
+type Migration = store.Migration
+
+// SQLOut SQL 出口（store.SQL，框架设计 05 §5.7）。
+func (db *DB) SQLOut() store.SQL { return sqlOut{db} }
+
+type sqlOut struct{ db *DB }
+
+func (o sqlOut) DB() *sql.DB     { return o.db.sql }
+func (o sqlOut) Dialect() string { return "sqlite" }
+func (o sqlOut) Migrate(ctx context.Context, owner string, ms []store.Migration) error {
+	return o.db.Migrate(ctx, owner, ms)
 }
 
 func (db *DB) migrate(ctx context.Context, owner string, ms []migration) error {

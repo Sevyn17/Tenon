@@ -12,12 +12,12 @@ import (
 // fake 测试用插件：按 Meta 声明，Setup 时执行 setup。
 type fake struct {
 	meta  Meta
-	setup func(*SetupCx) error
+	setup func(*Registrar) error
 	start func(*Scope) error
 }
 
 func (f *fake) Meta() Meta { return f.meta }
-func (f *fake) Setup(cx *SetupCx) error {
+func (f *fake) Setup(cx *Registrar) error {
 	if f.setup != nil {
 		return f.setup(cx)
 	}
@@ -50,9 +50,9 @@ func entries(names ...string) []Entry {
 func TestAssembleTopoOrderAndUse(t *testing.T) {
 	var got string
 	store := reg(t, "store", &fake{meta: Meta{Provides: []string{"slot:SessionStore"}},
-		setup: func(cx *SetupCx) error { return cx.FillSlot("SessionStore", "db") }})
+		setup: func(cx *Registrar) error { return cx.FillSlot("SessionStore", "db") }})
 	user := reg(t, "user", &fake{meta: Meta{Requires: []string{"slot:SessionStore", "slot:Secrets"}},
-		setup: func(cx *SetupCx) error {
+		setup: func(cx *Registrar) error {
 			s, err := Use[string](cx, "slot:SessionStore")
 			got = s
 			if err != nil {
@@ -77,9 +77,9 @@ func TestAssembleTopoOrderAndUse(t *testing.T) {
 
 func TestAssembleSelfChecks(t *testing.T) {
 	a := reg(t, "a", &fake{meta: Meta{Requires: []string{"service:b"}, Provides: []string{"service:a"}},
-		setup: func(cx *SetupCx) error { return cx.Provide("a", 1) }})
+		setup: func(cx *Registrar) error { return cx.Provide("a", 1) }})
 	b := reg(t, "b", &fake{meta: Meta{Requires: []string{"service:a"}, Provides: []string{"service:b"}},
-		setup: func(cx *SetupCx) error { return cx.Provide("b", 1) }})
+		setup: func(cx *Registrar) error { return cx.Provide("b", 1) }})
 	s1 := reg(t, "s1", &fake{meta: Meta{Provides: []string{"slot:X"}}})
 	s2 := reg(t, "s2", &fake{meta: Meta{Provides: []string{"slot:X"}}})
 	lone := reg(t, "lone", &fake{meta: Meta{Requires: []string{"service:none"}}})
@@ -102,7 +102,7 @@ func TestAssembleSelfChecks(t *testing.T) {
 
 func TestLayerOrderingAndGuardRules(t *testing.T) {
 	mk := func(name string, specs ...LayerSpec) string {
-		return reg(t, name, &fake{setup: func(cx *SetupCx) error {
+		return reg(t, name, &fake{setup: func(cx *Registrar) error {
 			for _, s := range specs {
 				if err := cx.AddLayer(s, nil); err != nil {
 					return err
@@ -147,7 +147,7 @@ type compactCfg struct {
 
 func TestConfigDecodeAndSchema(t *testing.T) {
 	var seen *compactCfg
-	n := reg(t, "compact", &fake{meta: Meta{Config: &compactCfg{}}, setup: func(cx *SetupCx) error {
+	n := reg(t, "compact", &fake{meta: Meta{Config: &compactCfg{}}, setup: func(cx *Registrar) error {
 		seen = cx.Config().(*compactCfg)
 		return nil
 	}})
@@ -243,7 +243,7 @@ func TestStartFailureClosesStarted(t *testing.T) {
 
 func TestExplain(t *testing.T) {
 	n := reg(t, "compact", &fake{meta: Meta{Version: "1", Config: &compactCfg{}},
-		setup: func(cx *SetupCx) error {
+		setup: func(cx *Registrar) error {
 			cx.Register("tool", "read", nil)
 			return cx.AddLayer(LayerSpec{Point: "model", Position: Transform, Outermost: true}, nil)
 		}})
@@ -265,7 +265,7 @@ func TestInjectAndOptional(t *testing.T) {
 	var got any
 	var gotOpt bool
 	user := reg(t, "user", &fake{meta: Meta{Requires: []string{"service:ui", "?service:sandbox"}},
-		setup: func(cx *SetupCx) error {
+		setup: func(cx *Registrar) error {
 			v, err := Use[string](cx, "service:ui")
 			if err != nil {
 				return err
@@ -287,7 +287,7 @@ func TestInjectAndOptional(t *testing.T) {
 	}
 	// 可选依赖有提供者：排在其后并能取到
 	sb := reg(t, "sb", &fake{meta: Meta{Provides: []string{"service:sandbox"}},
-		setup: func(cx *SetupCx) error { return cx.Provide("sandbox", "box") }})
+		setup: func(cx *Registrar) error { return cx.Provide("sandbox", "box") }})
 	a, err := Assemble(Spec{Plugins: []Entry{{Name: user}, {Name: sb}}, Inject: map[string]any{"service:ui": "tty"}})
 	if err != nil {
 		t.Fatal(err)
@@ -300,7 +300,7 @@ func TestInjectAndOptional(t *testing.T) {
 	}
 	// 插件不能提供应用预置的服务
 	dup := reg(t, "dup", &fake{meta: Meta{Provides: []string{"service:ui"}},
-		setup: func(cx *SetupCx) error { return cx.Provide("ui", "x") }})
+		setup: func(cx *Registrar) error { return cx.Provide("ui", "x") }})
 	if _, err := Assemble(Spec{Plugins: []Entry{{Name: dup}}, Inject: map[string]any{"service:ui": "tty"}}); err == nil {
 		t.Fatal("want dup error")
 	}

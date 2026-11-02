@@ -16,7 +16,7 @@ func (*plug) Meta() plugin.Meta {
 	return plugin.Meta{Name: "fs", Version: "0.1.0", Default: true, Effects: []string{plugin.EffectTools}, Requires: []string{kr.ServiceWorkdir}}
 }
 
-func (*plug) Setup(cx *plugin.SetupCx) error {
+func (*plug) Setup(cx *plugin.Registrar) error {
 	root, err := plugin.Use[string](cx, kr.ServiceWorkdir)
 	if err != nil {
 		return err

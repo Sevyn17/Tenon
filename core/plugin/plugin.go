@@ -49,7 +49,7 @@ const (
 // Plugin 插件接口。
 type Plugin interface {
 	Meta() Meta
-	Setup(cx *SetupCx) error
+	Setup(cx *Registrar) error
 	Start(sc *Scope) error
 }
 
@@ -150,8 +150,8 @@ const (
 
 // —— 装配期上下文 ——//
 
-// SetupCx 插件 Setup 时拿到的登记入口。
-type SetupCx struct {
+// Registrar 插件 Setup 时拿到的登记入口。
+type Registrar struct {
 	asm    *Assembly
 	plugin string
 	meta   Meta
@@ -159,13 +159,13 @@ type SetupCx struct {
 }
 
 // Plugin 当前插件名。
-func (cx *SetupCx) Plugin() string { return cx.plugin }
+func (cx *Registrar) Plugin() string { return cx.plugin }
 
 // Config 已解码的本插件配置（Meta.Config 的同类型指针）；无配置为 nil。
-func (cx *SetupCx) Config() any { return cx.config }
+func (cx *Registrar) Config() any { return cx.config }
 
 // FillSlot 填插槽（必须在 Provides 里声明 "slot:<名>"）。
-func (cx *SetupCx) FillSlot(name string, impl any) error {
+func (cx *Registrar) FillSlot(name string, impl any) error {
 	key := "slot:" + name
 	if !contains(cx.meta.Provides, key) {
 		return fmt.Errorf("插件 %s 未声明提供 %s", cx.plugin, key)
@@ -176,7 +176,7 @@ func (cx *SetupCx) FillSlot(name string, impl any) error {
 }
 
 // Provide 登记插件服务（必须在 Provides 里声明 "service:<名>"）。
-func (cx *SetupCx) Provide(name string, svc any) error {
+func (cx *Registrar) Provide(name string, svc any) error {
 	key := "service:" + name
 	if !contains(cx.meta.Provides, key) {
 		return fmt.Errorf("插件 %s 未声明提供 %s", cx.plugin, key)
@@ -187,7 +187,7 @@ func (cx *SetupCx) Provide(name string, svc any) error {
 }
 
 // Use 取依赖：只能取 Requires 里声明过的（含插槽默认实现）。
-func Use[T any](cx *SetupCx, key string) (T, error) {
+func Use[T any](cx *Registrar, key string) (T, error) {
 	var zero T
 	if !contains(cx.meta.Requires, key) && !contains(cx.meta.Requires, Optional+key) {
 		return zero, fmt.Errorf("插件 %s 未声明依赖 %s", cx.plugin, key)
@@ -204,7 +204,7 @@ func Use[T any](cx *SetupCx, key string) (T, error) {
 }
 
 // UseOptional 取可选依赖（Requires 写 "?<key>"）：提供者缺席返回零值与 false。
-func UseOptional[T any](cx *SetupCx, key string) (T, bool, error) {
+func UseOptional[T any](cx *Registrar, key string) (T, bool, error) {
 	var zero T
 	if !contains(cx.meta.Requires, Optional+key) {
 		return zero, false, fmt.Errorf("插件 %s 未声明可选依赖 %s", cx.plugin, key)
@@ -217,7 +217,7 @@ func UseOptional[T any](cx *SetupCx, key string) (T, bool, error) {
 }
 
 // AddLayer 登记调用点层。Guard 只能 FailClosed；超时 0 取默认值。
-func (cx *SetupCx) AddLayer(spec LayerSpec, impl any) error {
+func (cx *Registrar) AddLayer(spec LayerSpec, impl any) error {
 	if spec.Point != "model" && spec.Point != "tool" {
 		return fmt.Errorf("未知调用点 %q", spec.Point)
 	}
@@ -244,7 +244,7 @@ func (cx *SetupCx) AddLayer(spec LayerSpec, impl any) error {
 
 // Register 通用点位登记（工具、适配器、钩子、事件订阅、OnSessionDelete、乙类点位……）。
 // 由开位的模块按 point 名取用（Items）。
-func (cx *SetupCx) Register(point, name string, impl any) {
+func (cx *Registrar) Register(point, name string, impl any) {
 	cx.asm.items[point] = append(cx.asm.items[point], Item{Plugin: cx.plugin, Name: name, Impl: impl})
 	cx.asm.points = append(cx.asm.points, Registration{Plugin: cx.plugin, Point: point, Name: name})
 }
@@ -417,7 +417,7 @@ func Assemble(spec Spec) (*Assembly, error) {
 		return nil, fmt.Errorf("%w: %s", ErrCycle, strings.Join(stuck, ", "))
 	}
 	for _, n := range a.order {
-		cx := &SetupCx{asm: a, plugin: n, meta: a.metas[n], config: a.configs[n]}
+		cx := &Registrar{asm: a, plugin: n, meta: a.metas[n], config: a.configs[n]}
 		if err := a.plugins[n].Setup(cx); err != nil {
 			return nil, fmt.Errorf("插件 %s Setup: %w", n, err)
 		}

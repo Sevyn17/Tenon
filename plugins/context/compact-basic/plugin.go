@@ -49,7 +49,7 @@ func (compactPlugin) Meta() plugin.Meta {
 		Requires: []string{kr.ServiceModelhub}, Provides: []string{kr.ServiceCompactor}}
 }
 
-func (compactPlugin) Setup(cx *plugin.SetupCx) error {
+func (compactPlugin) Setup(cx *plugin.Registrar) error {
 	cfg := cx.Config().(*Config)
 	m, err := plugin.Use[*kr.Models](cx, kr.ServiceModelhub)
 	if err != nil {

@@ -32,7 +32,7 @@ func (*plug) Meta() plugin.Meta {
 		Requires: []string{kr.ServiceWorkdir, kr.ServiceUI, "?" + kr.ServiceTrust, "?service:sandbox", "?service:permission", "?" + pkgs.Service}}
 }
 
-func (p *plug) Setup(cx *plugin.SetupCx) error {
+func (p *plug) Setup(cx *plugin.Registrar) error {
 	pc, _ := cx.Config().(*PluginConfig)
 	if pc == nil {
 		pc = &PluginConfig{}
@@ -91,7 +91,7 @@ type defaultSandbox interface {
 
 // wireConfine stdio 服务子进程放进沙箱：服务 sandbox 字段优先，否则取缺省档位 [sandbox] 里 mcp__<服务>__* 的值；
 // 没有沙箱插件时不加沙箱并告警。
-func (p *plug) wireConfine(cx *plugin.SetupCx) error {
+func (p *plug) wireConfine(cx *plugin.Registrar) error {
 	sb, ok, err := plugin.UseOptional[toolhub.Confiner](cx, "service:sandbox")
 	if err != nil {
 		return err
@@ -124,7 +124,7 @@ func (p *plug) wireConfine(cx *plugin.SetupCx) error {
 
 // addPackages 追加插件包里的 MCP 服务（已由 core/pkgs 校验）。${YBASE_PLUGIN_DIR} 换成包目录，
 // 同名环境变量传给子进程，cwd 缺省为包目录。与配置文件里的服务重名时报错。
-func (p *plug) addPackages(cx *plugin.SetupCx) error {
+func (p *plug) addPackages(cx *plugin.Registrar) error {
 	ps, err := pkgs.From(cx)
 	if err != nil {
 		return err

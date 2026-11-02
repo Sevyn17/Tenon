@@ -28,7 +28,7 @@ func get(sc *kr.SessionCx, root string) *Instructions {
 	return in
 }
 
-func (*plug) Setup(cx *plugin.SetupCx) error {
+func (*plug) Setup(cx *plugin.Registrar) error {
 	root, err := plugin.Use[string](cx, kr.ServiceWorkdir)
 	if err != nil {
 		return err

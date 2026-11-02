@@ -16,7 +16,7 @@ func (adapterPlugin) Meta() plugin.Meta {
 		Requires: []string{kr.ServiceModelhub}}
 }
 
-func (adapterPlugin) Setup(cx *plugin.SetupCx) error {
+func (adapterPlugin) Setup(cx *plugin.Registrar) error {
 	m, err := plugin.Use[*kr.Models](cx, kr.ServiceModelhub)
 	if err != nil {
 		return err

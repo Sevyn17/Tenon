@@ -34,7 +34,7 @@ func (*plug) Meta() plugin.Meta {
 		Requires: []string{kr.ServiceDB, kr.ServiceWorkdir, "?" + kr.ServiceTrust}, Provides: []string{Service}}
 }
 
-func (*plug) Setup(cx *plugin.SetupCx) error {
+func (*plug) Setup(cx *plugin.Registrar) error {
 	cfg, _ := cx.Config().(*PluginConfig)
 	if cfg == nil {
 		cfg = &PluginConfig{}

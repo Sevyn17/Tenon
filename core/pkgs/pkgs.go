@@ -366,7 +366,7 @@ func Expand(s, dir string) string { return strings.ReplaceAll(s, "${"+DirVar+"}"
 const Service = "service:packages"
 
 // From 取预置的插件包；插件须在 Requires 里写 "?service:packages"。
-func From(cx *plugin.SetupCx) ([]*Package, error) {
+func From(cx *plugin.Registrar) ([]*Package, error) {
 	v, ok, err := plugin.UseOptional[[]*Package](cx, Service)
 	if err != nil || !ok {
 		return nil, err

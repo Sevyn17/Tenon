@@ -16,7 +16,7 @@ func (*plug) Meta() plugin.Meta {
 	return plugin.Meta{Name: "redact", Version: "0.1.0", Effects: []string{plugin.EffectRewriteResult}, Requires: []string{"?service:compactor"}}
 }
 
-func (*plug) Setup(cx *plugin.SetupCx) error {
+func (*plug) Setup(cx *plugin.Registrar) error {
 	red := Default() // 进程环境中名字像密钥的变量值 + 常见密钥模式
 	c, ok, err := plugin.UseOptional[kr.Redactable](cx, kr.ServiceCompactor)
 	if err != nil {

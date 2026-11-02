@@ -36,7 +36,7 @@ func ChildFactory(h *host.Host) host.Factory {
 	}
 }
 
-func (*plug) Setup(cx *plugin.SetupCx) error {
+func (*plug) Setup(cx *plugin.Registrar) error {
 	h, err := plugin.Use[*host.Host](cx, kr.ServiceHost)
 	if err != nil {
 		return err

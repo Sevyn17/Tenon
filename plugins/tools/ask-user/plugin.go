@@ -16,7 +16,7 @@ func (*plug) Meta() plugin.Meta {
 	return plugin.Meta{Name: "ask-user", Version: "0.1.0", Default: true, Effects: []string{plugin.EffectTools}, Requires: []string{kr.ServiceUI}}
 }
 
-func (*plug) Setup(cx *plugin.SetupCx) error {
+func (*plug) Setup(cx *plugin.Registrar) error {
 	ui, err := plugin.Use[kr.UI](cx, kr.ServiceUI)
 	if err != nil {
 		return err

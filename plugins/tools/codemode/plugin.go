@@ -16,7 +16,7 @@ func (*plug) Meta() plugin.Meta {
 	return plugin.Meta{Name: "code-mode", Version: "0.1.0", Effects: []string{plugin.EffectTools, plugin.EffectExec}}
 }
 
-func (*plug) Setup(cx *plugin.SetupCx) error {
+func (*plug) Setup(cx *plugin.Registrar) error {
 	for _, it := range Items() {
 		cx.Register(kr.PointPermItems, "code-mode", it)
 	}

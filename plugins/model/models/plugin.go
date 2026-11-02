@@ -28,7 +28,7 @@ func (modelsPlugin) Meta() plugin.Meta {
 		Requires: []string{kr.SlotSecrets}, Provides: []string{kr.ServiceModelhub}}
 }
 
-func (modelsPlugin) Setup(cx *plugin.SetupCx) error {
+func (modelsPlugin) Setup(cx *plugin.Registrar) error {
 	cfg := cx.Config().(*Config)
 	sec, err := plugin.Use[kr.Secrets](cx, kr.SlotSecrets)
 	if err != nil {

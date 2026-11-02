@@ -20,7 +20,7 @@ func (*plug) Meta() plugin.Meta {
 	return plugin.Meta{Name: "skills", Version: "0.1.0", Effects: []string{plugin.EffectTools, plugin.EffectSystemPrompt}, Requires: []string{kr.ServiceWorkdir, kr.ServiceUI, "?" + pkgs.Service}}
 }
 
-func (*plug) Setup(cx *plugin.SetupCx) error {
+func (*plug) Setup(cx *plugin.Registrar) error {
 	root, err := plugin.Use[string](cx, kr.ServiceWorkdir)
 	if err != nil {
 		return err

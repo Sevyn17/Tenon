@@ -28,7 +28,7 @@ func (*plug) Meta() plugin.Meta {
 		Requires: []string{kr.ServiceWorkdir, "?service:sandbox", "?service:permission"}}
 }
 
-func (p *plug) Setup(cx *plugin.SetupCx) error {
+func (p *plug) Setup(cx *plugin.Registrar) error {
 	root, err := plugin.Use[string](cx, kr.ServiceWorkdir)
 	if err != nil {
 		return err

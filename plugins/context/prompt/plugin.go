@@ -59,7 +59,7 @@ func Text(c Config, root string) (string, error) {
 	return text, nil
 }
 
-func (*plug) Setup(cx *plugin.SetupCx) error {
+func (*plug) Setup(cx *plugin.Registrar) error {
 	root, err := plugin.Use[string](cx, kr.ServiceWorkdir)
 	if err != nil {
 		return err
