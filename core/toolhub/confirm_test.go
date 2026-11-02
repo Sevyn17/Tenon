@@ -42,7 +42,7 @@ func TestConfirmApprove(t *testing.T) {
 		st.decide(cx.CallID, "approve")
 		return true, nil
 	})
-	rs := drain(h.Execute(context.Background(), "s", []session.ToolCall{call("1", "w", `{"a":1}`)}, nil))
+	rs := drain(h.Execute(context.Background(), kctx("s"), []session.ToolCall{call("1", "w", `{"a":1}`)}, nil))
 	if asked != 1 || *ran != 1 || text(rs[0].Output) != "written" {
 		t.Fatalf("批准后应执行一次: asked=%d ran=%d out=%q", asked, *ran, text(rs[0].Output))
 	}
@@ -57,7 +57,7 @@ func TestConfirmDenyAndDeadline(t *testing.T) {
 		st.decide(cx.CallID, "deny")
 		return false, nil
 	})
-	rs := drain(h.Execute(context.Background(), "s", []session.ToolCall{call("1", "w", `{}`)}, nil))
+	rs := drain(h.Execute(context.Background(), kctx("s"), []session.ToolCall{call("1", "w", `{}`)}, nil))
 	if *ran != 0 || rs[0].Output.Status != session.ToolError {
 		t.Fatalf("拒绝不应执行: ran=%d %+v", *ran, rs[0].Output)
 	}
@@ -66,7 +66,7 @@ func TestConfirmDenyAndDeadline(t *testing.T) {
 	h2, ran2 := confirmHub(t, st2, func(ctx context.Context, _ *Cx, _ string, _ time.Time) (bool, error) {
 		return false, context.DeadlineExceeded
 	})
-	rs = drain(h2.Execute(context.Background(), "s", []session.ToolCall{call("1", "w", `{}`)}, nil))
+	rs = drain(h2.Execute(context.Background(), kctx("s"), []session.ToolCall{call("1", "w", `{}`)}, nil))
 	if *ran2 != 0 || !strings.Contains(text(rs[0].Output), "未在截止时间前回应") {
 		t.Fatalf("截止应结清为错误: ran=%d %q", *ran2, text(rs[0].Output))
 	}
@@ -79,7 +79,7 @@ func TestConfirmArgsHashLocked(t *testing.T) {
 	h, ran := confirmHub(t, st, func(context.Context, *Cx, string, time.Time) (bool, error) {
 		return false, context.DeadlineExceeded
 	})
-	rs := drain(h.Execute(context.Background(), "s", []session.ToolCall{call("1", "w", `{"a":2}`)}, nil))
+	rs := drain(h.Execute(context.Background(), kctx("s"), []session.ToolCall{call("1", "w", `{"a":2}`)}, nil))
 	if *ran != 0 || rs[0].Output.Status != session.ToolError {
 		t.Fatalf("参数变化后不应凭旧批准执行: ran=%d %q", *ran, text(rs[0].Output))
 	}
@@ -94,7 +94,7 @@ func TestConfirmCancelKeepsPending(t *testing.T) {
 		<-actx.Done()
 		return false, actx.Err()
 	})
-	rs := drain(h.Execute(ctx, "s", []session.ToolCall{call("1", "w", `{}`)}, nil))
+	rs := drain(h.Execute(ctx, kctx("s"), []session.ToolCall{call("1", "w", `{}`)}, nil))
 	if *ran != 0 || rs[0].Output.Status != session.ToolTurnCancelled {
 		t.Fatalf("取消: ran=%d %+v", *ran, rs[0].Output)
 	}
@@ -112,7 +112,7 @@ func TestGuardShortCircuitWriteTool(t *testing.T) {
 	h.AddLayer(Layer{Name: "deny", Guard: true, Call: func(ctx context.Context, cx *Cx, a json.RawMessage, next Next) (Output, error) {
 		return Errorf("不行"), nil
 	}})
-	rs := drain(h.Execute(context.Background(), "s", []session.ToolCall{call("c1", "w", `{}`)}, nil))
+	rs := drain(h.Execute(context.Background(), kctx("s"), []session.ToolCall{call("c1", "w", `{}`)}, nil))
 	if len(rs) != 1 || rs[0].Err != nil || rs[0].Output.Status != session.ToolError {
 		t.Fatalf("短路结果应为错误结果而非内部错误: %+v", rs)
 	}
@@ -133,7 +133,7 @@ func TestConfirmThroughTransform(t *testing.T) {
 	h.layers = append([]Layer{{Name: "redact", Call: func(ctx context.Context, cx *Cx, a json.RawMessage, next Next) (Output, error) {
 		return next(ctx, cx, a)
 	}}}, h.layers...)
-	rs := drain(h.Execute(context.Background(), "s", []session.ToolCall{call("1", "w", `{}`)}, nil))
+	rs := drain(h.Execute(context.Background(), kctx("s"), []session.ToolCall{call("1", "w", `{}`)}, nil))
 	if asked != 1 || *ran != 1 || text(rs[0].Output) != "written" {
 		t.Fatalf("asked=%d ran=%d %+v", asked, *ran, rs[0].Output)
 	}
@@ -147,7 +147,7 @@ func TestTransformOwnConfirmRejected(t *testing.T) {
 	h.AddLayer(Layer{Name: "bad", Call: func(ctx context.Context, cx *Cx, a json.RawMessage, next Next) (Output, error) {
 		return Output{Kind: Confirm, Reason: "?"}, nil
 	}})
-	rs := drain(h.Execute(context.Background(), "s", []session.ToolCall{call("1", "r", `{}`)}, nil))
+	rs := drain(h.Execute(context.Background(), kctx("s"), []session.ToolCall{call("1", "r", `{}`)}, nil))
 	if rs[0].Output.Status != session.ToolError {
 		t.Fatalf("%+v", rs[0].Output)
 	}

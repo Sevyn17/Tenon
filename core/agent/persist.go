@@ -41,6 +41,7 @@ func (a *Agent) OpenAs(ctx context.Context, cfg *session.Config, meta store.Sess
 			return false, err
 		}
 		a.committed = 0
+		a.bindCtx(meta)
 		return false, nil
 	}
 	if err != nil {
@@ -51,6 +52,7 @@ func (a *Agent) OpenAs(ctx context.Context, cfg *session.Config, meta store.Sess
 		return false, err
 	}
 	a.Core = c
+	a.bindCtx(l.Meta)
 	a.committed = l.Snapshot.Header.LogLen
 	a.resume = c.Resumed()
 	if a.resume != nil && a.resume.Kind == session.NeedModel {

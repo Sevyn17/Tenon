@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"ybase-kernel/core/callctx"
 	"ybase-kernel/core/session"
 	"ybase-kernel/core/toolhub"
 )
@@ -95,7 +96,7 @@ func TestInstructionsLayer(t *testing.T) {
 		t.Fatal(err)
 	}
 	h.AddLayer(in.Layer())
-	run := h.Execute(context.Background(), "s", []session.ToolCall{
+	run := h.Execute(context.Background(), kctx("s"), []session.ToolCall{
 		{ID: "1", Name: "read_file", Args: json.RawMessage(`{"path":"pkg/a.txt"}`)},
 		{ID: "2", Name: "read_file", Args: json.RawMessage(`{"path":"pkg/a.txt"}`)},
 	}, nil)
@@ -130,3 +131,6 @@ func fakeRead(root string) *toolhub.Tool {
 		return string(b), err
 	})
 }
+
+// kctx 测试用调用上下文（框架设计 04 §4.4）。
+func kctx(id string) *callctx.Ctx { return callctx.New(callctx.Options{SessionID: id}) }

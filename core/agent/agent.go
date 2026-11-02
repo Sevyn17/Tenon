@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"ybase-kernel/core/callctx"
 	"ybase-kernel/core/modelhub"
 	"ybase-kernel/core/reqlog"
 	"ybase-kernel/core/session"
@@ -74,6 +75,10 @@ type Agent struct {
 	// Hub 工具管理器（必需：调用栈、并行、幂等、确认、存工件）；Toolset 为会话工具视图（可空）。
 	Hub     *toolhub.Hub
 	Toolset *toolhub.Toolset
+
+	// Ctx 本次调用的上下文（框架设计 04 §4.4）：租户、会话身份、使用配置、trace。
+	// 会话构造时建好，Open 时由会话行填全；工具与层从 toolhub.Cx.Ctx 读到它。
+	Ctx *callctx.Ctx
 
 	spanMu   sync.Mutex
 	hubSpans []store.Span

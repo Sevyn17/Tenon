@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"time"
 
+	"ybase-kernel/core/callctx"
 	"ybase-kernel/core/session"
 )
 
@@ -110,6 +111,11 @@ func Errorf(format string, a ...any) Output {
 
 // Cx 一次调用的上下文。
 type Cx struct {
+	// Ctx 本次调用的上下文（框架设计 04 §4.4）：租户、会话、使用配置、trace。
+	// 组件从这里读会话相关信息，不按会话保存状态（组件是全局单例）。
+	Ctx *callctx.Ctx
+	// Hub 本会话的工具管理器（run_code 这类要回到同一调用栈的工具用）。
+	Hub       *Hub
 	SessionID string
 	CallID    string
 	Tool      *Tool

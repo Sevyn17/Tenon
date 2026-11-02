@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"ybase-kernel/core/callctx"
 	"ybase-kernel/core/session"
 	"ybase-kernel/core/toolhub"
 )
@@ -38,7 +39,7 @@ func setup(t *testing.T) (*toolhub.Hub, *toolhub.Toolset, *[]string) {
 func call(t *testing.T, hub *toolhub.Hub, ts *toolhub.Toolset, code string) toolhub.Output {
 	t.Helper()
 	args, _ := json.Marshal(map[string]any{"code": code, "timeout": 2})
-	run := hub.ExecuteIn(context.Background(), ts, "s1", []session.ToolCall{{ID: "c1", Name: Name, Args: args}}, nil)
+	run := hub.ExecuteIn(context.Background(), ts, kctx("s1"), []session.ToolCall{{ID: "c1", Name: Name, Args: args}}, nil)
 	res, _ := run.Next()
 	if res.Err != nil {
 		t.Fatal(res.Err)
@@ -107,3 +108,6 @@ func TestObjectResult(t *testing.T) {
 		t.Fatalf("got %q", text(out))
 	}
 }
+
+// kctx 测试用调用上下文（框架设计 04 §4.4）。
+func kctx(id string) *callctx.Ctx { return callctx.New(callctx.Options{SessionID: id}) }

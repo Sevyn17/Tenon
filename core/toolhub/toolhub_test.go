@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"ybase-kernel/core/callctx"
 	"ybase-kernel/core/session"
 )
 
@@ -126,16 +127,16 @@ func TestIdempotency(t *testing.T) {
 		atomic.AddInt32(&runs, 1)
 		return Text("ok"), nil
 	}})
-	rs := drain(h.Execute(context.Background(), "s", []session.ToolCall{call("c1", "w", `{}`)}, nil))
+	rs := drain(h.Execute(context.Background(), kctx("s"), []session.ToolCall{call("c1", "w", `{}`)}, nil))
 	if text(rs[0].Output) != "ok" || runs != 1 {
 		t.Fatalf("首次执行: %+v runs=%d", rs, runs)
 	}
-	rs = drain(h.Execute(context.Background(), "s", []session.ToolCall{call("c1", "w", `{}`)}, nil))
+	rs = drain(h.Execute(context.Background(), kctx("s"), []session.ToolCall{call("c1", "w", `{}`)}, nil))
 	if text(rs[0].Output) != "ok" || runs != 1 {
 		t.Fatalf("重放应取回不重跑: %+v runs=%d", rs, runs)
 	}
 	st.recs["c2"] = &Record{Status: "started"}
-	rs = drain(h.Execute(context.Background(), "s", []session.ToolCall{call("c2", "w", `{}`)}, nil))
+	rs = drain(h.Execute(context.Background(), kctx("s"), []session.ToolCall{call("c2", "w", `{}`)}, nil))
 	if !strings.Contains(text(rs[0].Output), "结果未知") || runs != 1 {
 		t.Fatalf("started 应回状态未知: %q", text(rs[0].Output))
 	}
@@ -178,7 +179,7 @@ func TestParallelOrderAndExclusive(t *testing.T) {
 		return Text("written"), nil
 	}})
 	calls := []session.ToolCall{call("1", "r", `{}`), call("2", "r", `{}`), call("3", "w", `{}`), call("4", "r", `{}`)}
-	rs := drain(h.Execute(context.Background(), "s", calls, nil))
+	rs := drain(h.Execute(context.Background(), kctx("s"), calls, nil))
 	got := []string{}
 	for i, r := range rs {
 		if r.Call.ID != calls[i].ID {
@@ -213,7 +214,7 @@ func TestParallelLimit(t *testing.T) {
 	for i := 0; i < 6; i++ {
 		calls = append(calls, call(fmt.Sprint(i), "r", `{}`))
 	}
-	drain(h.Execute(context.Background(), "s", calls, nil))
+	drain(h.Execute(context.Background(), kctx("s"), calls, nil))
 	if peak > 2 {
 		t.Fatalf("并发上限 2，峰值 %d", peak)
 	}
@@ -227,7 +228,7 @@ func TestLayerFailurePolicies(t *testing.T) {
 	h.AddLayer(Layer{Name: "t-broken", FailOpen: true, Call: func(context.Context, *Cx, json.RawMessage, Next) (Output, error) {
 		return Output{}, errors.New("boom")
 	}})
-	rs := drain(h.Execute(context.Background(), "s", []session.ToolCall{call("1", "r", `{}`)}, nil))
+	rs := drain(h.Execute(context.Background(), kctx("s"), []session.ToolCall{call("1", "r", `{}`)}, nil))
 	if text(rs[0].Output) != "ran" {
 		t.Fatalf("Transform FailOpen 应跳过: %q", text(rs[0].Output))
 	}
@@ -237,7 +238,7 @@ func TestLayerFailurePolicies(t *testing.T) {
 	h2.AddLayer(Layer{Name: "perm", Guard: true, Call: func(context.Context, *Cx, json.RawMessage, Next) (Output, error) {
 		panic("guard crash")
 	}})
-	rs = drain(h2.Execute(context.Background(), "s", []session.ToolCall{call("1", "r", `{}`)}, nil))
+	rs = drain(h2.Execute(context.Background(), kctx("s"), []session.ToolCall{call("1", "r", `{}`)}, nil))
 	if !strings.Contains(text(rs[0].Output), "拒绝") || rs[0].Output.Status != session.ToolError {
 		t.Fatalf("Guard panic 应拒绝: %q", text(rs[0].Output))
 	}
@@ -247,7 +248,7 @@ func TestLayerFailurePolicies(t *testing.T) {
 	h3.AddLayer(Layer{Name: "sneaky", Call: func(context.Context, *Cx, json.RawMessage, Next) (Output, error) {
 		return Output{Kind: Confirm, Reason: "x"}, nil
 	}})
-	rs = drain(h3.Execute(context.Background(), "s", []session.ToolCall{call("1", "r", `{}`)}, nil))
+	rs = drain(h3.Execute(context.Background(), kctx("s"), []session.ToolCall{call("1", "r", `{}`)}, nil))
 	if !strings.Contains(text(rs[0].Output), "只能由 Guard") {
 		t.Fatalf("Transform 返回 Confirm 应被拦: %q", text(rs[0].Output))
 	}
@@ -264,7 +265,7 @@ func TestLayerTimeoutExcludesInner(t *testing.T) {
 		Call: func(ctx context.Context, cx *Cx, a json.RawMessage, next Next) (Output, error) {
 			return next(ctx, cx, a)
 		}})
-	rs := drain(h.Execute(context.Background(), "s", []session.ToolCall{call("1", "slow", `{}`)}, nil))
+	rs := drain(h.Execute(context.Background(), kctx("s"), []session.ToolCall{call("1", "slow", `{}`)}, nil))
 	if text(rs[0].Output) != "done" {
 		t.Fatalf("内层耗时不应计入本层: %q", text(rs[0].Output))
 	}
@@ -277,7 +278,7 @@ func TestEntryChecks(t *testing.T) {
 	ran := false
 	_ = h.Register(&Tool{Spec: session.ToolSpec{Name: "need", Schema: json.RawMessage(`{"type":"object","required":["path"]}`)},
 		Call: func(context.Context, *Cx, json.RawMessage) (Output, error) { ran = true; return Text("x"), nil }})
-	rs := drain(h.Execute(context.Background(), "s", []session.ToolCall{
+	rs := drain(h.Execute(context.Background(), kctx("s"), []session.ToolCall{
 		call("1", "need", `{}`), call("2", "need", `[1]`), call("3", "nope", `{}`), call("4", "need", `{"path":"a"}`),
 	}, map[string]string{"4": "单步调用过多"}))
 	if !strings.Contains(text(rs[0].Output), "path") || !strings.Contains(text(rs[1].Output), "JSON 对象") ||
@@ -299,7 +300,7 @@ func TestSpillAndReadArtifact(t *testing.T) {
 	big := strings.Join(lines, "\n")
 	_ = h.Register(&Tool{Spec: spec("sh"), Attrs: map[string]any{AttrPreview: "tail"},
 		Call: func(context.Context, *Cx, json.RawMessage) (Output, error) { return Text(big), nil }})
-	rs := drain(h.Execute(context.Background(), "s", []session.ToolCall{call("1", "sh", `{}`)}, nil))
+	rs := drain(h.Execute(context.Background(), kctx("s"), []session.ToolCall{call("1", "sh", `{}`)}, nil))
 	out := text(rs[0].Output)
 	if !strings.Contains(out, ArtifactPrefix) || !strings.Contains(out, "line-29") || strings.Contains(out, "line-00\n") {
 		t.Fatalf("tail 预览 + 引用: %q", out)
@@ -308,7 +309,7 @@ func TestSpillAndReadArtifact(t *testing.T) {
 	ref := strings.Fields(out[i:])[0]
 	ref = strings.TrimRight(ref, "）)。,，")
 	args, _ := json.Marshal(map[string]any{"ref": ref, "offset": 6, "limit": 5}) // 第 6–10 行 = line-05..line-09
-	rs = drain(h.Execute(context.Background(), "s", []session.ToolCall{{ID: "2", Name: "read_artifact", Args: args}}, nil))
+	rs = drain(h.Execute(context.Background(), kctx("s"), []session.ToolCall{{ID: "2", Name: "read_artifact", Args: args}}, nil))
 	pg := text(rs[0].Output)
 	if !strings.Contains(pg, "line-05") || strings.Contains(pg, "line-10") {
 		t.Fatalf("第 2 页应为 5–9 行: %q", pg)
@@ -354,7 +355,7 @@ func TestCancelSemantics(t *testing.T) {
 		Cancel: func(context.Context, *Cx) { cancelled <- struct{}{} }})
 
 	ctx, cancel := context.WithCancel(context.Background())
-	run := h.Execute(ctx, "s", []session.ToolCall{call("1", "r", `{}`)}, nil)
+	run := h.Execute(ctx, kctx("s"), []session.ToolCall{call("1", "r", `{}`)}, nil)
 	time.AfterFunc(20*time.Millisecond, cancel)
 	start := time.Now()
 	rs := drain(run)
@@ -363,7 +364,7 @@ func TestCancelSemantics(t *testing.T) {
 	}
 
 	ctx2, cancel2 := context.WithCancel(context.Background())
-	run = h.Execute(ctx2, "s", []session.ToolCall{call("2", "w", `{}`)}, nil)
+	run = h.Execute(ctx2, kctx("s"), []session.ToolCall{call("2", "w", `{}`)}, nil)
 	time.AfterFunc(20*time.Millisecond, cancel2)
 	rs = drain(run)
 	if text(rs[0].Output) != "写完" {
@@ -383,10 +384,13 @@ func TestSpanPerCall(t *testing.T) {
 	var evs []SpanEvent
 	h := New(Options{OnSpan: func(e SpanEvent) { mu.Lock(); evs = append(evs, e); mu.Unlock() }})
 	_ = h.Register(&Tool{Spec: spec("r"), Call: func(context.Context, *Cx, json.RawMessage) (Output, error) { return Text("hi"), nil }})
-	drain(h.Execute(context.Background(), "s", []session.ToolCall{call("1", "r", `{}`), call("2", "x", `{}`)}, nil))
+	drain(h.Execute(context.Background(), kctx("s"), []session.ToolCall{call("1", "r", `{}`), call("2", "x", `{}`)}, nil))
 	mu.Lock()
 	defer mu.Unlock()
 	if len(evs) != 2 || evs[0].ResultBytes == 0 || evs[0].End.Before(evs[0].Start) {
 		t.Fatalf("每次调用一个 span: %+v", evs)
 	}
 }
+
+// kctx 测试用调用上下文（框架设计 04 §4.4）。
+func kctx(id string) *callctx.Ctx { return callctx.New(callctx.Options{SessionID: id}) }

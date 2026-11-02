@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"ybase-kernel/core/callctx"
 	"ybase-kernel/core/session"
 )
 
@@ -49,12 +50,13 @@ func (r *Run) Next() (Result, bool) {
 func (r *Run) Stop() { r.once.Do(func() { close(r.stopped); r.cancel() }) }
 
 // Execute 执行一批调用。hints 为内核校验失败的提示（按调用 id），这些调用直接回填错误、不执行。
-func (h *Hub) Execute(ctx context.Context, sessionID string, calls []session.ToolCall, hints map[string]string) *Run {
-	return h.ExecuteIn(ctx, nil, sessionID, calls, hints)
+func (h *Hub) Execute(ctx context.Context, k *callctx.Ctx, calls []session.ToolCall, hints map[string]string) *Run {
+	return h.ExecuteIn(ctx, nil, k, calls, hints)
 }
 
 // ExecuteIn 同 Execute，限定在会话工具视图 ts 内（ts 非空时可用集外的调用直接回错误）。
-func (h *Hub) ExecuteIn(ctx context.Context, ts *Toolset, sessionID string, calls []session.ToolCall, hints map[string]string) *Run {
+// k 是本次调用的上下文（框架设计 04 §4.4），一路传到工具与层里。
+func (h *Hub) ExecuteIn(ctx context.Context, ts *Toolset, k *callctx.Ctx, calls []session.ToolCall, hints map[string]string) *Run {
 	ctx, cancel := context.WithCancel(ctx)
 	run := &Run{cancel: cancel, stopped: make(chan struct{})}
 	for range calls {
@@ -90,7 +92,7 @@ func (h *Hub) ExecuteIn(ctx context.Context, ts *Toolset, sessionID string, call
 						rw.Unlock()
 					}
 				}()
-				ch <- h.one(ctx, run.stopped, ts, sessionID, call, t)
+				ch <- h.one(ctx, run.stopped, ts, k, call, t)
 			}(call, t, ch, par)
 		}
 	}()
@@ -98,7 +100,8 @@ func (h *Hub) ExecuteIn(ctx context.Context, ts *Toolset, sessionID string, call
 }
 
 // one 一次调用的完整栈。
-func (h *Hub) one(ctx context.Context, stopped <-chan struct{}, ts *Toolset, sessionID string, call session.ToolCall, t *Tool) Result {
+func (h *Hub) one(ctx context.Context, stopped <-chan struct{}, ts *Toolset, k *callctx.Ctx, call session.ToolCall, t *Tool) Result {
+	sessionID := k.SessionID()
 	start := time.Now()
 	ev := SpanEvent{CallID: call.ID, Tool: call.Name, Start: start}
 	res := Result{Call: call}
@@ -117,7 +120,7 @@ func (h *Hub) one(ctx context.Context, stopped <-chan struct{}, ts *Toolset, ses
 		return res
 	}
 	ev.Risk = t.Risk.String()
-	cx := &Cx{SessionID: sessionID, CallID: call.ID, Tool: t, Toolset: ts, Args: call.Args, Items: h.ItemsOf(t)}
+	cx := &Cx{Ctx: k, Hub: h, SessionID: sessionID, CallID: call.ID, Tool: t, Toolset: ts, Args: call.Args, Items: h.ItemsOf(t)}
 	defer func() { ev.ChildSessionID = cx.ChildSessionID }()
 
 	// —— 入口：幂等 ——

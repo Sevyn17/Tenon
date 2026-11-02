@@ -77,7 +77,7 @@ func (a *Agent) runToolsHub(ctx context.Context, tn *session.ToolsNeed) (*sessio
 			a.Hooks.OnToolCall(c)
 		}
 	}
-	run := a.Hub.ExecuteIn(ctx, a.Toolset, a.SessionID, tn.Calls, tn.Hints)
+	run := a.Hub.ExecuteIn(ctx, a.Toolset, a.toolCtx(), tn.Calls, tn.Hints)
 	// 先收齐结果（toolhub 内部并行、按调用顺序产出），再在等待态暂存显露集追加，
 	// 最后按序提交：最后一个结果触发步边界，暂存的 AddTools 在下一步请求里生效（tool-hub D1）。
 	var results []toolhub.Result

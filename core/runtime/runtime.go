@@ -9,6 +9,7 @@ import (
 	"fmt"
 
 	"ybase-kernel/core/agent"
+	"ybase-kernel/core/callctx"
 	"ybase-kernel/core/modelhub"
 	"ybase-kernel/core/session"
 	"ybase-kernel/core/store"
@@ -21,6 +22,8 @@ type SessionCx struct {
 	Workdir string
 	Hub     *toolhub.Hub
 	Agent   *agent.Agent
+	// Ctx 本次会话的调用上下文（工具与层在调用时通过 toolhub.Cx.Ctx 拿到它）。
+	Ctx *callctx.Ctx
 	// Child 子会话（子智能体 / 工作组成员）：不再带委派工具，限制深度为 1。
 	Child bool
 	// Values 同一会话内贡献函数之间共享的状态（如指令层与指令系统块共用一份已装载集合）。
@@ -58,7 +61,9 @@ type Builder struct {
 
 // Build 构造会话 id 的 agent 与新会话配置；child 见 SessionCx.Child。
 func (b *Builder) Build(id string, child bool) (*agent.Agent, *session.Config, error) {
-	a := &agent.Agent{Store: b.DB, SessionID: id,
+	// 调用上下文：会话身份在 agent.Open 时由会话行填全（core/agent/ctx.go）。
+	kctx := callctx.New(callctx.Options{Tenant: store.Tenant, Workdir: b.Workdir, SessionID: id, Child: child})
+	a := &agent.Agent{Store: b.DB, SessionID: id, Ctx: kctx,
 		Model: &modelhub.Session{Hub: b.Models, SessionKey: "ybase-" + id}}
 	if b.Compactor != nil {
 		a.Compactor = b.Compactor
@@ -69,7 +74,7 @@ func (b *Builder) Build(id string, child bool) (*agent.Agent, *session.Config, e
 		ho.Thresholds, ho.ToolTimeout, ho.ConfirmDeadline = &th, b.Kernel.ToolTimeout, b.Kernel.ConfirmDeadline
 	}
 	hub := toolhub.New(ho)
-	cx := &SessionCx{ID: id, Workdir: b.Workdir, Hub: hub, Agent: a, Child: child, Values: map[string]any{}}
+	cx := &SessionCx{ID: id, Workdir: b.Workdir, Hub: hub, Agent: a, Child: child, Values: map[string]any{}, Ctx: kctx}
 	for _, it := range b.Items {
 		if err := hub.RegisterItem(it); err != nil {
 			return nil, nil, err

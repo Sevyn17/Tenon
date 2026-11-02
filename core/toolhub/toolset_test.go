@@ -38,7 +38,7 @@ func TestToolsetDeferAndSearch(t *testing.T) {
 	if !strings.Contains(ts.Catalog(), "gh_issue") {
 		t.Fatalf("目录段缺延迟工具: %q", ts.Catalog())
 	}
-	rs := drain(h.ExecuteIn(context.Background(), ts, "s", []session.ToolCall{
+	rs := drain(h.ExecuteIn(context.Background(), ts, kctx("s"), []session.ToolCall{
 		call("1", "tool_search", `{"query":"issue"}`),
 		call("2", "secret", `{}`),
 	}, nil))

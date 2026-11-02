@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"ybase-kernel/core/callctx"
 	"ybase-kernel/core/session"
 	"ybase-kernel/core/toolhub"
 )
@@ -67,7 +68,7 @@ func TestLayerPersistsRedacted(t *testing.T) {
 		},
 	})
 	h.AddLayer(Layer(New()))
-	res := h.Execute(context.Background(), "s", []session.ToolCall{{ID: "c1", Name: "leak", Args: json.RawMessage(`{}`)}}, nil)
+	res := h.Execute(context.Background(), kctx("s"), []session.ToolCall{{ID: "c1", Name: "leak", Args: json.RawMessage(`{}`)}}, nil)
 	r0, ok := res.Next()
 	if !ok || r0.Err != nil {
 		t.Fatal(r0.Err)
@@ -77,3 +78,6 @@ func TestLayerPersistsRedacted(t *testing.T) {
 		t.Fatal(txt)
 	}
 }
+
+// kctx 测试用调用上下文（框架设计 04 §4.4）。
+func kctx(id string) *callctx.Ctx { return callctx.New(callctx.Options{SessionID: id}) }

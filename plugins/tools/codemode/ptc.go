@@ -157,7 +157,7 @@ func Run(ctx context.Context, hub *toolhub.Hub, cx *toolhub.Cx, code string, d t
 				args = b
 			}
 			call := session.ToolCall{ID: fmt.Sprintf("%s#%d", cx.CallID, n), Name: name, Args: args}
-			run := hub.ExecuteIn(ctx, cx.Toolset, cx.SessionID, []session.ToolCall{call}, nil)
+			run := hub.ExecuteIn(ctx, cx.Toolset, cx.Ctx, []session.ToolCall{call}, nil)
 			res, _ := run.Next()
 			if res.Err != nil {
 				stop(fmt.Errorf("[exception] 子调用 %s 基础设施错误：%v", name, res.Err))
