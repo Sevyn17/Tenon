@@ -4,11 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"ybase-kernel/core/agent"
+	"ybase-kernel/core/bus"
 	"ybase-kernel/core/mail"
 	"ybase-kernel/core/session"
 	"ybase-kernel/core/store"
@@ -177,8 +180,19 @@ func TestDeliverReplyCorrCheck(t *testing.T) {
 		return r.h.Deliver(ctx, mail.Envelope{From: mail.Address{Kind: mail.AddrAgent, ID: from},
 			To: mail.Address{Kind: mail.AddrSession, ID: "s1"}, Kind: mail.KindReply, Corr: corr, Body: "结果"})
 	}
+	r.h.Bus = bus.New(0)
+	sub := r.h.Bus.Subscribe(ctx, bus.Filter{Kinds: []string{"guard.denied"}})
+	defer sub.Close()
 	if err := reply("other", "c1"); !errors.Is(err, store.ErrCorrRejected) {
 		t.Fatalf("伪造发送者应拒: %v", err)
+	}
+	select {
+	case e := <-sub.C():
+		if e.Kind != "guard.denied" {
+			t.Fatalf("伪造回信应记 guard.denied，得到 %s", e.Kind)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("伪造回信应发布 guard.denied 事件")
 	}
 	if err := reply("worker", "c1"); err != nil {
 		t.Fatalf("正确回信: %v", err)
@@ -486,5 +500,86 @@ func TestCapsRestrictToolCall(t *testing.T) {
 	}
 	if strings.Count(got, "不在本轮授权范围") != 1 {
 		t.Fatalf("新一轮不该再被 caps 拒：%s", got)
+	}
+}
+
+// 09 9.6 ⑤：两个并发 agent: 投递同一 key，只建一个会话（B19）。
+func TestConcurrentAgentKeyOneSession(t *testing.T) {
+	ctx := context.Background()
+	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{})
+	env := func(id string) mail.Envelope {
+		return mail.Envelope{
+			ID: id, From: mail.Address{Kind: mail.AddrHuman, ID: "u1"},
+			To: mail.Address{Kind: mail.AddrAgent, ID: "worker"}, Key: "k1", Body: "hi",
+		}
+	}
+	errs := make(chan error, 2)
+	for i := 0; i < 2; i++ {
+		go func(i int) { errs <- r.h.Deliver(ctx, env(fmt.Sprintf("e%d", i))) }(i)
+	}
+	for i := 0; i < 2; i++ {
+		if err := <-errs; err != nil {
+			t.Fatalf("并发投递应都成功：%v", err)
+		}
+	}
+	id, err := r.db.FindSessionByKey(ctx, "worker", "u1", "k1")
+	if err != nil {
+		t.Fatalf("应建出会话：%v", err)
+	}
+	list, err := r.db.ListSessions(ctx, 0, 10, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 1 {
+		t.Fatalf("同一 key 应只有一个会话，得到 %d（%s）", len(list), id)
+	}
+}
+
+// 09 9.6：运行中同一权限主体的 wake 排队并在下一次调模型前合并插入（B20/13 13.3）。
+func TestDeliverWakeMergedDuringTurn(t *testing.T) {
+	ctx := context.Background()
+	m := &scriptedModel{firstTool: true}
+	toolStarted := make(chan struct{}, 1)
+	toolRelease := make(chan struct{})
+	call := func(ctx context.Context, _ json.RawMessage) (toolhub.Output, error) {
+		toolStarted <- struct{}{}
+		select {
+		case <-toolRelease:
+			return toolhub.Text("echoed"), nil
+		case <-ctx.Done():
+			return toolhub.Output{}, ctx.Err()
+		}
+	}
+	r := newT2Rig(t, filepath.Join(t.TempDir(), "s.db"), m, 0, call)
+	hd := mustOpen(t, r.h, "s1")
+	if err := hd.Do(Command{Kind: Send, Text: "开始任务"}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-toolStarted:
+	case <-time.After(5 * time.Second):
+		t.Fatal("等待工具执行超时")
+	}
+	if err := r.h.Deliver(ctx, mail.Envelope{
+		From: mail.Address{Kind: mail.AddrHuman, ID: "u1"},
+		To:   mail.Address{Kind: mail.AddrSession, ID: "s1"},
+		Body: "补充要求",
+	}); err != nil {
+		t.Fatalf("运行中投递 wake：%v", err)
+	}
+	close(toolRelease)
+	if err := hd.Wait(); err != nil {
+		t.Fatal(err)
+	}
+	if n := m.getCalls(); n != 2 {
+		t.Fatalf("运行中插入不应多开回合：calls=%d", n)
+	}
+	last := m.request(m.getCalls() - 1)
+	all := ""
+	for _, msg := range last.Messages {
+		all += joinParts(msg.Content) + "\n"
+	}
+	if !strings.Contains(all, "补充要求") || !strings.Contains(all, "<msg from=") {
+		t.Fatalf("下一次模型请求应含合并信封：%q", all)
 	}
 }

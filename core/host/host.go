@@ -346,6 +346,8 @@ type actor struct {
 	waiters map[string]chan bool // 等确认的调用
 	// processing 是 drainInbox 当前回合正在消费的 inbox 项（T2a-1：回合中插入不重复取同一条）。
 	processing map[string]bool
+	// turnQueued 是回合开始时就已在信箱里的项：它们属于本回合或更早，不中途插入，留给下一回合（13 13.3 分轮）。
+	turnQueued map[string]bool
 	// turnCaps 是本轮的工具授权范围（信封 caps 交集）：turn 开始时设给 agent，结束时清空。
 	turnCaps []string
 	exitErr  error
@@ -718,10 +720,13 @@ func (a *actor) drainInbox(ctx context.Context) error {
 		if len(items) == 0 {
 			return nil
 		}
+		// 回合开始时已在信箱里的项（快照）：中途插入不取它们，留给下一回合（13 13.3 分轮）。
+		turnStart := inboxSet(itemIDs(items))
 		// 通知类信封先应用（12：notice 进下一次状态更新），并确认消费。
 		if done, err := a.applyNotices(ctx, items); err != nil {
 			return err
 		} else if done {
+			a.turnQueued = nil
 			continue
 		}
 		batch := collectInboxBatch(items, a.processing)
@@ -734,6 +739,10 @@ func (a *actor) drainInbox(ctx context.Context) error {
 			consume[i] = it.ItemID
 		}
 		a.processing = inboxSet(consume) // 本条正在被本回合消费：回合中插入不得重复取它
+		a.turnQueued = turnStart         // 回合开始时已在信箱、但不属于本回合的项：中途插入跳过
+		for _, id := range consume {     // 本回合消费的项不算「早先排队」——它们就是本条消息
+			delete(a.turnQueued, id)
+		}
 		m := envelopeMeta(env, untrusted)
 		if hk := a.h.Hooks.BeforeTurn; hk != nil {
 			nc, d, err := hk(a.id, content, untrusted)
@@ -747,6 +756,7 @@ func (a *actor) drainInbox(ctx context.Context) error {
 					return err
 				}
 				a.processing = nil
+				a.turnQueued = nil
 				continue
 			case RecordD:
 				if _, err := a.ag.Core.Record(content, m); err != nil {
@@ -756,6 +766,7 @@ func (a *actor) drainInbox(ctx context.Context) error {
 					return err
 				}
 				a.processing = nil
+				a.turnQueued = nil
 				continue
 			}
 			content = nc
@@ -773,8 +784,35 @@ func (a *actor) drainInbox(ctx context.Context) error {
 			}
 		}
 		a.processing = nil
+		a.turnQueued = nil
 		a.turnCaps = nil
 	}
+}
+
+// mergeSkip 合并两个跳过集合（proc 与 turnQueued）。
+func (a *actor) mergeSkip(maps ...map[string]bool) map[string]bool {
+	var out map[string]bool
+	for _, m := range maps {
+		if len(m) == 0 {
+			continue
+		}
+		if out == nil {
+			out = make(map[string]bool, len(m))
+		}
+		for k := range m {
+			out[k] = true
+		}
+	}
+	return out
+}
+
+// itemIDs 取 inbox 项 id 列表。
+func itemIDs(items []store.InboxItem) []string {
+	ids := make([]string, len(items))
+	for i, it := range items {
+		ids[i] = it.ItemID
+	}
+	return ids
 }
 
 // inboxSet 把 inbox 项 id 集合化（回合中插入时跳过本回合正在消费的项）。
@@ -904,6 +942,18 @@ func (h *Host) treePolicy() string {
 
 // between 需求边界（回合内）：取出回合中到达的命令，插话 / 改向 / Idle 类配置在这里交给内核。
 func (a *actor) between(need *session.Need) (*session.Need, error) {
+	// 运行中到达的信封（13 13.3）：notice 进状态更新、wake 在下一次调模型前插入。
+	// 投递方只把信封写进 inbox，投递命令可能因 actor 正忙没进队列，这里在步边界兜底。
+	if need.Kind != session.NeedDone {
+		if items, err := a.h.DB.Inbox(context.Background(), a.id); err == nil && len(items) > 0 {
+			if _, err := a.applyNotices(context.Background(), items); err != nil {
+				return need, err
+			}
+			if err := a.insertInput(context.Background()); err != nil {
+				return need, err
+			}
+		}
+	}
 	for {
 		var c Command
 		select {
@@ -919,8 +969,12 @@ func (a *actor) between(need *session.Need) (*session.Need, error) {
 				need = n // WaitingTools 改向：未执行调用补 Redirected，直接进入下一步
 			}
 		case Deliver:
-			// 信封已落 inbox：插入逻辑在同批 inbox 项上做（insertInput），这里不单独处理。
-			reply(c, nil)
+			// 信封已落 inbox：在下一次调模型前插入（09 9.6）；已到 Done 边界则留给下一回合。
+			if need.Kind != session.NeedDone {
+				reply(c, a.insertInput(context.Background()))
+			} else {
+				reply(c, nil)
+			}
 		case Send, Note:
 			// 运行中到达的用户消息：在下一次调模型前插入当前回合（09 9.4）。
 			// 已到 Done 边界时留给下一回合，inbox 不动。
@@ -1046,7 +1100,7 @@ func (a *actor) insertInput(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	batch := collectInboxBatch(items, a.processing)
+	batch := collectInboxBatch(items, a.mergeSkip(a.processing, a.turnQueued))
 	if batch == nil {
 		return nil
 	}

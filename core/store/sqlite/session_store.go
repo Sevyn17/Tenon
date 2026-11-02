@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"ybase-kernel/core/bus"
@@ -52,6 +53,9 @@ func (db *DB) CreateSession(ctx context.Context, m SessionMeta, hdr session.Head
 			title, header, shell_hash, session_key, meta, use_config, log_len, next_sync_seq, updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,1,?)`,
 			Tenant, m.ID, m.AgentID, m.AgentHash, m.Creator, m.ParentID, m.Origin, m.ForkUpto, m.Title, hb, shell.hash,
 			nullStr(m.SessionKey), jsonObj(m.Meta), jsonObj(m.UseConfig), now); err != nil {
+			if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+				return fmt.Errorf("%w: 会话 %s 或会话键已存在", ErrConflict, m.ID)
+			}
 			return err
 		}
 		if len(entries) == 0 {
