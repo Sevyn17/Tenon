@@ -380,6 +380,8 @@ type Assembly struct {
 	agentSchemas map[string]useconf.Schema
 	// templates 组件登记的内置定义模板（03 3.5、计划/01 T1b-2c）；装配结束后只读。
 	templates []agentdef.Template
+	// guards 组件登记的守卫规则（04 4.2、08 D4）；装配结束后只读。
+	guards []GuardRule
 }
 
 // 装配错误。

@@ -9,6 +9,7 @@ import (
 
 	"ybase-kernel/core/agent"
 	"ybase-kernel/core/mail"
+	"ybase-kernel/core/plugin"
 	"ybase-kernel/core/session"
 	"ybase-kernel/core/store"
 )
@@ -65,6 +66,11 @@ func (h *Host) deliverAgent(ctx context.Context, env mail.Envelope) error {
 			return err
 		}
 	}
+	// 新建会话前守卫（08 8.1）：可联系名单、所属树深度等由组件规则表达。
+	if v, why := h.evalGuard(plugin.GuardRequest{Point: plugin.GuardSessionOpen, Envelope: &env, Agent: env.To.ID}); v == plugin.Deny {
+		h.publish("", "guard.denied", map[string]any{"from": env.From.String(), "to": env.To.String(), "agent": env.To.ID, "reason": why})
+		return fmt.Errorf("%w: %s", ErrNotAllowed, why)
+	}
 	id := "ag-" + NewItemID()
 	meta := store.SessionMeta{ID: id, AgentID: env.To.ID, Creator: creator, SessionKey: env.Key, Origin: "agent"}
 	pre := func(ag *agent.Agent, cfg *session.Config) error {
@@ -112,12 +118,18 @@ func (h *Host) deliverSession(ctx context.Context, env mail.Envelope) error {
 		h.publish(id, "mail.rejected", map[string]any{"from": env.From.String(), "reason": "closed"})
 		return fmt.Errorf("%w: %s", ErrClosed, id)
 	}
-	// 联系名单（08 D4）：v1 只放开创建者本人、登记组件、以及带 corr 的回信。
+	// 联系名单（08 D4）：默认只放开创建者本人、登记组件、以及带 corr 的回信；
+	// 组件登记的 Allow 规则只能放开这条「往 session: 投递」的缺省限制（D4）。
+	verdict, reason := h.evalGuard(plugin.GuardRequest{Point: plugin.GuardDeliver, Envelope: &env})
+	if verdict == plugin.Deny {
+		h.publish(id, "guard.denied", map[string]any{"from": env.From.String(), "to": env.To.String(), "reason": reason})
+		return fmt.Errorf("%w: %s", ErrNotAllowed, reason)
+	}
 	l, err := h.DB.Load(ctx, id, nil)
 	if err != nil {
 		return err
 	}
-	if err := guardContact(env, l.Meta); err != nil {
+	if err := guardContact(env, l.Meta, verdict == plugin.Allow); err != nil {
 		h.publish(id, "guard.denied", map[string]any{"from": env.From.String(), "to": env.To.String(), "reason": err.Error()})
 		return err
 	}
@@ -445,16 +457,22 @@ func intersectCaps(a, b []string) []string {
 // guardContact 实现 08 D4 的联系名单第一版：创建者本人、登记组件（经 Mailer，
 // from=component:<名>）以及带 corr 的回信可以投递；agent/session 直投留待联系
 // 名单配置（[use.agent] contact）再接。
-func guardContact(env mail.Envelope, meta store.SessionMeta) error {
+//
+// allow 为 true 表示组件登记的 Allow 规则放开了「往 session: 投递」这条缺省
+// 限制（D4）；联系名单以外的硬约束（跳数、租户、预算）不受它影响。
+func guardContact(env mail.Envelope, meta store.SessionMeta, allow bool) error {
 	switch env.From.Kind {
 	case mail.AddrHuman:
 		if meta.Creator != "" && env.From.ID != meta.Creator {
+			if allow {
+				return nil
+			}
 			return fmt.Errorf("%w: %s 不是创建者 %s", ErrNotAllowed, env.From.ID, meta.Creator)
 		}
 	case mail.AddrComponent:
 		return nil
 	default:
-		if env.Corr == "" {
+		if env.Corr == "" && !allow {
 			return fmt.Errorf("%w: %s 直投需要 corr", ErrNotAllowed, env.From.Kind)
 		}
 	}

@@ -21,6 +21,7 @@ import (
 	"ybase-kernel/core/agent"
 	"ybase-kernel/core/bus"
 	"ybase-kernel/core/mail"
+	"ybase-kernel/core/plugin"
 	"ybase-kernel/core/session"
 	"ybase-kernel/core/store"
 	"ybase-kernel/core/toolhub"
@@ -137,6 +138,8 @@ type Host struct {
 	TreeRestarts int
 	// Guard 投递前守卫（08 8.1）：返回错误即拒绝投递并发布 guard.denied；nil = 不拦。
 	Guard func(*mail.Envelope) error
+	// Guards 组件登记的守卫规则（04 4.2、08 D4），装配期从 Assembly 取来。
+	Guards []plugin.GuardRule
 
 	mu     sync.Mutex
 	actors map[string]*actor

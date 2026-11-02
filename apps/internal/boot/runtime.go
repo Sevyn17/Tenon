@@ -205,6 +205,8 @@ func (r *Runtime) BuildApp(o AppOptions) (*Built, error) {
 		return nil, err
 	}
 	// 每回合开始的档位变化提示由 appapi 发 notice 事件。
+	// 组件登记的守卫规则（04 4.2、08 D4）：投递/建会话等内核点位在 Host 里执行。
+	r.Host.Guards = rt.Asm.GuardRules()
 	r.Host.Hooks.AfterTurn = func(id string, end session.EndReason) {
 		for _, f := range col.AfterTurn {
 			f(id, end)

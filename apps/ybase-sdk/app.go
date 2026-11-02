@@ -63,6 +63,8 @@ func (a *App) Start(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("ybase: 收集点位: %w", err)
 	}
+	// 组件登记的守卫规则（04 4.2、08 D4）。
+	a.host.Guards = a.asm.GuardRules()
 	a.host.Hooks.AfterTurn = func(id string, end session.EndReason) {
 		for _, f := range col.AfterTurn {
 			f(id, end)
