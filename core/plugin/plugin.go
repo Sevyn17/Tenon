@@ -53,6 +53,21 @@ type Plugin interface {
 	Start(sc *Scope) error
 }
 
+// ServiceSQL 存储的 SQL 出口服务键（值为 store.SQL），由存储插件提供。
+const ServiceSQL = "service:sql"
+
+// Requires 插件对底层能力的要求（框架设计 05 §5.7）。装配期检查，不满足直接装配失败。
+type Requires struct {
+	// SQL 需要执行 SQL 与自建表迁移（组件自有 p_<名>_* 表）：
+	// 装配里必须有人提供 ServiceSQL；纯非 SQL 存储（如内存实现）会导致装配失败。
+	SQL bool
+}
+
+// Requirer 声明能力要求的插件实现它；没实现等于无要求。
+type Requirer interface {
+	Requires() Requires
+}
+
 // Factory 构造插件实例。
 type Factory func() Plugin
 
@@ -427,10 +442,30 @@ func Assemble(spec Spec) (*Assembly, error) {
 			}
 		}
 	}
+	if err := a.checkRequirements(); err != nil {
+		return nil, err
+	}
 	if err := a.checkLayers(); err != nil {
 		return nil, err
 	}
 	return a, nil
+}
+
+// checkRequirements 自检：声明了能力要求的插件必须拿到对应服务（框架设计 05 §5.7）。
+// 放在 Setup 之后，因为提供方在 Setup 里才登记。
+func (a *Assembly) checkRequirements() error {
+	for _, n := range a.order {
+		rq, ok := a.plugins[n].(Requirer)
+		if !ok {
+			continue
+		}
+		if r := rq.Requires(); r.SQL {
+			if _, ok := a.values[ServiceSQL]; !ok {
+				return fmt.Errorf("插件 %s 需要 SQL 存储（Requires{SQL: true}），但装配里没有提供 %s；换成 SQL 存储或关掉这个插件", n, ServiceSQL)
+			}
+		}
+	}
+	return nil
 }
 
 // checkLayers 自检：每个调用点至多一个 Outermost，且必须是排序后的第一层。

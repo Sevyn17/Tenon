@@ -19,7 +19,7 @@ import (
 
 	"ybase-kernel/core/host"
 	"ybase-kernel/core/session"
-	"ybase-kernel/core/store/sqlite"
+	"ybase-kernel/core/store"
 	"ybase-kernel/core/toolhub"
 )
 
@@ -31,7 +31,7 @@ const MaxMembers = 8
 
 var nameRe = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
 
-var migrations = []sqlite.Migration{{Version: 1, Stmts: []string{
+var migrations = []store.Migration{{Version: 1, Stmts: []string{
 	`CREATE TABLE p_workgroup_tasks(
 		team TEXT NOT NULL, id INTEGER NOT NULL,
 		subject TEXT NOT NULL, description TEXT NOT NULL DEFAULT '',
@@ -50,9 +50,10 @@ var migrations = []sqlite.Migration{{Version: 1, Stmts: []string{
 
 // Group 进程内工作组服务。
 type Group struct {
-	Host   *host.Host
-	DB     *sqlite.DB
-	Member host.Factory // 成员会话工厂（成员工具集，不含 team_spawn）
+	Host     *host.Host
+	SQL      store.SQL          // 自有 p_workgroup_* 表的 SQL（Requires{SQL: true}）
+	Sessions store.SessionStore // 会话存在性检查
+	Member   host.Factory       // 成员会话工厂（成员工具集，不含 team_spawn）
 
 	mu      sync.Mutex
 	running map[string]bool // 成员 id → 回合进行中
@@ -62,12 +63,12 @@ type Group struct {
 }
 
 // New 建表并返回服务。
-func New(ctx context.Context, h *host.Host, db *sqlite.DB, member host.Factory) (*Group, error) {
-	if err := db.Migrate(ctx, "workgroup", migrations); err != nil {
+func New(ctx context.Context, h *host.Host, sq store.SQL, sessions store.SessionStore, member host.Factory) (*Group, error) {
+	if err := sq.Migrate(ctx, "workgroup", migrations); err != nil {
 		return nil, err
 	}
 	c, cancel := context.WithCancel(context.Background())
-	return &Group{Host: h, DB: db, Member: member, running: map[string]bool{}, ctx: c, cancel: cancel}, nil
+	return &Group{Host: h, SQL: sq, Sessions: sessions, Member: member, running: map[string]bool{}, ctx: c, cancel: cancel}, nil
 }
 
 // Close 取消所有后台成员回合并等待退出。
@@ -153,7 +154,7 @@ func (g *Group) start(leader, id, name, task string) error {
 	g.running[id] = true
 	g.mu.Unlock()
 	item := host.NewItemID()
-	if _, err := g.DB.SQL().Exec(`INSERT INTO p_workgroup_runs(member, leader, name, item_id, state, updated_at)
+	if _, err := g.SQL.DB().Exec(`INSERT INTO p_workgroup_runs(member, leader, name, item_id, state, updated_at)
 		VALUES(?, ?, ?, ?, 'running', ?) ON CONFLICT(member) DO UPDATE SET leader = excluded.leader, name = excluded.name,
 		item_id = excluded.item_id, state = 'running', msg = '', updated_at = excluded.updated_at`,
 		id, leader, name, item, time.Now().UnixMilli()); err != nil {
@@ -179,7 +180,7 @@ func (g *Group) start(leader, id, name, task string) error {
 			msg = fmt.Sprintf("[成员 %s 失败] %v", name, err)
 		}
 		bg := context.Background()
-		if _, err := g.DB.SQL().ExecContext(bg, `UPDATE p_workgroup_runs SET state = 'done', msg = ?, updated_at = ?
+		if _, err := g.SQL.DB().ExecContext(bg, `UPDATE p_workgroup_runs SET state = 'done', msg = ?, updated_at = ?
 			WHERE member = ? AND item_id = ?`, msg, time.Now().UnixMilli(), id, item); err != nil {
 			return
 		}
@@ -193,14 +194,14 @@ func (g *Group) settle(ctx context.Context, member, leader, name, item, msg stri
 	if err := g.deliverID(ctx, leader, "member:"+name, item, msg); err != nil {
 		return err
 	}
-	_, err := g.DB.SQL().ExecContext(ctx, `DELETE FROM p_workgroup_runs WHERE member = ? AND item_id = ?`, member, item)
+	_, err := g.SQL.DB().ExecContext(ctx, `DELETE FROM p_workgroup_runs WHERE member = ? AND item_id = ?`, member, item)
 	return err
 }
 
 // Recover 补投上次进程未投递的成员结果：已完成的投结果；进程退出时仍在跑的，告知领导它被中断。
 // 启动时调用一次（在开始派新成员之前）。返回补投条数。
 func (g *Group) Recover(ctx context.Context) (int, error) {
-	rows, err := g.DB.SQL().QueryContext(ctx, `SELECT member, leader, name, item_id, state, msg FROM p_workgroup_runs ORDER BY updated_at`)
+	rows, err := g.SQL.DB().QueryContext(ctx, `SELECT member, leader, name, item_id, state, msg FROM p_workgroup_runs ORDER BY updated_at`)
 	if err != nil {
 		return 0, err
 	}
@@ -282,7 +283,7 @@ func (g *Group) sendTool() *toolhub.Tool {
 				return toolhub.Errorf("成员名不合法：%s", a.To), nil
 			}
 			id := MemberID(leader, a.To)
-			ok, err := g.DB.Exists(ctx, id)
+			ok, err := g.Sessions.Exists(ctx, id)
 			if err != nil {
 				return toolhub.Output{}, err
 			}
@@ -327,7 +328,7 @@ var ErrConflict = errors.New("workgroup: 任务已被改动")
 func (g *Group) Create(ctx context.Context, team, subject, desc string) (Task, error) {
 	now := time.Now().UnixMilli()
 	var id int
-	err := g.DB.SQL().QueryRowContext(ctx, `INSERT INTO p_workgroup_tasks(team, id, subject, description, created_at, updated_at)
+	err := g.SQL.DB().QueryRowContext(ctx, `INSERT INTO p_workgroup_tasks(team, id, subject, description, created_at, updated_at)
 		VALUES(?, (SELECT COALESCE(MAX(id),0)+1 FROM p_workgroup_tasks WHERE team = ?), ?, ?, ?, ?) RETURNING id`,
 		team, team, subject, desc, now, now).Scan(&id)
 	if err != nil {
@@ -338,7 +339,7 @@ func (g *Group) Create(ctx context.Context, team, subject, desc string) (Task, e
 
 // List 列出任务。
 func (g *Group) List(ctx context.Context, team string) ([]Task, error) {
-	rows, err := g.DB.SQL().QueryContext(ctx, `SELECT id, subject, description, owner, status, result, rev
+	rows, err := g.SQL.DB().QueryContext(ctx, `SELECT id, subject, description, owner, status, result, rev
 		FROM p_workgroup_tasks WHERE team = ? ORDER BY id`, team)
 	if err != nil {
 		return nil, err
@@ -357,7 +358,7 @@ func (g *Group) List(ctx context.Context, team string) ([]Task, error) {
 
 func (g *Group) get(ctx context.Context, team string, id int) (Task, error) {
 	var t Task
-	err := g.DB.SQL().QueryRowContext(ctx, `SELECT id, subject, description, owner, status, result, rev
+	err := g.SQL.DB().QueryRowContext(ctx, `SELECT id, subject, description, owner, status, result, rev
 		FROM p_workgroup_tasks WHERE team = ? AND id = ?`, team, id).
 		Scan(&t.ID, &t.Subject, &t.Description, &t.Owner, &t.Status, &t.Result, &t.Rev)
 	if err == sql.ErrNoRows {
@@ -398,7 +399,7 @@ func (g *Group) Complete(ctx context.Context, team string, id int, who, result s
 }
 
 func (g *Group) update(ctx context.Context, team string, t Task, owner, status, result string) (Task, error) {
-	res, err := g.DB.SQL().ExecContext(ctx, `UPDATE p_workgroup_tasks SET owner = ?, status = ?, result = ?, rev = rev + 1, updated_at = ?
+	res, err := g.SQL.DB().ExecContext(ctx, `UPDATE p_workgroup_tasks SET owner = ?, status = ?, result = ?, rev = rev + 1, updated_at = ?
 		WHERE team = ? AND id = ? AND rev = ?`, owner, status, result, time.Now().UnixMilli(), team, t.ID, t.Rev)
 	if err != nil {
 		return t, err

@@ -73,7 +73,7 @@ func rig(t *testing.T) (*Group, *host.Host, *sqlite.DB, *echoModel) {
 		}
 	}
 	h.New = mk(true)
-	g, err = New(context.Background(), h, db, mk(false))
+	g, err = New(context.Background(), h, db.SQLOut(), db, mk(false))
 	if err != nil {
 		t.Fatal(err)
 	}

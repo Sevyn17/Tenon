@@ -3,6 +3,7 @@ package storesqlite
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"path/filepath"
 	"sync"
@@ -41,6 +42,36 @@ func (s *Store) Blobs() toolhub.Artifacts {
 	return s.blobs
 }
 
+// raw 已打开的数据库；Start 之前为 nil。
+func (s *Store) raw() *sqlite.DB {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.db
+}
+
+// SQL 存储的 SQL 出口（store.SQL，框架设计 05 §5.7）：Start 之前各方法不可用。
+func (s *Store) SQL() store.SQL { return sqlOut{s} }
+
+type sqlOut struct{ h *Store }
+
+func (o sqlOut) DB() *sql.DB {
+	db := o.h.raw()
+	if db == nil {
+		return nil
+	}
+	return db.SQL()
+}
+
+func (o sqlOut) Dialect() string { return "sqlite" }
+
+func (o sqlOut) Migrate(ctx context.Context, owner string, ms []store.Migration) error {
+	db := o.h.raw()
+	if db == nil {
+		return errors.New("store-sqlite: 尚未启动")
+	}
+	return db.Migrate(ctx, owner, ms)
+}
+
 // Config store-sqlite 配置。
 type Config struct {
 	Dir      string `cfg:"dir" default:".ybase" title:"存储目录" description:"state.db 与 blobs/ 所在目录"`
@@ -56,7 +87,8 @@ func init() { plugin.Register("store-sqlite", func() plugin.Plugin { return &sto
 
 func (p *storePlugin) Meta() plugin.Meta {
 	return plugin.Meta{Name: "store-sqlite", Version: "0.1.0", Default: true, Config: &Config{},
-		Provides: []string{kr.SlotSessionStore, kr.SlotToolResultStore, kr.SlotBlobStore, kr.SlotAgentStore, kr.ServiceDB}}
+		Provides: []string{kr.SlotSessionStore, kr.SlotToolResultStore, kr.SlotBlobStore, kr.SlotAgentStore,
+			kr.ServiceDB, plugin.ServiceSQL}}
 }
 
 func (p *storePlugin) Setup(cx *plugin.Registrar) error {
@@ -65,6 +97,9 @@ func (p *storePlugin) Setup(cx *plugin.Registrar) error {
 		if err := cx.FillSlot(s, p.h); err != nil {
 			return err
 		}
+	}
+	if err := cx.Provide("sql", p.h.SQL()); err != nil {
+		return err
 	}
 	return cx.Provide("db", kr.DBHandle(p.h))
 }

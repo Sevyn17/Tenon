@@ -36,7 +36,7 @@ const (
 const PointOnSessionDelete = "on_session_delete"
 
 // DBHandle 存储句柄：Start 之前 DB() 返回 nil。
-// 需要 SQL 的插件（现有 p_<名>_ 表）暂时把 DB() 断言成 *sqlite.DB；T1b-1b 改为声明 Requires{SQL: true}。
+// 需要 SQL 的插件实现 plugin.Requirer 声明 Requires{SQL: true}，再从 service:sql 取 store.SQL（T1b-1b）。
 type DBHandle interface {
 	DB() store.Store
 	Blobs() toolhub.Artifacts
