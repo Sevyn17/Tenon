@@ -44,10 +44,17 @@ func ProjectTrusted(cx *plugin.Registrar) bool {
 	return !ok || v
 }
 
-// ToolsEntry 一条会话工具登记，按 Order、再按插件名排列（决定工具在请求里的顺序）。
+// ToolsEntry 一条工具登记，按 Order、再按插件名排列（决定工具在请求里的顺序）。
+//
+// 工具在装配期就构造好、各会话共用同一批只读对象（框架设计 04 4.2 / 4.9）；
+// 需要会话信息的工具从调用上下文拿（toolhub.Cx.Ctx），不按会话重造。
 type ToolsEntry struct {
 	Order int
-	Func  ToolsFunc
+	// Tools 取这批工具。装配后调用，可懒加载（如 MCP 要等进程起来才知道有哪些工具）；
+	// 返回同一份切片，不要再改里面的 Tool。
+	Tools func() []*toolhub.Tool
+	// Visible 可空：本会话是否要这批工具（子会话不带委派工具、工作组成员只拿成员工具）。
+	Visible func(*SessionCx) bool
 }
 
 // LayerEntry 一条会话层登记。排序：Transform（Guard=false）在外、Guard 在内；同位置按 Order、再按插件名。
@@ -78,7 +85,7 @@ type UI interface {
 
 // Collected 装配结果里的会话贡献。
 type Collected struct {
-	Tools     []ToolsFunc
+	Tools     []ToolSet
 	Layers    []LayerFunc
 	Blocks    []BlockFunc
 	AfterTurn []AfterTurnFunc
@@ -109,7 +116,7 @@ func Collect(asm *plugin.Assembly) (*Collected, error) {
 		return tl[i].plugin < tl[j].plugin
 	})
 	for _, t := range tl {
-		c.Tools = append(c.Tools, t.e.Func)
+		c.Tools = append(c.Tools, ToolSet{Tools: t.e.Tools, Visible: t.e.Visible})
 	}
 	type layer struct {
 		e      LayerEntry

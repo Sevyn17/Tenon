@@ -21,13 +21,12 @@ func (*plug) Setup(cx *plugin.Registrar) error {
 	for _, it := range Items() {
 		cx.Register(kr.PointPermItems, it.ID, it)
 	}
+	// 工具装配期构造一次（WithItems 只做一次，不再按会话重复追加）。
+	ts := w.Tools()
+	ts[0].WithItems(ItemFetch)
+	ts[1].WithItems(ItemSearch)
 	cx.Register(kr.PointSessionTools, "web", kr.ToolsEntry{Order: 40,
-		Func: func(*kr.SessionCx) ([]*toolhub.Tool, error) {
-			ts := w.Tools()
-			ts[0].WithItems(ItemFetch)
-			ts[1].WithItems(ItemSearch)
-			return ts, nil
-		}})
+		Tools: func() []*toolhub.Tool { return ts }})
 	return nil
 }
 

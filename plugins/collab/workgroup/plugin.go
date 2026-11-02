@@ -54,18 +54,24 @@ func (p *plug) Setup(cx *plugin.Registrar) error {
 	for _, it := range Items() {
 		cx.Register(kr.PointPermItems, it.ID, it)
 	}
+	// 组长与成员是两批工具，靠 Visible 按会话挑（工作组 = 两个定义模板，工具清单在 T1b-2 落到定义里）。
+	isMember := func(sc *kr.SessionCx) bool { return strings.Contains(sc.ID, "/m-") }
 	cx.Register(kr.PointSessionTools, "workgroup", kr.ToolsEntry{Order: 70,
-		Func: func(sc *kr.SessionCx) ([]*toolhub.Tool, error) {
-			switch {
-			case p.g == nil:
-				return nil, nil
-			case strings.Contains(sc.ID, "/m-"):
-				return p.g.MemberTools(), nil
-			case !sc.Child:
-				return p.g.LeaderTools(), nil
+		Tools: func() []*toolhub.Tool {
+			if p.g == nil {
+				return nil
 			}
-			return nil, nil
-		}})
+			return p.g.LeaderTools()
+		},
+		Visible: func(sc *kr.SessionCx) bool { return !sc.Child && !isMember(sc) }})
+	cx.Register(kr.PointSessionTools, "workgroup-member", kr.ToolsEntry{Order: 70,
+		Tools: func() []*toolhub.Tool {
+			if p.g == nil {
+				return nil
+			}
+			return p.g.MemberTools()
+		},
+		Visible: isMember})
 	cx.Register(kr.PointReady, "workgroup", kr.ReadyFunc(func(ctx context.Context) error {
 		if p.g == nil {
 			return nil

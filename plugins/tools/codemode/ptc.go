@@ -29,8 +29,8 @@ const (
 	MaxCodeLength = 64 << 10
 )
 
-// Tool 构造 run_code。hub 为子调用所走的 tool-hub（与本工具注册在同一 hub）。
-func Tool(hub *toolhub.Hub) *toolhub.Tool {
+// Tool 构造 run_code。子调用走本次调用所在的 tool-hub（toolhub.Cx.Hub）。
+func Tool() *toolhub.Tool {
 	no := false
 	return &toolhub.Tool{
 		Spec: session.ToolSpec{
@@ -66,7 +66,10 @@ func Tool(hub *toolhub.Hub) *toolhub.Tool {
 			if d > MaxTime {
 				d = MaxTime
 			}
-			out, err := Run(ctx, hub, cx, a.Code, d)
+			if cx.Hub == nil {
+				return toolhub.Errorf("内部错误：本次调用没有工具管理器"), nil
+			}
+			out, err := Run(ctx, cx.Hub, cx, a.Code, d)
 			if err != nil {
 				return toolhub.Errorf("%s", out+err.Error()), nil
 			}

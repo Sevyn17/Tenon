@@ -30,9 +30,12 @@ type SessionCx struct {
 	Values map[string]any
 }
 
-// ToolsFunc 每会话工具；LayerFunc 每会话工具层（nil 层跳过）；BlockFunc 每会话系统块（nil 跳过）。
+// ToolSet 装配期登记好的一组工具；LayerFunc 每会话工具层（nil 层跳过）；BlockFunc 每会话系统块（nil 跳过）。
 type (
-	ToolsFunc func(*SessionCx) ([]*toolhub.Tool, error)
+	ToolSet struct {
+		Tools   func() []*toolhub.Tool
+		Visible func(*SessionCx) bool // 可空 = 所有会话都要
+	}
 	LayerFunc func(*SessionCx) ([]toolhub.Layer, error)
 	BlockFunc func(*SessionCx) (*session.SystemBlock, error)
 	HooksFunc func(*SessionCx) agent.Hooks
@@ -51,7 +54,7 @@ type Builder struct {
 	// Kernel [kernel] 节（工具缺省超时 / 确认截止 / 工件阈值）；nil = 内核缺省。
 	Kernel *Kernel
 
-	Tools  []ToolsFunc
+	Tools  []ToolSet
 	Layers []LayerFunc
 	Blocks []BlockFunc
 	Hooks  HooksFunc // 可空
@@ -80,12 +83,14 @@ func (b *Builder) Build(id string, child bool) (*agent.Agent, *session.Config, e
 			return nil, nil, err
 		}
 	}
-	for _, f := range b.Tools {
-		ts, err := f(cx)
-		if err != nil {
-			return nil, nil, err
+	for _, set := range b.Tools {
+		if set.Visible != nil && !set.Visible(cx) {
+			continue
 		}
-		for _, t := range ts {
+		if set.Tools == nil {
+			continue
+		}
+		for _, t := range set.Tools() {
 			if err := hub.Register(t); err != nil {
 				return nil, nil, fmt.Errorf("runtime: 登记工具 %s：%w", t.Spec.Name, err)
 			}

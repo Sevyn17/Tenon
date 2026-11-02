@@ -57,8 +57,10 @@ func (p *plug) Setup(cx *plugin.Registrar) error {
 	for _, it := range Items() {
 		cx.Register(kr.PointPermItems, it.ID, it)
 	}
+	// 进程级一个 Shell（后台 job 属于本进程），工具装配期构造一次。
+	tools := sh.Tools()
 	cx.Register(kr.PointSessionTools, "shell", kr.ToolsEntry{Order: 30,
-		Func: func(*kr.SessionCx) ([]*toolhub.Tool, error) { return sh.Tools(), nil }})
+		Tools: func() []*toolhub.Tool { return tools }})
 	return nil
 }
 

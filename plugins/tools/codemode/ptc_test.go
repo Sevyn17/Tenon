@@ -28,7 +28,7 @@ func setup(t *testing.T) (*toolhub.Hub, *toolhub.Toolset, *[]string) {
 			return toolhub.Text("echo:" + a.Text), nil
 		},
 	}
-	for _, tl := range []*toolhub.Tool{echo, Tool(hub)} {
+	for _, tl := range []*toolhub.Tool{echo, Tool()} {
 		if err := hub.Register(tl); err != nil {
 			t.Fatal(err)
 		}

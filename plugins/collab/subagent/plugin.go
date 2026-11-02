@@ -45,13 +45,10 @@ func (*plug) Setup(cx *plugin.Registrar) error {
 	for _, it := range Items() {
 		cx.Register(kr.PointPermItems, it.ID, it)
 	}
+	// 子会话不再带委派工具（深度上限 1）。这里用 Visible 而不是重造工具。
 	cx.Register(kr.PointSessionTools, "subagent", kr.ToolsEntry{Order: 60,
-		Func: func(sc *kr.SessionCx) ([]*toolhub.Tool, error) {
-			if sc.Child {
-				return nil, nil
-			}
-			return []*toolhub.Tool{t}, nil
-		}})
+		Tools:   func() []*toolhub.Tool { return []*toolhub.Tool{t} },
+		Visible: func(sc *kr.SessionCx) bool { return !sc.Child }})
 	return nil
 }
 

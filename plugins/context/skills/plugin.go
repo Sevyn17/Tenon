@@ -43,23 +43,16 @@ func (*plug) Setup(cx *plugin.Registrar) error {
 	for _, it := range Items() {
 		cx.Register(kr.PointPermItems, "skills", it)
 	}
+	// 技能索引装配期扫一次，各会话共用（工具与系统块读同一份）。
+	s := NewSkills(root, extra...)
+	for _, w := range s.Warnings {
+		ui.Warn("技能", w)
+	}
+	sk := s.Tool().WithItems(ItemLoad)
 	cx.Register(kr.PointSessionTools, "skills", kr.ToolsEntry{Order: 25,
-		Func: func(sc *kr.SessionCx) ([]*toolhub.Tool, error) {
-			s := NewSkills(root, extra...)
-			for _, w := range s.Warnings {
-				ui.Warn("技能", w)
-			}
-			sc.Values[valueKey] = s
-			return []*toolhub.Tool{s.Tool().WithItems(ItemLoad)}, nil
-		}})
+		Tools: func() []*toolhub.Tool { return []*toolhub.Tool{sk} }})
 	cx.Register(kr.PointSystemBlock, "skills", kr.BlockEntry{Order: 20,
-		Func: func(sc *kr.SessionCx) (*session.SystemBlock, error) {
-			s, _ := sc.Values[valueKey].(*Skills)
-			if s == nil {
-				return nil, nil
-			}
-			return s.Block(), nil
-		}})
+		Func: func(*kr.SessionCx) (*session.SystemBlock, error) { return s.Block(), nil }})
 	return nil
 }
 

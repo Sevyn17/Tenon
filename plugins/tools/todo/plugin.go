@@ -33,7 +33,7 @@ func (*plug) Setup(cx *plugin.Registrar) error {
 		ui.Print(b.String())
 	})
 	cx.Register(kr.PointSessionTools, "todo", kr.ToolsEntry{Order: 20,
-		Func: func(*kr.SessionCx) ([]*toolhub.Tool, error) { return []*toolhub.Tool{todo}, nil }})
+		Tools: func() []*toolhub.Tool { return []*toolhub.Tool{todo} }})
 	return nil
 }
 

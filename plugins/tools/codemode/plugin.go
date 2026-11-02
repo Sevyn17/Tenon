@@ -20,8 +20,9 @@ func (*plug) Setup(cx *plugin.Registrar) error {
 	for _, it := range Items() {
 		cx.Register(kr.PointPermItems, "code-mode", it)
 	}
+	// 子调用回到本次调用所在的 hub（toolhub.Cx.Hub），工具本身与会话无关。
 	cx.Register(kr.PointSessionTools, "code-mode", kr.ToolsEntry{Order: 90,
-		Func: func(sc *kr.SessionCx) ([]*toolhub.Tool, error) { return []*toolhub.Tool{Tool(sc.Hub)}, nil }})
+		Tools: func() []*toolhub.Tool { return []*toolhub.Tool{Tool()} }})
 	return nil
 }
 

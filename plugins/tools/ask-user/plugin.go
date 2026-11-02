@@ -23,7 +23,7 @@ func (*plug) Setup(cx *plugin.Registrar) error {
 	}
 	ask := AskUser(ui.Ask)
 	cx.Register(kr.PointSessionTools, "ask-user", kr.ToolsEntry{Order: 21,
-		Func: func(*kr.SessionCx) ([]*toolhub.Tool, error) { return []*toolhub.Tool{ask}, nil }})
+		Tools: func() []*toolhub.Tool { return []*toolhub.Tool{ask} }})
 	return nil
 }
 

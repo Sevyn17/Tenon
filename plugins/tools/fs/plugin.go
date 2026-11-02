@@ -24,17 +24,18 @@ func (*plug) Setup(cx *plugin.Registrar) error {
 	for _, it := range Items(root) {
 		cx.Register(kr.PointPermItems, it.ID, it)
 	}
+	// 工具装配期构造一次，各会话共用同一批只读对象（框架设计 04 4.2）。工作目录来自 service:workdir，
+	// 与会话无关；将来若按会话给不同根，从 toolhub.Cx.Ctx 取。
+	tools := []*toolhub.Tool{
+		ReadFile(root).WithItems(ItemRead),
+		Grep(root).WithItems(ItemRead),
+		Glob(root).WithItems(ItemRead),
+		Edit(root).WithItems(ItemWrite),
+		WriteFile(root).WithItems(ItemWrite),
+		ListDir(root).WithItems(ItemRead),
+	}
 	cx.Register(kr.PointSessionTools, "fs", kr.ToolsEntry{Order: 10,
-		Func: func(*kr.SessionCx) ([]*toolhub.Tool, error) {
-			return []*toolhub.Tool{
-				ReadFile(root).WithItems(ItemRead),
-				Grep(root).WithItems(ItemRead),
-				Glob(root).WithItems(ItemRead),
-				Edit(root).WithItems(ItemWrite),
-				WriteFile(root).WithItems(ItemWrite),
-				ListDir(root).WithItems(ItemRead),
-			}, nil
-		}})
+		Tools: func() []*toolhub.Tool { return tools }})
 	return nil
 }
 
