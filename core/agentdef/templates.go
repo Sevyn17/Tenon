@@ -113,12 +113,17 @@ func (t *templated) Load(ctx context.Context, ref Ref) (Agent, error) {
 	if t.app == nil {
 		return Agent{}, fmt.Errorf("定义 %s：%w", ref, ErrNotFound)
 	}
+	a, err := t.app.Load(ctx, ref)
+	if err != nil {
+		return Agent{}, err
+	}
+	// 租户层确实定义了同名定义才报冲突；裸名解析会先试租户层，不存在时照常落到平台层。
 	if ref.Namespace == Tenant {
 		if owner, ok := t.owners[ref.Name]; ok {
 			return Agent{}, fmt.Errorf("定义 %s 与组件 %s 的模板同名：模板只能由组件提供", ref, owner)
 		}
 	}
-	return t.app.Load(ctx, ref)
+	return a, nil
 }
 
 var _ Source = (*templated)(nil)

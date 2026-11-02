@@ -46,9 +46,19 @@ type Assembled struct {
 }
 
 // Assemble 按 profile 装配；overrides 按插件名覆盖配置键（命令行参数），inject 为应用预置服务。
+// 插件实例取自进程内注册表。
 func Assemble(p *plugin.Profile, overrides map[string]map[string]any, inject map[string]any) (*Assembled, error) {
+	return AssembleInstances(p, overrides, inject, nil)
+}
+
+// AssembleInstances 同 Assemble；instances 里给出的插件直接使用实例，不再走注册表
+// （ybase.New 的组件清单用，T1b-2d）。
+func AssembleInstances(p *plugin.Profile, overrides map[string]map[string]any, inject map[string]any, instances map[string]plugin.Plugin) (*Assembled, error) {
 	spec := p.Spec(runtime.SlotDefaults())
 	spec.Inject = inject
+	if len(instances) > 0 {
+		spec.Instances = instances
+	}
 	for i, e := range spec.Plugins {
 		if ov, ok := overrides[e.Name]; ok {
 			c := map[string]any{}

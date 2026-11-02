@@ -117,6 +117,15 @@ func lookup(name string) (Factory, bool) {
 	return f, ok
 }
 
+// Instantiate 实例化一个已登记的插件（应用预设按名字取内置组件用）；未登记返回 false。
+func Instantiate(name string) (Plugin, bool) {
+	f, ok := lookup(name)
+	if !ok {
+		return nil, false
+	}
+	return f(), true
+}
+
 // —— 层（调用点中间件栈）——//
 
 // Position 层的位置。
@@ -322,6 +331,9 @@ type Spec struct {
 	// Inject：应用 / 内核预置的服务（"service:host"、"service:ui"……），插件经 Requires 取用；
 	// 不能再由插件提供同名项。
 	Inject map[string]any
+	// Instances：直接给出的插件实例（应用自带组件、测试替身用）；有实例时不再走注册表。
+	// 名字仍是 Entry.Name，实例的 Meta().Name 缺省时补成这个名字。
+	Instances map[string]Plugin
 }
 
 // Optional 可选依赖前缀：Requires 写 "?service:sandbox"，提供者缺席也能装配。
@@ -380,11 +392,14 @@ func Assemble(spec Spec) (*Assembly, error) {
 	}
 	sort.Strings(names)
 	for _, n := range names {
-		f, ok := lookup(n)
+		p, ok := spec.Instances[n]
 		if !ok {
-			return nil, fmt.Errorf("%w: %s", ErrUnknown, n)
+			f, found := lookup(n)
+			if !found {
+				return nil, fmt.Errorf("%w: %s", ErrUnknown, n)
+			}
+			p = f()
 		}
-		p := f()
 		m := p.Meta()
 		if m.Name == "" {
 			m.Name = n
