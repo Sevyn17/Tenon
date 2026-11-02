@@ -68,7 +68,7 @@ func newRig(t *testing.T, path string, m *fakeModel) *rig {
 	t.Cleanup(func() { db.Close() })
 	runs := new(int)
 	r := &rig{db: db, m: m, runs: runs, path: path}
-	r.h = &Host{DB: db, New: func(id string) (*agent.Agent, *session.Config, error) {
+	r.h = &Host{DB: db, New: func(id, def string) (*agent.Agent, *session.Config, error) {
 		hub := toolhub.New(toolhub.Options{Store: agent.ToolStore{DB: db}})
 		echo := &toolhub.Tool{Spec: session.ToolSpec{Name: "echo", Schema: json.RawMessage(`{"type":"object"}`)},
 			Risk: toolhub.Dangerous, Call: func(context.Context, *toolhub.Cx, json.RawMessage) (toolhub.Output, error) {

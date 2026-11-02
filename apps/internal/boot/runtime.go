@@ -209,6 +209,8 @@ func (r *Runtime) BuildApp(o AppOptions) (*Built, error) {
 		Layers: col.Layers,
 		Items:  col.Items,
 		Kernel: &kern,
+		// 会话定义来源：子智能体 / 工作组成员按内置模板名构造（T1b-2c）。
+		Definitions: rt.Defs,
 	}
 	rb.Hooks = o.Hooks
 	rb.Blocks = col.Blocks // 系统提示词由 prompt 插件提供（plugin-switch-plan §2.1）

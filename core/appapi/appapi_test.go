@@ -60,7 +60,7 @@ func newApp(t *testing.T) *App {
 	t.Cleanup(func() { b.Close(); db.Close() })
 	var app *App
 	h := &host.Host{DB: db, Bus: b}
-	h.New = func(id string) (*agent.Agent, *session.Config, error) {
+	h.New = func(id, def string) (*agent.Agent, *session.Config, error) {
 		hub := toolhub.New(toolhub.Options{Store: agent.ToolStore{DB: db}})
 		echo := &toolhub.Tool{Spec: session.ToolSpec{Name: "echo", Schema: json.RawMessage(`{"type":"object"}`)},
 			Risk: toolhub.Dangerous, Call: func(context.Context, *toolhub.Cx, json.RawMessage) (toolhub.Output, error) {

@@ -4,6 +4,7 @@ package boot
 // CLI（apps/ybase）与桌面端（apps/desktop）共用。
 
 import (
+	"ybase-kernel/core/agentdef"
 	"ybase-kernel/core/plugin"
 	"ybase-kernel/core/runtime"
 	compact "ybase-kernel/plugins/context/compact-basic"
@@ -40,6 +41,8 @@ type Assembled struct {
 	Store   runtime.DBHandle
 	Models  *runtime.Models
 	Compact *compact.Compactor // compact-basic（可空）
+	// Defs 会话定义的来源：组件内置模板 + 应用平台定义（T1b-2c、03 3.5）。
+	Defs agentdef.Source
 }
 
 // Assemble 按 profile 装配；overrides 按插件名覆盖配置键（命令行参数），inject 为应用预置服务。
@@ -63,6 +66,12 @@ func Assemble(p *plugin.Profile, overrides map[string]map[string]any, inject map
 		return nil, err
 	}
 	rt := &Assembled{Asm: asm}
+	// 组件登记的内置定义模板归入平台命名空间：模板之间 / 与应用平台定义同名即装配失败（启动报错）。
+	defs, err := asm.Definitions(nil)
+	if err != nil {
+		return nil, err
+	}
+	rt.Defs = defs
 	if v, ok := asm.Value(runtime.ServiceDB); ok {
 		rt.Store, _ = v.(runtime.DBHandle)
 	}

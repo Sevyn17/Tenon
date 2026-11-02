@@ -45,7 +45,7 @@ func Tool(h *host.Host, f host.Factory) *toolhub.Tool {
 				id = cx.SessionID + "/sub-" + cid
 			}
 			cx.ChildSessionID = id
-			out, err := h.Spawn(ctx, cx.SessionID, id, f, a.Task)
+			out, err := h.Spawn(ctx, cx.SessionID, id, Definition, f, a.Task)
 			if err != nil {
 				if ctx.Err() != nil {
 					return toolhub.Output{}, ctx.Err()

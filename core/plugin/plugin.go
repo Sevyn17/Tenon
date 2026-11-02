@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"ybase-kernel/core/agentdef"
 	"ybase-kernel/core/useconf"
 )
 
@@ -196,6 +197,16 @@ func (cx *Registrar) AgentConfig(proto any) error {
 	return nil
 }
 
+// Template 登记本组件的内置定义模板（04 4.2、03 3.5）：模板归入平台命名空间，
+// 与应用随程序发布的平台定义合并成会话定义的来源。
+//
+// 这里只登记、不校验；冲突（模板之间同名、与应用平台定义同名）在 Assembly.Definitions
+// 里报告，装配失败即启动报错（03 3.5）。
+func (cx *Registrar) Template(src agentdef.Source) {
+	cx.asm.templates = append(cx.asm.templates, agentdef.Template{Owner: cx.plugin, Source: src})
+	cx.asm.points = append(cx.asm.points, Registration{Plugin: cx.plugin, Point: "template", Name: cx.plugin})
+}
+
 // FillSlot 填插槽（必须在 Provides 里声明 "slot:<名>"）。
 func (cx *Registrar) FillSlot(name string, impl any) error {
 	key := "slot:" + name
@@ -333,6 +344,8 @@ type Assembly struct {
 	scopes    map[string]*Scope
 	// agentSchemas 各组件登记的使用配置原型（06 6.2）；键是组件名。
 	agentSchemas map[string]useconf.Schema
+	// templates 组件登记的内置定义模板（03 3.5、计划/01 T1b-2c）；装配结束后只读。
+	templates []agentdef.Template
 }
 
 // 装配错误。
@@ -557,6 +570,19 @@ func (a *Assembly) AgentSchemas() []useconf.Schema {
 func (a *Assembly) AgentSchema(component string) (useconf.Schema, bool) {
 	sc, ok := a.agentSchemas[component]
 	return sc, ok
+}
+
+// Templates 组件登记的内置定义模板（按装配顺序；03 3.5）。
+func (a *Assembly) Templates() []agentdef.Template {
+	return append([]agentdef.Template(nil), a.templates...)
+}
+
+// Definitions 把应用的平台定义与组件模板合成会话定义的来源（03 3.5、计划/01 T1b-2c）。
+//
+// 模板之间同名、模板与应用平台定义同名时返回错误；应用层把这个错误当装配失败，
+// 即启动报错。app 可以是 nil（应用没有随程序发布的平台定义）。
+func (a *Assembly) Definitions(app agentdef.Source) (agentdef.Source, error) {
+	return agentdef.WithTemplates(app, a.templates)
 }
 
 func (a *Assembly) Start(root *Scope) error {

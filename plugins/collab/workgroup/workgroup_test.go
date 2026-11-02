@@ -57,7 +57,7 @@ func rig(t *testing.T) (*Group, *host.Host, *sqlite.DB, *echoModel) {
 	h := &host.Host{DB: db}
 	var g *Group
 	mk := func(leader bool) host.Factory {
-		return func(id string) (*agent.Agent, *session.Config, error) {
+		return func(id, def string) (*agent.Agent, *session.Config, error) {
 			hub := toolhub.New(toolhub.Options{Store: agent.ToolStore{DB: db}})
 			ts := g.MemberTools()
 			if leader {

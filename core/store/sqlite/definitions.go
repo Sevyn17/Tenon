@@ -45,3 +45,22 @@ func (db *DB) GetDefinition(ctx context.Context, kind, id string, version int) (
 	}
 	return body, v, err
 }
+
+// ListDefinitions 列出 kind 下出现过的定义 id（每个 id 一次，按 id 升序）。
+func (db *DB) ListDefinitions(ctx context.Context, kind string) ([]string, error) {
+	rows, err := db.sql.QueryContext(ctx,
+		`SELECT DISTINCT id FROM definitions WHERE tenant = ? AND kind = ? ORDER BY id`, Tenant, kind)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
+}

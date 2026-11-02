@@ -322,6 +322,18 @@ func testDefinitions(t *testing.T, db store.Store) {
 	if _, _, err := db.GetDefinition(ctx, "agent", "a", 3); !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("越界版本: %v", err)
 	}
+	if ids, err := db.ListDefinitions(ctx, "agent"); err != nil || len(ids) != 1 || ids[0] != "a" {
+		t.Fatalf("列定义: %v %v", ids, err)
+	}
+	if _, _, err := db.PutDefinition(ctx, "agent", "b", "three"); err != nil {
+		t.Fatalf("写第二个定义: %v", err)
+	}
+	if ids, _ := db.ListDefinitions(ctx, "agent"); len(ids) != 2 || ids[0] != "a" || ids[1] != "b" {
+		t.Fatalf("列定义按 id 升序: %v", ids)
+	}
+	if ids, err := db.ListDefinitions(ctx, "nope"); err != nil || len(ids) != 0 {
+		t.Fatalf("空定义类: %v %v", ids, err)
+	}
 }
 
 // —— inbox ——//

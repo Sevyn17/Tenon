@@ -51,11 +51,11 @@ func TestToolsSharedAcrossSessions(t *testing.T) {
 		},
 	}
 
-	a1, _, err := b.Build("s1", false)
+	a1, _, err := b.Build("s1", "", false)
 	if err != nil {
 		t.Fatalf("Build s1：%v", err)
 	}
-	a2, _, err := b.Build("s2", true)
+	a2, _, err := b.Build("s2", "", true)
 	if err != nil {
 		t.Fatalf("Build s2：%v", err)
 	}
@@ -94,7 +94,7 @@ func TestToolSetNilTools(t *testing.T) {
 		{Tools: func() []*toolhub.Tool { return nil }},
 		{Tools: nil},
 	}}
-	if _, _, err := b.Build("s", false); err != nil {
+	if _, _, err := b.Build("s", "", false); err != nil {
 		t.Fatalf("Build：%v", err)
 	}
 }

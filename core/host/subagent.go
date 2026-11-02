@@ -26,13 +26,14 @@ func (h *Host) Get(id string) (Handle, bool) {
 }
 
 // Spawn 新建（或续用）子会话 id，投递 task，等回合结束，返回最后一条助手文本。
-// f 为子会话的 agent 工厂（通常不含委派工具：深度 1）。ctx 取消 → 取消子回合。
-func (h *Host) Spawn(ctx context.Context, parent, id string, f Factory, task string) (string, error) {
-	return h.SpawnAs(ctx, parent, id, "subagent", f, task)
+// f 为子会话的 agent 工厂（通常不含委派工具：深度 1）；def 是子会话内置定义名（T1b-2c）。
+// ctx 取消 → 取消子回合。
+func (h *Host) Spawn(ctx context.Context, parent, id, def string, f Factory, task string) (string, error) {
+	return h.SpawnAs(ctx, parent, id, "subagent", def, f, task)
 }
 
 // SpawnAs 同 Spawn，子会话 origin 可选（subagent / member）。
-func (h *Host) SpawnAs(ctx context.Context, parent, id, origin string, f Factory, task string) (string, error) {
+func (h *Host) SpawnAs(ctx context.Context, parent, id, origin, def string, f Factory, task string) (string, error) {
 	existed, err := h.DB.Exists(ctx, id)
 	if err != nil {
 		return "", err
@@ -46,13 +47,20 @@ func (h *Host) SpawnAs(ctx context.Context, parent, id, origin string, f Factory
 		if l.Meta.ParentID != parent || l.Meta.Origin != origin {
 			return "", fmt.Errorf("host: 会话 %s 不是 %s 的 %s 子会话", id, parent, origin)
 		}
-		hd, err = h.open(ctx, id, f, nil)
+		if def != "" && l.Meta.AgentID != "" && l.Meta.AgentID != def {
+			return "", fmt.Errorf("host: 会话 %s 的定义是 %s，不是 %s", id, l.Meta.AgentID, def)
+		}
+		hd, err = h.open(ctx, id, def, f, nil)
 		if err != nil {
 			return "", err
 		}
 	} else {
-		hd, err = h.open(ctx, id, f, func(ag *agent.Agent, cfg *session.Config) error {
-			_, err := ag.OpenAs(ctx, cfg, store.SessionMeta{ParentID: parent, Origin: origin})
+		hd, err = h.open(ctx, id, def, f, func(ag *agent.Agent, cfg *session.Config) error {
+			meta := store.SessionMeta{ParentID: parent, Origin: origin}
+			if ag.Def != nil {
+				meta.AgentID, meta.AgentHash = ag.Def.ID, ag.Def.Version
+			}
+			_, err := ag.OpenAs(ctx, cfg, meta)
 			return err
 		})
 		if err != nil {

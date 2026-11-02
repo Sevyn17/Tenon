@@ -106,6 +106,8 @@ type DefinitionStore interface {
 	PutDefinition(ctx context.Context, kind, id, body string) (version int, hash string, err error)
 	// GetDefinition 读指定版本；version <= 0 取最新。不存在返回 ErrNotFound。
 	GetDefinition(ctx context.Context, kind, id string, version int) (string, int, error)
+	// ListDefinitions 列出一个定义类出现过的定义 id（每个 id 一次，按 id 升序）。
+	ListDefinitions(ctx context.Context, kind string) ([]string, error)
 }
 
 // —— 共享类型 ——//

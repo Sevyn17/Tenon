@@ -100,8 +100,8 @@ func New(o Options) (*App, error) {
 			}
 			return hk
 		}
-		o.Host.New = func(id string) (*agent.Agent, *session.Config, error) { return rb.Build(id, false) }
-		o.Host.Child = func(id string) (*agent.Agent, *session.Config, error) { return rb.Build(id, true) }
+		o.Host.New = func(id, def string) (*agent.Agent, *session.Config, error) { return rb.Build(id, def, false) }
+		o.Host.Child = func(id, def string) (*agent.Agent, *session.Config, error) { return rb.Build(id, def, true) }
 	}
 	return a, nil
 }

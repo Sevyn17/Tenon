@@ -168,7 +168,7 @@ func (g *Group) start(leader, id, name, task string) error {
 		defer g.wg.Done()
 		ctx, cancel := context.WithTimeout(g.ctx, MemberTimeout)
 		defer cancel()
-		out, err := g.Host.SpawnAs(ctx, leader, id, "member", g.Member, task)
+		out, err := g.Host.SpawnAs(ctx, leader, id, "member", MemberDefinition, g.Member, task)
 		g.mu.Lock()
 		delete(g.running, id)
 		g.mu.Unlock()

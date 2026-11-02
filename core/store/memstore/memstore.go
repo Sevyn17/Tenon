@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -732,6 +733,23 @@ func (s *Store) GetDefinition(ctx context.Context, kind, id string, version int)
 		return "", 0, store.ErrNotFound
 	}
 	return vs[version-1].body, version, nil
+}
+
+// ListDefinitions 列出 kind 下出现过的定义 id（每个 id 一次，按 id 升序）。
+func (s *Store) ListDefinitions(ctx context.Context, kind string) ([]string, error) {
+	if err := s.lock(); err != nil {
+		return nil, err
+	}
+	defer s.mu.Unlock()
+	prefix := kind + "\x00"
+	var out []string
+	for k := range s.defs {
+		if strings.HasPrefix(k, prefix) {
+			out = append(out, strings.TrimPrefix(k, prefix))
+		}
+	}
+	sort.Strings(out)
+	return out, nil
 }
 
 // DefinitionHash 读指定版本的内容哈希（测试用；sqlite 经 SQL 查 definitions.hash）。

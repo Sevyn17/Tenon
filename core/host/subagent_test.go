@@ -12,7 +12,7 @@ func TestSpawnSubagent(t *testing.T) {
 	if _, err := r.h.Open(ctx, "p"); err != nil {
 		t.Fatal(err)
 	}
-	out, err := r.h.Spawn(ctx, "p", "p/sub-1", r.h.New, "查一下")
+	out, err := r.h.Spawn(ctx, "p", "p/sub-1", "", r.h.New, "查一下")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -27,7 +27,7 @@ func TestSpawnSubagent(t *testing.T) {
 		t.Fatalf("会话行 = %+v", l.Meta)
 	}
 	// 续用同一子会话：第二回合
-	out, err = r.h.Spawn(ctx, "p", "p/sub-1", r.h.New, "再查")
+	out, err = r.h.Spawn(ctx, "p", "p/sub-1", "", r.h.New, "再查")
 	if err != nil || out != "re:再查" {
 		t.Fatalf("续用: %q %v", out, err)
 	}
@@ -35,7 +35,7 @@ func TestSpawnSubagent(t *testing.T) {
 		t.Fatalf("子会话应有 4 条消息，得到 %d", n)
 	}
 	// 别的父会话不能续用
-	if _, err := r.h.Spawn(ctx, "q", "p/sub-1", r.h.New, "x"); err == nil {
+	if _, err := r.h.Spawn(ctx, "q", "p/sub-1", "", r.h.New, "x"); err == nil {
 		t.Fatal("非本会话的子智能体应被拒绝")
 	}
 }

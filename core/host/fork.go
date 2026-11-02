@@ -72,7 +72,7 @@ func (h *Host) Fork(ctx context.Context, src, dst string, upto int, origin strin
 	if err := h.created(ctx, dst, Origin{Kind: origin, ParentID: src, ForkUpto: hdr.LogLen}); err != nil {
 		return Handle{}, err
 	}
-	return h.open(ctx, dst, h.New, nil)
+	return h.open(ctx, dst, l.Meta.AgentID, h.New, nil)
 }
 
 // remap 深拷贝条目并重新分配条目 id 与调用 id（结果的 call_id 同步映射）。

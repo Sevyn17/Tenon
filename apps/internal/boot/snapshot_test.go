@@ -20,11 +20,13 @@ import (
 	"time"
 
 	"ybase-kernel/core/agent"
+	"ybase-kernel/core/agentdef"
 	"ybase-kernel/core/appapi"
 	"ybase-kernel/core/bus"
 	"ybase-kernel/core/host"
 	"ybase-kernel/core/runtime"
 	"ybase-kernel/core/session"
+	"ybase-kernel/core/store"
 )
 
 var update = flag.Bool("update", false, "重录回归快照")
@@ -108,8 +110,8 @@ func TestAssembledSnapshot(t *testing.T) {
 	}
 	s := &scripted{reqs: map[string][]session.Request{}}
 	wrap := func(f host.Factory) host.Factory {
-		return func(id string) (*agent.Agent, *session.Config, error) {
-			a, cfg, err := f(id)
+		return func(id, def string) (*agent.Agent, *session.Config, error) {
+			a, cfg, err := f(id, def)
 			if a != nil {
 				a.Model = roleModel{s: s, role: role(id)}
 			}
@@ -174,6 +176,43 @@ func TestAssembledSnapshot(t *testing.T) {
 	}
 	got = append(scrub(got, root, home), '\n')
 	compare(t, filepath.Join("testdata", "snapshot_assembled.json"), got)
+
+	// T1b-2c：角色改由内置定义模板判定（不再按会话 id 猜），会话行记定义名与哈希；
+	// 模型请求与 T1b-1 完全一致（上面的快照无差异即证明「行为不变」）。
+	if rt.Rt.Defs == nil {
+		t.Fatal("装配结果缺定义来源")
+	}
+	for _, name := range []string{"subagent", "workgroup-leader", "workgroup-member"} {
+		if _, _, err := agentdef.Resolve(ctx, rt.Rt.Defs, agentdef.Scope{Tenant: store.Tenant}, name); err != nil {
+			t.Fatalf("内置定义 %s：%v", name, err)
+		}
+	}
+	infos, err := rt.Host.DB.ListSessions(ctx, 0, 50, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := map[string]bool{}
+	for _, info := range infos {
+		l, err := rt.Host.DB.Load(ctx, info.ID, nil)
+		if err != nil {
+			t.Fatalf("读会话 %s：%v", info.ID, err)
+		}
+		switch l.Meta.Origin {
+		case "subagent":
+			if l.Meta.AgentID != "subagent" || l.Meta.AgentHash == "" {
+				t.Fatalf("子智能体会话 %s 的定义 = %q / %q", info.ID, l.Meta.AgentID, l.Meta.AgentHash)
+			}
+			seen["subagent"] = true
+		case "member":
+			if l.Meta.AgentID != "workgroup-member" || l.Meta.AgentHash == "" {
+				t.Fatalf("成员会话 %s 的定义 = %q / %q", info.ID, l.Meta.AgentID, l.Meta.AgentHash)
+			}
+			seen["member"] = true
+		}
+	}
+	if !seen["subagent"] || !seen["member"] {
+		t.Fatalf("没跑到子智能体 / 成员场景：%v", seen)
+	}
 }
 
 // normalizeIDs 把工具调用 id 换成按出现顺序的 idN（id 是 uuid，每次不同）。

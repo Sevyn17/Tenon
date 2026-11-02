@@ -20,7 +20,7 @@ func TestSpanHierarchy(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	h := &Host{DB: db, New: func(id string) (*agent.Agent, *session.Config, error) {
+	h := &Host{DB: db, New: func(id, def string) (*agent.Agent, *session.Config, error) {
 		a := &agent.Agent{Store: db, SessionID: id, Model: &fakeModel{}}
 		hub := toolhub.New(toolhub.Options{Store: agent.ToolStore{DB: db}, OnSpan: a.HubSpan})
 		if err := hub.Register(&toolhub.Tool{Spec: session.ToolSpec{Name: "echo", Schema: json.RawMessage(`{"type":"object"}`)},

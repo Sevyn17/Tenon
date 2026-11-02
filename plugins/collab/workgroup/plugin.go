@@ -1,16 +1,17 @@
 package workgroup
 
 // 插件登记（thin-kernel-plan §2.2）：工作组。顶层会话是领导（team_spawn + 看板），
-// 成员会话（id 含 /m-）只有 team_send + 看板；成员经 service:host 的 Child 构造（可空 = New）。
+// 成员会话（定义 workgroup-member，会话 id 里的 /m- 只是命名约定）只有 team_send + 看板；
+// 成员经 service:host 的 Child 构造（可空 = New）。
 // 数据库在 store-sqlite 启动后才打开，所以 Group 在 Start 里建；会话构造器就绪后（ready 点位）补投上次未送达的结果。
 // 自有 p_workgroup_* 表要 SQL，所以声明 Requires{SQL: true}，装配期就检查存储是否给得出 SQL。
 
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"ybase-kernel/core/agent"
+	"ybase-kernel/core/agentdef"
 	"ybase-kernel/core/host"
 	"ybase-kernel/core/plugin"
 	kr "ybase-kernel/core/runtime"
@@ -18,6 +19,37 @@ import (
 	"ybase-kernel/core/store"
 	"ybase-kernel/core/toolhub"
 )
+
+// 两个内置定义名（09 9.3、计划/01 T1b-2c）：组长与成员的角色由定义判定，不再按会话 id 猜。
+const (
+	LeaderDefinition = "workgroup-leader"
+	MemberDefinition = "workgroup-member"
+)
+
+// templateManifest 组长的内置定义模板。行为不变：不带 tools / use / prompt，
+// 工具集合仍由 Visible 按定义挑（09 9.3「行为不变」）。
+const leaderManifest = `format = "ybase/v1"
+id = "workgroup-leader"
+description = "工作组组长：派成员（team_spawn）、给成员发消息、看看板。"
+`
+
+// templateManifest 成员的内置定义模板。
+const memberManifest = `format = "ybase/v1"
+id = "workgroup-member"
+description = "工作组成员：给组长或其他成员发消息、看看板。"
+`
+
+// TemplateSource 工作组两个内置定义模板的来源（平台层）；Setup 里交给 Registrar.Template。
+func TemplateSource() (agentdef.Source, error) {
+	m := agentdef.Mem()
+	for name, manifest := range map[string]string{LeaderDefinition: leaderManifest, MemberDefinition: memberManifest} {
+		if err := m.Put(agentdef.Ref{Namespace: agentdef.Platform, Name: name},
+			agentdef.Files{agentdef.ManifestName: []byte(manifest)}); err != nil {
+			return nil, err
+		}
+	}
+	return m, nil
+}
 
 type plug struct {
 	h   *host.Host
@@ -54,8 +86,13 @@ func (p *plug) Setup(cx *plugin.Registrar) error {
 	for _, it := range Items() {
 		cx.Register(kr.PointPermItems, it.ID, it)
 	}
-	// 组长与成员是两批工具，靠 Visible 按会话挑（工作组 = 两个定义模板，工具清单在 T1b-2 落到定义里）。
-	isMember := func(sc *kr.SessionCx) bool { return strings.Contains(sc.ID, "/m-") }
+	src, err := TemplateSource()
+	if err != nil {
+		return err
+	}
+	cx.Template(src)
+	// 组长与成员是两批工具，靠 Visible 按会话定义挑（工作组 = 两个内置定义模板）。
+	isMember := func(sc *kr.SessionCx) bool { return sc.Def != nil && sc.Def.ID == MemberDefinition }
 	cx.Register(kr.PointSessionTools, "workgroup", kr.ToolsEntry{Order: 70,
 		Tools: func() []*toolhub.Tool {
 			if p.g == nil {
@@ -89,7 +126,7 @@ func (p *plug) Setup(cx *plugin.Registrar) error {
 }
 
 func (p *plug) Start(sc *plugin.Scope) error {
-	member := func(id string) (*agent.Agent, *session.Config, error) {
+	member := func(id, def string) (*agent.Agent, *session.Config, error) {
 		f := p.h.Child
 		if f == nil {
 			f = p.h.New
@@ -97,7 +134,7 @@ func (p *plug) Start(sc *plugin.Scope) error {
 		if f == nil {
 			return nil, nil, fmt.Errorf("workgroup: 宿主未配置会话构造")
 		}
-		return f(id)
+		return f(id, def)
 	}
 	g, err := New(context.Background(), p.h, p.sql, p.db.DB(), member)
 	if err != nil {

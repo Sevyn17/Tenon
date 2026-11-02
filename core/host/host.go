@@ -94,7 +94,10 @@ type Hooks struct {
 }
 
 // Factory 为会话构造 agent（模型、工具、存储、显示回调已配好）与新会话配置。
-type Factory func(id string) (*agent.Agent, *session.Config, error)
+//
+// def 是会话行里记的智能体定义名（T1b-2c：子智能体、工作组成员各自有内置定义；
+// 空 = 无定义会话，如用户直接新建的会话）。
+type Factory func(id, def string) (*agent.Agent, *session.Config, error)
 
 // Store 宿主用到的存储能力：会话 + 输入队列。
 type Store interface {
@@ -166,11 +169,12 @@ func (h Handle) Err() error { return h.a.exitErr }
 
 // Open 打开（不存在则新建，origin = new）。已打开的返回同一句柄。
 func (h *Host) Open(ctx context.Context, id string) (Handle, error) {
-	return h.open(ctx, id, h.New, nil)
+	return h.open(ctx, id, "", h.New, nil)
 }
 
-// open 打开会话；pre 非空时代替默认的 Open（调用方自己建会话行，如子智能体）。
-func (h *Host) open(ctx context.Context, id string, f Factory, pre func(*agent.Agent, *session.Config) error) (Handle, error) {
+// open 打开会话；def 是要用的智能体定义名（空 = 无定义，恢复已有会话时从会话行取）；
+// pre 非空时代替默认的 Open（调用方自己建会话行，如子智能体）。
+func (h *Host) open(ctx context.Context, id, def string, f Factory, pre func(*agent.Agent, *session.Config) error) (Handle, error) {
 	h.mu.Lock()
 	if h.actors == nil {
 		h.actors = map[string]*actor{}
@@ -181,7 +185,7 @@ func (h *Host) open(ctx context.Context, id string, f Factory, pre func(*agent.A
 	}
 	h.mu.Unlock()
 
-	ag, cfg, err := f(id)
+	ag, cfg, err := f(id, def)
 	if err != nil {
 		return Handle{}, err
 	}
