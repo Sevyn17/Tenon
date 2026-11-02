@@ -122,7 +122,7 @@ func (a *Agent) checkpoint(ctx context.Context, run string, rec *reqlog.Record) 
 	// 持久化不随回合取消中止：取消后的收尾（cancel 条目、回合结束头部）也必须落库。
 	ctx = context.WithoutCancel(ctx)
 	s := a.Core.Snapshot()
-	cp := store.Checkpoint{SessionID: a.SessionID, ExpectLogLen: a.committed, Header: s.Header, RunState: run}
+	cp := store.Checkpoint{SessionID: a.SessionID, Epoch: a.Epoch, ExpectLogLen: a.committed, Header: s.Header, RunState: run}
 	from := a.committed
 	if s.Header.LogLen < a.committed { // rewind 后立即 checkpoint，截断点即新 log_len
 		t := s.Header.LogLen

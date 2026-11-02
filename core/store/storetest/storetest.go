@@ -38,6 +38,7 @@ func Run(t *testing.T, open func(t *testing.T) store.Store) {
 		{"SessionKeyUnique", testSessionKeyUnique},
 		{"Stats", testStats},
 		{"Export", testExport},
+		{"LeaseFencing", testLeaseFencing},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) { c.f(t, open(t)) })
@@ -706,5 +707,50 @@ func testExport(t *testing.T, db store.Store) {
 	}
 	if err := db.Export(ctx, "none", &bytes.Buffer{}); !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("缺失会话导出: %v", err)
+	}
+}
+
+// testLeaseFencing 验证 02 2.2 的租约带纪元：抢租约纪元递增、旧纪元写入被拒、旧持有者续租失败。
+func testLeaseFencing(t *testing.T, db store.Store) {
+	ctx := context.Background()
+	id := "s1"
+	create(t, db, store.SessionMeta{ID: id}, newCore())
+
+	if _, err := db.AcquireLease(ctx, "none", "node-a"); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("缺失会话抢租约: %v", err)
+	}
+	epoch1, err := db.AcquireLease(ctx, id, "node-a")
+	if err != nil || epoch1 != 1 {
+		t.Fatalf("首次抢租约: epoch=%d err=%v", epoch1, err)
+	}
+	if err := db.RenewLease(ctx, id, "node-a", epoch1); err != nil {
+		t.Fatalf("续租: %v", err)
+	}
+	hdr := newCore().Snapshot().Header
+	if err := db.Commit(ctx, store.Checkpoint{SessionID: id, ExpectLogLen: 0, Epoch: epoch1, Header: hdr}); err != nil {
+		t.Fatalf("持租约提交: %v", err)
+	}
+	// 另一个节点接管：纪元加一。
+	epoch2, err := db.AcquireLease(ctx, id, "node-b")
+	if err != nil || epoch2 != epoch1+1 {
+		t.Fatalf("接管: epoch=%d err=%v", epoch2, err)
+	}
+	// 旧节点的迟到写入被存储拒绝。
+	err = db.Commit(ctx, store.Checkpoint{SessionID: id, ExpectLogLen: 0, Epoch: epoch1, Header: hdr})
+	if !errors.Is(err, store.ErrLeaseLost) {
+		t.Fatalf("旧纪元写入应被拒: %v", err)
+	}
+	if err := db.RenewLease(ctx, id, "node-a", epoch1); !errors.Is(err, store.ErrLeaseLost) {
+		t.Fatalf("旧持有者续租应失败: %v", err)
+	}
+	// 新纪元写入成功；释放后不能再用。
+	if err := db.Commit(ctx, store.Checkpoint{SessionID: id, ExpectLogLen: 0, Epoch: epoch2, Header: hdr}); err != nil {
+		t.Fatalf("新纪元提交: %v", err)
+	}
+	if err := db.ReleaseLease(ctx, id, "node-b", epoch2); err != nil {
+		t.Fatalf("释放: %v", err)
+	}
+	if err := db.RenewLease(ctx, id, "node-b", epoch2); !errors.Is(err, store.ErrLeaseLost) {
+		t.Fatalf("释放后续租应失败: %v", err)
 	}
 }

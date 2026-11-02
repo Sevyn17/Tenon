@@ -23,6 +23,9 @@ func (a *Agent) Drive(ctx context.Context, need *session.Need) (session.EndReaso
 	return a.drive(ctx, need)
 }
 
+// Consume 把已处理的 inbox 项记入下一次 checkpoint（回合中插入用户消息时用，H7）。
+func (a *Agent) Consume(ids ...string) { a.consume = append(a.consume, ids...) }
+
 // Commit Idle 下的修改（record / set_ext / compact / rewind）与头部同事务提交（03 §8.2 第 4 条）。
 func (a *Agent) Commit(ctx context.Context, consume ...string) error {
 	a.consume = append(a.consume, consume...)

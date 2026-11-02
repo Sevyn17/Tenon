@@ -31,9 +31,13 @@ var ErrNotFound = errors.New("store: 会话不存在")
 // ErrStateMismatch：条件更新时记录不在期望状态。
 var ErrStateMismatch = errors.New("store: 工具记录状态不符")
 
+// ErrLeaseLost：本写者不再持有会话写租约（纪元不符）——旧节点的迟到写入被拒（02 2.2 fencing）。
+var ErrLeaseLost = errors.New("store: 会话写租约已失效")
+
 // Store 内核用到的全部存储能力。
 type Store interface {
 	SessionStore
+	LeaseStore
 	InboxStore
 	ToolResultStore
 	DefinitionStore
@@ -80,6 +84,19 @@ type InboxStore interface {
 	Inbox(ctx context.Context, sessionID string) ([]InboxItem, error)
 	// InInbox 报告某项是否仍待处理。
 	InInbox(ctx context.Context, sessionID, itemID string) (bool, error)
+}
+
+// LeaseStore 会话写租约（02 2.2：租约带纪元，同一时刻只有一个节点持有）。
+//
+// 语义：host 打开会话时抢租约，租约纪元加一；这一轮的所有写入（Commit、检查点、
+// 工具结果、信箱确认）都必须带这个纪元，存储只接受与当前纪元相符的写入。
+type LeaseStore interface {
+	// AcquireLease 抢租约：holder 成为持有者并返回新纪元（从 1 起）。会话不存在返回 ErrNotFound。
+	AcquireLease(ctx context.Context, sessionID, holder string) (epoch int64, err error)
+	// RenewLease 续租：holder 与 epoch 都匹配才成功，否则 ErrLeaseLost。
+	RenewLease(ctx context.Context, sessionID, holder string, epoch int64) error
+	// ReleaseLease 释放租约：holder/epoch 匹配才清空持有者；不匹配忽略（幂等释放）。
+	ReleaseLease(ctx context.Context, sessionID, holder string, epoch int64) error
 }
 
 // ToolResultStore 工具幂等 / 挂起记录（tool-hub D4）。
@@ -151,6 +168,7 @@ type Span struct {
 type Checkpoint struct {
 	SessionID    string
 	ExpectLogLen int              // 条件写：存储里当前的 log_len 必须等于它
+	Epoch        int64            // 非零：这次写入必须持有该纪元的租约，否则 ErrLeaseLost（02 2.2 fencing）
 	TruncateFrom *int             // 非空：把 idx >= 它的条目移入归档
 	Append       []*session.Entry // 从 AppendFrom 开始的新条目
 	AppendFrom   int

@@ -72,7 +72,8 @@ func (db *DB) Commit(ctx context.Context, cp Checkpoint) error {
 	var evs []bus.Envelope
 	err := db.tx(ctx, func(tx *sql.Tx) error {
 		var logLen, seq int
-		err := tx.QueryRowContext(ctx, `SELECT log_len, next_sync_seq FROM sessions WHERE id = ? AND tenant = ?`, cp.SessionID, Tenant).Scan(&logLen, &seq)
+		var leaseEpoch int64
+		err := tx.QueryRowContext(ctx, `SELECT log_len, next_sync_seq, lease_epoch FROM sessions WHERE id = ? AND tenant = ?`, cp.SessionID, Tenant).Scan(&logLen, &seq, &leaseEpoch)
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrNotFound
 		}
@@ -81,6 +82,9 @@ func (db *DB) Commit(ctx context.Context, cp Checkpoint) error {
 		}
 		if logLen != cp.ExpectLogLen {
 			return fmt.Errorf("%w: 期望 log_len=%d，实际 %d", ErrConflict, cp.ExpectLogLen, logLen)
+		}
+		if cp.Epoch != 0 && leaseEpoch != cp.Epoch {
+			return fmt.Errorf("%w: 期望纪元 %d，实际 %d", ErrLeaseLost, cp.Epoch, leaseEpoch)
 		}
 		if cp.TruncateFrom != nil {
 			if _, err := tx.ExecContext(ctx, `INSERT INTO session_entries_archive(tenant, session_id, idx, id, body, truncated_at, rewind_seq)

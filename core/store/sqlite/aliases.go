@@ -15,6 +15,7 @@ var (
 	ErrConflict      = store.ErrConflict
 	ErrNotFound      = store.ErrNotFound
 	ErrStateMismatch = store.ErrStateMismatch
+	ErrLeaseLost     = store.ErrLeaseLost
 )
 
 // 共享类型别名。

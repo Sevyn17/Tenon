@@ -30,7 +30,8 @@ func TestReplayAfterConsumed(t *testing.T) {
 	}
 }
 
-// M4.9：两个进程（两个 Host、同一 DB 文件）写同一会话：后写者条件写失败，已提交的日志不被破坏。
+// M4.9：两个进程（两个 Host、同一 DB 文件）写同一会话：后写者被拒，已提交的日志不被破坏。
+// T2a-1 起第二个 Host 打开会话即接管更新的租约纪元（02 2.2 fencing），旧写者得到 ErrLeaseLost。
 func TestSecondHostConflicts(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "s.db")
 	r1 := newRig(t, path, &fakeModel{})
@@ -44,7 +45,10 @@ func TestSecondHostConflicts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// inbox 在共享库里，两个 actor 都可能取到同一输入；谁先提交谁赢，另一个必须因条件写冲突退出。
+	rejected := func(e error) bool {
+		return errors.Is(e, sqlite.ErrConflict) || errors.Is(e, sqlite.ErrLeaseLost)
+	}
+	// inbox 在共享库里，两个 actor 都可能取到同一输入；后打开者持新纪元租约，另一个的写必须被拒。
 	if err := h1.Do(Command{Kind: Send, Text: "a"}); err != nil {
 		t.Fatal(err)
 	}
@@ -54,13 +58,13 @@ func TestSecondHostConflicts(t *testing.T) {
 	for _, e := range []error{e1, e2} {
 		switch {
 		case e == nil:
-		case errors.Is(e, sqlite.ErrConflict):
+		case rejected(e):
 			conflicts++
 		default:
 			t.Fatalf("意外错误: %v", e)
 		}
 	}
-	if conflicts == 0 { // 未撞上：没跑回合的那个（状态过期）再写一次必然冲突
+	if conflicts == 0 { // 未撞上：没跑回合的那个（状态过期）再写一次必然被拒
 		stale := h2
 		if r1.m.calls == 0 { // h2 先取到输入并提交，h1 才是过期写者
 			stale = h1
@@ -73,11 +77,11 @@ func TestSecondHostConflicts(t *testing.T) {
 		case <-time.After(10 * time.Second):
 			t.Fatalf("过期写者 10s 内未退出")
 		}
-		if !errors.Is(stale.Err(), sqlite.ErrConflict) {
-			t.Fatalf("过期写者应因条件写冲突退出: %v", stale.Err())
+		if !rejected(stale.Err()) {
+			t.Fatalf("过期写者应因写冲突/租约失效退出: %v", stale.Err())
 		}
 	} else if conflicts != 1 {
-		t.Fatalf("应恰好一个写者冲突: %v / %v", e1, e2)
+		t.Fatalf("应恰好一个写者被拒: %v / %v", e1, e2)
 	}
 	l, err := r1.db.Load(ctx, "s", nil)
 	if err != nil {

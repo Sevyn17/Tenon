@@ -99,22 +99,31 @@ type Hooks struct {
 // 空 = 无定义会话，如用户直接新建的会话）。
 type Factory func(id, def string) (*agent.Agent, *session.Config, error)
 
-// Store 宿主用到的存储能力：会话 + 输入队列。
+// Store 宿主用到的存储能力：会话 + 写租约 + 输入队列。
 type Store interface {
 	store.SessionStore
+	store.LeaseStore
 	store.InboxStore
 }
 
 // Host 进程内会话表。
 type Host struct {
-	DB     Store
-	New    Factory
-	Child  Factory // 子智能体会话的构造（可空 = New）；通常去掉委派工具以限制深度
-	Hooks  Hooks
-	Bus    *bus.Bus // 可空：易失事件（界面）
-	Queue  int      // 外部队列容量，默认 64
+	DB    Store
+	New   Factory
+	Child Factory // 子智能体会话的构造（可空 = New）；通常去掉委派工具以限制深度
+	Hooks Hooks
+	Bus   *bus.Bus // 可空：易失事件（界面）
+	Queue int      // 外部队列容量，默认 64
+
+	// Holder 本实例的租约持有者标识（空 = 首次打开时按实例生成）。
+	// 同一存储上两个 Host 打开同一会话会互相抢租约，旧持有者的写入被存储拒绝（02 2.2 fencing）。
+	Holder string
+	// Limit 同时推理的会话数上限（0 = 不限）；超出上限的回合排队等待，不报错（02 2.4）。
+	Limit int
+
 	mu     sync.Mutex
 	actors map[string]*actor
+	sem    chan struct{} // Limit 的许可池，首次使用时按 Limit 建
 }
 
 // Handle 会话句柄：只投递命令。
@@ -223,8 +232,27 @@ func (h *Host) open(ctx context.Context, id, def string, f Factory, pre func(*ag
 	}
 	h.actors[id] = a
 	h.mu.Unlock()
+	// 抢写租约：纪元随每次抢租约递增，本 actor 的每次写入都带它（02 2.2 fencing）。
+	holder := h.leaseHolder()
+	epoch, err := h.DB.AcquireLease(ctx, id, holder)
+	if err != nil {
+		h.remove(id)
+		return Handle{}, err
+	}
+	ag.Epoch = epoch
+	a.epoch, a.holder = epoch, holder
 	go a.run()
 	return Handle{a}, nil
+}
+
+// leaseHolder 本实例的租约持有者标识（懒生成）。
+func (h *Host) leaseHolder() string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.Holder == "" {
+		h.Holder = "host-" + uuid.NewString()
+	}
+	return h.Holder
 }
 
 // created 调 create 钩子；失败回滚（删除刚建的会话，DSH agent-loop 同做法）。
@@ -270,13 +298,18 @@ type actor struct {
 	in   chan Command
 	exit chan struct{}
 
+	epoch  int64  // 写租约纪元（02 2.2）
+	holder string // 租约持有者
+
 	mu      sync.Mutex
 	queued  []Command // 回合中收到、待需求边界 / 回合后处理的命令
 	cancel  context.CancelFunc
 	inTurn  bool
 	waiters map[string]chan bool // 等确认的调用
-	exitErr error
-	once    sync.Once
+	// processing 是 drainInbox 当前回合正在消费的 inbox 项（T2a-1：回合中插入不重复取同一条）。
+	processing map[string]bool
+	exitErr    error
+	once       sync.Once
 }
 
 // enqueue 外部命令入口：Cancel / Confirm 立即生效；其余排队。
@@ -354,6 +387,9 @@ func (a *actor) run() {
 			a.exitErr = fmt.Errorf("host: 会话 %s panic: %v", a.id, r)
 		}
 		a.h.remove(a.id)
+		if a.holder != "" { // 释放写租约；不匹配（已被接管）时存储忽略
+			_ = a.h.DB.ReleaseLease(context.Background(), a.id, a.holder, a.epoch)
+		}
 		a.once.Do(func() { close(a.exit) })
 	}()
 	ctx := context.Background()
@@ -472,6 +508,7 @@ func (a *actor) drainInbox(ctx context.Context) error {
 			}
 			consume = append(consume, it.ItemID)
 		}
+		a.processing = inboxSet(consume) // 本条正在被本回合消费：回合中插入不得重复取它
 		m := map[string]any{session.MetaSource: "user", session.MetaTrust: "trusted"}
 		if untrusted {
 			m[session.MetaTrust] = "untrusted"
@@ -487,6 +524,7 @@ func (a *actor) drainInbox(ctx context.Context) error {
 				if err := a.ag.Commit(ctx, consume...); err != nil {
 					return err
 				}
+				a.processing = nil
 				continue
 			case RecordD:
 				if _, err := a.ag.Core.Record(content, m); err != nil {
@@ -495,6 +533,7 @@ func (a *actor) drainInbox(ctx context.Context) error {
 				if err := a.ag.Commit(ctx, consume...); err != nil {
 					return err
 				}
+				a.processing = nil
 				continue
 			}
 			content = nc
@@ -504,11 +543,29 @@ func (a *actor) drainInbox(ctx context.Context) error {
 		}); err != nil {
 			return err
 		}
+		a.processing = nil
 	}
+}
+
+// inboxSet 把 inbox 项 id 集合化（回合中插入时跳过本回合正在消费的项）。
+func inboxSet(ids []string) map[string]bool {
+	if len(ids) == 0 {
+		return nil
+	}
+	m := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		m[id] = true
+	}
+	return m
 }
 
 // turn 跑一个回合：可取消的 ctx、turn span、after_turn、回合中排队的 Idle 命令在回合后处理。
 func (a *actor) turn(ctx context.Context, f func(context.Context) (session.EndReason, error)) error {
+	release, err := a.acquireSlot(ctx)
+	if err != nil {
+		return err
+	}
+	defer release()
 	tctx, cancel := context.WithCancel(ctx)
 	a.mu.Lock()
 	a.cancel, a.inTurn = cancel, true
@@ -553,7 +610,11 @@ func (a *actor) between(need *session.Need) (*session.Need, error) {
 				need = n // WaitingTools 改向：未执行调用补 Redirected，直接进入下一步
 			}
 		case Send, Note:
-			// 已落 inbox，回合结束后处理
+			// 运行中到达的用户消息：在下一次调模型前插入当前回合（09 9.4）。
+			// 已到 Done 边界时留给下一回合，inbox 不动。
+			if need.Kind != session.NeedDone {
+				reply(c, a.insertInput(context.Background()))
+			}
 		case SetConfig: // 内核暂存到下一个步边界，随下次 checkpoint 落库
 			_, _, err := a.ag.Core.SetConfig(session.ConfigPatch{MaxSteps: c.MaxSteps})
 			reply(c, err)
@@ -642,3 +703,88 @@ func steerMode(m session.SteerMode) session.SteerMode {
 
 // timeAfter requeue 的轮询间隔。
 func timeAfter() <-chan time.Time { return time.After(20 * time.Millisecond) }
+
+// acquireSlot 取一个并发推理许可（Host.Limit 控制）；超出上限时排队等待，不报错（02 2.4）。
+func (a *actor) acquireSlot(ctx context.Context) (func(), error) {
+	h := a.h
+	if h.Limit <= 0 {
+		return func() {}, nil
+	}
+	h.mu.Lock()
+	if h.sem == nil || cap(h.sem) != h.Limit {
+		h.sem = make(chan struct{}, h.Limit)
+	}
+	sem := h.sem
+	h.mu.Unlock()
+	select {
+	case sem <- struct{}{}:
+		return func() { <-sem }, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-a.exit:
+		return nil, ErrClosed
+	}
+}
+
+// insertInput 把 inbox 里待处理的用户消息插入当前回合：note 拼在 input 前，下一次调模型前生效
+// （session 的暂存插话机制）；只有 note 时留到下一个输入（与 drainInbox 一致）。
+// 守卫拒绝或内核不需要插话时保持 inbox 不动，交给回合结束后的正常路径处理。
+func (a *actor) insertInput(ctx context.Context) error {
+	items, err := a.h.DB.Inbox(ctx, a.id)
+	if err != nil {
+		return err
+	}
+	var notes []store.InboxItem
+	var input *store.InboxItem
+	for i := range items {
+		if a.processing[items[i].ItemID] {
+			continue // 本回合正在消费的项（drainInbox 已取），不重复插入
+		}
+		if items[i].Kind == store.InboxNote {
+			notes = append(notes, items[i])
+			continue
+		}
+		input = &items[i]
+		break
+	}
+	if input == nil {
+		return nil
+	}
+	var content session.Content
+	untrusted := false
+	var ids []string
+	for _, it := range append(notes, *input) {
+		var c session.Content
+		if err := json.Unmarshal([]byte(it.Input), &c); err != nil {
+			return err
+		}
+		if it.Kind == store.InboxNote {
+			c = append(session.Content{session.NewTextPart("[补报] ")}, c...)
+		}
+		content = append(content, c...)
+		if it.Trust == "untrusted" {
+			untrusted = true
+		}
+		ids = append(ids, it.ItemID)
+	}
+	// 守卫仍要过：拒绝时不插入，留给回合后的正常处理（那里会发布 turn_denied 并消费）。
+	if hk := a.h.Hooks.BeforeTurn; hk != nil {
+		nc, d, err := hk(a.id, content, untrusted)
+		if err != nil || d != Allow {
+			return nil
+		}
+		content = nc
+	}
+	m := map[string]any{session.MetaSource: "user", session.MetaTrust: "trusted"}
+	if untrusted {
+		m[session.MetaTrust] = "untrusted"
+	}
+	if _, err := a.ag.Core.MidInput(content, m); err != nil {
+		if errors.Is(err, session.ErrNotWaiting) {
+			return nil // 回合刚好结束：inbox 留给下一回合
+		}
+		return err
+	}
+	a.ag.Consume(ids...)
+	return nil
+}

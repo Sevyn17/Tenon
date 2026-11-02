@@ -622,6 +622,28 @@ func (c *Core) Steer(content Content, meta map[string]any, mode SteerMode) ([]Ch
 	return append(ch, ch2...), need, err
 }
 
+// MidInput 在回合进行中立即追加一条用户输入条目（09 9.4：运行中到达的消息在下一次调模型前插入）。
+// 与 Steer(Append) 不同，它不等步边界，直接进入下一次请求的历史；回合结束前仍属本回合。
+func (c *Core) MidInput(content Content, meta map[string]any) ([]Change, error) {
+	if err := c.checkReadOnly(); err != nil {
+		return nil, err
+	}
+	if c.hdr.Status == StatusIdle {
+		return nil, ErrNotWaiting
+	}
+	if err := c.checkMetaSize(meta); err != nil {
+		return nil, err
+	}
+	if meta == nil {
+		meta = map[string]any{}
+	}
+	if c.hdr.Turn == nil {
+		return nil, ErrNotWaiting
+	}
+	c.appendEntry(c.hdr.Turn.Turn, meta, Item{Kind: KindUser, User: &UserItem{Content: content}})
+	return []Change{{Kind: ChangeAppended, To: c.absLen() - 1, Entries: 1}}, nil
+}
+
 // Cancel 取消（T17）：先 flush 暂存项；未回传调用补 Cancelled(TurnCancelled)；Done(Cancelled)。
 func (c *Core) Cancel() ([]Change, *Need, error) {
 	if err := c.checkReadOnly(); err != nil {

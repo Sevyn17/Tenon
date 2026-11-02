@@ -56,6 +56,10 @@ type sess struct {
 	preview   string
 	updatedAt int64
 
+	// 写租约（02 2.2）：holder 为空 = 无主；epoch 每抢一次加一。
+	leaseHolder string
+	leaseEpoch  int64
+
 	entries  map[int]entry // idx → 条目
 	archive  []archived
 	requests map[string]request
@@ -228,6 +232,10 @@ func (s *Store) Commit(ctx context.Context, cp store.Checkpoint) error {
 	if x.logLen != cp.ExpectLogLen {
 		s.mu.Unlock()
 		return fmt.Errorf("%w: 期望 log_len=%d，实际 %d", store.ErrConflict, cp.ExpectLogLen, x.logLen)
+	}
+	if cp.Epoch != 0 && x.leaseEpoch != cp.Epoch {
+		s.mu.Unlock()
+		return fmt.Errorf("%w: 期望纪元 %d，实际 %d", store.ErrLeaseLost, cp.Epoch, x.leaseEpoch)
 	}
 	// 先把可能失败的序列化全部做完，再动数据。
 	hash, shell, hb, err := splitHeader(cp.Header)
