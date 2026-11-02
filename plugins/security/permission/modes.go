@@ -190,8 +190,13 @@ func (r *Registry) load() error {
 			if fi, err := e.Info(); err == nil {
 				stamps[p] = fi.ModTime()
 			}
+			isProject := di > 0 // Dirs[0] 用户级，其后是项目级（见 ModeDirs）
+			if _, dup := files[id]; dup && isProject && !project[id] {
+				// 项目档位不能顶替用户自己的同名档位：用户写的 strict 被项目改成 full，用户察觉不到。
+				return fmt.Errorf("permission: %s：项目档位与用户档位 %s 同名，不能覆盖，请改名", p, id)
+			}
 			files[id], src[id] = f, p
-			project[id] = di > 0 // Dirs[0] 用户级，其后是项目级（见 ModeDirs）
+			project[id] = isProject
 		}
 	}
 	defs := map[Mode]*ModeDef{}

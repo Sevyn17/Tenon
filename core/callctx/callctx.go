@@ -38,6 +38,8 @@ type Ctx struct {
 	meta    map[string]any // sessions.meta 解析结果（应用写的业务键）
 	use     map[string]any // 使用配置 [use.*] 解析结果：组件名 → 该组件的配置
 	trace   Trace
+	// untrusted 本回合输入是否含不可信来源（内核每回合设置，见 SetUntrusted）。
+	untrusted bool
 }
 
 // Options 内核构造 Ctx 用。
@@ -156,6 +158,27 @@ func (c *Ctx) Bind(s Session, meta, use json.RawMessage) {
 	c.session = s
 	c.meta = decodeObject(meta)
 	c.use = decodeObject(use)
+}
+
+// SetUntrusted 内核在每回合开始（以及回合中插入新输入）时设置：本回合的输入里有没有不可信来源
+// （外部入口的信封、不可信输入）。权限组件据此把 allow 降为询问。只会在回合内由假变真，回合开始重设。
+func (c *Ctx) SetUntrusted(v bool) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.untrusted = v
+}
+
+// Untrusted 本回合的输入是否含不可信来源。
+func (c *Ctx) Untrusted() bool {
+	if c == nil {
+		return false
+	}
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.untrusted
 }
 
 // BindTrace 内核填 trace（一次任务贯穿多个会话时用）。

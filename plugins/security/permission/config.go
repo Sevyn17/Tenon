@@ -100,6 +100,9 @@ type Sessions struct {
 	Fixed toolhub.SandboxMode
 	// Load 首次用到某会话时读取其持久状态（可空）。
 	Load func(sessionID string) (Mode, []string)
+	// ModeApproved 受信项目的放宽档位是否已被用户确认（§9.6，应用按 trust.toml 实现；可空 = 一律未确认）。
+	// 项目档位当新会话缺省时也要过这道确认，没确认过退回内置缺省档位。
+	ModeApproved func(mode Mode, widened []string) bool
 
 	mu     sync.Mutex
 	state  map[string]*sessState
@@ -135,6 +138,13 @@ func (s *Sessions) reg() *Registry {
 func (s *Sessions) get(id string) *sessState {
 	id = Top(id)
 	s.mu.Lock()
+	if st := s.state[id]; st != nil {
+		s.mu.Unlock()
+		return st
+	}
+	s.mu.Unlock()
+	def := s.defaultMode() // 不持锁：要读权限项注册表、可能调应用的确认查询
+	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.state == nil {
 		s.state = map[string]*sessState{}
@@ -142,10 +152,7 @@ func (s *Sessions) get(id string) *sessState {
 	if st := s.state[id]; st != nil {
 		return st
 	}
-	st := &sessState{mode: s.Default}
-	if st.mode == "" {
-		st.mode = Default
-	}
+	st := &sessState{mode: def}
 	if s.Load != nil {
 		s.mu.Unlock()
 		m, raw := s.Load(id)
@@ -166,6 +173,48 @@ func (s *Sessions) get(id string) *sessState {
 	st.gen = s.gen[st.mode]
 	s.state[id] = st
 	return st
+}
+
+// defaultMode 新会话的缺省档位：permissions.toml 的 mode；它若是受信项目提交的放宽档位
+// 且用户没确认过，退回内置缺省档位（不让项目悄悄把所有新会话放宽，§9.6）。调用方不持锁。
+func (s *Sessions) defaultMode() Mode {
+	m := s.Default
+	if m == "" {
+		return Default
+	}
+	if d, ok := s.reg().Get(m); ok && d.Project {
+		if w := ProjectWidened(d, s.itemsSnapshot()); len(w) > 0 && (s.ModeApproved == nil || !s.ModeApproved(m, w)) {
+			return Default
+		}
+	}
+	return m
+}
+
+// ProjectWidened 项目档位放宽了什么（应用确认放宽、记 trust.toml 时也用它，两边清单才一致）：按权限项比对（Widened），再加上继承根比内置缺省档位宽的情况
+// （权限项注册表要到第一个会话装配时才有，这时只能从继承根看出「base = full」这类放宽）。
+func ProjectWidened(d *ModeDef, items []toolhub.Item) []string {
+	w := Widened(d, items)
+	if rank(d.Root) > rank(Default) {
+		w = append(w, "基础档位 "+string(d.Root))
+	}
+	return w
+}
+
+// rank 内置档位从严到宽的次序；未知（没有内置根）按最严。
+func rank(m Mode) int {
+	for i, b := range Builtins {
+		if b == m {
+			return i
+		}
+	}
+	return -1
+}
+
+// itemsSnapshot 权限项注册表（首个会话装配时登记）；未登记时为空，Widened 只看档位自身写的项。
+func (s *Sessions) itemsSnapshot() []toolhub.Item {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]toolhub.Item(nil), s.items...)
 }
 
 // Registry 档位注册表。
@@ -287,11 +336,7 @@ func (s *Sessions) DefaultSandboxFor(tool string) toolhub.SandboxMode {
 	if s.Fixed != "" {
 		return s.Fixed
 	}
-	m := s.Default
-	if m == "" {
-		m = Default
-	}
-	d, ok := s.reg().Get(m)
+	d, ok := s.reg().Get(s.defaultMode())
 	if !ok {
 		d = builtinDef(Ask)
 	}

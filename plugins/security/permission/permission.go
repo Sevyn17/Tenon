@@ -67,6 +67,8 @@ type Policy struct {
 	Sandbox toolhub.SandboxMode
 	// Untrusted 报告本次调用所在回合的输入是否不可信（可空）。
 	Untrusted func(cx *toolhub.Cx) bool
+	// Cap 定义给的权限上限（[use.permission]，08 8.3）；非空时另按它判一次，取两者更严的结论。
+	Cap *Policy
 }
 
 func (p Policy) def() *ModeDef {
@@ -94,8 +96,24 @@ func (p Policy) allRules() []Rule {
 	return append([]Rule(nil), p.Rules...)
 }
 
-// Decide 纯函数判定（便于测试与 explain）。
+// Decide 纯函数判定（便于测试与 explain）。有上限档位（Cap）时两边各判一次，取更严的结论：
+// 上限只能收窄，会话档位再宽也越不过定义给的上限。
 func (p Policy) Decide(cx *toolhub.Cx, args json.RawMessage) Decision {
+	d := p.decide(cx, args)
+	if p.Cap == nil {
+		return d
+	}
+	c := *p.Cap
+	c.Cap, c.Untrusted = nil, p.Untrusted
+	cd := c.decide(cx, args)
+	if severity(cd.Action) > severity(d.Action) {
+		cd.Reason = "智能体权限上限 " + string(c.Mode) + "：" + cd.Reason
+		return cd
+	}
+	return d
+}
+
+func (p Policy) decide(cx *toolhub.Cx, args json.RawMessage) Decision {
 	name := cx.Tool.Spec.Name
 	d := p.base(cx, args)
 	if d.Action != Allow {
@@ -122,6 +140,9 @@ func (p Policy) base(cx *toolhub.Cx, args json.RawMessage) Decision {
 				return Decision{Action: act, Reason: fmt.Sprintf("规则 %s → %s", r, act)}
 			}
 		}
+	}
+	if r, ok := q.unseen(name, args, rules); ok {
+		return Decision{Action: AskUser, Reason: fmt.Sprintf("命令含规则看不全的写法（命令替换 / 后台 / 重定向），规则 %s 无法确认未命中，改为询问", r)}
 	}
 	// 申请了比本档更宽的沙箱：只认带足够沙箱模式的 allow 规则，否则询问
 	req, _ := toolhub.RequestedSandbox(args)
@@ -236,16 +257,92 @@ func (p Policy) hit(r Rule, name string, args json.RawMessage) bool {
 		return true
 	}
 	subj, cmd := Subject(name, args, p.Root)
-	if cmd { // deny / ask：复合命令任一段命中即命中
-		if segs, ok := SplitCommand(subj); ok {
-			for _, seg := range segs {
-				if Glob(r.Pattern, seg) {
-					return true
-				}
-			}
+	if !cmd {
+		return Glob(r.Pattern, subj)
+	}
+	// deny / ask：复合命令任一段命中即命中；空白压成一个（`rm  -rf` 与 `rm -rf` 同一条），
+	// 启动器包着的命令（`cmd /c …`、`bash -c "…"`）拆开再看一遍里面的命令。
+	for _, seg := range commandViews(subj, 0) {
+		if Glob(r.Pattern, seg) {
+			return true
 		}
 	}
-	return Glob(r.Pattern, subj)
+	return false
+}
+
+// unseen deny / ask 规则看不全的命令：拆不开（命令替换、后台 &、写文件重定向、脚本块），
+// 规则只能对整条命令做前缀匹配，里面藏的命令看不到。有针对命令的 deny / ask 规则时，
+// 这类命令至少要询问——否则公共 deny 换个写法就绕过去了。
+func (p Policy) unseen(name string, args json.RawMessage, rules []Rule) (Rule, bool) {
+	subj, cmd := Subject(name, args, p.Root)
+	if !cmd {
+		return Rule{}, false
+	}
+	if _, ok := SplitCommand(normSpace(subj)); ok {
+		return Rule{}, false
+	}
+	for _, r := range rules {
+		if (r.Action == Deny || r.Action == AskUser) && r.Pattern != "" && (r.Tool == "*" || r.Tool == name) {
+			return r, true
+		}
+	}
+	return Rule{}, false
+}
+
+// commandViews 一条命令供规则匹配的各个视图：压过空白的整条、拆开的每一段，
+// 以及启动器（cmd /c、sh/bash -c、pwsh -Command）包着的内层命令（递归，最多 3 层）。
+func commandViews(c string, depth int) []string {
+	c = normSpace(c)
+	views := []string{c}
+	segs, ok := SplitCommand(c)
+	if !ok {
+		segs = nil
+	}
+	for _, s := range segs {
+		if s != c {
+			views = append(views, s)
+		}
+	}
+	if depth >= 3 {
+		return views
+	}
+	for _, s := range append([]string{c}, segs...) {
+		if inner, ok := launcherPayload(s); ok {
+			views = append(views, commandViews(inner, depth+1)...)
+		}
+	}
+	return views
+}
+
+// normSpace 把连续空白压成一个空格并去掉首尾空白。
+func normSpace(s string) string { return strings.Join(strings.Fields(s), " ") }
+
+// launcherPayload 取出 `cmd /c X`、`sh -c "X"`、`bash -lc 'X'`、`pwsh -Command X` 里的 X。
+func launcherPayload(seg string) (string, bool) {
+	f := strings.Fields(seg)
+	if len(f) < 3 {
+		return "", false
+	}
+	exe := strings.ToLower(filepath.Base(strings.Trim(f[0], `"'`)))
+	exe = strings.TrimSuffix(strings.TrimSuffix(exe, ".exe"), ".cmd")
+	flag := strings.ToLower(f[1])
+	var ok bool
+	switch exe {
+	case "cmd":
+		ok = flag == "/c" || flag == "/k"
+	case "sh", "bash", "zsh", "dash":
+		ok = strings.HasPrefix(flag, "-") && strings.HasSuffix(flag, "c")
+	case "powershell", "pwsh":
+		ok = flag == "-command" || flag == "-c"
+	}
+	if !ok {
+		return "", false
+	}
+	rest := strings.TrimSpace(seg[strings.Index(seg, f[1])+len(f[1]):])
+	if len(rest) >= 2 && (rest[0] == '"' || rest[0] == '\'') && rest[len(rest)-1] == rest[0] {
+		rest = rest[1 : len(rest)-1]
+	}
+	return rest, rest != ""
 }
 
 // Subject 调用的匹配对象：shell 命令（cmd=true）/ 相对路径 / 参数 JSON。

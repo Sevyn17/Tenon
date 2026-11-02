@@ -759,6 +759,9 @@ func (a *actor) drainInbox(ctx context.Context) error {
 		}
 		// 每回合都按本批信封重设 trace：非信封输入（Send/Note）置空，免得沿用上一回合的 trace。
 		a.ag.SetTrace(env.Trace)
+		// 触发链信息：本回合发出的信封沿用本批里最大的跳数、来源可信度只降不升（08 8.7）。
+		a.ag.SetTurnOrigin(agent.TurnOrigin{Hop: batchHop(batch), Untrusted: untrusted})
+		a.ag.Ctx.SetUntrusted(untrusted) // 权限组件据此把 allow 降为询问
 		if env.Trace != "" {
 			a.h.recordTrace(env.Trace, a.id, "session", "")
 		}
@@ -1166,9 +1169,15 @@ func (a *actor) insertInput(ctx context.Context) error {
 		content = nc
 	}
 	m := envelopeMeta(env, untrusted)
-	// 回合中插入的信封同样收窄本轮授权范围（触发链 caps 取交集）。
+	// 回合中插入的信封同样收窄本轮授权范围（触发链 caps 取交集），不可信输入只升不降。
 	a.turnCaps = intersectCaps(a.turnCaps, batchCaps(batch))
 	a.ag.SetCaps(a.turnCaps)
+	if untrusted {
+		a.ag.Ctx.SetUntrusted(true)
+		o := a.ag.CurrentTurnOrigin()
+		o.Untrusted = true
+		a.ag.SetTurnOrigin(o)
+	}
 	if _, err := a.ag.Core.MidInput(content, m); err != nil {
 		if errors.Is(err, session.ErrNotWaiting) {
 			return nil // 回合刚好结束：inbox 留给下一回合

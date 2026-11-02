@@ -365,7 +365,8 @@ func TestGuardContactAndHop(t *testing.T) {
 	}
 	send := func(from mail.Address, hop int) error {
 		t.Helper()
-		return r.h.Deliver(ctx, mail.Envelope{From: from, To: mail.Address{Kind: mail.AddrSession, ID: "s1"}, Body: "hi", Hop: hop})
+		// 跳数是链上的内核字段：入口 Deliver 从 0 起算，这里走发件箱派发路径带上已有跳数。
+		return r.h.deliverQueued(ctx, mail.Envelope{From: from, To: mail.Address{Kind: mail.AddrSession, ID: "s1"}, Body: "hi", Hop: hop})
 	}
 	if err := send(mail.Address{Kind: mail.AddrHuman, ID: "u2"}, 0); !errors.Is(err, ErrNotAllowed) {
 		t.Fatalf("非创建者应被拒，得到 %v", err)
@@ -472,7 +473,8 @@ func TestCapsRestrictToolCall(t *testing.T) {
 	}
 	deliver := func(caps []string) {
 		t.Helper()
-		if err := h.Deliver(ctx, mail.Envelope{
+		// caps 是内核按发送会话写的（Agent.Outbound）；这里模拟链上已带 caps 的信封。
+		if err := h.deliverQueued(ctx, mail.Envelope{
 			From: mail.Address{Kind: mail.AddrHuman, ID: "u1"},
 			To:   mail.Address{Kind: mail.AddrSession, ID: "s1"},
 			Kind: mail.KindRequest, Body: "tool", Caps: caps,

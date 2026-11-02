@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"ybase-kernel/core/agent"
@@ -229,6 +230,8 @@ func (r *Runtime) BuildApp(o AppOptions) (*Built, error) {
 		Definitions: rt.Defs,
 		// 状态提交登记（框架设计 12.5）：agent 每次调模型前收集变化的片段。
 		Statuses: col.Statuses,
+		// 使用配置原型（06 6.2）：定义里的 [use.*] 按它算成会话的 use_config。
+		Schemas: rt.Asm.AgentSchemas(),
 	}
 	rb.Hooks = o.Hooks
 	rb.Blocks = col.Blocks // 系统提示词由 prompt 插件提供（plugin-switch-plan §2.1）
@@ -238,6 +241,11 @@ func (r *Runtime) BuildApp(o AppOptions) (*Built, error) {
 		Trusted: r.Trusted, Profile: r.Profile, Packages: r.Packages, UI: o.UI}
 	if perms != nil {
 		ao.Modes = PermModes{P: perms, Workdir: o.ModesWorkdir}
+		// 项目档位当新会话缺省时，也要用户确认过放宽（与 /mode 切换共用 trust.toml 的确认记录）。
+		wd := o.ModesWorkdir
+		perms.ModeApproved = func(m permission.Mode, widened []string) bool {
+			return ModeApproved(wd, string(m), strings.Join(widened, "、"))
+		}
 	}
 	if rt.Compact != nil {
 		ao.Compactor = rt.Compact

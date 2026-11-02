@@ -9,6 +9,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path"
+	"strings"
 
 	"ybase-kernel/core/agent"
 	"ybase-kernel/core/agentdef"
@@ -18,6 +20,7 @@ import (
 	"ybase-kernel/core/session"
 	"ybase-kernel/core/store"
 	"ybase-kernel/core/toolhub"
+	"ybase-kernel/core/useconf"
 )
 
 // SessionCx 构造一个会话时贡献函数拿到的上下文。
@@ -70,6 +73,9 @@ type Builder struct {
 	Definitions agentdef.Source
 	// Statuses 状态提交登记（框架设计 12.5）：每次调模型前由 agent 收集变化的片段。
 	Statuses []inject.Reg
+	// Schemas 装配期各组件登记的使用配置原型（06 6.2，Assembly.AgentSchemas）：新会话按定义的
+	// [use.*] 算 use_config 用；nil = 定义里写了 [use.*] 的会话创建失败（没有组件认这份配置）。
+	Schemas []useconf.Schema
 }
 
 // Build 构造会话 id 的 agent 与新会话配置。
@@ -87,6 +93,7 @@ func (b *Builder) Build(id, defName string, child bool) (*agent.Agent, *session.
 		Model: &modelhub.Session{Hub: b.Models, SessionKey: "ybase-" + id}}
 	a.Def = def
 	a.Statuses = b.Statuses
+	a.Schemas = b.Schemas
 	if b.Compactor != nil {
 		a.Compactor = b.Compactor
 	}
@@ -127,7 +134,11 @@ func (b *Builder) Build(id, defName string, child bool) (*agent.Agent, *session.
 	if err := hub.Validate(); err != nil {
 		return nil, nil, err
 	}
-	ts := hub.SpecsFor(nil, 0)
+	allow, err := defTools(def, hub.Names())
+	if err != nil {
+		return nil, nil, err
+	}
+	ts := hub.SpecsFor(allow, 0)
 	a.Hub, a.Toolset = hub, ts
 	if b.Hooks != nil {
 		a.Hooks = b.Hooks(cx)
@@ -150,6 +161,42 @@ func (b *Builder) Build(id, defName string, child bool) (*agent.Agent, *session.
 		}
 	}
 	return a, cfg, nil
+}
+
+// defTools 把定义的 tools 白名单（支持 `*` / `?` 通配，03 3.2）展开成本会话的可用工具集合
+// （08 8.3：有效权限 = tools ∩ [use.permission] ∩ caps …，这里是第一项）。
+// 定义为 nil 或没写 tools 时返回 nil = 不收窄。写了却一项都没匹配到任何已登记工具时报错——
+// 多半是拼错了名字，悄悄给一个空工具集只会让问题更难查。
+func defTools(def *agentdef.Agent, registered []string) ([]string, error) {
+	if def == nil || len(def.Tools) == 0 {
+		return nil, nil
+	}
+	out := []string{}
+	seen := map[string]bool{}
+	var unmatched []string
+	for _, pat := range def.Tools {
+		hit := false
+		for _, n := range registered {
+			ok, err := path.Match(pat, n)
+			if err != nil {
+				return nil, fmt.Errorf("runtime: 定义 %s 的 tools 项 %q 不合法：%w", def.ID, pat, err)
+			}
+			if ok {
+				hit = true
+				if !seen[n] {
+					seen[n] = true
+					out = append(out, n)
+				}
+			}
+		}
+		if !hit {
+			unmatched = append(unmatched, pat)
+		}
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("runtime: 定义 %s 的 tools 没有匹配到任何已登记工具：%s", def.ID, strings.Join(unmatched, "、"))
+	}
+	return out, nil
 }
 
 // loadDefinition 取会话要用的智能体定义（T1b-2c）。

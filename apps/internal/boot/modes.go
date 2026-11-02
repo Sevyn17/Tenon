@@ -48,7 +48,7 @@ func (m PermModes) Set(id, mode string, confirm bool) (appapi.ModeState, error) 
 	}
 	// §9.6：受信项目提交的档位若放宽了权限，首次选用要用户确认一次（记进 trust.toml，放宽清单变了要重新确认）。
 	if d.Project {
-		if w := strings.Join(permission.Widened(d, m.P.Items()), "、"); w != "" && !ModeApproved(m.Workdir, mode, w) {
+		if w := strings.Join(permission.ProjectWidened(d, m.P.Items()), "、"); w != "" && !ModeApproved(m.Workdir, mode, w) {
 			if !confirm {
 				return appapi.ModeState{}, appapi.Errorf(appapi.CodeNeedConfirm, "档位 %s 来自项目 .ybase/modes，放宽了：%s", mode, w)
 			}

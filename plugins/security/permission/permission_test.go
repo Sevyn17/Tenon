@@ -9,7 +9,9 @@ import (
 	"testing"
 	"time"
 
+	"ybase-kernel/core/callctx"
 	"ybase-kernel/core/session"
+	"ybase-kernel/core/store"
 	"ybase-kernel/core/toolhub"
 )
 
@@ -78,6 +80,51 @@ func TestDecideModesAndRules(t *testing.T) {
 	if (Policy{Mode: ReadOnly}).SandboxOf("shell") != toolhub.SandboxReadOnly || (Policy{}).SandboxOf("shell") != toolhub.SandboxWorkspaceWrite ||
 		(Policy{Mode: Full}).SandboxOf("shell") != toolhub.SandboxFull || (Policy{Mode: Full, Sandbox: toolhub.SandboxReadOnly}).SandboxOf("shell") != toolhub.SandboxReadOnly {
 		t.Fatal("档位沙箱映射错误")
+	}
+}
+
+// B7：公共 deny 规则不能靠换个写法绕过——多余空白、启动器包一层、藏进命令替换 / 后台 / 重定向。
+// 拆不开的命令里看不到藏了什么，有 deny / ask 规则时至少询问。
+func TestShellDenyRuleVariants(t *testing.T) {
+	sh := eff("shell", toolhub.Dangerous, toolhub.EffectExec, toolhub.AttrSandboxed)
+	p := Policy{Mode: Workspace, Rules: []Rule{{Tool: "shell", Pattern: "rm -rf:*", Action: Deny}}}
+	for cmd, want := range map[string]Action{
+		"rm -rf x":                Deny,
+		"rm  -rf x":               Deny, // 多余空白
+		"\trm -rf x":              Deny,
+		"cmd /c rm -rf x":         Deny, // 启动器包一层
+		`bash -c "rm -rf x"`:      Deny,
+		"pwsh -Command rm -rf x":  Deny,
+		"git status && rm -rf x":  Deny,
+		"echo $(rm -rf x)":        AskUser, // 命令替换：看不到里面
+		"rm -rf x &":              Deny,    // 前缀照样命中
+		"sleep 1 & rm -rf x":      AskUser, // 单个 &：拆不开
+		"go test ./... > out.txt": AskUser, // 写文件重定向：拆不开，有 deny 规则就问
+		"go test ./...":           Allow,   // 正常命令不受影响
+	} {
+		args, _ := json.Marshal(map[string]string{"command": cmd})
+		if got := p.Decide(sh, args); got.Action != want {
+			t.Errorf("%q: 得到 %s，期望 %s（%s）", cmd, got.Action, want, got.Reason)
+		}
+	}
+	// 没有命令类 deny / ask 规则时，拆不开的命令仍按档位判定（不平白多问）。
+	args, _ := json.Marshal(map[string]string{"command": "go test ./... > out.txt"})
+	if got := (Policy{Mode: Workspace}).Decide(sh, args).Action; got != Allow {
+		t.Fatalf("无规则时按档位放行，得到 %s", got)
+	}
+}
+
+// B1：[use.permission] 上限只收窄——会话档位再宽，也按上限档位判定；上限更宽时不放宽。
+func TestPolicyCapOnlyNarrows(t *testing.T) {
+	wr := eff("write_file", toolhub.Write, toolhub.EffectWrite, AttrWorkspace)
+	args := json.RawMessage(`{"path":"a.txt"}`)
+	full := Policy{Mode: Full, Cap: &Policy{Mode: ReadOnly}}
+	if got := full.Decide(wr, args); got.Action != Deny || !strings.Contains(got.Reason, "智能体权限上限") {
+		t.Fatalf("上限 read-only 应拒写：%+v", got)
+	}
+	ro := Policy{Mode: ReadOnly, Cap: &Policy{Mode: Full}}
+	if got := ro.Decide(wr, args).Action; got != Deny {
+		t.Fatalf("上限更宽不能放宽会话档位，得到 %s", got)
 	}
 }
 
@@ -241,6 +288,68 @@ func TestLayerConfirmAndApprovedHashLock(t *testing.T) {
 	}
 }
 
+// B10：不可信输入回合里，allow 降为询问（由内核按回合在 Ctx 上标记，权限层读它）。
+func TestUntrustedTurnDowngradesAllow(t *testing.T) {
+	sh := eff("shell", toolhub.Dangerous, toolhub.EffectExec, toolhub.AttrSandboxed)
+	sh.Ctx = callctx.New(callctx.Options{SessionID: "s"})
+	p := Policy{Mode: Workspace, Untrusted: func(c *toolhub.Cx) bool { return c.Ctx != nil && c.Ctx.Untrusted() }}
+	args := json.RawMessage(`{"command":"go test ./..."}`)
+	if got := p.Decide(sh, args).Action; got != Allow {
+		t.Fatalf("可信回合按档位放行，得 %s", got)
+	}
+	sh.Ctx.SetUntrusted(true)
+	if got := p.Decide(sh, args).Action; got != AskUser {
+		t.Fatalf("不可信回合应降为询问，得 %s", got)
+	}
+}
+
+// B9：受信项目的档位不能悄悄生效——同名覆盖用户档位报错；放宽档位当新会话缺省要用户确认过。
+func TestProjectModesNeedApproval(t *testing.T) {
+	home, proj := t.TempDir(), t.TempDir()
+	t.Setenv("YBASE_HOME", home)
+	mk := func(dir, name, body string) {
+		t.Helper()
+		d := filepath.Join(dir, "modes")
+		if dir == proj {
+			d = filepath.Join(dir, ".ybase", "modes")
+		}
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(d, name+".toml"), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// 1. 同名：项目的 strict 顶替用户的 strict → 拒绝。
+	mk(home, "strict", "base = \"read-only\"\n")
+	mk(proj, "strict", "base = \"full\"\n")
+	if _, err := NewRegistry(ModeDirs(proj)...); err == nil || !strings.Contains(err.Error(), "同名") {
+		t.Fatalf("项目档位与用户档位同名应报错，得 %v", err)
+	}
+	os.Remove(filepath.Join(proj, ".ybase", "modes", "strict.toml"))
+
+	// 2. 项目放宽档位当缺省：没确认 → 退回内置缺省；确认后 → 生效。
+	mk(proj, "yolo", "base = \"full\"\n")
+	if err := os.WriteFile(filepath.Join(proj, ".ybase", "permissions.toml"), []byte("mode = \"yolo\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s, err := Open(proj, proj, "", "", func() store.Store { return nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m := s.Mode("s1"); m != Default {
+		t.Fatalf("未确认的项目放宽档位不应成为缺省，得 %s", m)
+	}
+	s2, err := Open(proj, proj, "", "", func() store.Store { return nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	s2.ModeApproved = func(m Mode, w []string) bool { return m == "yolo" && len(w) > 0 }
+	if m := s2.Mode("s1"); m != "yolo" {
+		t.Fatalf("确认过的项目档位应成为缺省，得 %s", m)
+	}
+}
+
 func TestRegistryCustomModes(t *testing.T) {
 	user, proj := t.TempDir(), t.TempDir()
 	write := func(dir, name, body string) {
@@ -312,12 +421,19 @@ write = "allow"
 		t.Fatal("覆盖内置档位应报错")
 	}
 	os.Remove(filepath.Join(proj, "full.toml"))
+	// 项目级与用户级同名：报错，不让项目悄悄顶替用户自己的档位（B9，2026-11-02 起）。
+	if _, err := NewRegistry(user, proj); err == nil || !strings.Contains(err.Error(), "同名") {
+		t.Fatalf("项目档位与用户档位同名应报错，得 %v", err)
+	}
+	os.Remove(filepath.Join(proj, "dev.toml"))
+	write(proj, "projdev", `base = "ask"
+`)
 	r2, err := NewRegistry(user, proj)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if d, _ := r2.Get("dev"); d.Root != Ask || !d.Project {
-		t.Fatal("项目级应覆盖用户级")
+	if d, _ := r2.Get("projdev"); d.Root != Ask || !d.Project {
+		t.Fatal("项目级档位应可用并标为项目来源")
 	}
 	// 循环继承
 	cyc := t.TempDir()

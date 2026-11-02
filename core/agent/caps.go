@@ -36,31 +36,38 @@ func (a *Agent) InstallCapsGuard() {
 	})
 }
 
-// SetCaps 设置本轮的工具授权范围；nil / 空表示不限（下一回合由 host 重设）。
+// SetCaps 设置本轮的工具授权范围：nil = 不限，空集 = 一个都不许（下一回合由 host 重设）。
 func (a *Agent) SetCaps(caps []string) {
 	if a == nil {
 		return
 	}
 	a.capsMu.Lock()
-	a.caps = caps
+	if caps == nil {
+		a.caps = nil
+	} else {
+		a.caps = append([]string{}, caps...)
+	}
 	a.capsMu.Unlock()
 }
 
-// Caps 当前本轮的授权范围（拷贝）。
+// Caps 当前本轮的授权范围（拷贝；nil = 不限，空集 = 一个都不许）。
 func (a *Agent) Caps() []string {
 	if a == nil {
 		return nil
 	}
 	a.capsMu.RLock()
 	defer a.capsMu.RUnlock()
-	return append([]string(nil), a.caps...)
+	if a.caps == nil {
+		return nil
+	}
+	return append([]string{}, a.caps...)
 }
 
-// allowedByCaps 工具是否在本轮范围内；没有范围（nil/空）时全部允许。
+// allowedByCaps 工具是否在本轮范围内；没有范围（nil）时全部允许，空集时全部拒绝。
 func (a *Agent) allowedByCaps(tool string) bool {
 	a.capsMu.RLock()
 	defer a.capsMu.RUnlock()
-	if len(a.caps) == 0 {
+	if a.caps == nil {
 		return true
 	}
 	for _, c := range a.caps {

@@ -285,6 +285,9 @@ func (h *Hub) Authorized() bool {
 	return false
 }
 
+// Names 已登记工具名（登记顺序，含内核自带的机制工具）。
+func (h *Hub) Names() []string { return append([]string(nil), h.order...) }
+
 // Get 按名取工具。
 func (h *Hub) Get(name string) (*Tool, bool) {
 	t, ok := h.tools[name]

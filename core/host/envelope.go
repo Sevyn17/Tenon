@@ -26,15 +26,36 @@ var ErrNotAllowed = errors.New("host: 发送方不在联系名单里")
 // MaxHop 单封信封允许的最大跳数。
 const MaxHop = 8
 
-// Deliver 投递一封信封（13 13.3）：session: 只查不建；agent: 带 key 时查或建
-// （B19）；human: 等分片二后半。
+// Deliver 投递一封来自入口（人 / 应用 / 组件）的信封（13 13.3）：session: 只查不建；
+// agent: 带 key 时查或建（B19）；human: 发布给界面。
+//
+// 内核字段一律由内核写（09 9.6 D2，调用方传入的值忽略）：hop 从 0 起算，trace 新分配，
+// caps 清空（入口不收窄、也不能放宽），origin 只能降不能升（组件发来的最高是 agent）。
+// 会话之间的转发（发件箱）保留链上已有的内核字段，见 deliverQueued。
 //
 // 返回前信封已落 inbox（幂等：同 id 只算一次）；回合中到达的 wake 会在下一次调模型前合并插入。
 func (h *Host) Deliver(ctx context.Context, env mail.Envelope) error {
+	env.Hop, env.Trace, env.Caps = 0, "", nil
+	if env.From.Kind == mail.AddrComponent && env.Origin != mail.OriginExternal {
+		env.Origin = mail.OriginAgent // 组件不能自称 human
+	}
+	return h.deliver(ctx, env)
+}
+
+// deliverQueued 派发会话发件箱里的信封：内核字段是发送会话的回合在提交时写好的
+// （见 StampOutbound），沿链保留，只在这里继续加跳数。
+func (h *Host) deliverQueued(ctx context.Context, env mail.Envelope) error {
+	if env.Hop < 0 {
+		env.Hop = 0
+	}
+	return h.deliver(ctx, env)
+}
+
+func (h *Host) deliver(ctx context.Context, env mail.Envelope) error {
 	if err := env.Normalize(); err != nil {
 		return err
 	}
-	if env.Trace == "" { // 一次任务共享 trace id（08 8.7）：缺省由内核分配，调用方传值忽略。
+	if env.Trace == "" { // 一次任务共享 trace id（08 8.7）：入口处由内核分配。
 		env.Trace = mail.NewID()
 	}
 	// 跳数（08 D4）：每投递一次加一，超过上限截断并记 guard.denied。
@@ -440,13 +461,24 @@ func (a *actor) applyNotices(ctx context.Context, items []store.InboxItem) (bool
 	return true, nil
 }
 
+// batchHop 一批信封里最大的跳数（本回合发出的信封从它继续计数，08 8.7）。
+func batchHop(items []store.InboxItem) int {
+	hop := 0
+	for _, it := range items {
+		if e, ok := parseEnvelope(it); ok && e.Hop > hop {
+			hop = e.Hop
+		}
+	}
+	return hop
+}
+
 // batchCaps 一批信封的 caps 交集（信封 caps 已是触发链上的交集；不同发送方再取交集）。
-// nil = 不限；空集不参与（表示该封没有收紧）。返回拷贝，避免调用方改到信封数据。
+// nil = 不限（该封没有收紧）；空集 = 一个都不许，参与求交。返回拷贝，避免调用方改到信封数据。
 func batchCaps(items []store.InboxItem) []string {
 	var out []string
 	for _, it := range items {
 		e, ok := parseEnvelope(it)
-		if !ok || len(e.Caps) == 0 {
+		if !ok || e.Caps == nil {
 			continue
 		}
 		out = intersectCaps(out, e.Caps)
@@ -454,19 +486,23 @@ func batchCaps(items []store.InboxItem) []string {
 	return out
 }
 
-// intersectCaps 两个授权范围的交集；nil 表示不限，空集按空集处理。
+// intersectCaps 两个授权范围的交集；nil 表示不限。交集为空时返回非 nil 的空集（一个都不许），
+// 不能退化成 nil——那会把「两边没有共同工具」变成「不限」。
 func intersectCaps(a, b []string) []string {
 	if a == nil {
-		return append([]string(nil), b...)
+		if b == nil {
+			return nil
+		}
+		return append([]string{}, b...)
 	}
 	if b == nil {
-		return append([]string(nil), a...)
+		return append([]string{}, a...)
 	}
 	keep := make(map[string]bool, len(b))
 	for _, s := range b {
 		keep[s] = true
 	}
-	var out []string
+	out := []string{}
 	for _, s := range a {
 		if keep[s] {
 			out = append(out, s)
@@ -493,8 +529,10 @@ func guardContact(env mail.Envelope, meta store.SessionMeta, allow bool) error {
 	case mail.AddrComponent:
 		return nil
 	default:
-		if env.Corr == "" && !allow {
-			return fmt.Errorf("%w: %s 直投需要 corr", ErrNotAllowed, env.From.Kind)
+		// 只有回信能凭 corr 进门，而且之后必须通过 ClaimCorr 核对；request / notify 带个 corr
+		// 不算授权（否则随便填一个 corr 就绕过了联系名单）。
+		if env.Kind != mail.KindReply && !allow {
+			return fmt.Errorf("%w: %s 直投需要回信 corr", ErrNotAllowed, env.From.Kind)
 		}
 	}
 	return nil
@@ -547,7 +585,7 @@ func (h *Host) FlushOutbox(ctx context.Context) (int, error) {
 			_ = h.DB.MarkOutbox(ctx, it.ID)
 			continue
 		}
-		err := h.Deliver(ctx, env)
+		err := h.deliverQueued(ctx, env)
 		permanent := errors.Is(err, ErrSessionNotFound) || errors.Is(err, ErrClosed) ||
 			errors.Is(err, ErrNotAllowed) || errors.Is(err, ErrTooManyHops) || errors.Is(err, store.ErrCorrRejected)
 		if err == nil {

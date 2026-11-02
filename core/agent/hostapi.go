@@ -4,8 +4,10 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
+	"ybase-kernel/core/mail"
 	"ybase-kernel/core/session"
 	"ybase-kernel/core/store"
 )
@@ -78,6 +80,64 @@ func (s *Span) End(status string) { (*span)(s).End(status) }
 // ID span id（子 span 的 parent）。
 func (s *Span) ID() string { return s.s.ID }
 
+// Outbound 以本会话身份发一封信（会话之间投递的唯一入口）：内核字段由这里写，调用方给的忽略
+// （08 8.3 / 8.7，09 9.6 D2）——
+//   - from = session:<本会话>；
+//   - hop = 触发本回合的信封里最大的跳数（派发时再加一）；reply / control 同样沿用，派发不另减；
+//   - trace = 本回合的 trace；
+//   - caps = 本会话这一轮的有效权限：可用工具集 ∩ 本轮 caps（被调用方拿不到发送方没有的工具）；
+//   - origin：本回合由不可信来源触发时记 external，否则 agent（只降不升）。
+//
+// 信封随本轮检查点落库，提交后由宿主派发（08 9.6）。
+func (a *Agent) Outbound(env mail.Envelope) error {
+	o := a.CurrentTurnOrigin()
+	env.From = mail.Address{Kind: mail.AddrSession, ID: a.SessionID}
+	env.Hop = o.Hop
+	env.Trace = a.TraceID()
+	env.Caps = a.effectiveCaps()
+	env.Origin = mail.OriginAgent
+	if o.Untrusted {
+		env.Origin = mail.OriginExternal
+	}
+	env.Via = ""
+	if err := env.Normalize(); err != nil {
+		return err
+	}
+	b, err := json.Marshal(env)
+	if err != nil {
+		return err
+	}
+	a.EnqueueOutbox(env.ID, b)
+	return nil
+}
+
+// effectiveCaps 本会话这一轮能用的工具：可用工具集 ∩ 本轮 caps。总是返回非 nil
+// （会话之间的信封必须带上发送方的权限，「不限」不能沿链传下去）。
+func (a *Agent) effectiveCaps() []string {
+	var avail []string
+	if a.Toolset != nil {
+		avail = a.Toolset.Available()
+	}
+	caps := a.Caps()
+	out := []string{}
+	for _, n := range avail {
+		if caps != nil && !contains(caps, n) {
+			continue
+		}
+		out = append(out, n)
+	}
+	return out
+}
+
+func contains(xs []string, s string) bool {
+	for _, x := range xs {
+		if x == s {
+			return true
+		}
+	}
+	return false
+}
+
 // EnqueueOutbox 把一封待外发的信封记入本轮检查点：它与历史、工具结果在同一次提交里
 // 落库（08 9.6），提交成功后才由 Host 派发，崩溃时不会出现「信发了但回合没落库」。
 // 信封由调用方序列化成 JSON（通常来自 mail.Envelope）。
@@ -87,6 +147,27 @@ func (a *Agent) EnqueueOutbox(id string, envelope []byte) {
 		Envelope:  append([]byte(nil), envelope...),
 		CreatedAt: time.Now().UnixMilli(),
 	})
+}
+
+// TurnOrigin 本回合的触发链信息（发出信封时由内核盖到信封上，见 host.StampOutbound）：
+// 触发本回合的信封里最大的跳数，以及触发来源是否不可信。host 在开回合时设置。
+type TurnOrigin struct {
+	Hop       int
+	Untrusted bool
+}
+
+// SetTurnOrigin 设置本回合的触发链信息。
+func (a *Agent) SetTurnOrigin(o TurnOrigin) {
+	a.traceMu.Lock()
+	a.turnOrigin = o
+	a.traceMu.Unlock()
+}
+
+// CurrentTurnOrigin 本回合的触发链信息。
+func (a *Agent) CurrentTurnOrigin() TurnOrigin {
+	a.traceMu.Lock()
+	defer a.traceMu.Unlock()
+	return a.turnOrigin
 }
 
 // SetTrace 设置当前回合的 trace id（host 在取信时从信封上拿到；为空表示不记录）。

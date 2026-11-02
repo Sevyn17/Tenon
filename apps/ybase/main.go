@@ -779,7 +779,7 @@ func (c *cli) mode(args []string) error {
 	m := permission.Mode(args[0])
 	// §9.6：受信项目提交的档位若放宽了权限，首次选用要用户确认一次（记进 trust.toml，放宽清单变了要重新确认）。
 	if d, ok := c.perms.Registry().Get(m); ok && d.Project {
-		if w := strings.Join(permission.Widened(d, c.perms.Items()), "、"); w != "" && !modeApproved(c.o.workdir, string(m), w) {
+		if w := strings.Join(permission.ProjectWidened(d, c.perms.Items()), "、"); w != "" && !modeApproved(c.o.workdir, string(m), w) {
 			if len(args) < 2 || args[1] != "-confirm" {
 				fmt.Printf("档位 %s 来自项目 .ybase/modes，放宽了：%s\n确认使用请输入：/mode %s -confirm\n", m, w, m)
 				return nil

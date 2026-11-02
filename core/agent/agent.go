@@ -106,6 +106,7 @@ type Agent struct {
 	capsMu      sync.RWMutex
 	traceMu     sync.Mutex
 	trace       string
+	turnOrigin  TurnOrigin
 	traceEvents []store.TraceEvent
 	caps        []string
 	capsGuarded bool

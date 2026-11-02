@@ -51,7 +51,8 @@ func TestExplainTraceListsPath(t *testing.T) {
 		Kind:  mail.KindRequest,
 		Body:  "hi",
 	}
-	if err := h.Deliver(context.Background(), env); err != nil {
+	// 链上已有 trace 的信封（发件箱派发）沿用 trace；入口 Deliver 会重新分配。
+	if err := h.deliverQueued(context.Background(), env); err != nil {
 		t.Fatalf("Deliver: %v", err)
 	}
 	if err := hd.Wait(); err != nil {
@@ -72,7 +73,7 @@ func TestExplainTraceListsPath(t *testing.T) {
 func TestTraceNotCarriedIntoPlainTurn(t *testing.T) {
 	h, _ := newExplainRig(t, &scriptedModel{})
 	hd := mustOpen(t, h, "s1")
-	if err := h.Deliver(context.Background(), mail.Envelope{Trace: "tr3",
+	if err := h.deliverQueued(context.Background(), mail.Envelope{Trace: "tr3",
 		From: mail.Address{Kind: mail.AddrHuman, ID: "u1"}, To: mail.Address{Kind: mail.AddrSession, ID: "s1"},
 		Kind: mail.KindRequest, Body: "hi"}); err != nil {
 		t.Fatalf("Deliver: %v", err)
@@ -105,7 +106,7 @@ func TestExplainTraceGuardDenied(t *testing.T) {
 		Kind:  mail.KindRequest,
 		Body:  "hi",
 	}
-	if err := h.Deliver(context.Background(), env); err == nil {
+	if err := h.deliverQueued(context.Background(), env); err == nil {
 		t.Fatal("跳数超限应报错")
 	}
 	out, err := ExplainTrace(context.Background(), db, "tr2")

@@ -66,7 +66,21 @@ func writeSubjects(root string, args json.RawMessage) ([]string, error) {
 	if a.Path == "" {
 		return nil, nil
 	}
+	// 权限按真实位置判定：经链接指到工作目录外的路径要报成外部的绝对路径，
+	// 不能按字面上的 lnk/... 命中「工作目录内」的规则（工具本身也会拒绝，这里是第二道）。
+	if q, err := resolve(root, a.Path); err != nil || q == "" {
+		if rp, err := realPath(absUnder(root, a.Path)); err == nil {
+			return []string{filepath.ToSlash(rp)}, nil
+		}
+	}
 	return []string{relSlash(root, a.Path)}, nil
+}
+
+func absUnder(root, p string) string {
+	if filepath.IsAbs(p) {
+		return filepath.Clean(p)
+	}
+	return filepath.Clean(filepath.Join(root, p))
 }
 
 // relSlash 把路径规范化成相对 root 的斜杠路径；越界或无法相对化时返回清理过的原路径。

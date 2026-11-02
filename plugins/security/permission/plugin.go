@@ -19,6 +19,15 @@ import (
 // Service 本插件提供的服务键。
 const Service = "service:permission"
 
+// UseConfig 定义里的 [use.permission]（03 3.2、08 8.3）：这个智能体的权限上限。
+// 只收窄、不放宽——每次调用按会话当前档位与这里的档位各判一次，取更严的结论。
+//
+//	[use.permission]
+//	mode = "read-only"
+type UseConfig struct {
+	Mode string `toml:"mode" description:"本智能体的权限上限档位（read-only / ask / workspace / full 或自定义档位名）；与会话档位取更严"`
+}
+
 // PluginConfig permission 插件配置（命令行 -mode / -yes / -sandbox 经插件配置覆盖传入）。
 type PluginConfig struct {
 	ForceMode string `cfg:"force_mode" title:"强制档位" description:"覆盖配置文件与会话记录：read-only / ask / workspace / full 或自定义档位名"`
@@ -55,6 +64,9 @@ func (*plug) Setup(cx *plugin.Registrar) error {
 	if err != nil {
 		return err
 	}
+	if err := cx.AgentConfig(&UseConfig{}); err != nil {
+		return err
+	}
 	cx.Register(kr.PointPermItems, ItemSandbox, SandboxItem())
 	cx.Register(kr.PointSessionLayer, "permission", kr.LayerEntry{Guard: true, Order: 10,
 		Func: func(sc *kr.SessionCx) ([]toolhub.Layer, error) {
@@ -72,16 +84,50 @@ func (*plug) Setup(cx *plugin.Registrar) error {
 			if err := CheckItems(hub.Items()); err != nil {
 				return nil, err
 			}
+			// [use.permission]（08 8.3）：定义给的权限上限档位，会话打开后由框架算好放进 Ctx。
+			// 没写时不加限制；写了但档位不存在时按 read-only 处理（不因笔误放开）。
+			// 会话打开后读算好的 use_config（含租户 / 用户层）；构造工具列表时会话还没打开，
+			// 先按定义里写的值（同一来源的第一层）。
+			capDef := func() *ModeDef {
+				var u UseConfig
+				if sc.Ctx != nil {
+					_ = sc.Ctx.Config("permission", &u)
+				}
+				if u.Mode == "" && sc.Def != nil {
+					u.Mode, _ = sc.Def.Use["permission"]["mode"].(string)
+				}
+				if u.Mode == "" {
+					return nil
+				}
+				d, ok := s.reg().Get(Mode(u.Mode))
+				if !ok {
+					return builtinDef(ReadOnly) // 配置了却找不到：按最严处理，不放开
+				}
+				return d
+			}
 			if err := hub.SetVisible(func(n string) bool {
 				t, ok := hub.Get(n)
 				if !ok {
 					return true
 				}
-				return Visible(s.Def(id), t, hub.ItemsOf(t))
+				items := hub.ItemsOf(t)
+				if d := capDef(); d != nil && !Visible(d, t, items) {
+					return false
+				}
+				return Visible(s.Def(id), t, items)
 			}); err != nil {
 				return nil, err
 			}
-			return []toolhub.Layer{Layer(s.Policy, nil)}, nil
+			policy := func(sid string) Policy {
+				p := s.Policy(sid)
+				// 不可信输入回合（外部入口、不可信来源的信封）：allow 降为询问（由内核按回合标记）。
+				p.Untrusted = func(cx *toolhub.Cx) bool { return cx.Ctx != nil && cx.Ctx.Untrusted() }
+				if d := capDef(); d != nil {
+					p.Cap = &Policy{Mode: d.ID, Def: d, Rules: p.Rules, Root: p.Root, Sandbox: p.Sandbox}
+				}
+				return p
+			}
+			return []toolhub.Layer{Layer(policy, nil)}, nil
 		}})
 	return cx.Provide("permission", s)
 }

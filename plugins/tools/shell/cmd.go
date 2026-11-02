@@ -31,6 +31,13 @@ var launchers = map[string]bool{
 	"xargs": true, "env": true, "eval": true, "exec": true, "sudo": true, "doas": true, "runas": true,
 	"start": true, "start-process": true, "invoke-expression": true, "iex": true, "source": true, ".": true,
 	"docker": true, "podman": true, "kubectl": true, "ssh": true,
+	// 执行任意代码的其他入口：子系统 / 运行时 / Windows 脚本宿主。
+	"wsl": true, "java": true, "node-gyp": true, "tsx": true, "ts-node": true,
+	"cscript": true, "wscript": true, "mshta": true, "rundll32": true, "regsvr32": true,
+	"msiexec": true, "conhost": true, "busybox": true,
+	// 包一层再跑别的命令的：前缀规则会放行被包的任意命令。
+	"nohup": true, "setsid": true, "time": true, "watch": true, "nice": true, "chroot": true,
+	"su": true, "gsudo": true,
 }
 
 // harmless 可直接去掉的重定向（只合并 / 丢弃输出，不写文件）。
@@ -120,12 +127,32 @@ func Safe(seg string) bool { return safeHeads[head(seg)] }
 // Launcher 简单命令是否是启动器类命令（见 launchers）。
 func Launcher(seg string) bool {
 	h := head(seg)
+	// 带路径的解释器（/usr/bin/python3、C:\Python\python.exe）按文件名看。
+	if i := strings.LastIndexAny(h, `/\`); i >= 0 {
+		h = h[i+1:]
+	}
 	if launchers[h] {
 		return true
 	}
-	// 带路径的解释器（/usr/bin/python3、C:\Python\python.exe）也算。
-	if i := strings.LastIndexAny(h, `/\`); i >= 0 {
-		return launchers[h[i+1:]]
+	// Windows 可执行后缀：python.exe、npm.cmd、build.bat 与不带后缀的同一个程序。
+	for _, ext := range []string{".exe", ".cmd", ".bat", ".com", ".ps1"} {
+		if b, ok := strings.CutSuffix(h, ext); ok && launchers[b] {
+			return true
+		}
+	}
+	// 版本号后缀：python3.12、node18 这类。
+	if b := strings.TrimRight(h, "0123456789."); b != h && launchers[b] {
+		return true
+	}
+	// 带子命令才执行任意代码的工具：go run、dotnet run、git -c（可配置 core.sshCommand 等）。
+	f := strings.Fields(strings.ToLower(seg))
+	if len(f) >= 2 {
+		switch h {
+		case "go", "dotnet", "deno", "bun":
+			return f[1] == "run" || f[1] == "exec" || f[1] == "eval"
+		case "git":
+			return f[1] == "-c" || strings.HasPrefix(f[1], "--config") || f[1] == "--exec-path"
+		}
 	}
 	return false
 }

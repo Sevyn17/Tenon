@@ -111,7 +111,8 @@ type Envelope struct {
 	Trace     string    `json:"trace,omitempty"`
 	Hop       int       `json:"hop,omitempty"`
 	Origin    Origin    `json:"origin"`
-	Caps      []string  `json:"caps,omitempty"`
+	// Caps 授权工具范围：nil = 不限，空集 = 一个都不许（不能用 omitempty，否则空集落库后变成不限）。
+	Caps      []string  `json:"caps"`
 	BudgetRef string    `json:"budget_ref,omitempty"`
 	Body      string    `json:"body"`
 	Deadline  int64     `json:"deadline,omitempty"` // Unix 毫秒，0 = 无期限

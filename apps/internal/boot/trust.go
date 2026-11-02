@@ -59,7 +59,8 @@ func writeTrustFile(f trustFile) error {
 	if path == "" {
 		return fmt.Errorf("取不到用户目录，无法保存信任记录")
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	// 信任记录决定哪些项目的配置会被加载：只本人可读写（0700 / 0600）。
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
 	keys := make([]string, 0, len(f.Projects))
@@ -83,7 +84,10 @@ func writeTrustFile(f trustFile) error {
 			fmt.Fprintf(&b, "%q = %q\n", k, f.ModeApprovals[k])
 		}
 	}
-	return os.WriteFile(path, []byte(b.String()), 0o644)
+	if err := os.WriteFile(path, []byte(b.String()), 0o600); err != nil {
+		return err
+	}
+	return os.Chmod(path, 0o600) // 已存在的旧文件 WriteFile 不改权限
 }
 
 // ModeApproved 项目档位 mode 的放宽清单 widened 是否已被确认过。
