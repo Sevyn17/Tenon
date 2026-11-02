@@ -20,6 +20,7 @@ import (
 	"ybase-kernel/core/reqlog"
 	"ybase-kernel/core/session"
 	"ybase-kernel/core/store"
+	"ybase-kernel/core/useconf"
 )
 
 // Open 打开会话：存在则恢复（返回 true），不存在则用 cfg 新建。
@@ -37,6 +38,9 @@ func (a *Agent) OpenAs(ctx context.Context, cfg *session.Config, meta store.Sess
 	if errors.Is(err, store.ErrNotFound) {
 		a.Core = session.New(cfg)
 		meta.ID = a.SessionID
+		if err := a.fillUseConfig(ctx, &meta); err != nil {
+			return false, err
+		}
 		if err := a.Store.CreateSession(ctx, meta, a.Core.Snapshot().Header, nil); err != nil {
 			return false, err
 		}
@@ -59,6 +63,24 @@ func (a *Agent) OpenAs(ctx context.Context, cfg *session.Config, meta store.Sess
 		a.recovered = a.recoverRequest(ctx, a.resume.Model.RequestID)
 	}
 	return true, nil
+}
+
+// fillUseConfig 新会话落库前按使用配置链算好 use_config（06 6.3、D8）。
+// 调用方已经给了 use_config 就尊重它（子会话继承父会话配置的路径）；没有定义就什么都不做。
+func (a *Agent) fillUseConfig(ctx context.Context, meta *store.SessionMeta) error {
+	if len(meta.UseConfig) > 0 || a.Def == nil || len(a.Def.Use) == 0 {
+		return nil
+	}
+	values, err := useconf.ResolveAll(ctx, a.Schemas, a.Def.Use, a.UseSource, store.Tenant, meta.Creator)
+	if err != nil {
+		return err
+	}
+	raw, err := useconf.EncodeAll(values)
+	if err != nil {
+		return err
+	}
+	meta.UseConfig = raw
+	return nil
 }
 
 // Pending 报告是否有恢复出的未完成回合。

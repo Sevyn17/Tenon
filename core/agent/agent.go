@@ -11,12 +11,14 @@ import (
 	"sync"
 	"time"
 
+	"ybase-kernel/core/agentdef"
 	"ybase-kernel/core/callctx"
 	"ybase-kernel/core/modelhub"
 	"ybase-kernel/core/reqlog"
 	"ybase-kernel/core/session"
 	"ybase-kernel/core/store"
 	"ybase-kernel/core/toolhub"
+	"ybase-kernel/core/useconf"
 )
 
 // Model 模型调用接口（modelhub.Session 实现；测试用假实现）。
@@ -79,6 +81,13 @@ type Agent struct {
 	// Ctx 本次调用的上下文（框架设计 04 §4.4）：租户、会话身份、使用配置、trace。
 	// 会话构造时建好，Open 时由会话行填全；工具与层从 toolhub.Cx.Ctx 读到它。
 	Ctx *callctx.Ctx
+
+	// Def 会话所用的定义（可空）：有它且会话行还没有 use_config 时，Open 新建会话前按
+	// 使用配置链算一份存进去（06 6.3）。Schemas 是装配期各组件登记的原型，UseSource 是
+	// 租户/用户层配置的来源；用户层取会话创建者（D7）。
+	Def       *agentdef.Agent
+	Schemas   []useconf.Schema
+	UseSource useconf.Source
 
 	spanMu   sync.Mutex
 	hubSpans []store.Span

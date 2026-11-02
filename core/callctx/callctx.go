@@ -9,6 +9,7 @@ package callctx
 
 import (
 	"encoding/json"
+	"fmt"
 	"sync"
 )
 
@@ -115,6 +116,23 @@ func (c *Ctx) Use(component string) (any, bool) {
 	defer c.mu.RUnlock()
 	v, ok := c.use[component]
 	return v, ok
+}
+
+// Config 把本会话给某组件算好的使用配置填进组件自己的结构体（04 §4.4 的 *Ctx.Config）。
+// 没有这份配置就原样返回，proto 保持组件的缺省值。值在建会话时已由框架算好并校验过。
+func (c *Ctx) Config(component string, proto any) error {
+	raw, ok := c.Use(component)
+	if !ok || raw == nil || proto == nil {
+		return nil
+	}
+	b, err := json.Marshal(raw)
+	if err != nil {
+		return err
+	}
+	if err := json.Unmarshal(b, proto); err != nil {
+		return fmt.Errorf("callctx: 解析 [use.%s] 失败：%w", component, err)
+	}
+	return nil
 }
 
 // Trace 追踪标识。

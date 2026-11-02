@@ -12,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"ybase-kernel/core/useconf"
 )
 
 // TrustLevel 受信等级（内置恒为 Trusted；为外部插件预留，02 §3）。
@@ -179,6 +181,21 @@ func (cx *Registrar) Plugin() string { return cx.plugin }
 // Config 已解码的本插件配置（Meta.Config 的同类型指针）；无配置为 nil。
 func (cx *Registrar) Config() any { return cx.config }
 
+// AgentConfig 登记本组件的使用配置原型（06 6.2）：零值结构体指针，字段用 toml 标签。
+// 装配结束后由框架按定义里的 [use.<组件>] 与租户/用户层算出每个会话的值（06 6.3）。
+func (cx *Registrar) AgentConfig(proto any) error {
+	sc, err := useconf.SchemaOf(cx.plugin, proto)
+	if err != nil {
+		return err
+	}
+	if _, dup := cx.asm.agentSchemas[cx.plugin]; dup {
+		return fmt.Errorf("插件 %s 重复登记使用配置", cx.plugin)
+	}
+	cx.asm.agentSchemas[cx.plugin] = sc
+	cx.asm.points = append(cx.asm.points, Registration{Plugin: cx.plugin, Point: "agent_config", Name: cx.plugin})
+	return nil
+}
+
 // FillSlot 填插槽（必须在 Provides 里声明 "slot:<名>"）。
 func (cx *Registrar) FillSlot(name string, impl any) error {
 	key := "slot:" + name
@@ -314,6 +331,8 @@ type Assembly struct {
 	mandatory map[string]bool
 	plugins   map[string]Plugin
 	scopes    map[string]*Scope
+	// agentSchemas 各组件登记的使用配置原型（06 6.2）；键是组件名。
+	agentSchemas map[string]useconf.Schema
 }
 
 // 装配错误。
@@ -329,7 +348,8 @@ var (
 func Assemble(spec Spec) (*Assembly, error) {
 	a := &Assembly{metas: map[string]Meta{}, configs: map[string]any{}, sources: map[string]map[string]string{},
 		values: map[string]any{}, fromDef: map[string]bool{}, injected: map[string]bool{}, items: map[string][]Item{},
-		mandatory: map[string]bool{}, plugins: map[string]Plugin{}, scopes: map[string]*Scope{}}
+		mandatory: map[string]bool{}, plugins: map[string]Plugin{}, scopes: map[string]*Scope{},
+		agentSchemas: map[string]useconf.Schema{}}
 	enabled := map[string]Entry{}
 	for _, e := range spec.Plugins {
 		enabled[e.Name] = e
@@ -522,6 +542,23 @@ func (a *Assembly) Value(key string) (any, bool) {
 func (a *Assembly) Order() []string { return append([]string(nil), a.order...) }
 
 // Start 按装配顺序启动插件，各自在 root 下开插件作用域。失败时已启动的倒序关闭。
+// AgentSchemas 各组件登记的使用配置原型，按组件名排序（建会话时算 use_config 用）。
+func (a *Assembly) AgentSchemas() []useconf.Schema {
+	out := make([]useconf.Schema, 0, len(a.agentSchemas))
+	for _, name := range a.Order() {
+		if sc, ok := a.agentSchemas[name]; ok {
+			out = append(out, sc)
+		}
+	}
+	return out
+}
+
+// AgentSchema 查某个组件的使用配置原型。
+func (a *Assembly) AgentSchema(component string) (useconf.Schema, bool) {
+	sc, ok := a.agentSchemas[component]
+	return sc, ok
+}
+
 func (a *Assembly) Start(root *Scope) error {
 	for _, n := range a.order {
 		sc := root.Child("plugin:" + n)
