@@ -45,12 +45,12 @@ func (b *Blobs) Put(ctx context.Context, sessionID, mime string, data []byte) (s
 		return "", err
 	}
 	now := time.Now().UnixMilli()
-	if _, err := b.db.sql.ExecContext(ctx, `INSERT INTO blobs(sha256, size, mime, created_at, touched_at) VALUES(?,?,?,?,?)
+	if _, err := b.db.q().ExecContext(ctx, `INSERT INTO blobs(sha256, size, mime, created_at, touched_at) VALUES(?,?,?,?,?)
 		ON CONFLICT(sha256) DO UPDATE SET touched_at = excluded.touched_at`, h, len(data), mime, now, now); err != nil {
 		return "", err
 	}
 	if sessionID != "" {
-		if _, err := b.db.sql.ExecContext(ctx, `INSERT INTO blob_refs(tenant, session_id, sha256) VALUES(?,?,?)
+		if _, err := b.db.q().ExecContext(ctx, `INSERT INTO blob_refs(tenant, session_id, sha256) VALUES(?,?,?)
 			ON CONFLICT DO NOTHING`, Tenant, sessionID, h); err != nil {
 			return "", err
 		}
@@ -74,7 +74,7 @@ func (b *Blobs) Get(h string) ([]byte, error) {
 // GC 回收没有任何引用、且超过宽限期未被触碰的文件（data-contract §6）。
 func (b *Blobs) GC(ctx context.Context, grace time.Duration) (int, error) {
 	cut := time.Now().Add(-grace).UnixMilli()
-	rows, err := b.db.sql.QueryContext(ctx, `SELECT sha256 FROM blobs WHERE touched_at < ?
+	rows, err := b.db.q().QueryContext(ctx, `SELECT sha256 FROM blobs WHERE touched_at < ?
 		AND sha256 NOT IN (SELECT sha256 FROM blob_refs)`, cut)
 	if err != nil {
 		return 0, err
@@ -93,7 +93,7 @@ func (b *Blobs) GC(ctx context.Context, grace time.Duration) (int, error) {
 		if err := os.Remove(b.path(h)); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return 0, err
 		}
-		if _, err := b.db.sql.ExecContext(ctx, `DELETE FROM blobs WHERE sha256 = ?`, h); err != nil {
+		if _, err := b.db.q().ExecContext(ctx, `DELETE FROM blobs WHERE sha256 = ?`, h); err != nil {
 			return 0, err
 		}
 	}

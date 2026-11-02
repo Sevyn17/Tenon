@@ -43,6 +43,7 @@ func Run(t *testing.T, open func(t *testing.T) store.Store) {
 		{"PendingCorr", testPendingCorr},
 		{"FindSessionByKey", testFindSessionByKey},
 		{"Outbox", testOutbox},
+		{"SubStoresAndTx", testSubStoresAndTx},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) { c.f(t, open(t)) })
@@ -919,5 +920,44 @@ func testOutbox(t *testing.T, db store.Store) {
 	items, _ = db.Outbox(ctx, 0)
 	if len(items) != 1 || items[0].ID != "m2" {
 		t.Fatalf("标记后 Outbox = %+v", items)
+	}
+}
+
+// —— 按子存储访问与 Tx（05：T3 落地） ——//
+
+func testSubStoresAndTx(t *testing.T, db store.Store) {
+	ctx := context.Background()
+	if db.Sessions() == nil || db.Queue() == nil || db.Results() == nil || db.Definitions() == nil ||
+		db.Leases() == nil || db.Sleeps() == nil || db.Pending() == nil || db.OutboxQueue() == nil {
+		t.Fatal("按子存储访问器不应为空")
+	}
+	c := newCore()
+	create(t, db, store.SessionMeta{ID: "tx-1"}, c)
+	ok := false
+	err := db.Tx(ctx, func(tx store.Store) error {
+		if admitted, err := tx.Queue().Admit(ctx, "tx-1", store.InboxItem{ItemID: "t1", Kind: store.InboxInput, Input: `[]`}); err != nil || !admitted {
+			return err
+		}
+		if in, _ := tx.Queue().InInbox(ctx, "tx-1", "t1"); !in {
+			t.Fatal("事务内的写入应立即可见")
+		}
+		if err := tx.Commit(ctx, store.Checkpoint{SessionID: "tx-1", ExpectLogLen: 0, Header: c.Snapshot().Header}); err != nil {
+			return err
+		}
+		ok = true
+		return nil
+	})
+	if err != nil || !ok {
+		t.Fatalf("Tx: %v committed=%v", err, ok)
+	}
+	if items, err := db.Inbox(ctx, "tx-1"); err != nil || len(items) != 1 {
+		t.Fatalf("提交后收件: %v %+v", err, items)
+	}
+	sentinel := errors.New("内部错误")
+	if err := db.Tx(ctx, func(tx store.Store) error { return sentinel }); !errors.Is(err, sentinel) {
+		t.Fatalf("Tx 应传播 fn 的错误: %v", err)
+	}
+	if _, err := db.Sessions().Exists(ctx, "tx-1"); err != nil {
+		t.Fatalf("Sessions().Exists: %v", err)
 	}
 }

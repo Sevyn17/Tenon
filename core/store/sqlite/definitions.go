@@ -16,7 +16,7 @@ func (db *DB) PutDefinition(ctx context.Context, kind, id, body string) (int, st
 	var v int
 	sum := sha256.Sum256([]byte(body))
 	hash := hex.EncodeToString(sum[:])
-	err := db.tx(ctx, func(tx *sql.Tx) error {
+	err := db.inTx(ctx, func(tx *sql.Tx) error {
 		if err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(version), 0) FROM definitions WHERE tenant = ? AND kind = ? AND id = ?`,
 			Tenant, kind, id).Scan(&v); err != nil {
 			return err
@@ -39,7 +39,7 @@ func (db *DB) GetDefinition(ctx context.Context, kind, id string, version int) (
 	}
 	var body string
 	var v int
-	err := db.sql.QueryRowContext(ctx, q, args...).Scan(&body, &v)
+	err := db.q().QueryRowContext(ctx, q, args...).Scan(&body, &v)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", 0, ErrNotFound
 	}
@@ -48,7 +48,7 @@ func (db *DB) GetDefinition(ctx context.Context, kind, id string, version int) (
 
 // ListDefinitions 列出 kind 下出现过的定义 id（每个 id 一次，按 id 升序）。
 func (db *DB) ListDefinitions(ctx context.Context, kind string) ([]string, error) {
-	rows, err := db.sql.QueryContext(ctx,
+	rows, err := db.q().QueryContext(ctx,
 		`SELECT DISTINCT id FROM definitions WHERE tenant = ? AND kind = ? ORDER BY id`, Tenant, kind)
 	if err != nil {
 		return nil, err

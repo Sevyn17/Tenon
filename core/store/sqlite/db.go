@@ -19,8 +19,25 @@ import (
 // DB 一个存储文件。
 type DB struct {
 	sql      *sql.DB
+	tx       *sql.Tx // 非空表示当前是 Tx 内的事务视图（05：按子存储访问 + Tx）
+	events   []bus.Envelope
 	mu       sync.Mutex
 	onCommit func(bus.Envelope)
+}
+
+// execer 是 *sql.DB 与 *sql.Tx 的公共子集，子存储方法通过 q() 取执行器。
+type execer interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
+
+// q 返回当前执行器：事务视图内走 tx，否则直连。
+func (db *DB) q() execer {
+	if db.tx != nil {
+		return db.tx
+	}
+	return db.sql
 }
 
 // Options 打开选项。

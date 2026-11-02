@@ -17,7 +17,7 @@ func TestSessionStats(t *testing.T) {
 	}
 	defer db.Close()
 	now := time.Now()
-	err = db.tx(ctx, func(tx *sql.Tx) error {
+	err = db.inTx(ctx, func(tx *sql.Tx) error {
 		for i, s := range []Span{
 			{ID: "a1", Kind: "attempt", Status: "ok", Attrs: json.RawMessage(`{"input":1000,"output":10,"cache_read":800,"usage_source":"Reported"}`)},
 			{ID: "a2", Kind: "attempt", Status: "ok", Attrs: json.RawMessage(`{"input":1000,"output":20,"cache_read":0,"cache_write":5,"usage_source":"Reported"}`)},

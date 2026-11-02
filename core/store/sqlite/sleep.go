@@ -19,7 +19,7 @@ import (
 // SessionStatus 读会话生命周期状态（active / sleeping / deleted）。
 func (db *DB) SessionStatus(ctx context.Context, sessionID string) (string, error) {
 	var st string
-	err := db.sql.QueryRowContext(ctx, `SELECT status FROM sessions WHERE tenant = ? AND id = ?`, Tenant, sessionID).Scan(&st)
+	err := db.q().QueryRowContext(ctx, `SELECT status FROM sessions WHERE tenant = ? AND id = ?`, Tenant, sessionID).Scan(&st)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", store.ErrNotFound
 	}
@@ -37,7 +37,7 @@ func (db *DB) SetSessionStatus(ctx context.Context, sessionID, from, to string, 
 		q += ` AND lease_epoch = ?`
 		args = append(args, epoch)
 	}
-	res, err := db.sql.ExecContext(ctx, q, args...)
+	res, err := db.q().ExecContext(ctx, q, args...)
 	if err != nil {
 		return err
 	}
@@ -55,7 +55,7 @@ func (db *DB) SessionsWithStatus(ctx context.Context, status string, limit int) 
 		q += ` LIMIT ?`
 		args = append(args, limit)
 	}
-	rows, err := db.sql.QueryContext(ctx, q, args...)
+	rows, err := db.q().QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}

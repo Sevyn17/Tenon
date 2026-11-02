@@ -19,7 +19,7 @@ func (db *DB) AcquireLease(ctx context.Context, sessionID, holder string) (int64
 		return 0, fmt.Errorf("%w: 租约持有者不能为空", store.ErrLeaseLost)
 	}
 	var epoch int64
-	err := db.tx(ctx, func(tx *sql.Tx) error {
+	err := db.inTx(ctx, func(tx *sql.Tx) error {
 		res, err := tx.ExecContext(ctx, `UPDATE sessions SET lease_holder = ?, lease_epoch = lease_epoch + 1
 			WHERE tenant = ? AND id = ? AND status != 'deleted'`, holder, Tenant, sessionID)
 		if err != nil {
@@ -42,7 +42,7 @@ func (db *DB) RenewLease(ctx context.Context, sessionID, holder string, epoch in
 	if holder == "" || epoch <= 0 {
 		return store.ErrLeaseLost
 	}
-	return db.tx(ctx, func(tx *sql.Tx) error {
+	return db.inTx(ctx, func(tx *sql.Tx) error {
 		res, err := tx.ExecContext(ctx, `UPDATE sessions SET lease_holder = ?
 			WHERE tenant = ? AND id = ? AND lease_holder = ? AND lease_epoch = ? AND status != 'deleted'`,
 			holder, Tenant, sessionID, holder, epoch)
@@ -61,7 +61,7 @@ func (db *DB) ReleaseLease(ctx context.Context, sessionID, holder string, epoch 
 	if holder == "" || epoch <= 0 {
 		return nil
 	}
-	return db.tx(ctx, func(tx *sql.Tx) error {
+	return db.inTx(ctx, func(tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, `UPDATE sessions SET lease_holder = ''
 			WHERE tenant = ? AND id = ? AND lease_holder = ? AND lease_epoch = ?`, Tenant, sessionID, holder, epoch)
 		return err

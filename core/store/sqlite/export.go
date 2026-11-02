@@ -19,7 +19,7 @@ func (db *DB) Export(ctx context.Context, sessionID string, w io.Writer) error {
 		ForkUpto, LogLen                                                                              int
 		UpdatedAt                                                                                     int64
 	}
-	if err := db.sql.QueryRowContext(ctx, `SELECT id, agent_id, agent_hash, creator, parent_id, origin, status, run_state, title, header, shell_hash,
+	if err := db.q().QueryRowContext(ctx, `SELECT id, agent_id, agent_hash, creator, parent_id, origin, status, run_state, title, header, shell_hash,
 		fork_upto, log_len, updated_at FROM sessions WHERE tenant = ? AND id = ?`, Tenant, sessionID).
 		Scan(&meta.ID, &meta.AgentID, &meta.AgentHash, &meta.Creator, &meta.ParentID, &meta.Origin, &meta.Status, &meta.RunState, &meta.Title,
 			&meta.Header, &meta.ShellHash, &meta.ForkUpto, &meta.LogLen, &meta.UpdatedAt); err != nil {
@@ -36,7 +36,7 @@ func (db *DB) Export(ctx context.Context, sessionID string, w io.Writer) error {
 	}
 
 	q := func(kind, query string, scan func(*rowsScanner) (any, error)) error {
-		rows, err := db.sql.QueryContext(ctx, query, Tenant, sessionID)
+		rows, err := db.q().QueryContext(ctx, query, Tenant, sessionID)
 		if err != nil {
 			return err
 		}

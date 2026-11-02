@@ -38,7 +38,7 @@ func (db *DB) StartTool(ctx context.Context, sessionID, callID, argsHash string)
 // 仍是 pending 的记录按本次参数刷新哈希与截止：这次批准的是本次展示的参数，
 // 旧进程算出的哈希（如旧版哈希规则）不应让批准后的推进失败。
 func (db *DB) PendConfirm(ctx context.Context, sessionID, callID, argsHash, reason string, deadline time.Time) error {
-	_, err := db.sql.ExecContext(ctx, `INSERT INTO tool_results(tenant, session_id, call_id, status, kind, args_hash,
+	_, err := db.q().ExecContext(ctx, `INSERT INTO tool_results(tenant, session_id, call_id, status, kind, args_hash,
 		decision, deadline, created_at) VALUES(?,?,?,?,?,?,?,?,?)
 		ON CONFLICT(tenant, session_id, call_id) DO UPDATE SET args_hash = excluded.args_hash, deadline = excluded.deadline
 		WHERE tool_results.status = 'pending'`,

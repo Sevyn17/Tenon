@@ -14,7 +14,7 @@ func (db *DB) Admit(ctx context.Context, sessionID string, it InboxItem) (bool, 
 	if it.Trust == "" {
 		it.Trust = "trusted"
 	}
-	res, err := db.sql.ExecContext(ctx, `INSERT INTO session_inbox(tenant, session_id, item_id, kind, input, trust, envelope, created_at)
+	res, err := db.q().ExecContext(ctx, `INSERT INTO session_inbox(tenant, session_id, item_id, kind, input, trust, envelope, created_at)
 		VALUES(?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING`, Tenant, sessionID, it.ItemID, it.Kind, it.Input, it.Trust, it.Envelope, time.Now().UnixMilli())
 	if err != nil {
 		return false, err
@@ -25,7 +25,7 @@ func (db *DB) Admit(ctx context.Context, sessionID string, it InboxItem) (bool, 
 
 // Inbox 按准入顺序列出未消费项。
 func (db *DB) Inbox(ctx context.Context, sessionID string) ([]InboxItem, error) {
-	rows, err := db.sql.QueryContext(ctx, `SELECT item_id, kind, input, trust, envelope, created_at FROM session_inbox
+	rows, err := db.q().QueryContext(ctx, `SELECT item_id, kind, input, trust, envelope, created_at FROM session_inbox
 		WHERE tenant = ? AND session_id = ? AND consumed_at = 0 ORDER BY created_at, rowid`, Tenant, sessionID)
 	if err != nil {
 		return nil, err
@@ -47,7 +47,7 @@ func (db *DB) Inbox(ctx context.Context, sessionID string) ([]InboxItem, error) 
 // InInbox 报告某 item 是否仍待处理（未消费）。
 func (db *DB) InInbox(ctx context.Context, sessionID, itemID string) (bool, error) {
 	var n int
-	err := db.sql.QueryRowContext(ctx, `SELECT COUNT(*) FROM session_inbox WHERE tenant = ? AND session_id = ? AND item_id = ? AND consumed_at = 0`,
+	err := db.q().QueryRowContext(ctx, `SELECT COUNT(*) FROM session_inbox WHERE tenant = ? AND session_id = ? AND item_id = ? AND consumed_at = 0`,
 		Tenant, sessionID, itemID).Scan(&n)
 	return n > 0, err
 }

@@ -24,7 +24,7 @@ func (db *DB) PutToolPending(ctx context.Context, r ToolRecord) error {
 }
 
 func (db *DB) insertTool(ctx context.Context, r ToolRecord) error {
-	res, err := db.sql.ExecContext(ctx, `INSERT INTO tool_results(tenant, session_id, call_id, status, kind, args_hash,
+	res, err := db.q().ExecContext(ctx, `INSERT INTO tool_results(tenant, session_id, call_id, status, kind, args_hash,
 		deadline, token_hash, created_at) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING`,
 		Tenant, r.SessionID, r.CallID, r.Status, r.Kind, r.ArgsHash, unixMilli(r.Deadline), r.TokenHash, time.Now().UnixMilli())
 	if err != nil {
@@ -46,7 +46,7 @@ func (db *DB) Deliver(ctx context.Context, sessionID, callID, delivered, decisio
 // 只读工具不写 started，可传 from = "" 直接插入 done。
 func (db *DB) FinishTool(ctx context.Context, sessionID, callID, from, output string) error {
 	if from == "" {
-		res, err := db.sql.ExecContext(ctx, `INSERT INTO tool_results(tenant, session_id, call_id, status, output, created_at)
+		res, err := db.q().ExecContext(ctx, `INSERT INTO tool_results(tenant, session_id, call_id, status, output, created_at)
 			VALUES(?,?,?,?,?,?) ON CONFLICT DO NOTHING`, Tenant, sessionID, callID, ToolDone, output, time.Now().UnixMilli())
 		if err != nil {
 			return err
@@ -61,7 +61,7 @@ func (db *DB) FinishTool(ctx context.Context, sessionID, callID, from, output st
 
 func (db *DB) advanceTool(ctx context.Context, sessionID, callID, from, set string, args ...any) error {
 	args = append(args, Tenant, sessionID, callID, from)
-	res, err := db.sql.ExecContext(ctx, `UPDATE tool_results SET `+set+
+	res, err := db.q().ExecContext(ctx, `UPDATE tool_results SET `+set+
 		` WHERE tenant = ? AND session_id = ? AND call_id = ? AND status = ?`, args...)
 	if err != nil {
 		return err
@@ -76,7 +76,7 @@ func (db *DB) advanceTool(ctx context.Context, sessionID, callID, from, set stri
 func (db *DB) GetTool(ctx context.Context, sessionID, callID string) (*ToolRecord, error) {
 	var r ToolRecord
 	var dl int64
-	err := db.sql.QueryRowContext(ctx, `SELECT session_id, call_id, status, kind, args_hash, decision, delivered, output,
+	err := db.q().QueryRowContext(ctx, `SELECT session_id, call_id, status, kind, args_hash, decision, delivered, output,
 		deadline, token_hash FROM tool_results WHERE tenant = ? AND session_id = ? AND call_id = ?`, Tenant, sessionID, callID).
 		Scan(&r.SessionID, &r.CallID, &r.Status, &r.Kind, &r.ArgsHash, &r.Decision, &r.Delivered, &r.Output, &dl, &r.TokenHash)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -93,7 +93,7 @@ func (db *DB) GetTool(ctx context.Context, sessionID, callID string) (*ToolRecor
 
 // PendingTools 列出会话的挂起记录（未加载会话的视图、超时扫描用）。
 func (db *DB) PendingTools(ctx context.Context, sessionID string) ([]ToolRecord, error) {
-	rows, err := db.sql.QueryContext(ctx, `SELECT call_id, kind, args_hash, deadline FROM tool_results
+	rows, err := db.q().QueryContext(ctx, `SELECT call_id, kind, args_hash, deadline FROM tool_results
 		WHERE tenant = ? AND session_id = ? AND status = ? ORDER BY created_at`, Tenant, sessionID, ToolPending)
 	if err != nil {
 		return nil, err
@@ -116,7 +116,7 @@ func (db *DB) PendingTools(ctx context.Context, sessionID string) ([]ToolRecord,
 
 // DeleteFinishedTools 回合结束后清理 done / started 记录（pending 只按 deadline 处理，data-contract §6）。
 func (db *DB) DeleteFinishedTools(ctx context.Context, sessionID string) error {
-	_, err := db.sql.ExecContext(ctx, `DELETE FROM tool_results WHERE tenant = ? AND session_id = ? AND status IN (?, ?)`,
+	_, err := db.q().ExecContext(ctx, `DELETE FROM tool_results WHERE tenant = ? AND session_id = ? AND status IN (?, ?)`,
 		Tenant, sessionID, ToolDone, ToolStarted)
 	return err
 }

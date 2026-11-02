@@ -18,7 +18,7 @@ func (db *DB) Outbox(ctx context.Context, limit int) ([]store.OutboxItem, error)
 		q += ` LIMIT ?`
 		args = append(args, limit)
 	}
-	rows, err := db.sql.QueryContext(ctx, q, args...)
+	rows, err := db.q().QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -38,6 +38,6 @@ func (db *DB) Outbox(ctx context.Context, limit int) ([]store.OutboxItem, error)
 
 // MarkOutbox 标记一条外发信封已派发。
 func (db *DB) MarkOutbox(ctx context.Context, id string) error {
-	_, err := db.sql.ExecContext(ctx, `UPDATE session_outbox SET sent = 1 WHERE tenant = ? AND id = ?`, Tenant, id)
+	_, err := db.q().ExecContext(ctx, `UPDATE session_outbox SET sent = 1 WHERE tenant = ? AND id = ?`, Tenant, id)
 	return err
 }

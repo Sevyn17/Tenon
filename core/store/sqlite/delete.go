@@ -13,7 +13,7 @@ import (
 
 // DeleteSession 删除会话及其全部数据。cleaners 为各插件登记的回调，按给定顺序调用。
 func (db *DB) DeleteSession(ctx context.Context, id string, cleaners []Cleaner) error {
-	res, err := db.sql.ExecContext(ctx, `UPDATE sessions SET status = 'deleted', deleted_at = ? WHERE tenant = ? AND id = ?`,
+	res, err := db.q().ExecContext(ctx, `UPDATE sessions SET status = 'deleted', deleted_at = ? WHERE tenant = ? AND id = ?`,
 		time.Now().UnixMilli(), Tenant, id)
 	if err != nil {
 		return err
@@ -26,7 +26,7 @@ func (db *DB) DeleteSession(ctx context.Context, id string, cleaners []Cleaner) 
 			return fmt.Errorf("清理回调 %d: %w（墓碑保留，可重试）", i, err)
 		}
 	}
-	return db.tx(ctx, func(tx *sql.Tx) error {
+	return db.inTx(ctx, func(tx *sql.Tx) error {
 		for _, t := range []string{"session_entries", "session_entries_archive", "session_requests", "session_inbox",
 			"tool_results", "trace_spans", "blob_refs"} {
 			if _, err := tx.ExecContext(ctx, `DELETE FROM `+t+` WHERE tenant = ? AND session_id = ?`, Tenant, id); err != nil {

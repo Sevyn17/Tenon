@@ -54,6 +54,21 @@ type Store interface {
 	// OnCommit 设置提交成功后的持久事件回调；回调在提交的 goroutine 里同步执行，须很快返回。
 	OnCommit(f func(bus.Envelope))
 	Close() error
+
+	// —— 按子存储访问与 Tx（05：随发件箱/session_pending 在 T3 落地）。使用方仍只依赖自己用到的小接口。——
+	// Sessions 返回会话子存储；以下访问器都返回同一个底座的子视图。
+	Sessions() SessionStore
+	Queue() InboxStore
+	Results() ToolResultStore
+	Definitions() DefinitionStore
+	Leases() LeaseStore
+	Sleeps() SleepStore
+	Pending() CorrStore
+	// OutboxQueue 返回外发队列（OutboxStore 的 Outbox 方法名冲突，故访问器带 Queue 后缀）。
+	OutboxQueue() OutboxStore
+	// Tx 在一个存储事务里执行 fn：fn 内通过子存储访问器的写入与最外层一起提交，出错整体回滚。
+	// 已在事务里时直接加入外层；具体隔离级别由实现决定（memstore 不保证回滚）。
+	Tx(ctx context.Context, fn func(Store) error) error
 }
 
 // SessionStore 会话头部、日志、外壳、请求记录、观测与删除。

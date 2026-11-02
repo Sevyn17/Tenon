@@ -40,7 +40,7 @@ func (db *DB) CreateSession(ctx context.Context, m SessionMeta, hdr session.Head
 		m.Origin = "new"
 	}
 	now := time.Now().UnixMilli()
-	return db.tx(ctx, func(tx *sql.Tx) error {
+	return db.inTx(ctx, func(tx *sql.Tx) error {
 		shell, hb, err := splitHeader(hdr)
 		if err != nil {
 			return err
@@ -70,7 +70,7 @@ func (db *DB) CreateSession(ctx context.Context, m SessionMeta, hdr session.Head
 func (db *DB) Commit(ctx context.Context, cp Checkpoint) error {
 	now := time.Now().UnixMilli()
 	var evs []bus.Envelope
-	err := db.tx(ctx, func(tx *sql.Tx) error {
+	err := db.inTx(ctx, func(tx *sql.Tx) error {
 		var logLen, seq int
 		var leaseEpoch int64
 		err := tx.QueryRowContext(ctx, `SELECT log_len, next_sync_seq, lease_epoch FROM sessions WHERE id = ? AND tenant = ?`, cp.SessionID, Tenant).Scan(&logLen, &seq, &leaseEpoch)
@@ -168,7 +168,11 @@ func (db *DB) Commit(ctx context.Context, cp Checkpoint) error {
 		return nil
 	})
 	if err == nil {
-		db.notify(evs)
+		if db.tx != nil {
+			db.events = append(db.events, evs...)
+		} else {
+			db.notify(evs)
+		}
 	}
 	return err
 }
@@ -181,7 +185,7 @@ func (db *DB) Load(ctx context.Context, id string, base *int) (*Loaded, error) {
 		key            sql.NullString
 		metaJ, useCfgJ string
 	)
-	err := db.sql.QueryRowContext(ctx, `SELECT agent_id, agent_hash, creator, parent_id, origin, fork_upto, title, run_state, header, shell_hash,
+	err := db.q().QueryRowContext(ctx, `SELECT agent_id, agent_hash, creator, parent_id, origin, fork_upto, title, run_state, header, shell_hash,
 		session_key, meta, use_config
 		FROM sessions WHERE id = ? AND tenant = ? AND status != 'deleted'`, id, Tenant).
 		Scan(&l.Meta.AgentID, &l.Meta.AgentHash, &l.Meta.Creator, &l.Meta.ParentID, &l.Meta.Origin, &l.Meta.ForkUpto, &l.Meta.Title, &l.RunState, &hb, &shellH,
@@ -201,7 +205,7 @@ func (db *DB) Load(ctx context.Context, id string, base *int) (*Loaded, error) {
 		return nil, err
 	}
 	var cfgBody string
-	if err := db.sql.QueryRowContext(ctx, `SELECT body FROM session_shells WHERE hash = ?`, shellH).Scan(&cfgBody); err != nil {
+	if err := db.q().QueryRowContext(ctx, `SELECT body FROM session_shells WHERE hash = ?`, shellH).Scan(&cfgBody); err != nil {
 		return nil, fmt.Errorf("外壳 %s: %w", shellH, err)
 	}
 	if cfgBody != "null" {
@@ -231,7 +235,7 @@ func (db *DB) Entries(ctx context.Context, id string, from, to int) ([]*session.
 		q += ` AND idx < ?`
 		args = append(args, to)
 	}
-	rows, err := db.sql.QueryContext(ctx, q+` ORDER BY idx`, args...)
+	rows, err := db.q().QueryContext(ctx, q+` ORDER BY idx`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -255,7 +259,7 @@ func (db *DB) Entries(ctx context.Context, id string, from, to int) ([]*session.
 func (db *DB) GetRequest(ctx context.Context, sessionID, requestID string) (*RequestRecord, error) {
 	var r RequestRecord
 	var cv, sf, comp string
-	err := db.sql.QueryRowContext(ctx, `SELECT shell_hash, prefix_base, prefix_end, compaction_view, suffix, final_hash, composition
+	err := db.q().QueryRowContext(ctx, `SELECT shell_hash, prefix_base, prefix_end, compaction_view, suffix, final_hash, composition
 		FROM session_requests WHERE tenant = ? AND session_id = ? AND request_id = ?`, Tenant, sessionID, requestID).
 		Scan(&r.ShellHash, &r.PrefixBase, &r.PrefixEnd, &cv, &sf, &r.FinalHash, &comp)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -272,7 +276,7 @@ func (db *DB) GetRequest(ctx context.Context, sessionID, requestID string) (*Req
 // Shell 按哈希读外壳（Config JSON）。
 func (db *DB) Shell(ctx context.Context, hash string) (*session.Config, error) {
 	var b string
-	if err := db.sql.QueryRowContext(ctx, `SELECT body FROM session_shells WHERE hash = ?`, hash).Scan(&b); err != nil {
+	if err := db.q().QueryRowContext(ctx, `SELECT body FROM session_shells WHERE hash = ?`, hash).Scan(&b); err != nil {
 		return nil, err
 	}
 	var c session.Config
@@ -285,7 +289,7 @@ func (db *DB) Shell(ctx context.Context, hash string) (*session.Config, error) {
 // ShellBody 按哈希读外壳原文（请求外壳与会话 Config 共用 session_shells，R5）。
 func (db *DB) ShellBody(ctx context.Context, hash string) ([]byte, error) {
 	var b string
-	if err := db.sql.QueryRowContext(ctx, `SELECT body FROM session_shells WHERE hash = ?`, hash).Scan(&b); err != nil {
+	if err := db.q().QueryRowContext(ctx, `SELECT body FROM session_shells WHERE hash = ?`, hash).Scan(&b); err != nil {
 		return nil, err
 	}
 	return []byte(b), nil
@@ -294,7 +298,7 @@ func (db *DB) ShellBody(ctx context.Context, hash string) ([]byte, error) {
 // Exists 报告会话是否存在（未删除）。
 func (db *DB) Exists(ctx context.Context, id string) (bool, error) {
 	var n int
-	err := db.sql.QueryRowContext(ctx, `SELECT COUNT(*) FROM sessions WHERE id = ? AND tenant = ? AND status != 'deleted'`, id, Tenant).Scan(&n)
+	err := db.q().QueryRowContext(ctx, `SELECT COUNT(*) FROM sessions WHERE id = ? AND tenant = ? AND status != 'deleted'`, id, Tenant).Scan(&n)
 	return n > 0, err
 }
 
@@ -352,7 +356,10 @@ func putSpan(ctx context.Context, tx *sql.Tx, sid string, s Span) error {
 	return err
 }
 
-func (db *DB) tx(ctx context.Context, f func(*sql.Tx) error) error {
+func (db *DB) inTx(ctx context.Context, f func(*sql.Tx) error) error {
+	if db.tx != nil { // 已在外部事务里：加入它，由最外层提交/回滚。
+		return f(db.tx)
+	}
 	tx, err := db.sql.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -381,7 +388,7 @@ func unraw(s string) json.RawMessage {
 // FindSessionByKey 按会话键查会话 id（13 13.3 B19）。
 func (s *DB) FindSessionByKey(ctx context.Context, agentID, creator, key string) (string, error) {
 	var id string
-	err := s.sql.QueryRowContext(ctx,
+	err := s.q().QueryRowContext(ctx,
 		`SELECT id FROM sessions WHERE tenant = ? AND agent_id = ? AND creator = ? AND session_key = ?`,
 		Tenant, agentID, creator, key).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
