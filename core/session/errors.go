@@ -17,6 +17,8 @@ var (
 	ErrNotIdle = fmt.Errorf("%w: 当前状态不支持该操作（需 Idle）", ErrState)
 	// ErrNotWaiting：Idle 调用等待态专属命令（steer / cancel / abort / submit）。
 	ErrNotWaiting = fmt.Errorf("%w: 当前状态不支持该操作（需等待态）", ErrState)
+	// ErrToolsOpen：工具调用的结果还没到齐时插入条目——会拆开调用与结果（R14），厂商会拒绝该请求。
+	ErrToolsOpen = fmt.Errorf("%w: 工具结果未到齐，不能插入条目", ErrState)
 	// ErrReadOnly：存在不支持的条目类型，会话只读打开（R15）。
 	ErrReadOnly = fmt.Errorf("%w: 会话只读（存在不支持的条目类型）", ErrState)
 	// ErrExtTooLarge：ext / 单条 meta 超过大小上限——拒不静默截断（S4 / R10）。

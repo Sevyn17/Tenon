@@ -271,79 +271,43 @@ type askReq struct {
 	reply   chan string
 }
 
-func chat(o opts, a *app) error {
-	rt, root, h, b := a.rt, a.root, a.h, a.bus
-	if rt.Models == nil {
-		return fmt.Errorf("profile 中没有 models 插件")
-	}
-	db := rt.Store.DB()
-	modelName := rt.Models.Model
-	var perms *permission.Sessions
-	if v, ok := rt.Asm.Value(permission.Service); ok {
-		perms, _ = v.(*permission.Sessions)
-	}
-	askCh := a.ui.ask
-	kern, err := runtime.ParseKernel(a.profile.Kernel)
-	if err != nil {
-		return fmt.Errorf("profile [kernel]: %w", err)
-	}
-	col, err := runtime.Collect(rt.Asm)
-	if err != nil {
-		return err
-	}
-	// 每回合开始的档位变化提示由 appapi 发 notice 事件（见 onEvent）。
-	h.Hooks.AfterTurn = func(id string, end session.EndReason) {
-		for _, f := range col.AfterTurn {
-			f(id, end)
-		}
-	}
-	rb := &runtime.Builder{DB: db, Artifacts: rt.Store.Blobs(), Models: rt.Models.Hub, Model: modelName, Workdir: root,
-		Policy: func() session.Policy {
-			pol := kern.Policy
-			if o.maxSteps >= 0 {
-				pol.MaxSteps = uint32(o.maxSteps)
+// buildChat 建会话构造器与应用接口层：走 boot.BuildApp，与桌面端 / api-server 同一份装配
+// （定义来源、状态提交、守卫规则等不会在 CLI 里漏接）。
+func buildChat(o opts, a *app) (*boot.Built, error) {
+	br := &boot.Runtime{Rt: a.rt, Profile: a.profile, Root: a.root, Bus: a.bus, Host: a.h,
+		Trusted: a.trusted, TrustWhy: a.trustWhy, Notes: a.notes, Packages: a.packages}
+	return br.BuildApp(boot.AppOptions{
+		MaxSteps:     o.maxSteps,
+		ModesWorkdir: o.workdir,
+		Hooks: func(*runtime.SessionCx) agent.Hooks {
+			return agent.Hooks{
+				OnReset: func() { fmt.Print("\n[重试中…]\n") },
+				OnText:  func(d string) { fmt.Print(d) },
+				OnToolCall: func(c session.ToolCall) {
+					fmt.Printf("\n⚙ %s %s\n", c.Name, string(c.Args))
+				},
+				OnToolResult: func(_ session.ToolCall, out string, isErr bool) {
+					tag := "✓"
+					if isErr {
+						tag = "✗"
+					}
+					fmt.Printf("%s %s\n", tag, preview(out, 300))
+				},
 			}
-			return pol
 		},
-		Tools:  col.Tools,
-		Layers: col.Layers,
-		Items:  col.Items,
-		Kernel: &kern,
-	}
-	rb.Hooks = func(*runtime.SessionCx) agent.Hooks {
-		return agent.Hooks{
-			OnReset: func() { fmt.Print("\n[重试中…]\n") },
-			OnText:  func(d string) { fmt.Print(d) },
-			OnToolCall: func(c session.ToolCall) {
-				fmt.Printf("\n⚙ %s %s\n", c.Name, string(c.Args))
-			},
-			OnToolResult: func(_ session.ToolCall, out string, isErr bool) {
-				tag := "✓"
-				if isErr {
-					tag = "✗"
-				}
-				fmt.Printf("%s %s\n", tag, preview(out, 300))
-			},
-		}
-	}
-	rb.Blocks = col.Blocks // 系统提示词由 prompt 插件提供（plugin-switch-plan §2.1）
-	// 应用接口层：设置会话构造器（顶层会话带委派 / 领导工具；子会话与工作组成员按 child 构造，深度 1）、
-	// 把提交事件接到总线、档位变化提示发 notice。
-	ao := appapi.Options{Host: h, Bus: b, DB: db, Builder: rb, Model: modelName, Workdir: root, Trusted: a.trusted, Profile: a.profile, Packages: a.packages}
-	if perms != nil {
-		ao.Modes = newPermModes(perms, o.workdir)
-	}
-	if rt.Compact != nil {
-		ao.Compactor = rt.Compact
-	}
-	api, err := appapi.New(ao)
+	})
+}
+
+func chat(o opts, a *app) error {
+	rt, root, h := a.rt, a.root, a.h
+	askCh := a.ui.ask
+	built, err := buildChat(o, a)
 	if err != nil {
 		return err
 	}
-	for _, f := range col.Ready { // 构造器就绪后再跑：如工作组补投会打开领导会话
-		if err := f(context.Background()); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-		}
+	db, modelName, perms, api := built.DB, built.Model, built.Perms, built.API
+	for _, err := range built.Ready(context.Background()) { // 构造器就绪后再跑：如工作组补投会打开领导会话
+		fmt.Fprintln(os.Stderr, err)
 	}
 	c := &cli{o: o, rt: rt, db: db, h: h, api: api, perms: perms, profile: a.profile, packages: a.packages}
 	ctx := context.Background()

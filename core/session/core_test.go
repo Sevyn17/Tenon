@@ -119,6 +119,39 @@ func TestT3_T4_CompactAndRewind(t *testing.T) {
 	}
 }
 
+// T4：截掉的压缩条目即使 upto 在截断点之前（压缩条目写在更后面），也要退回上一次压缩；
+// 否则压缩基点仍指向已删的摘要，重建请求会丢掉摘要和它之前的全部历史。
+func TestRewindPastCompactionEntryResetsBase(t *testing.T) {
+	h := newHarness(t, 8)
+	for _, s := range []string{"t1", "t2", "t3", "t4", "t5", "t6", "t7", "t8"} {
+		if _, err := h.core.Record(txt(s), nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := h.core.Compact(txt("摘要"), 4, nil); err != nil { // 压缩条目在 idx 8，upto=4
+		t.Fatal(err)
+	}
+	if _, err := h.core.Record(txt("t9"), nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.core.Rewind(7); err != nil { // 截掉 idx 7.. 含压缩条目（idx 8）
+		t.Fatalf("Rewind: %v", err)
+	}
+	if got := h.core.hdr.CompactionBase; got != 0 {
+		t.Fatalf("压缩条目被截掉后基点应退回 0，得 %d", got)
+	}
+	req, err := BuildRequest(h.core.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := len(req.Messages); n != 7 {
+		t.Fatalf("应保留 t1..t7 共 7 条，得 %d", n)
+	}
+	if _, err := Restore(h.core.Snapshot()); err != nil {
+		t.Fatalf("截断后应能恢复: %v", err)
+	}
+}
+
 // —— T5 / T6 / T10 / T11：等待态插话与改向 ——
 
 func TestT5_T6_T10_T11_Steer(t *testing.T) {

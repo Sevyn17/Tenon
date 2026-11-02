@@ -53,6 +53,9 @@ func (m *memStore) FinishTool(_ context.Context, _, id, from, out string) error 
 	if from != "" && (r == nil || r.Status != from) {
 		return errors.New("state mismatch")
 	}
+	if from == "" && r != nil { // 与 sqlite 同语义：from="" 是插入，已有记录即冲突
+		return errors.New("state mismatch")
+	}
 	if r == nil {
 		r = &Record{}
 		m.recs[id] = r

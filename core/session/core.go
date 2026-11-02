@@ -393,9 +393,8 @@ func (c *Core) validateUpto(upto int) error {
 			if open > 0 {
 				open--
 			}
-		case KindUser:
-			open = 0
 		}
+		// user / 注入条目不闭合调用：结果没到齐之前出现的任何条目都不能当作切点（R14）。
 	}
 	if open > 0 {
 		return ErrBadRewind
@@ -488,8 +487,15 @@ func (c *Core) Rewind(to int) ([]Change, error) {
 			return nil, ErrBadRewind
 		}
 	}
-	// 截掉当前压缩条目 → 退回上一次压缩（在其必须仍处于 [base, to) 内）。
+	// 截掉压缩条目 → 退回 [base, to) 内最后一次压缩。判断看压缩条目本身的位置，不看它的 upto：
+	// 压缩条目写在 upto 之后的任意位置，upto < to 时条目照样可能被截掉。
 	overCompaction := c.hdr.CompactionBase >= to && c.hdr.CompactionBase > 0
+	for i := to - c.base; i < len(c.items); i++ {
+		if c.items[i].Item.Kind == KindCompaction {
+			overCompaction = true
+			break
+		}
+	}
 	if overCompaction {
 		prev := 0
 		found := false
@@ -580,6 +586,9 @@ func (c *Core) Inject(kind string, text string, meta map[string]any) ([]Change, 
 	if strings.TrimSpace(text) == "" {
 		return nil, nil
 	}
+	if c.hdr.Status == StatusWaitingTools {
+		return nil, ErrToolsOpen // 注入要等本步结果到齐（步边界之后）
+	}
 	if err := c.checkMetaSize(meta); err != nil {
 		return nil, err
 	}
@@ -630,6 +639,9 @@ func (c *Core) MidInput(content Content, meta map[string]any) ([]Change, error) 
 	}
 	if c.hdr.Status == StatusIdle {
 		return nil, ErrNotWaiting
+	}
+	if c.hdr.Status == StatusWaitingTools {
+		return nil, ErrToolsOpen // 插在调用与结果之间会让下一次请求非法：等步边界
 	}
 	if err := c.checkMetaSize(meta); err != nil {
 		return nil, err
@@ -735,15 +747,8 @@ func (c *Core) ModelDone(requestID string, needID uint64, reply AssistantItem, s
 		c.hdr.Turn.Usage.CacheWrite += reply.Usage.CacheWrite
 	}
 
-	// 为调用分配内核 id（S6），wire_id 存厂商原始 id。
-	for i := range reply.ToolCalls {
-		if reply.ToolCalls[i].ID == "" {
-			reply.ToolCalls[i].ID = c.genID()
-		}
-		if reply.ToolCalls[i].WireID == "" {
-			reply.ToolCalls[i].WireID = reply.ToolCalls[i].ID
-		}
-	}
+	// 为调用分配内核 id（S6），wire_id 存厂商原始 id；不合法的参数 JSON 先规整（见 normalizeCalls）。
+	c.normalizeCalls(reply.ToolCalls)
 
 	redirected := c.hdr.Redirected
 	empty := len(reply.Content) == 0 && len(reply.ToolCalls) == 0
@@ -811,14 +816,7 @@ func (c *Core) ModelInterrupted(requestID string, needID uint64, reply Assistant
 	}
 	var ch []Change
 	if len(reply.Content) > 0 || len(reply.ToolCalls) > 0 {
-		for i := range reply.ToolCalls {
-			if reply.ToolCalls[i].ID == "" {
-				reply.ToolCalls[i].ID = c.genID()
-			}
-			if reply.ToolCalls[i].WireID == "" {
-				reply.ToolCalls[i].WireID = reply.ToolCalls[i].ID
-			}
-		}
+		c.normalizeCalls(reply.ToolCalls) // 中断时参数常是半截 JSON
 		reply.Interrupted = true
 		c.appendEntry(c.hdr.Turn.Turn, nil, Item{Kind: KindAssistant, Assistant: &reply})
 		ch = append(ch, Change{Kind: ChangeAppended, To: c.absLen() - 1, Entries: 1})
@@ -847,6 +845,40 @@ func (c *Core) ModelFailed(requestID string, needID uint64, reason EndReason) ([
 
 // validateCalls 校验模型请求的工具调用（S3）：工具名、参数 JSON、单步调用数。
 // 返回 callID → 错误提示；allInvalid 报告是否全部无效（T13 立即回填路径）。
+// InvalidArgsKey 不合法参数 JSON 规整后保存原始文本的键（见 normalizeCalls）。
+const InvalidArgsKey = "_invalid_args"
+
+// normalizeCalls 分配内核 id 与 wire_id，并把不合法的参数 JSON 换成 `{"_invalid_args": "<原文>"}`：
+// 原样存进条目会让条目无法序列化（之后每个检查点都失败），厂商也不接受非对象的调用参数。
+// 标记留在参数里随条目持久化，恢复后 validateCalls 仍能认出它、不会把调用当作 `{}` 执行。
+func (c *Core) normalizeCalls(calls []ToolCall) {
+	for i := range calls {
+		if calls[i].ID == "" {
+			calls[i].ID = c.genID()
+		}
+		if calls[i].WireID == "" {
+			calls[i].WireID = calls[i].ID
+		}
+		if a := calls[i].Args; len(a) > 0 && !json.Valid(a) {
+			b, _ := json.Marshal(map[string]string{InvalidArgsKey: string(a)})
+			calls[i].Args = b
+		}
+	}
+}
+
+// invalidArgs 参数是否是 normalizeCalls 规整过的非法 JSON。
+func invalidArgs(a json.RawMessage) bool {
+	if !json.Valid(a) {
+		return true
+	}
+	var m map[string]json.RawMessage
+	if json.Unmarshal(a, &m) != nil || len(m) != 1 {
+		return false
+	}
+	_, ok := m[InvalidArgsKey]
+	return ok
+}
+
 func (c *Core) validateCalls(calls []ToolCall) (map[string]string, bool) {
 	hints := map[string]string{}
 	known := map[string]bool{}
@@ -866,7 +898,7 @@ func (c *Core) validateCalls(calls []ToolCall) (map[string]string, bool) {
 			hints[call.ID] = "单步最多 " + itoa(limit) + " 个工具调用，请减少并行调用数量"
 		case !known[call.Name]:
 			hints[call.ID] = "工具 " + call.Name + " 不存在，可用工具：" + c.toolNames()
-		case !json.Valid(call.Args):
+		case invalidArgs(call.Args):
 			hints[call.ID] = "工具 " + call.Name + " 的参数不是合法 JSON，请修正后重试"
 		default:
 			allInvalid = false

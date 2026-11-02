@@ -500,10 +500,42 @@ func guardContact(env mail.Envelope, meta store.SessionMeta, allow bool) error {
 	return nil
 }
 
+// kickFlush 在后台派发发件箱；已有派发在跑时只记一笔，由它跑完后再派一轮
+// （本次提交的外发行可能在它读表之后才落库）。
+func (h *Host) kickFlush() {
+	h.flushMu.Lock()
+	if h.flushing {
+		h.flushAgain = true
+		h.flushMu.Unlock()
+		return
+	}
+	h.flushing = true
+	h.flushMu.Unlock()
+	go func() {
+		for {
+			if _, err := h.FlushOutbox(context.Background()); err != nil {
+				h.publish("", "mail.failed", map[string]any{"error": err.Error()})
+			}
+			h.flushMu.Lock()
+			if !h.flushAgain {
+				h.flushing = false
+				h.flushMu.Unlock()
+				return
+			}
+			h.flushAgain = false
+			h.flushMu.Unlock()
+		}
+	}()
+}
+
 // FlushOutbox 派发待外发信封（08 9.6）：检查点提交后调用。派发成功才标记已发；
 // 被永久拒绝的（会话不存在/已关闭/不在联系名单/跳数超限/corr 不符）也标记，
 // 避免毒消息反复重试。临时错误留在表里等下次重试。
+// 同一个 Host 内串行执行（并发调用排队），同一条外发不会被两个调用同时读到并重复投递。
+// 不要在 actor 协程里调用：投递 control 会同步等目标 actor 受理命令。
 func (h *Host) FlushOutbox(ctx context.Context) (int, error) {
+	h.flushRun.Lock()
+	defer h.flushRun.Unlock()
 	items, err := h.DB.Outbox(ctx, 64)
 	if err != nil {
 		return 0, err

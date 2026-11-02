@@ -150,6 +150,14 @@ type Host struct {
 	mu     sync.Mutex
 	actors map[string]*actor
 	sem    chan struct{} // Limit 的许可池，首次使用时按 Limit 建
+
+	// 发件箱派发（08 9.6）：同一时刻只有一个派发者（读未发行 → 投递 → 标记之间不能交错，
+	// 否则同一条会投递多次）；回合结束只「踢一下」后台派发，不在 actor 协程里投递
+	// （发给自己 / 父会话的 control 会同步等 actor 受理命令）。
+	flushRun   sync.Mutex
+	flushMu    sync.Mutex
+	flushing   bool
+	flushAgain bool
 }
 
 // Handle 会话句柄：只投递命令。
@@ -883,11 +891,9 @@ func (a *actor) turn(ctx context.Context, f func(context.Context) (session.EndRe
 	if err := a.ag.Commit(ctx); err != nil { // span 与 after_turn 的修改落库
 		return end, err
 	}
-	// 外发与检查点同事务（08 9.6）：提交成功后再派发；派发失败不影响回合结果，
-	// 未标记的外发行会在下次 FlushOutbox 时重试。
-	if _, err := a.h.FlushOutbox(ctx); err != nil {
-		a.h.publish(a.id, "mail.failed", map[string]any{"error": err.Error()})
-	}
+	// 外发与检查点同事务（08 9.6）：提交成功后再派发；派发在后台进行、失败不影响回合结果，
+	// 未标记的外发行会在下次派发时重试。
+	a.h.kickFlush()
 	return end, nil
 }
 
@@ -961,7 +967,8 @@ func (h *Host) treePolicy() string {
 func (a *actor) between(need *session.Need) (*session.Need, error) {
 	// 运行中到达的信封（13 13.3）：notice 进状态更新、wake 在下一次调模型前插入。
 	// 投递方只把信封写进 inbox，投递命令可能因 actor 正忙没进队列，这里在步边界兜底。
-	if need.Kind != session.NeedDone {
+	// 只在调模型前插入：NeedTools 时本步调用的结果还没写，插进去会拆开调用与结果（R14）。
+	if need.Kind == session.NeedModel {
 		if items, err := a.h.DB.Inbox(context.Background(), a.id); err == nil && len(items) > 0 {
 			if _, err := a.applyNotices(context.Background(), items); err != nil {
 				return need, err
@@ -1165,6 +1172,9 @@ func (a *actor) insertInput(ctx context.Context) error {
 	if _, err := a.ag.Core.MidInput(content, m); err != nil {
 		if errors.Is(err, session.ErrNotWaiting) {
 			return nil // 回合刚好结束：inbox 留给下一回合
+		}
+		if errors.Is(err, session.ErrToolsOpen) {
+			return nil // 本步工具结果未到齐：留在 inbox，下一个调模型前的边界再插
 		}
 		return err
 	}

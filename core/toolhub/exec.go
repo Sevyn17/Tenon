@@ -102,6 +102,9 @@ func (h *Hub) ExecuteIn(ctx context.Context, ts *Toolset, k *callctx.Ctx, calls 
 // one 一次调用的完整栈。
 func (h *Hub) one(ctx context.Context, stopped <-chan struct{}, ts *Toolset, k *callctx.Ctx, call session.ToolCall, t *Tool) Result {
 	sessionID := k.SessionID()
+	// 记录读写不随回合取消：取消时结果往往已经产生（Write 宽限期内完成、Read 返回取消结果），
+	// 用已取消的 ctx 落库会变成基础设施错误让会话退出，重启后还会被报成「结果未知」。
+	sctx := context.WithoutCancel(ctx)
 	start := time.Now()
 	ev := SpanEvent{CallID: call.ID, Tool: call.Name, Start: start}
 	res := Result{Call: call}
@@ -125,7 +128,7 @@ func (h *Hub) one(ctx context.Context, stopped <-chan struct{}, ts *Toolset, k *
 
 	// —— 入口：幂等 ——
 	if h.store != nil {
-		rec, found, err := h.store.Lookup(ctx, sessionID, call.ID)
+		rec, found, err := h.store.Lookup(sctx, sessionID, call.ID)
 		if err != nil {
 			res.Err = err
 			return res
@@ -152,7 +155,7 @@ func (h *Hub) one(ctx context.Context, stopped <-chan struct{}, ts *Toolset, k *
 					if rec.Decision == "approve" { // 批准过，但参数哈希对不上（如旧版本写的记录）：不是用户拒绝
 						out = Errorf("这次调用的批准记录与当前参数不一致（可能由旧版本写入），未执行；如仍需要，请重新发起同一调用，会再次请求确认")
 					}
-					res.Output, res.Err = h.finish(ctx, sessionID, call.ID, "delivered", out)
+					res.Output, res.Err = h.finish(sctx, sessionID, call.ID, "delivered", out)
 					ev.Guard = "denied"
 					return res
 				}
@@ -173,23 +176,26 @@ func (h *Hub) one(ctx context.Context, stopped <-chan struct{}, ts *Toolset, k *
 	}
 	if out.Kind == Confirm {
 		ev.Guard = "confirm"
-		out, err = h.confirm(ctx, cx, call, out.Reason)
+		out, err = h.confirm(ctx, sctx, cx, call, out.Reason)
 		if err != nil {
 			res.Err = err
 			return res
 		}
 	}
 	if out.Kind == Done && !cx.finished {
-		out, ev.Artifact = h.spill(ctx, sessionID, t, out)
+		out, ev.Artifact = h.spill(sctx, sessionID, t, out)
 		if h.store != nil {
 			b, _ := json.Marshal(newStored(out))
-			// 只有执行器真的写过 started 才按 started 推进；层短路（拒绝、参数错误等）
-			// 时没有执行，直接插入 done。
+			// 只有执行器真的写过 started 才按 started 推进；批准过（delivered）但没写 started
+			// 的（只读风险工具、批准后层短路）从 delivered 推进；其余层短路直接插入 done。
 			from := ""
-			if cx.started {
+			switch {
+			case cx.started:
 				from = "started"
+			case cx.Approved:
+				from = "delivered"
 			}
-			if err := h.store.FinishTool(ctx, sessionID, call.ID, from, string(b)); err != nil {
+			if err := h.store.FinishTool(sctx, sessionID, call.ID, from, string(b)); err != nil {
 				res.Err = err
 				return res
 			}
@@ -202,12 +208,13 @@ func (h *Hub) one(ctx context.Context, stopped <-chan struct{}, ts *Toolset, k *
 
 // confirm Guard 返回 Confirm：写挂起记录 → 等人工决定（持有本调用的锁，保留顺序位，D6）。
 // 批准则重走调用栈（Guard 按记录放行，参数哈希锁定）；拒绝 / 超时以错误结果结清。
-func (h *Hub) confirm(ctx context.Context, cx *Cx, call session.ToolCall, reason string) (Output, error) {
+// sctx 是不随回合取消的存储 ctx（见 one）。
+func (h *Hub) confirm(ctx, sctx context.Context, cx *Cx, call session.ToolCall, reason string) (Output, error) {
 	if h.await == nil || h.store == nil {
 		return Errorf("需要人工确认，但当前没有可应答者：%s", reason), nil
 	}
 	deadline := time.Now().Add(h.deadline)
-	if err := h.store.PutPending(ctx, cx.SessionID, cx.CallID, ArgsHash(call.Args), reason, deadline); err != nil {
+	if err := h.store.PutPending(sctx, cx.SessionID, cx.CallID, ArgsHash(call.Args), reason, deadline); err != nil {
 		return Output{}, err
 	}
 	actx, cancel := context.WithDeadline(ctx, deadline)
@@ -219,12 +226,12 @@ func (h *Hub) confirm(ctx context.Context, cx *Cx, call session.ToolCall, reason
 		return Output{Kind: Done, Content: session.Content{session.NewTextPart("回合已取消，确认未完成")}, Status: session.ToolTurnCancelled}, nil
 	case err != nil && (errors.Is(err, context.DeadlineExceeded) || errors.Is(actx.Err(), context.DeadlineExceeded)): // 截止
 		cx.finished = true
-		return h.finish(ctx, cx.SessionID, cx.CallID, "pending", Errorf("用户未在截止时间前回应确认：%s", reason))
+		return h.finish(sctx, cx.SessionID, cx.CallID, "pending", Errorf("用户未在截止时间前回应确认：%s", reason))
 	case err != nil: // 应答者失败（含进程被杀）：记录保持 pending，恢复后重问
 		return Output{}, err
 	case !ok:
 		cx.finished = true
-		return h.finish(ctx, cx.SessionID, cx.CallID, "delivered", denied("deny"))
+		return h.finish(sctx, cx.SessionID, cx.CallID, "delivered", denied("deny"))
 	}
 	cx.Approved = true
 	out, err := h.chain(0, call)(ctx, cx, call.Args)
@@ -233,7 +240,7 @@ func (h *Hub) confirm(ctx context.Context, cx *Cx, call session.ToolCall, reason
 	}
 	if out.Kind == Confirm { // 批准后 Guard 仍要求确认：按拒绝结清，不循环
 		cx.finished = true
-		return h.finish(ctx, cx.SessionID, cx.CallID, "delivered", Errorf("批准后仍未通过权限检查：%s", out.Reason))
+		return h.finish(sctx, cx.SessionID, cx.CallID, "delivered", Errorf("批准后仍未通过权限检查：%s", out.Reason))
 	}
 	return out, nil
 }
@@ -317,7 +324,10 @@ func runLayer(ctx context.Context, l Layer, cx *Cx, args json.RawMessage, next N
 func (h *Hub) executor(ctx context.Context, cx *Cx, args json.RawMessage) (Output, error) {
 	t := cx.Tool
 	if h.store != nil && t.Risk != Read {
-		if err := h.store.PutToolStarted(ctx, cx.SessionID, cx.CallID, ArgsHash(args)); err != nil {
+		if ctx.Err() != nil { // 回合已取消：不再开始有副作用的执行
+			return Output{Kind: Done, Content: session.Content{session.NewTextPart("回合已取消，未执行")}, Status: session.ToolTurnCancelled}, nil
+		}
+		if err := h.store.PutToolStarted(context.WithoutCancel(ctx), cx.SessionID, cx.CallID, ArgsHash(args)); err != nil {
 			return Output{}, err
 		}
 		cx.started = true

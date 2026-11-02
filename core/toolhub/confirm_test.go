@@ -121,6 +121,60 @@ func TestGuardShortCircuitWriteTool(t *testing.T) {
 	}
 }
 
+// 只读风险的工具也可能要确认（如联网的 web_fetch）：批准后记录是 delivered，执行器不写 started，
+// 结清必须从 delivered 推进，不能当作新记录插入。
+func TestConfirmApproveReadRiskTool(t *testing.T) {
+	st := newMem()
+	ran := 0
+	h := New(Options{Store: st, Await: func(_ context.Context, cx *Cx, _ string, _ time.Time) (bool, error) {
+		st.decide(cx.CallID, "approve")
+		return true, nil
+	}})
+	_ = h.Register(&Tool{Spec: spec("fetch"), Risk: Read,
+		Call: func(context.Context, *Cx, json.RawMessage) (Output, error) { ran++; return Text("page"), nil }})
+	h.AddLayer(approvalGuard(st))
+	rs := drain(h.Execute(context.Background(), kctx("s"), []session.ToolCall{call("1", "fetch", `{}`)}, nil))
+	if rs[0].Err != nil || ran != 1 || text(rs[0].Output) != "page" {
+		t.Fatalf("批准后只读工具应执行并结清: ran=%d err=%v out=%q", ran, rs[0].Err, text(rs[0].Output))
+	}
+	if r, _, _ := st.Lookup(context.Background(), "s", "1"); r.Status != "done" {
+		t.Fatalf("记录应结清为 done: %+v", r)
+	}
+}
+
+// 回合取消时结果记录仍要写成功：存储调用不能用已取消的回合 ctx。
+func TestCancelledTurnStillRecordsResult(t *testing.T) {
+	st := &ctxStore{memStore: newMem()}
+	h := New(Options{Store: st})
+	ctx, cancel := context.WithCancel(context.Background())
+	_ = h.Register(&Tool{Spec: spec("w"), Risk: Write,
+		Call: func(context.Context, *Cx, json.RawMessage) (Output, error) { cancel(); return Text("written"), nil }})
+	rs := drain(h.Execute(ctx, kctx("s"), []session.ToolCall{call("1", "w", `{}`)}, nil))
+	if rs[0].Err != nil {
+		t.Fatalf("取消不应变成基础设施错误: %v", rs[0].Err)
+	}
+	if r, _, _ := st.Lookup(context.Background(), "s", "1"); r.Status != "done" {
+		t.Fatalf("结果已知，记录应为 done（否则重启后报结果未知）: %+v", r)
+	}
+}
+
+// ctxStore 像真实存储一样：ctx 已取消的写入失败。
+type ctxStore struct{ *memStore }
+
+func (s *ctxStore) PutToolStarted(ctx context.Context, sid, id, h string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return s.memStore.PutToolStarted(ctx, sid, id, h)
+}
+
+func (s *ctxStore) FinishTool(ctx context.Context, sid, id, from, out string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return s.memStore.FinishTool(ctx, sid, id, from, out)
+}
+
 // 外层 Transform（如 redact）包着内层 Guard：Guard 的 Confirm 要能穿过 Transform 进入确认流程。
 func TestConfirmThroughTransform(t *testing.T) {
 	st := newMem()

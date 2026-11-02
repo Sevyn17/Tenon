@@ -244,6 +244,93 @@ func TestMidTurnUserMessageInserted(t *testing.T) {
 	}
 }
 
+// R14：模型正在回工具调用时到达的消息，不能插在调用与结果之间——
+// 落到 NeedTools 边界时留在 inbox，等结果到齐后的调模型边界再插。
+func TestMidTurnMessageNotBetweenCallAndResult(t *testing.T) {
+	m := &scriptedModel{firstTool: true, start: make(chan int, 4), gate: make(chan struct{})}
+	r := newT2Rig(t, filepath.Join(t.TempDir(), "s.db"), m, 0, nil)
+	hd := mustOpen(t, r.h, "s1")
+	if err := hd.Do(Command{Kind: Send, Text: "开始任务"}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-m.start: // 第一次调模型已开始（将回工具调用），消息在此期间到达
+	case <-time.After(5 * time.Second):
+		t.Fatal("等待模型调用超时")
+	}
+	if err := hd.Do(Command{Kind: Send, Text: "补充要求"}); err != nil {
+		t.Fatal(err)
+	}
+	close(m.gate)
+	if err := hd.Wait(); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < m.getCalls(); i++ {
+		var roles []string
+		for _, msg := range m.request(i).Messages {
+			roles = append(roles, msg.Role)
+		}
+		for j := 1; j < len(roles); j++ {
+			if roles[j] == "tool" && roles[j-1] != "assistant" && roles[j-1] != "tool" {
+				t.Fatalf("第 %d 次请求里工具结果前不是调用：%v", i+1, roles)
+			}
+		}
+	}
+	all := ""
+	for _, msg := range m.request(m.getCalls() - 1).Messages {
+		all += joinParts(msg.Content) + "\n"
+	}
+	if !strings.Contains(all, "补充要求") {
+		t.Fatalf("消息应在之后的请求里出现：%q", all)
+	}
+	// 落盘的日志能重新加载（旧行为下 Restore 报「调用结果未闭合就出现新输入」）。
+	l, err := r.db.Load(context.Background(), "s1", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := session.Restore(l.Snapshot); err != nil {
+		t.Fatalf("落盘日志应能恢复: %v", err)
+	}
+}
+
+// 工具执行中取消：回合以取消结束，会话仍在（旧行为：用已取消的 ctx 写结果记录失败，顶层会话退出）。
+func TestCancelDuringToolKeepsSession(t *testing.T) {
+	m := &scriptedModel{firstTool: true}
+	started := make(chan struct{}, 1)
+	call := func(ctx context.Context, _ json.RawMessage) (toolhub.Output, error) {
+		started <- struct{}{}
+		<-ctx.Done()
+		return toolhub.Text("partial"), nil
+	}
+	r := newT2Rig(t, filepath.Join(t.TempDir(), "s.db"), m, 0, call)
+	hd := mustOpen(t, r.h, "s1")
+	if err := hd.Do(Command{Kind: Send, Text: "开始任务"}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("等待工具执行超时")
+	}
+	if err := hd.Do(Command{Kind: Cancel}); err != nil {
+		t.Fatal(err)
+	}
+	if err := hd.Wait(); err != nil {
+		t.Fatalf("取消后回合应正常结束: %v", err)
+	}
+	select {
+	case <-hd.Done():
+		t.Fatalf("取消不应让会话退出: %v", hd.Err())
+	default:
+	}
+	if err := hd.Do(Command{Kind: Send, Text: "继续"}); err != nil {
+		t.Fatalf("取消后会话应可继续: %v", err)
+	}
+	if err := hd.Wait(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // 09 9.4 ④：租约带纪元——旧持有者的写入被拒绝，接管者可以继续。
 func TestLeaseTakeoverRejectsStaleWrites(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "s.db")

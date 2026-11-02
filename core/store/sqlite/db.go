@@ -5,10 +5,12 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	_ "modernc.org/sqlite"
 
@@ -55,7 +57,38 @@ func Open(ctx context.Context, path string, opt Options) (*DB, error) {
 	if opt.SyncFull {
 		sync = "FULL"
 	}
-	dsn := fmt.Sprintf("file:%s?_pragma=journal_mode(WAL)&_pragma=synchronous(%s)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(ON)&_txlock=immediate", filepath.ToSlash(path), sync)
+	// busy_timeout 排在第一个：pragma 按顺序执行，后面的语句才有等待。
+	dsn := fmt.Sprintf("file:%s?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=synchronous(%s)&_pragma=foreign_keys(ON)&_txlock=immediate", filepath.ToSlash(path), sync)
+	// 新文件首次切 WAL 要独占锁，SQLite 在这一步不走 busy 等待：多个进程同时首次打开时
+	// 后到者立即 SQLITE_BUSY。按退避重试整个打开（含迁移），上限见约束清单。
+	var lastErr error
+	for i := 0; i < openRetries; i++ {
+		if i > 0 {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(openBackoff << min(i-1, 5)):
+			}
+		}
+		db, err := openOnce(ctx, dsn)
+		if err == nil {
+			return db, nil
+		}
+		lastErr = err
+		if !isBusy(err) {
+			return nil, err
+		}
+	}
+	return nil, lastErr
+}
+
+// 并发首次打开的重试（约束清单「存储」）：最多 openRetries 次，退避从 openBackoff 起翻倍、封顶 32 倍。
+const (
+	openRetries = 20
+	openBackoff = 10 * time.Millisecond
+)
+
+func openOnce(ctx context.Context, dsn string) (*DB, error) {
 	s, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, err
@@ -68,6 +101,18 @@ func Open(ctx context.Context, path string, opt Options) (*DB, error) {
 		return nil, err
 	}
 	return db, nil
+}
+
+// isBusy 是否是 SQLite 的锁冲突（SQLITE_BUSY / SQLITE_LOCKED 及其扩展码）。
+func isBusy(err error) bool {
+	var se interface{ Code() int }
+	if errors.As(err, &se) {
+		switch se.Code() & 0xff {
+		case 5, 6: // SQLITE_BUSY, SQLITE_LOCKED
+			return true
+		}
+	}
+	return false
 }
 
 // Close 关闭。
@@ -112,9 +157,20 @@ func (db *DB) migrate(ctx context.Context, owner string, ms []migration) error {
 		if m.version <= cur {
 			continue
 		}
-		tx, err := db.sql.BeginTx(ctx, nil)
+		tx, err := db.sql.BeginTx(ctx, nil) // _txlock=immediate：开事务即持写锁，多进程迁移串行
 		if err != nil {
 			return err
+		}
+		// 拿到写锁后重读版本：另一个进程可能已在我们读版本之后做完了这一步（并发首次打开）。
+		var now int
+		if err := tx.QueryRowContext(ctx, `SELECT version FROM schema_versions WHERE owner = ?`, owner).Scan(&now); err != nil && err != sql.ErrNoRows {
+			tx.Rollback()
+			return err
+		}
+		if m.version <= now {
+			tx.Rollback()
+			cur = now
+			continue
 		}
 		for _, st := range m.stmts {
 			if _, err := tx.ExecContext(ctx, st); err != nil {
