@@ -43,6 +43,7 @@ func (m *Mailer) Send(ctx context.Context, to mail.Address, body string) error {
 	}
 	env := mail.Envelope{
 		From:   m.from,
+		Via:    m.from.ID,
 		To:     to,
 		Kind:   mail.KindRequest,
 		Mode:   mail.ModeWake,

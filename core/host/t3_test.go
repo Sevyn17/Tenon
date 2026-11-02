@@ -337,3 +337,34 @@ func TestDeliverAgentCreatesAndReusesKey(t *testing.T) {
 		}
 	}
 }
+
+// TestGuardContactAndHop：联系名单第一版 + 跳数上限（08 D4）。
+func TestGuardContactAndHop(t *testing.T) {
+	ctx := context.Background()
+	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{})
+	if _, err := r.h.open(ctx, "s1", "", r.h.New, func(ag *agent.Agent, cfg *session.Config) error {
+		_, err := ag.OpenAs(ctx, cfg, store.SessionMeta{ID: "s1", Creator: "u1"})
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	send := func(from mail.Address, hop int) error {
+		t.Helper()
+		return r.h.Deliver(ctx, mail.Envelope{From: from, To: mail.Address{Kind: mail.AddrSession, ID: "s1"}, Body: "hi", Hop: hop})
+	}
+	if err := send(mail.Address{Kind: mail.AddrHuman, ID: "u2"}, 0); !errors.Is(err, ErrNotAllowed) {
+		t.Fatalf("非创建者应被拒，得到 %v", err)
+	}
+	if err := send(mail.Address{Kind: mail.AddrHuman, ID: "u1"}, 0); err != nil {
+		t.Fatalf("创建者应允许：%v", err)
+	}
+	if err := send(mail.Address{Kind: mail.AddrAgent, ID: "worker"}, 0); !errors.Is(err, ErrNotAllowed) {
+		t.Fatalf("agent 直投应被拒，得到 %v", err)
+	}
+	if err := send(mail.Address{Kind: mail.AddrComponent, ID: "permission"}, 0); err != nil {
+		t.Fatalf("组件应允许：%v", err)
+	}
+	if err := send(mail.Address{Kind: mail.AddrHuman, ID: "u1"}, MaxHop); !errors.Is(err, ErrTooManyHops) {
+		t.Fatalf("跳数超限应被拒，得到 %v", err)
+	}
+}

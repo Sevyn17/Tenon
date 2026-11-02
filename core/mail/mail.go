@@ -102,6 +102,7 @@ func (o Origin) Trusted() bool { return o != OriginExternal }
 type Envelope struct {
 	ID        string    `json:"id"`
 	From      Address   `json:"from"`
+	Via       string    `json:"via,omitempty"` // 组件转发时的发送组件名（人仍是 from）
 	To        Address   `json:"to"`
 	Kind      Kind      `json:"kind"`
 	Mode      Mode      `json:"mode"`

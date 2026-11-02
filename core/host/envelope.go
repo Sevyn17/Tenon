@@ -16,6 +16,15 @@ import (
 // ErrSessionNotFound 会话地址只投不建（13 13.3：查不到就拒绝，不自动新建）。
 var ErrSessionNotFound = errors.New("host: 会话不存在")
 
+// ErrTooManyHops 信封跳数超过上限（08 D4：跳数超限截断回错）。
+var ErrTooManyHops = errors.New("host: 信封跳数超过上限")
+
+// ErrNotAllowed 发送方不在目标会话的联系名单里（08 D4）。
+var ErrNotAllowed = errors.New("host: 发送方不在联系名单里")
+
+// MaxHop 单封信封允许的最大跳数。
+const MaxHop = 8
+
 // Deliver 投递一封信封（13 13.3）：session: 只查不建；agent: 带 key 时查或建
 // （B19）；human: 等分片二后半。
 //
@@ -23,6 +32,12 @@ var ErrSessionNotFound = errors.New("host: 会话不存在")
 func (h *Host) Deliver(ctx context.Context, env mail.Envelope) error {
 	if err := env.Normalize(); err != nil {
 		return err
+	}
+	// 跳数（08 D4）：每投递一次加一，超过上限截断并记 guard.denied。
+	env.Hop++
+	if env.Hop > MaxHop {
+		h.publish(env.To.ID, "guard.denied", map[string]any{"from": env.From.String(), "to": env.To.String(), "reason": "hop"})
+		return fmt.Errorf("%w: %d > %d", ErrTooManyHops, env.Hop, MaxHop)
 	}
 	switch env.To.Kind {
 	case mail.AddrSession:
@@ -96,6 +111,15 @@ func (h *Host) deliverSession(ctx context.Context, env mail.Envelope) error {
 	if st, err := h.DB.SessionStatus(ctx, id); err == nil && st == "deleted" {
 		h.publish(id, "mail.rejected", map[string]any{"from": env.From.String(), "reason": "closed"})
 		return fmt.Errorf("%w: %s", ErrClosed, id)
+	}
+	// 联系名单（08 D4）：v1 只放开创建者本人、登记组件、以及带 corr 的回信。
+	l, err := h.DB.Load(ctx, id, nil)
+	if err != nil {
+		return err
+	}
+	if err := guardContact(env, l.Meta); err != nil {
+		h.publish(id, "guard.denied", map[string]any{"from": env.From.String(), "to": env.To.String(), "reason": err.Error()})
+		return err
 	}
 	// 回信核对（11 回信核对）：存在、未过期、未用过、发送者 = 预期回复方，只收第一条。
 	if env.Kind == mail.KindReply {
@@ -377,4 +401,23 @@ func (a *actor) applyNotices(ctx context.Context, items []store.InboxItem) (bool
 	}
 	a.processing = nil
 	return true, nil
+}
+
+// guardContact 实现 08 D4 的联系名单第一版：创建者本人、登记组件（经 Mailer，
+// from=component:<名>）以及带 corr 的回信可以投递；agent/session 直投留待联系
+// 名单配置（[use.agent] contact）再接。
+func guardContact(env mail.Envelope, meta store.SessionMeta) error {
+	switch env.From.Kind {
+	case mail.AddrHuman:
+		if meta.Creator != "" && env.From.ID != meta.Creator {
+			return fmt.Errorf("%w: %s 不是创建者 %s", ErrNotAllowed, env.From.ID, meta.Creator)
+		}
+	case mail.AddrComponent:
+		return nil
+	default:
+		if env.Corr == "" {
+			return fmt.Errorf("%w: %s 直投需要 corr", ErrNotAllowed, env.From.Kind)
+		}
+	}
+	return nil
 }
