@@ -77,6 +77,9 @@ type SessionStore interface {
 	DeleteSession(ctx context.Context, id string, cleaners []Cleaner) error
 	// ListSessions 按更新时间倒序列出未删除会话。
 	ListSessions(ctx context.Context, before int64, limit int, topOnly bool) ([]SessionInfo, error)
+	// FindSessionByKey 按会话键（定义、创建者、key）查会话 id（13 13.3 B19）。
+	// 唯一约束不看状态：墓碑占着键也会返回；调用方自行判断已关闭。不存在返回 ErrNotFound。
+	FindSessionByKey(ctx context.Context, agentID, creator, key string) (string, error)
 	// SessionStats 汇总会话用量与最近一次请求组成。
 	SessionStats(ctx context.Context, sessionID string) (Stats, error)
 	// Replay 实现 bus.Source：seq > after 的持久事件（升序）及水位。

@@ -283,3 +283,57 @@ func textOfMsg(t *testing.T, m session.Message) string {
 	}
 	return b.String()
 }
+
+// TestDeliverAgentCreatesAndReusesKey：agent: 地址不带 key 每次新建；带 key 按
+// （定义, 创建者, key）查或建（13 13.3 B19）。
+func TestDeliverAgentCreatesAndReusesKey(t *testing.T) {
+	db, err := sqlite.Open(context.Background(), filepath.Join(t.TempDir(), "s.db"), sqlite.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+	var defs []string
+	h := &Host{DB: db, New: func(id, def string) (*agent.Agent, *session.Config, error) {
+		defs = append(defs, def)
+		a := &agent.Agent{Store: db, SessionID: id, Model: &fakeModel{}}
+		cfg := &session.Config{Model: "m", Policy: session.DefaultPolicy()}
+		return a, cfg, nil
+	}}
+	ctx := context.Background()
+	mk := func(key string) mail.Envelope {
+		return mail.Envelope{From: mail.Address{Kind: mail.AddrHuman, ID: "u1"},
+			To: mail.Address{Kind: mail.AddrAgent, ID: "worker"}, Key: key, Body: "你好"}
+	}
+	send := func(key string) {
+		t.Helper()
+		if err := h.Deliver(ctx, mk(key)); err != nil {
+			t.Fatalf("Deliver: %v", err)
+		}
+	}
+	send("k1")
+	id1, err := db.FindSessionByKey(ctx, "worker", "u1", "k1")
+	if err != nil {
+		t.Fatalf("FindSessionByKey: %v", err)
+	}
+	hd, ok := h.Get(id1)
+	if !ok {
+		t.Fatalf("会话 %s 应已打开", id1)
+	}
+	if err := hd.Wait(); err != nil {
+		t.Fatalf("Wait: %v", err)
+	}
+	send("k1") // 同键复用
+	hd.Wait()
+	if list, _ := db.ListSessions(ctx, 0, 50, false); len(list) != 1 {
+		t.Fatalf("同键应该只有 1 个会话，得到 %d", len(list))
+	}
+	send("") // 不带 key：新建
+	if list, _ := db.ListSessions(ctx, 0, 50, false); len(list) != 2 {
+		t.Fatalf("不带 key 应该新建会话，得到 %d", len(list))
+	}
+	for _, d := range defs {
+		if d != "worker" {
+			t.Fatalf("Factory 定义名 = %q，期望 worker", d)
+		}
+	}
+}

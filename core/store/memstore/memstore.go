@@ -779,3 +779,17 @@ func (s *Store) DefinitionHash(kind, id string, version int) string {
 	}
 	return vs[version-1].hash
 }
+
+// FindSessionByKey 按会话键查会话 id（13 13.3 B19）。
+func (s *Store) FindSessionByKey(_ context.Context, agentID, creator, key string) (string, error) {
+	if err := s.lock(); err != nil {
+		return "", err
+	}
+	defer s.mu.Unlock()
+	for _, x := range s.sessions {
+		if x.meta.AgentID == agentID && x.meta.Creator == creator && x.meta.SessionKey == key {
+			return x.meta.ID, nil
+		}
+	}
+	return "", store.ErrNotFound
+}

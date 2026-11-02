@@ -41,6 +41,7 @@ func Run(t *testing.T, open func(t *testing.T) store.Store) {
 		{"LeaseFencing", testLeaseFencing},
 		{"SleepStatus", testSleepStatus},
 		{"PendingCorr", testPendingCorr},
+		{"FindSessionByKey", testFindSessionByKey},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) { c.f(t, open(t)) })
@@ -854,5 +855,32 @@ func testPendingCorr(t *testing.T, db store.Store) {
 	}
 	if _, err := db.ClaimCorr(ctx, "corr-4", "s1", ""); !errors.Is(err, store.ErrCorrRejected) {
 		t.Fatal("过期回信应被拒")
+	}
+}
+
+// FindSessionByKey 按会话键查会话（13 13.3 B19 的原子查或建基础）。
+func testFindSessionByKey(t *testing.T, db store.Store) {
+	ctx := context.Background()
+	h := newCore().Snapshot().Header
+	mk := func(id, agent, creator, key string) {
+		t.Helper()
+		if err := db.CreateSession(ctx, store.SessionMeta{ID: id, AgentID: agent, Creator: creator, SessionKey: key}, h, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mk("k1", "a", "u", "key-1")
+	mk("k2", "a", "u2", "key-1")
+	if _, err := db.FindSessionByKey(ctx, "a", "u", "key-1"); err != nil {
+		t.Fatalf("查已存在键: %v", err)
+	}
+	id, err := db.FindSessionByKey(ctx, "a", "u", "key-1")
+	if err != nil || id != "k1" {
+		t.Fatalf("id/err = %q/%v，期望 k1", id, err)
+	}
+	if _, err := db.FindSessionByKey(ctx, "a", "u", "nope"); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("不存在键 err = %v，期望 ErrNotFound", err)
+	}
+	if _, err := db.FindSessionByKey(ctx, "b", "u", "key-1"); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("换定义 err = %v，期望 ErrNotFound", err)
 	}
 }

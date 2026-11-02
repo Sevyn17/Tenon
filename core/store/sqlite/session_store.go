@@ -366,3 +366,18 @@ func unraw(s string) json.RawMessage {
 	}
 	return json.RawMessage(s)
 }
+
+// FindSessionByKey 按会话键查会话 id（13 13.3 B19）。
+func (s *DB) FindSessionByKey(ctx context.Context, agentID, creator, key string) (string, error) {
+	var id string
+	err := s.sql.QueryRowContext(ctx,
+		`SELECT id FROM sessions WHERE tenant = ? AND agent_id = ? AND creator = ? AND session_key = ?`,
+		Tenant, agentID, creator, key).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", ErrNotFound
+	}
+	if err != nil {
+		return "", fmt.Errorf("sqlite: 按会话键查会话: %w", err)
+	}
+	return id, nil
+}

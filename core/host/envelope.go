@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 
+	"ybase-kernel/core/agent"
 	"ybase-kernel/core/mail"
 	"ybase-kernel/core/session"
 	"ybase-kernel/core/store"
@@ -15,8 +16,8 @@ import (
 // ErrSessionNotFound 会话地址只投不建（13 13.3：查不到就拒绝，不自动新建）。
 var ErrSessionNotFound = errors.New("host: 会话不存在")
 
-// Deliver 投递一封信封（13 13.3）。当前支持 session: 地址；agent:/human: 地址随
-// 分片二（新建会话 / 人工投递）补上。
+// Deliver 投递一封信封（13 13.3）：session: 只查不建；agent: 带 key 时查或建
+// （B19）；human: 等分片二后半。
 //
 // 返回前信封已落 inbox（幂等：同 id 只算一次）；回合中到达的 wake 会在下一次调模型前合并插入。
 func (h *Host) Deliver(ctx context.Context, env mail.Envelope) error {
@@ -26,9 +27,50 @@ func (h *Host) Deliver(ctx context.Context, env mail.Envelope) error {
 	switch env.To.Kind {
 	case mail.AddrSession:
 		return h.deliverSession(ctx, env)
+	case mail.AddrAgent:
+		return h.deliverAgent(ctx, env)
 	default:
-		return fmt.Errorf("host: 暂不支持投递到 %s（T3 分片二提供）", env.To.String())
+		return fmt.Errorf("host: 暂不支持投递到 %s（后一分片提供）", env.To.String())
 	}
+}
+
+// deliverAgent 投给 agent:<定义名>：带 key 时按（定义, 创建者, key）查或建会话（B19）。
+func (h *Host) deliverAgent(ctx context.Context, env mail.Envelope) error {
+	creator := ""
+	if env.From.Kind == mail.AddrHuman {
+		creator = env.From.ID
+	}
+	if env.Key != "" {
+		id, err := h.DB.FindSessionByKey(ctx, env.To.ID, creator, env.Key)
+		if err == nil {
+			env.To = mail.Address{Kind: mail.AddrSession, ID: id}
+			return h.deliverSession(ctx, env)
+		}
+		if !errors.Is(err, store.ErrNotFound) {
+			return err
+		}
+	}
+	id := "ag-" + NewItemID()
+	meta := store.SessionMeta{ID: id, AgentID: env.To.ID, Creator: creator, SessionKey: env.Key, Origin: "agent"}
+	pre := func(ag *agent.Agent, cfg *session.Config) error {
+		if ag.Def != nil {
+			meta.AgentID, meta.AgentHash = ag.Def.ID, ag.Def.Version
+		}
+		_, err := ag.OpenAs(ctx, cfg, meta)
+		return err
+	}
+	if _, err := h.open(ctx, id, env.To.ID, h.New, pre); err != nil {
+		// 并发建同键：唯一约束冲突后重查一次再投（13 13.3 B19）。
+		if env.Key != "" && errors.Is(err, store.ErrConflict) {
+			if sid, ferr := h.DB.FindSessionByKey(ctx, env.To.ID, creator, env.Key); ferr == nil {
+				env.To = mail.Address{Kind: mail.AddrSession, ID: sid}
+				return h.deliverSession(ctx, env)
+			}
+		}
+		return err
+	}
+	env.To = mail.Address{Kind: mail.AddrSession, ID: id}
+	return h.deliverSession(ctx, env)
 }
 
 // DeliverText 是投递一条用户文本的便捷入口（等价于 from=human 的 wake 请求）。
