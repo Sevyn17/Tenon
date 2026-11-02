@@ -49,6 +49,8 @@ func (h *Host) Deliver(ctx context.Context, env mail.Envelope) error {
 		return h.deliverSession(ctx, env)
 	case mail.AddrAgent:
 		return h.deliverAgent(ctx, env)
+	case mail.AddrHuman:
+		return h.deliverHuman(ctx, env)
 	default:
 		return fmt.Errorf("host: 暂不支持投递到 %s（后一分片提供）", env.To.String())
 	}
@@ -147,6 +149,13 @@ func (h *Host) deliverSession(ctx context.Context, env mail.Envelope) error {
 			h.publish(id, "guard.denied", map[string]any{"from": env.From.String(), "to": env.To.String(),
 				"corr": env.Corr, "reason": "corr"})
 			return fmt.Errorf("%w: corr %s", err, env.Corr)
+		}
+		// 人工确认的回答：交给挂起的工具确认，不当作普通消息入信箱（11 11.2）。
+		if h.resolveHuman(env.Corr, env.Body) {
+			h.publish(id, "human.answered", map[string]any{"corr": env.Corr, "from": env.From.String(),
+				"approve": decisionFromBody(env.Body)})
+			h.recordTrace(env.Trace, id, "envelope", "human -> session:"+id+"（回信）")
+			return nil
 		}
 	}
 	// 内核守卫（T3 分片二接入联系名单 / caps / hop）。

@@ -129,6 +129,11 @@ type Host struct {
 	Holder string
 	// Limit 同时推理的会话数上限（0 = 不限）；超出上限的回合排队等待，不报错（02 2.4）。
 	Limit int
+
+	// 人工确认（11 11.2 human: 地址）：内核签发 corr、发布 human.asked；
+	// 回信（KindReply + corr）投回会话时按 corr 交给等待中的工具确认。
+	humanMu   sync.Mutex
+	humanWait map[string]chan bool
 	// SleepAfter 空闲多久后休眠（0 = 不休眠）。休眠的会话释放进程内对象与写租约，
 	// 只剩存储里的几行；有新信件时任一节点抢到租约即可唤醒（02 2.2）。
 	SleepAfter time.Duration
@@ -1035,23 +1040,47 @@ func (a *actor) requeue() {
 	}
 }
 
-// wireConfirm 把 toolhub 的人工确认接到 Confirm 命令（单一路径，D3）。
+// wireConfirm 把 toolhub 的人工确认接到 human: 地址（11 11.2 D3）：
+// 内核签发 corr、登记待回复、发布 human.asked；回答可以是 envelope 回信（corr），
+// 也可以是既有的 Confirm 命令（call_id），两条路都落到同一个等待通道。
 func (a *actor) wireConfirm() {
 	a.ag.Hub.SetAwait(a.ag.AwaitFunc(func(cx *toolhub.Cx, reason string) bool {
+		corr := mail.NewID()
+		deadline := time.Now().Add(toolhub.DefaultConfirmDeadline)
+		idx := 0
+		if core := a.ag.Core; core != nil {
+			c := core.Context()
+			idx = c.Base + len(c.Items)
+		}
+		_ = a.h.DB.IssueCorr(context.Background(), store.Pending{Corr: corr, SessionID: a.id,
+			Trace: a.ag.TraceID(), IssuedIdx: idx, Deadline: deadline.UnixMilli()})
 		w := make(chan bool, 1)
 		a.mu.Lock()
 		a.waiters[cx.CallID] = w
 		a.mu.Unlock()
+		a.h.humanMu.Lock()
+		if a.h.humanWait == nil {
+			a.h.humanWait = map[string]chan bool{}
+		}
+		a.h.humanWait[corr] = w
+		a.h.humanMu.Unlock()
 		defer func() {
 			a.mu.Lock()
 			delete(a.waiters, cx.CallID)
 			a.mu.Unlock()
+			a.h.humanMu.Lock()
+			delete(a.h.humanWait, corr)
+			a.h.humanMu.Unlock()
 		}()
-		a.h.publish(a.id, "human_requested", map[string]any{"call_id": cx.CallID, "tool": cx.Tool.Spec.Name, "reason": reason, "args": string(cx.Args)})
+		a.h.publish(a.id, "human_requested", map[string]any{"call_id": cx.CallID, "tool": cx.Tool.Spec.Name,
+			"reason": reason, "args": string(cx.Args), "corr": corr, "deadline": deadline.UnixMilli()})
+		a.h.recordTrace(a.ag.TraceID(), a.id, "envelope", "session:"+a.id+" -> human（确认 "+cx.Tool.Spec.Name+"）")
 		select {
 		case ok := <-w:
 			return ok
 		case <-a.exit:
+			return false
+		case <-time.After(time.Until(deadline)):
 			return false
 		}
 	}))
