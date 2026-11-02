@@ -13,7 +13,9 @@ package session
 
 import (
 	"encoding/json"
+	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -563,6 +565,26 @@ func (c *Core) Compact(summary Content, upto int, meta map[string]any) ([]Change
 	}
 	c.hdr.PendingCompact = &PendingCompact{Summary: summary, Upto: upto, Meta: meta}
 	return nil, nil
+}
+
+// Inject 追加一条上下文注入条目（框架设计 12.5）：kind 为 snapshot / status；
+// text 是内核渲染好的注入文本，meta 记录已发哈希（条目只读、随检查点持久化）。
+// 注入只追加条目、不改回合状态：可在 WaitingModel / WaitingTools 下调用。
+func (c *Core) Inject(kind string, text string, meta map[string]any) ([]Change, error) {
+	if err := c.checkReadOnly(); err != nil {
+		return nil, err
+	}
+	if kind != KindSnapshot && kind != KindStatus {
+		return nil, fmt.Errorf("%w: 注入种类 %q", ErrState, kind)
+	}
+	if strings.TrimSpace(text) == "" {
+		return nil, nil
+	}
+	if err := c.checkMetaSize(meta); err != nil {
+		return nil, err
+	}
+	c.appendEntry(c.lastTurn(), meta, Item{Kind: kind, Injection: &InjectionItem{Text: text}})
+	return []Change{{Kind: ChangeAppended, To: c.absLen() - 1, Entries: 1}}, nil
 }
 
 // —— 命令：等待态专属（T5 / T6 / T7 / T17 / T18）——//

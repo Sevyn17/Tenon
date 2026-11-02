@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"sort"
 
+	"ybase-kernel/core/inject"
 	"ybase-kernel/core/plugin"
 	"ybase-kernel/core/session"
 	"ybase-kernel/core/toolhub"
@@ -92,6 +93,8 @@ type Collected struct {
 	Ready     []ReadyFunc
 	// Items 权限项声明（装配级），按 id 排序后交给每个会话的 hub 登记。
 	Items []toolhub.Item
+	// Statuses 状态提交登记（框架设计 12.5）：每次调模型前由 agent 收集变化片段。
+	Statuses []inject.Reg
 }
 
 // Collect 按点位取出登记项；工具、层、系统块按上面的规则排序（确定）。类型不符报错。
@@ -189,5 +192,6 @@ func Collect(asm *plugin.Assembly) (*Collected, error) {
 		c.Items = append(c.Items, item)
 	}
 	sort.SliceStable(c.Items, func(i, j int) bool { return c.Items[i].ID < c.Items[j].ID })
+	c.Statuses = asm.Statuses()
 	return c, nil
 }

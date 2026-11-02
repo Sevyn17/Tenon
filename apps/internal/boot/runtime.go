@@ -211,6 +211,8 @@ func (r *Runtime) BuildApp(o AppOptions) (*Built, error) {
 		Kernel: &kern,
 		// 会话定义来源：子智能体 / 工作组成员按内置模板名构造（T1b-2c）。
 		Definitions: rt.Defs,
+		// 状态提交登记（框架设计 12.5）：agent 每次调模型前收集变化的片段。
+		Statuses: col.Statuses,
 	}
 	rb.Hooks = o.Hooks
 	rb.Blocks = col.Blocks // 系统提示词由 prompt 插件提供（plugin-switch-plan §2.1）

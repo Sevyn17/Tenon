@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"ybase-kernel/core/agentdef"
+	"ybase-kernel/core/inject"
 	"ybase-kernel/core/useconf"
 )
 
@@ -214,6 +215,27 @@ func (cx *Registrar) AgentConfig(proto any) error {
 func (cx *Registrar) Template(src agentdef.Source) {
 	cx.asm.templates = append(cx.asm.templates, agentdef.Template{Owner: cx.plugin, Source: src})
 	cx.asm.points = append(cx.asm.points, Registration{Plugin: cx.plugin, Point: "template", Name: cx.plugin})
+}
+
+// StatusEntry 一份状态提交登记（Registrar.Status；04 4.7）。
+type StatusEntry struct {
+	Key string
+	Fn  inject.Func
+}
+
+// Status 登记一份状态提交（框架设计 12.5）：每次调模型前框架调用 fn，按 key 只发变化的
+// 片段，合并成一条 status 条目追加在本次请求末尾。key 可 * 结尾表示动态前缀。
+func (cx *Registrar) Status(key string, fn inject.Func) error {
+	if strings.TrimSpace(key) == "" {
+		return fmt.Errorf("插件 %s：状态提交缺 key", cx.plugin)
+	}
+	if fn == nil {
+		return fmt.Errorf("插件 %s：状态提交 %s 缺函数", cx.plugin, key)
+	}
+	cx.asm.items[PointStatus] = append(cx.asm.items[PointStatus], Item{Plugin: cx.plugin, Name: key,
+		Impl: StatusEntry{Key: key, Fn: fn}})
+	cx.asm.points = append(cx.asm.points, Registration{Plugin: cx.plugin, Point: PointStatus, Name: key})
+	return nil
 }
 
 // FillSlot 填插槽（必须在 Provides 里声明 "slot:<名>"）。
@@ -559,6 +581,22 @@ func (a *Assembly) Layers(point string) []Layer {
 
 // Items 通用点位上的全部登记（按装配顺序）。
 func (a *Assembly) Items(point string) []Item { return a.items[point] }
+
+// PointStatus 状态提交点位（04 4.7 / 框架设计 12.5）。
+const PointStatus = "status"
+
+// Statuses 已登记的状态提交（按装配顺序）。
+func (a *Assembly) Statuses() []inject.Reg {
+	var out []inject.Reg
+	for _, it := range a.items[PointStatus] {
+		se, ok := it.Impl.(StatusEntry)
+		if !ok {
+			continue
+		}
+		out = append(out, inject.Reg{Key: se.Key, Owner: it.Plugin, Fn: se.Fn})
+	}
+	return out
+}
 
 // Value 取插槽 / 服务的最终实现。
 func (a *Assembly) Value(key string) (any, bool) {

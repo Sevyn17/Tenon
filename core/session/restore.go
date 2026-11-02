@@ -96,6 +96,13 @@ func Restore(snap Snapshot) (*Core, error) {
 			}
 			lastUpto = it.Compaction.Upto
 			sawCompaction = true
+		case KindSnapshot, KindStatus:
+			if it.Injection == nil {
+				return nil, fmt.Errorf("%w: %s 条目 %d 缺体", ErrState, it.Kind, i)
+			}
+			if len(open) > 0 {
+				return nil, fmt.Errorf("%w: 条目 %d：调用结果未闭合就出现注入", ErrState, i)
+			}
 		case KindUnknown:
 			readOnly = true // R15：未识别条目使会话只读（可查看、可同步）
 		default:

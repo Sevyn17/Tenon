@@ -32,24 +32,22 @@ func fixture(t *testing.T) (*session.Core, session.Context) {
 func TestBuildRebuildRoundTrip(t *testing.T) {
 	_, ctx := fixture(t)
 	base, _ := session.BuildRequest(ctx)
-	final := base
-	final.Messages = append(append([]session.Message(nil), base.Messages...), session.Message{Role: "user", Content: txt("记忆注入")})
-	final.Tools = base.Tools[:1] // 收窄
-	r, err := Build("req-1", ctx, nil, base, final, []string{"plugin:memory"})
+	// 注入已全部进内核历史（12.4 C4）：最终请求就是基础请求，没有「后缀」这一段。
+	r, err := Build("req-1", ctx, nil, base, base)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
-	if r.PrefixBase != 0 || r.PrefixEnd != 3 || len(r.Suffix) != 1 || r.Suffix[0].Source != "plugin:memory" {
+	if r.PrefixBase != 0 || r.PrefixEnd != 3 {
 		t.Fatalf("记录不符: %+v", r)
 	}
 	got, err := Rebuild(r, ctx)
 	if err != nil {
 		t.Fatalf("Rebuild: %v", err)
 	}
-	if !sameJSON(got, final) {
+	if !sameJSON(got, base) {
 		t.Fatalf("重组不等于最终请求")
 	}
-	if r.Composition.Parts["inject:plugin:memory"] == 0 || r.Composition.Parts["system:plugin:agents-md"] == 0 || r.Composition.Parts["tools"] == 0 {
+	if r.Composition.Parts["system:plugin:agents-md"] == 0 || r.Composition.Parts["tools"] == 0 {
 		t.Fatalf("组成统计缺类别: %+v", r.Composition)
 	}
 }
@@ -58,7 +56,7 @@ func TestRebuildWithCompactionView(t *testing.T) {
 	_, ctx := fixture(t)
 	view := &CompactionView{Summary: txt("摘要"), Upto: 2}
 	base, _ := session.BuildWithCompaction(ctx, view.Summary, view.Upto)
-	r, err := Build("req-2", ctx, view, base, base, nil)
+	r, err := Build("req-2", ctx, view, base, base)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,19 +76,19 @@ func TestShapeViolations(t *testing.T) {
 	mod := base
 	mod.Messages = append([]session.Message(nil), base.Messages...)
 	mod.Messages[1] = session.Message{Role: "user", Content: txt("篡改")}
-	if _, err := Build("x", ctx, nil, base, mod, nil); !errors.Is(err, ErrShape) {
+	if _, err := Build("x", ctx, nil, base, mod); !errors.Is(err, ErrShape) {
 		t.Fatalf("改写前缀应拒绝: %v", err)
 	}
 
 	cut := base
 	cut.Messages = base.Messages[:1]
-	if _, err := Build("x", ctx, nil, base, cut, nil); !errors.Is(err, ErrShape) {
+	if _, err := Build("x", ctx, nil, base, cut); !errors.Is(err, ErrShape) {
 		t.Fatalf("删减消息应拒绝: %v", err)
 	}
 
 	wide := base
 	wide.Tools = append(append([]session.ToolSpec(nil), base.Tools...), session.ToolSpec{Name: "evil"})
-	if _, err := Build("x", ctx, nil, base, wide, nil); !errors.Is(err, ErrShape) {
+	if _, err := Build("x", ctx, nil, base, wide); !errors.Is(err, ErrShape) {
 		t.Fatalf("放宽工具应拒绝: %v", err)
 	}
 }
@@ -98,7 +96,7 @@ func TestShapeViolations(t *testing.T) {
 func TestRebuildMismatchAfterHistoryChange(t *testing.T) {
 	c, ctx := fixture(t)
 	base, _ := session.BuildRequest(ctx)
-	r, err := Build("req-3", ctx, nil, base, base, nil)
+	r, err := Build("req-3", ctx, nil, base, base)
 	if err != nil {
 		t.Fatal(err)
 	}

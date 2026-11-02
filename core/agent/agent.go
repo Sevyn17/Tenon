@@ -13,6 +13,7 @@ import (
 
 	"ybase-kernel/core/agentdef"
 	"ybase-kernel/core/callctx"
+	"ybase-kernel/core/inject"
 	"ybase-kernel/core/modelhub"
 	"ybase-kernel/core/reqlog"
 	"ybase-kernel/core/session"
@@ -88,6 +89,9 @@ type Agent struct {
 	Def       *agentdef.Agent
 	Schemas   []useconf.Schema
 	UseSource useconf.Source
+
+	// Statuses 状态提交登记（框架设计 12.5）：每次调模型前收集，按 key 只发变化的片段。
+	Statuses []inject.Reg
 
 	spanMu   sync.Mutex
 	hubSpans []store.Span
@@ -210,6 +214,21 @@ func (a *Agent) callModel(ctx context.Context, need *session.Need) (*session.Nee
 		if req, view, err = a.buildRequest(ctx, false); err != nil {
 			return nil, err
 		}
+		// 注入在压缩决策之后：压缩会折叠旧的状态条目，压缩后按 key 重新注入一次（12.5）。
+		changed, ierr := a.injectStatuses(view != nil)
+		if ierr != nil {
+			return nil, ierr
+		}
+		if changed {
+			if view != nil {
+				req, err = session.BuildWithCompaction(a.Core.Context(), view.Summary, view.Upto)
+			} else {
+				req, err = session.BuildRequest(a.Core.Context())
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
 	}
 	return a.sendModel(ctx, need, req, view, false)
 }
@@ -249,7 +268,7 @@ func (a *Agent) buildRequest(ctx context.Context, force bool) (session.Request, 
 
 func (a *Agent) sendModel(ctx context.Context, need *session.Need, req session.Request, view *reqlog.CompactionView, retried bool) (*session.Need, error) {
 	// 压缩视图之后的最终请求 = 基础请求；Transform 层在 modelhub 内，R2 由调度器校验。
-	rec, err := reqlog.Build(need.Model.RequestID, a.Core.Context(), view, req, req, nil)
+	rec, err := reqlog.Build(need.Model.RequestID, a.Core.Context(), view, req, req)
 	if err != nil {
 		return nil, err
 	}

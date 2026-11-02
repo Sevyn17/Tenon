@@ -13,6 +13,7 @@ import (
 	"ybase-kernel/core/agent"
 	"ybase-kernel/core/agentdef"
 	"ybase-kernel/core/callctx"
+	"ybase-kernel/core/inject"
 	"ybase-kernel/core/modelhub"
 	"ybase-kernel/core/session"
 	"ybase-kernel/core/store"
@@ -67,6 +68,8 @@ type Builder struct {
 	Items []toolhub.Item
 	// Definitions 智能体定义来源（03 3.5）；nil = 会话不带定义（也没有可加载的定义名）。
 	Definitions agentdef.Source
+	// Statuses 状态提交登记（框架设计 12.5）：每次调模型前由 agent 收集变化的片段。
+	Statuses []inject.Reg
 }
 
 // Build 构造会话 id 的 agent 与新会话配置。
@@ -83,6 +86,7 @@ func (b *Builder) Build(id, defName string, child bool) (*agent.Agent, *session.
 	a := &agent.Agent{Store: b.DB, SessionID: id, Ctx: kctx,
 		Model: &modelhub.Session{Hub: b.Models, SessionKey: "ybase-" + id}}
 	a.Def = def
+	a.Statuses = b.Statuses
 	if b.Compactor != nil {
 		a.Compactor = b.Compactor
 	}

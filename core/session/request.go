@@ -145,6 +145,10 @@ func entryToMessage(e *Entry, abs int) (Message, error) {
 			Reasoning: e.Item.Assistant.Reasoning}, nil
 	case KindToolResult:
 		return Message{Role: "tool", Content: e.Item.ToolResult.Output, ToolCallID: e.Item.ToolResult.CallID}, nil
+	case KindSnapshot, KindStatus:
+		// 注入条目作为 user 消息参与请求；位置就是条目写入的位置（回合首次在用户消息后，
+		// 途中在工具结果后），连续同角色消息由适配器合并。
+		return Message{Role: "user", Content: Content{NewTextPart(e.Item.Injection.Text)}}, nil
 	default:
 		return Message{}, fmt.Errorf("%w: 条目 %d 未知种类 %q", ErrState, abs, e.Item.Kind)
 	}

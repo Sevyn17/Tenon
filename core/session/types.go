@@ -131,11 +131,12 @@ type Usage struct {
 // Item：条目变体（M4 §3.2）。JSON 形如 {"kind":"user",...}；
 // 未识别 kind 原样落 Unknown（R15）。
 type Item struct {
-	Kind       string          `json:"kind"` // user / assistant / tool_result / compaction / unknown
+	Kind       string          `json:"kind"` // user / assistant / tool_result / compaction / snapshot / status / unknown
 	User       *UserItem       `json:"user,omitempty"`
 	Assistant  *AssistantItem  `json:"assistant,omitempty"`
 	ToolResult *ToolResultItem `json:"tool_result,omitempty"`
 	Compaction *CompactionItem `json:"compaction,omitempty"`
+	Injection  *InjectionItem  `json:"injection,omitempty"`
 	Unknown    *UnknownItem    `json:"unknown,omitempty"`
 }
 
@@ -145,6 +146,8 @@ const (
 	KindAssistant  = "assistant"
 	KindToolResult = "tool_result"
 	KindCompaction = "compaction"
+	KindSnapshot   = "snapshot" // 上下文快照（L2）：会话开头与压缩后注入
+	KindStatus     = "status"   // 状态更新（L3）：每次调模型前按 key 只发变化
 	KindUnknown    = "unknown"
 )
 
@@ -174,6 +177,12 @@ type ToolResultItem struct {
 type CompactionItem struct {
 	Upto    int
 	Summary Content
+}
+
+// InjectionItem：上下文注入条目体（框架设计 12.5）。Text 是内核渲染好的注入文本：
+// 快照用 <context> 包裹，状态更新用 <status-update> 包裹；已发哈希记在条目 meta。
+type InjectionItem struct {
+	Text string
 }
 
 // UnknownItem：未识别条目，raw 原样保留（R15）；使会话只读。

@@ -75,6 +75,7 @@ func (a *App) Start(ctx context.Context) error {
 		Items:       col.Items,
 		Kernel:      &kern,
 		Definitions: a.defs,
+		Statuses:    col.Statuses,
 	}
 	rb.Hooks = func(*kr.SessionCx) agent.Hooks { return agent.Hooks{} }
 	if _, err := appapi.New(appapi.Options{

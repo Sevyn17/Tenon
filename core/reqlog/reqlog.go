@@ -27,12 +27,6 @@ type CompactionView struct {
 	Upto    int             `json:"upto"`
 }
 
-// SuffixMessage Transform 追加的一条消息，带来源（G1）。
-type SuffixMessage struct {
-	Source  string          `json:"source,omitempty"`
-	Message session.Message `json:"message"`
-}
-
 // Shell 请求外壳：最终请求里除消息外的全部内容。
 type Shell struct {
 	Model  string                `json:"model"`
@@ -48,7 +42,6 @@ type Record struct {
 	PrefixBase  int
 	PrefixEnd   int
 	View        *CompactionView
-	Suffix      []SuffixMessage
 	FinalHash   string
 	Composition Composition
 }
@@ -57,7 +50,7 @@ type Record struct {
 // ① 最终请求的消息以基础请求的消息为前缀（逐字节相等），之后只能追加；
 // ② 最终请求的 tools 是基础请求 tools 的子集（只能收窄）。
 // sources[i] 给后缀第 i 条消息标来源，可为 nil。
-func Build(requestID string, ctx session.Context, view *CompactionView, base, final session.Request, sources []string) (*Record, error) {
+func Build(requestID string, ctx session.Context, view *CompactionView, base, final session.Request) (*Record, error) {
 	if len(final.Messages) < len(base.Messages) {
 		return nil, fmt.Errorf("%w: 消息被删减（%d < %d）", ErrShape, len(final.Messages), len(base.Messages))
 	}
@@ -89,14 +82,9 @@ func Build(requestID string, ctx session.Context, view *CompactionView, base, fi
 		View:       view,
 		FinalHash:  h,
 	}
-	for i, m := range final.Messages[len(base.Messages):] {
-		src := ""
-		if i < len(sources) {
-			src = sources[i]
-		}
-		r.Suffix = append(r.Suffix, SuffixMessage{Source: src, Message: m})
-	}
-	r.Composition = Compose(final, len(base.Messages), sources, view != nil || hasCompaction(ctx))
+	// 注入已全部进内核历史（框架设计 12.4 C4），最终请求不再有「后缀」这一段；
+	// 前缀之外的额外消息属于非法改写，由上面的前缀校验兜底（只允许追加，本版没有追加方）。
+	r.Composition = Compose(final, len(base.Messages), nil, view != nil || hasCompaction(ctx))
 	return r, nil
 }
 
@@ -120,9 +108,6 @@ func Rebuild(r *Record, ctx session.Context) (session.Request, error) {
 	}
 	final := session.Request{Model: r.Shell.Model, System: r.Shell.System, Tools: r.Shell.Tools, Params: r.Shell.Params,
 		Messages: base.Messages}
-	for _, s := range r.Suffix {
-		final.Messages = append(final.Messages, s.Message)
-	}
 	h, err := session.RequestHash(final)
 	if err != nil {
 		return session.Request{}, err

@@ -173,11 +173,6 @@ func toStore(r *reqlog.Record) (*store.RequestRecord, error) {
 			return nil, err
 		}
 	}
-	if len(r.Suffix) > 0 {
-		if sr.Suffix, err = json.Marshal(r.Suffix); err != nil {
-			return nil, err
-		}
-	}
 	if sr.Composition, err = json.Marshal(r.Composition); err != nil {
 		return nil, err
 	}
@@ -196,11 +191,6 @@ func (a *Agent) fromStore(ctx context.Context, sr *store.RequestRecord) (*reqlog
 	if len(sr.CompactionView) > 0 {
 		r.View = &reqlog.CompactionView{}
 		if err := json.Unmarshal(sr.CompactionView, r.View); err != nil {
-			return nil, err
-		}
-	}
-	if len(sr.Suffix) > 0 {
-		if err := json.Unmarshal(sr.Suffix, &r.Suffix); err != nil {
 			return nil, err
 		}
 	}
