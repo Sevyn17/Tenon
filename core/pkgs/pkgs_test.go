@@ -11,9 +11,9 @@ import (
 
 type nopPlugin struct{}
 
-func (nopPlugin) Meta() plugin.Meta              { return plugin.Meta{Name: "pkgs-test-target", Config: &testCfg{}} }
+func (nopPlugin) Meta() plugin.Meta                { return plugin.Meta{Name: "pkgs-test-target", Config: &testCfg{}} }
 func (nopPlugin) Setup(cx *plugin.Registrar) error { return nil }
-func (nopPlugin) Start(sc *plugin.Scope) error   { return nil }
+func (nopPlugin) Start(sc *plugin.Scope) error     { return nil }
 
 func init() { plugin.Register("pkgs-test-target", func() plugin.Plugin { return nopPlugin{} }) }
 
