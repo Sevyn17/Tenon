@@ -45,6 +45,9 @@ func Run(t *testing.T, open func(t *testing.T) store.Store) {
 		{"FindSessionByKey", testFindSessionByKey},
 		{"Outbox", testOutbox},
 		{"OutboxClaim", testOutboxClaim},
+		{"ErrorKinds", testErrorKinds},
+		{"TraceOrder", testTraceOrder},
+		{"Prune", testPrune},
 		{"TraceEvents", testTraceEvents},
 		{"SubStoresAndTx", testSubStoresAndTx},
 	}
@@ -538,6 +541,13 @@ func testDelete(t *testing.T, db store.Store) {
 	commitAll(t, db, "s1", c, 0, nil)
 	_, _ = db.Admit(ctx, "s1", store.InboxItem{ItemID: "i1", Kind: store.InboxInput, Input: `[]`})
 	_ = db.PutToolStarted(ctx, "s1", "c1", "")
+	_ = db.IssueCorr(ctx, store.Pending{Corr: "del-corr", SessionID: "s1"})
+	_ = db.RecordTrace(ctx, store.TraceEvent{Trace: "del-trace", Session: "s1", Kind: "envelope"})
+	o := c.Snapshot()
+	if err := db.Commit(ctx, store.Checkpoint{SessionID: "s1", ExpectLogLen: o.Header.LogLen, Header: o.Header,
+		Outbox: []store.OutboxItem{{ID: "del-out", Envelope: []byte(`{}`)}}}); err != nil {
+		t.Fatal(err)
+	}
 	boom := errors.New("boom")
 	if err := db.DeleteSession(ctx, "s1", []store.Cleaner{func(context.Context, string) error { return boom }}); !errors.Is(err, boom) {
 		t.Fatalf("回调失败应返回错误: %v", err)
@@ -566,6 +576,16 @@ func testDelete(t *testing.T, db store.Store) {
 	}
 	if items, _ := db.Inbox(ctx, "s1"); len(items) != 0 {
 		t.Fatal("inbox 应清理")
+	}
+	// 待回复、发件箱、trace 事件也一并清掉（D 组：sqlite 原来漏删这三张表）。
+	if _, err := db.PendingCorr(ctx, "del-corr"); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("待回复应清理: %v", err)
+	}
+	if items, _ := db.Outbox(ctx, 0); len(items) != 0 {
+		t.Fatalf("发件箱应清理: %+v", items)
+	}
+	if evs, _ := db.TraceEvents(ctx, "del-trace"); len(evs) != 0 {
+		t.Fatalf("trace 事件应清理: %+v", evs)
 	}
 	// 删干净后 id 可复用，旧数据不残留
 	create(t, db, store.SessionMeta{ID: "s1"}, newCore())
@@ -959,6 +979,116 @@ func testOutbox(t *testing.T, db store.Store) {
 	}
 	if err := db.MarkOutbox(ctx, "no-such"); err != nil {
 		t.Fatalf("标记未知 id 不应报错: %v", err)
+	}
+}
+
+// testErrorKinds 两个实现对同一种失败给同一种错误（D 组）：调用方靠 errors.Is 分支，
+// 实现之间不一致就意味着某条分支在另一种存储上永远走不到。
+func testErrorKinds(t *testing.T, db store.Store) {
+	ctx := context.Background()
+	h := newCore().Snapshot().Header
+	if err := db.CreateSession(ctx, store.SessionMeta{ID: "ek", AgentID: "a", Creator: "u", SessionKey: "k"}, h, nil); err != nil {
+		t.Fatal(err)
+	}
+	// 重复 id / 重复会话键 → ErrConflict（host 并发按 key 建会话时据此重查）。
+	if err := db.CreateSession(ctx, store.SessionMeta{ID: "ek"}, h, nil); !errors.Is(err, store.ErrConflict) {
+		t.Fatalf("重复 id 应 ErrConflict，得 %v", err)
+	}
+	if err := db.CreateSession(ctx, store.SessionMeta{ID: "ek2", AgentID: "a", Creator: "u", SessionKey: "k"}, h, nil); !errors.Is(err, store.ErrConflict) {
+		t.Fatalf("重复会话键应 ErrConflict，得 %v", err)
+	}
+	// 空会话键查不到（键为空的会话不参与查找）。
+	if err := db.CreateSession(ctx, store.SessionMeta{ID: "nokey", AgentID: "a", Creator: "u"}, h, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.FindSessionByKey(ctx, "a", "u", ""); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("空键应 ErrNotFound，得 %v", err)
+	}
+	// 未知会话：Replay / SetSessionStatus / SessionStatus 都是 ErrNotFound。
+	if _, _, err := db.Replay(ctx, "no-such", 0); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("Replay 未知会话应 ErrNotFound，得 %v", err)
+	}
+	if err := db.SetSessionStatus(ctx, "no-such", store.StatusActive, store.StatusSleeping, 0); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("SetSessionStatus 未知会话应 ErrNotFound，得 %v", err)
+	}
+	if _, err := db.SessionStatus(ctx, "no-such"); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("SessionStatus 未知会话应 ErrNotFound，得 %v", err)
+	}
+	// 状态不符：ErrStateMismatch（不是 ErrNotFound）。
+	if err := db.SetSessionStatus(ctx, "ek", store.StatusSleeping, store.StatusActive, 0); !errors.Is(err, store.ErrStateMismatch) {
+		t.Fatalf("状态不符应 ErrStateMismatch，得 %v", err)
+	}
+	// 墓碑：清理回调失败、墓碑保留时，SessionStatus 报 deleted（host 据此拒投「已关闭」）。
+	boom := errors.New("boom")
+	_ = db.DeleteSession(ctx, "ek", []store.Cleaner{func(context.Context, string) error { return boom }})
+	if st, err := db.SessionStatus(ctx, "ek"); err != nil || st != "deleted" {
+		t.Fatalf("墓碑的 SessionStatus 应为 deleted，得 %q %v", st, err)
+	}
+}
+
+// testTraceOrder trace 事件按发生时间返回，与记录顺序无关。
+func testTraceOrder(t *testing.T, db store.Store) {
+	ctx := context.Background()
+	for _, ev := range []store.TraceEvent{{Trace: "o", Kind: "b", At: 200}, {Trace: "o", Kind: "a", At: 100}, {Trace: "o", Kind: "c", At: 300}} {
+		if err := db.RecordTrace(ctx, ev); err != nil {
+			t.Fatal(err)
+		}
+	}
+	evs, err := db.TraceEvents(ctx, "o")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, e := range evs {
+		got = append(got, e.Kind)
+	}
+	if strings.Join(got, "") != "abc" {
+		t.Fatalf("trace 事件应按时间排序，得 %v", got)
+	}
+}
+
+// testPrune 过期数据清理（D 组）：只删「早于截止时间且已经没用」的行——已用 / 已过期的待回复、
+// 已派发或死信的外发、trace 事件；未用的待回复与未派发的外发不动。
+func testPrune(t *testing.T, db store.Store) {
+	ctx := context.Background()
+	h := newCore().Snapshot().Header
+	if err := db.CreateSession(ctx, store.SessionMeta{ID: "pr"}, h, nil); err != nil {
+		t.Fatal(err)
+	}
+	_ = db.IssueCorr(ctx, store.Pending{Corr: "p-used", SessionID: "pr"})
+	_ = db.IssueCorr(ctx, store.Pending{Corr: "p-open", SessionID: "pr"})
+	_ = db.VoidCorr(ctx, "p-used")
+	if err := db.Commit(ctx, store.Checkpoint{SessionID: "pr", Header: h, Outbox: []store.OutboxItem{
+		{ID: "o-sent", Envelope: []byte(`{}`), CreatedAt: 1}, {ID: "o-dead", Envelope: []byte(`{}`), CreatedAt: 2},
+		{ID: "o-open", Envelope: []byte(`{}`), CreatedAt: 3}}}); err != nil {
+		t.Fatal(err)
+	}
+	_ = db.MarkOutbox(ctx, "o-sent")
+	_ = db.DeadOutbox(ctx, "o-dead", "x")
+	_ = db.RecordTrace(ctx, store.TraceEvent{Trace: "pt", Session: "pr", Kind: "k", At: 1})
+	n, err := db.Prune(ctx, time.Now().Add(time.Hour))
+	if err != nil {
+		t.Fatalf("Prune: %v", err)
+	}
+	if n < 4 {
+		t.Fatalf("应清掉已用待回复、已派发与死信外发、trace 事件（≥4 行），得 %d", n)
+	}
+	if _, err := db.PendingCorr(ctx, "p-used"); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("已用的待回复应清掉: %v", err)
+	}
+	if _, err := db.PendingCorr(ctx, "p-open"); err != nil {
+		t.Fatalf("未用的待回复不应清: %v", err)
+	}
+	items, _ := db.Outbox(ctx, 0)
+	if len(items) != 1 || items[0].ID != "o-open" {
+		t.Fatalf("未派发的外发不应清：%+v", items)
+	}
+	if evs, _ := db.TraceEvents(ctx, "pt"); len(evs) != 0 {
+		t.Fatalf("早于截止时间的 trace 事件应清掉: %+v", evs)
+	}
+	// 截止时间之前没有可清的：什么也不删。
+	if n, err := db.Prune(ctx, time.Unix(0, 0)); err != nil || n != 0 {
+		t.Fatalf("截止时间之前不应清任何行，得 %d %v", n, err)
 	}
 }
 

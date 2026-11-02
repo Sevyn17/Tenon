@@ -199,12 +199,12 @@ func (s *Store) CreateSession(ctx context.Context, m store.SessionMeta, hdr sess
 		m.Origin = "new"
 	}
 	if _, ok := s.sessions[m.ID]; ok { // 墓碑也占着 id（与 sqlite 主键一致）
-		return fmt.Errorf("memstore: 会话 %s 已存在", m.ID)
+		return fmt.Errorf("%w: 会话 %s 已存在", store.ErrConflict, m.ID)
 	}
 	if m.SessionKey != "" {
 		for _, x := range s.sessions { // 唯一约束不看状态（与 sqlite 部分唯一索引一致）
 			if x.meta.SessionKey == m.SessionKey && x.meta.AgentID == m.AgentID && x.meta.Creator == m.Creator {
-				return fmt.Errorf("memstore: 会话键冲突（%s, %s, %s）已被 %s 占用", m.AgentID, m.Creator, m.SessionKey, x.meta.ID)
+				return fmt.Errorf("%w: 会话键（%s, %s, %s）已被 %s 占用", store.ErrConflict, m.AgentID, m.Creator, m.SessionKey, x.meta.ID)
 			}
 		}
 	}
@@ -543,6 +543,13 @@ func (s *Store) DeleteSession(ctx context.Context, id string, cleaners []store.C
 		}
 	}
 	s.outbox = kept
+	tk := s.traces[:0]
+	for _, ev := range s.traces {
+		if ev.Session != id {
+			tk = append(tk, ev)
+		}
+	}
+	s.traces = tk
 	s.mu.Unlock()
 	return nil
 }
@@ -824,6 +831,9 @@ func (s *Store) FindSessionByKey(_ context.Context, agentID, creator, key string
 		return "", err
 	}
 	defer s.mu.Unlock()
+	if key == "" { // 与 sqlite 一致：没有键的会话不参与查找
+		return "", store.ErrNotFound
+	}
 	for _, x := range s.sessions {
 		if x.meta.AgentID == agentID && x.meta.Creator == creator && x.meta.SessionKey == key {
 			return x.meta.ID, nil

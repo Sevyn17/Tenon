@@ -42,6 +42,9 @@ func (db *DB) SetSessionStatus(ctx context.Context, sessionID, from, to string, 
 		return err
 	}
 	if n, _ := res.RowsAffected(); n != 1 {
+		if _, err := db.SessionStatus(ctx, sessionID); errors.Is(err, store.ErrNotFound) {
+			return store.ErrNotFound // 与 memstore 一致：会话不存在不算「状态不符」
+		}
 		return fmt.Errorf("%w: 会话 %s 不是 %s 状态（或纪元不符）", store.ErrStateMismatch, sessionID, from)
 	}
 	return nil

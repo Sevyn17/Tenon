@@ -81,7 +81,7 @@ type Runtime struct {
 	Packages []*pkgs.Package
 
 	proc      *plugin.Scope
-	sleepStop context.CancelFunc // 兜底扫描循环的取消函数（SleepAfter>0 时）
+	sleepStop context.CancelFunc // 后台循环（兜底扫描、存储清理）的取消函数
 }
 
 // StartOptions Start 的参数。
@@ -130,11 +130,12 @@ func Start(o StartOptions) (*Runtime, error) {
 	}
 	r.Host.DB = r.Rt.Store.DB() // 数据库在 store-sqlite 启动后才打开
 	r.Host.SleepAfter = o.SleepAfter
+	ctx, cancel := context.WithCancel(context.Background())
+	r.sleepStop = cancel
 	if o.SleepAfter > 0 { // 休眠会话的兜底扫描（02 2.2）：有信件的休眠会话定期唤醒
-		ctx, cancel := context.WithCancel(context.Background())
-		r.sleepStop = cancel
 		go r.Host.ScanLoop(ctx, o.SleepAfter)
 	}
+	go r.Host.Maintain(ctx, 0, 0) // 存储清理：过期的待回复、已派发外发、trace 事件
 	return r, nil
 }
 

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"ybase-kernel/core/mail"
+	"ybase-kernel/core/store"
 )
 
 // 回合提交后 actor 自己派发发件箱：发给本会话的 control（close / interrupt）不能在 actor 协程里
@@ -167,5 +168,38 @@ func TestOutboxConcurrentFlushDeliversOnce(t *testing.T) {
 	}
 	if len(items) != 0 {
 		t.Fatalf("派发后发件箱应为空：%+v", items)
+	}
+}
+
+// D 组：宿主启动的存储清理会删掉过期的观测与记账行（已派发的外发、trace 事件），
+// 不动未派发的外发。
+func TestMaintainPrunesOldRows(t *testing.T) {
+	ctx := context.Background()
+	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{})
+	hd := mustOpen(t, r.h, "s1")
+	for _, id := range []string{"sent", "open"} {
+		env := mail.Envelope{ID: id, From: mail.Address{Kind: mail.AddrComponent, ID: "t"},
+			To: mail.Address{Kind: mail.AddrSession, ID: "nope"}, Body: id}
+		_ = env.Normalize()
+		b, _ := json.Marshal(env)
+		hd.Agent().EnqueueOutbox(id, b)
+	}
+	if err := hd.Agent().Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+	_ = r.db.MarkOutbox(ctx, "sent")
+	_ = r.db.RecordTrace(ctx, store.TraceEvent{Trace: "old", Session: "s1", Kind: "k", At: 1})
+	mctx, cancel := context.WithCancel(ctx)
+	done := make(chan struct{})
+	go func() { r.h.Maintain(mctx, time.Hour, -1); close(done) }() // keep<0 → 缺省；先清一次
+	time.Sleep(200 * time.Millisecond)
+	cancel()
+	<-done
+	if evs, _ := r.db.TraceEvents(ctx, "old"); len(evs) != 0 {
+		t.Fatalf("过期 trace 事件应清掉：%+v", evs)
+	}
+	items, _ := r.db.Outbox(ctx, 0)
+	if len(items) != 1 || items[0].ID != "open" {
+		t.Fatalf("未派发的外发不应清：%+v", items)
 	}
 }

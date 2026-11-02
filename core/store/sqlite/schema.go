@@ -132,4 +132,18 @@ var coreMigrations = []migration{
 		`ALTER TABLE session_outbox ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE session_outbox ADD COLUMN dead TEXT NOT NULL DEFAULT ''`,
 	}},
+	// v8：租户条件与热路径索引（2026-11-02 D 组）。trace_events 补 tenant 列（旧行按本地租户）；
+	// 信箱排空、待回复、工具截止、trace 删除各补一条带 tenant 的索引。session_shells 按内容寻址、
+	// 跨租户共享同一份外壳（只存工具定义与系统提示），不加租户列。
+	{version: 8, stmts: []string{
+		`ALTER TABLE trace_events ADD COLUMN tenant TEXT NOT NULL DEFAULT 'local'`,
+		`CREATE INDEX trace_events_tt ON trace_events(tenant, trace, at)`,
+		`CREATE INDEX trace_events_s ON trace_events(tenant, session)`,
+		`CREATE INDEX trace_events_at ON trace_events(at)`,
+		`CREATE INDEX session_inbox_drain ON session_inbox(tenant, session_id, consumed_at, created_at)`,
+		`CREATE INDEX session_pending_ts ON session_pending(tenant, session_id, issued_idx)`,
+		`CREATE INDEX session_pending_prune ON session_pending(used, created_at)`,
+		`CREATE INDEX session_outbox_prune ON session_outbox(sent, created_at)`,
+		`CREATE INDEX tool_results_tdeadline ON tool_results(tenant, status, deadline)`,
+	}},
 }

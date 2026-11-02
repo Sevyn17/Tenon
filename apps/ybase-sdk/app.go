@@ -50,11 +50,12 @@ func (a *App) Start(ctx context.Context) error {
 	}
 	a.host.DB = db
 	a.host.SleepAfter = a.sleepAfter
+	bgCtx, cancel := context.WithCancel(context.Background())
+	a.sleepStop = cancel
 	if a.sleepAfter > 0 { // 休眠会话的兜底扫描（02 2.2）
-		scanCtx, cancel := context.WithCancel(context.Background())
-		a.sleepStop = cancel
-		go a.host.ScanLoop(scanCtx, a.sleepAfter)
+		go a.host.ScanLoop(bgCtx, a.sleepAfter)
 	}
+	go a.host.Maintain(bgCtx, 0, 0) // 存储清理：过期的待回复、已派发外发、trace 事件
 	kern, err := kr.ParseKernel(nil)
 	if err != nil {
 		return fmt.Errorf("ybase: 内核配置: %w", err)

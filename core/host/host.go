@@ -581,6 +581,43 @@ func (h *Host) ScanOnce(ctx context.Context) (int, error) {
 	return woke, nil
 }
 
+// Maintain 存储清理（D 组）：先清一次，之后每隔 every 清一次早于保留期 keep 的观测与记账行
+// （已用 / 过期的待回复、已派发 / 死信的外发、trace 事件），直到 ctx 取消。every <= 0 按 1 小时，
+// keep <= 0 按 RetainDefault。存储不支持清理时直接返回。
+func (h *Host) Maintain(ctx context.Context, every, keep time.Duration) {
+	p, ok := h.DB.(store.PruneStore)
+	if !ok {
+		return
+	}
+	if every <= 0 {
+		every = time.Hour
+	}
+	if keep <= 0 {
+		keep = RetainDefault
+	}
+	prune := func() {
+		if n, err := p.Prune(ctx, time.Now().Add(-keep)); err != nil {
+			h.publish("", "store.prune_failed", map[string]any{"error": err.Error()})
+		} else if n > 0 {
+			h.publish("", "store.pruned", map[string]any{"rows": n})
+		}
+	}
+	prune()
+	t := time.NewTicker(every)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			prune()
+		}
+	}
+}
+
+// RetainDefault 观测与记账行的缺省保留期（约束清单「存储」）。
+const RetainDefault = 7 * 24 * time.Hour
+
 // ScanLoop 周期跑 ScanOnce，直到 ctx 取消。
 func (h *Host) ScanLoop(ctx context.Context, every time.Duration) {
 	if every <= 0 {

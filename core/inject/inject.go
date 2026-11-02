@@ -117,9 +117,21 @@ func Hashes(items []Item) map[string]string {
 
 // HashesFrom 从已写入历史的注入条目推导已发哈希表；同一 key 以后者为准。
 // 兼容 JSON round trip 后的 map[string]any。
+//
+// 内核写的 status 条目记的是「发完这条之后的全部有效哈希」（含先前的、去掉已清除的），所以以最后一条
+// 内核 status 条目为准，再叠上它之后的快照条目（快照只记自己发的 key）。不能把所有条目的表都合起来：
+// 已清除的 key 会从更早的条目里复活，之后每次调模型都多发一条「清除」（D 组）。
+// notice 信封转成的 status 条目不带哈希表，不参与。
 func HashesFrom(entries []*session.Entry) map[string]string {
+	start := 0
+	for i := len(entries) - 1; i >= 0; i-- {
+		if e := entries[i]; e != nil && e.Item.Kind == session.KindStatus && e.Meta[MetaStatus] != nil {
+			start = i
+			break
+		}
+	}
 	out := map[string]string{}
-	for _, e := range entries {
+	for _, e := range entries[start:] {
 		if e == nil || (e.Item.Kind != session.KindStatus && e.Item.Kind != session.KindSnapshot) {
 			continue
 		}

@@ -16,7 +16,7 @@ func (s *Store) SessionStatus(ctx context.Context, sessionID string) (string, er
 		return "", err
 	}
 	defer s.mu.Unlock()
-	x := s.live(sessionID)
+	x := s.sessions[sessionID] // 墓碑也读（与 sqlite 一致：清理没做完时报 deleted）
 	if x == nil {
 		return "", store.ErrNotFound
 	}

@@ -545,12 +545,21 @@ func (c *Core) SetExt(k string, v any) error {
 	if c.hdr.Ext == nil {
 		c.hdr.Ext = map[string]any{}
 	}
+	old, had := c.hdr.Ext[k]
 	if v == nil {
 		delete(c.hdr.Ext, k)
 	} else {
 		c.hdr.Ext[k] = v
 	}
-	return c.checkExtSize()
+	if err := c.checkExtSize(); err != nil { // 超限：恢复原值（S1：要么完整生效，要么不变）
+		if had {
+			c.hdr.Ext[k] = old
+		} else {
+			delete(c.hdr.Ext, k)
+		}
+		return err
+	}
+	return nil
 }
 
 // Compact 压缩（T3 / T5）：Idle 直接追加压缩条目；等待态暂存到步边界。
@@ -852,18 +861,37 @@ const InvalidArgsKey = "_invalid_args"
 // 原样存进条目会让条目无法序列化（之后每个检查点都失败），厂商也不接受非对象的调用参数。
 // 标记留在参数里随条目持久化，恢复后 validateCalls 仍能认出它、不会把调用当作 `{}` 执行。
 func (c *Core) normalizeCalls(calls []ToolCall) {
+	used := c.usedWireIDs()
 	for i := range calls {
 		if calls[i].ID == "" {
 			calls[i].ID = c.genID()
 		}
-		if calls[i].WireID == "" {
+		// 厂商 id 缺省或已用过（同一回复里重复、或历史里出现过——有的兼容实现每轮都从 call_0 起编）
+		// 时改用内核 id：一个请求里 tool_use id 必须唯一，Restore 也据此校验。
+		if calls[i].WireID == "" || used[calls[i].WireID] {
 			calls[i].WireID = calls[i].ID
 		}
+		used[calls[i].WireID] = true
 		if a := calls[i].Args; len(a) > 0 && !json.Valid(a) {
 			b, _ := json.Marshal(map[string]string{InvalidArgsKey: string(a)})
 			calls[i].Args = b
 		}
 	}
+}
+
+// usedWireIDs 加载窗口里已用过的厂商调用 id。
+func (c *Core) usedWireIDs() map[string]bool {
+	used := map[string]bool{}
+	for _, e := range c.items {
+		if a := e.Item.Assistant; e.Item.Kind == KindAssistant && a != nil {
+			for _, tc := range a.ToolCalls {
+				if tc.WireID != "" {
+					used[tc.WireID] = true
+				}
+			}
+		}
+	}
+	return used
 }
 
 // invalidArgs 参数是否是 normalizeCalls 规整过的非法 JSON。

@@ -415,10 +415,15 @@ func newStored(o Output) storedOutput {
 	return storedOutput{Text: contentText(o.Content), Error: o.Status == session.ToolError, Status: statusName(o.Status)}
 }
 
+// output 还原结果；状态按存的 Status 还原（取消的结果恢复后仍是取消），旧记录没有 Status 时按 Error 判断。
 func (s storedOutput) output() Output {
 	st := session.ToolOK
 	if s.Error {
 		st = session.ToolError
+	}
+	if s.Status != "" && s.Status != "ok" {
+		state, reason, _ := strings.Cut(s.Status, ":")
+		st = session.ToolStatus{State: state, CancelReason: reason}
 	}
 	return Output{Kind: Done, Content: session.Content{session.NewTextPart(s.Text)}, Status: st}
 }

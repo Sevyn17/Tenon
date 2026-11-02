@@ -2,6 +2,7 @@ package session
 
 import (
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 )
@@ -61,5 +62,64 @@ func TestInvalidToolArgsNormalizedOnInterrupt(t *testing.T) {
 	}
 	if _, err := Restore(c.Snapshot()); err != nil {
 		t.Fatalf("应能恢复: %v", err)
+	}
+}
+
+// D 组：厂商调用 id 重复（同一回复里、或与历史里的重复）时改用内核 id——一个请求里 tool_use id 必须唯一。
+func TestDuplicateWireIDsReplaced(t *testing.T) {
+	h := newHarness(t, 8)
+	c := h.core
+	_, n1, _ := c.Input(txt("开始"), nil)
+	calls := []ToolCall{{Name: "echo", WireID: "call_0", Args: json.RawMessage(`{}`)}, {Name: "echo", WireID: "call_0", Args: json.RawMessage(`{}`)}}
+	_, n2, err := c.ModelDone(n1.Model.RequestID, n1.ID, AssistantItem{ToolCalls: calls}, StopReason{V: "ToolUse"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var n3 *Need
+	for _, tc := range n2.Tools.Calls {
+		_, n3, _ = c.SubmitResult(tc.ID, txt("r"), ToolOK)
+	}
+	// 下一步厂商又从 call_0 起编：也要换掉。
+	_, _, err = c.ModelDone(n3.Model.RequestID, n3.ID, AssistantItem{ToolCalls: []ToolCall{{Name: "echo", WireID: "call_0", Args: json.RawMessage(`{}`)}}}, StopReason{V: "ToolUse"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := map[string]bool{}
+	for _, e := range c.items {
+		if e.Item.Kind != KindAssistant {
+			continue
+		}
+		for _, tc := range e.Item.Assistant.ToolCalls {
+			if seen[tc.WireID] {
+				t.Fatalf("wire id 重复：%s", tc.WireID)
+			}
+			seen[tc.WireID] = true
+		}
+	}
+	// Restore 校验同一条目内不重复，这里应能恢复。
+	if _, err := Restore(c.Snapshot()); err != nil {
+		t.Fatalf("应能恢复: %v", err)
+	}
+}
+
+// D 组：SetExt 超限时恢复原值（要么完整生效，要么不变）。
+func TestSetExtTooLargeKeepsOld(t *testing.T) {
+	h := newHarness(t, 8)
+	c := h.core
+	if err := c.SetExt("app.k", "v1"); err != nil {
+		t.Fatal(err)
+	}
+	big := strings.Repeat("x", 128<<10)
+	if err := c.SetExt("app.k", big); !errors.Is(err, ErrExtTooLarge) {
+		t.Fatalf("超限应报 ErrExtTooLarge，得 %v", err)
+	}
+	if got := c.hdr.Ext["app.k"]; got != "v1" {
+		t.Fatalf("超限时应保留原值，得 %v", got)
+	}
+	if err := c.SetExt("app.new", big); !errors.Is(err, ErrExtTooLarge) {
+		t.Fatal("超限应报错")
+	}
+	if _, ok := c.hdr.Ext["app.new"]; ok {
+		t.Fatal("超限时新键不应留下")
 	}
 }

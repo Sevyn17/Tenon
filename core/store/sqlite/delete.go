@@ -33,6 +33,16 @@ func (db *DB) DeleteSession(ctx context.Context, id string, cleaners []Cleaner) 
 				return err
 			}
 		}
+		// v4 起的表：待回复、发件箱按 session_id；trace 事件按 session（无租户列，见 v8 迁移）。
+		for _, q := range []string{
+			`DELETE FROM session_pending WHERE tenant = ? AND session_id = ?`,
+			`DELETE FROM session_outbox WHERE tenant = ? AND session_id = ?`,
+			`DELETE FROM trace_events WHERE tenant = ? AND session = ?`,
+		} {
+			if _, err := tx.ExecContext(ctx, q, Tenant, id); err != nil {
+				return err
+			}
+		}
 		_, err := tx.ExecContext(ctx, `DELETE FROM sessions WHERE tenant = ? AND id = ?`, Tenant, id)
 		return err
 	})

@@ -50,6 +50,7 @@ type Store interface {
 	CorrStore
 	OutboxStore
 	TraceStore
+	PruneStore
 	ToolResultStore
 	DefinitionStore
 	// OnCommit 设置提交成功后的持久事件回调；回调在提交的 goroutine 里同步执行，须很快返回。
@@ -155,6 +156,7 @@ type Pending struct {
 	IssuedIdx int   // 签发时该会话的日志长度：Rewind 到更早位置后作废（11 11.2）
 	Deadline  int64 // Unix 毫秒，0 = 无期限（超时视为无回复）
 	Used      bool
+	CreatedAt int64 // Unix 毫秒，登记时由实现写（Prune 按它判断保留期）
 }
 
 // CorrStore 待回复表（session_pending）。corr 不可猜，由内核签发。
@@ -439,6 +441,13 @@ func ShellHash(c *session.Config) (string, error) {
 func HashBytes(b []byte) string {
 	sum := sha256.Sum256(b)
 	return hex.EncodeToString(sum[:])
+}
+
+// PruneStore 过期数据清理（D 组）：只删早于 before、而且已经没用的观测与记账行——
+// 已用或已过期的待回复、已派发或死信的外发、trace 事件。会话日志、未用的待回复、
+// 未派发的外发一律不动。返回删除的行数。宿主启动时与定期调用（保留期见约束清单）。
+type PruneStore interface {
+	Prune(ctx context.Context, before time.Time) (int, error)
 }
 
 // TraceStore 是 trace 事件表（08 8.7）：一次任务的全部信封共享 trace id，

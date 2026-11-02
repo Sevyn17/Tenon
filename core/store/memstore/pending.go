@@ -20,6 +20,7 @@ func (s *Store) IssueCorr(ctx context.Context, p store.Pending) error {
 	if _, ok := s.pending[p.Corr]; ok {
 		return fmt.Errorf("memstore: corr %s 已登记", p.Corr)
 	}
+	p.CreatedAt = s.now()
 	s.pending[p.Corr] = p
 	return nil
 }

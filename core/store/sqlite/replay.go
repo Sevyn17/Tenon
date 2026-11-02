@@ -3,6 +3,8 @@ package sqlite
 // 事件回放与会话列表（应用接口层，docs/90 - 归档/10 - 框架模块/12 - 应用接口层.md §三、§四）。
 
 import (
+	"database/sql"
+	"errors"
 	"context"
 	"encoding/json"
 	"sort"
@@ -34,6 +36,9 @@ func (db *DB) notify(evs []bus.Envelope) {
 func (db *DB) Replay(ctx context.Context, session string, after int64) ([]bus.Envelope, int64, error) {
 	var next int64
 	if err := db.q().QueryRowContext(ctx, `SELECT next_sync_seq FROM sessions WHERE tenant = ? AND id = ?`, Tenant, session).Scan(&next); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, 0, ErrNotFound
+		}
 		return nil, 0, err
 	}
 	var out []bus.Envelope

@@ -166,6 +166,29 @@ func TestRenderWrapsAndEscapes(t *testing.T) {
 	}
 }
 
+// D 组：已清除的 key 不从更早的条目里复活（以最后一条内核 status 条目的有效哈希表为准）。
+func TestHashesFromClearedKeyStaysCleared(t *testing.T) {
+	st := func(m map[string]any) *session.Entry {
+		return &session.Entry{Item: session.Item{Kind: session.KindStatus, Injection: &session.InjectionItem{Text: "x"}},
+			Meta: map[string]any{inject.MetaStatus: m}}
+	}
+	entries := []*session.Entry{
+		st(map[string]any{"a": "h1", "b": "h2"}),
+		st(map[string]any{"a": "h1"}), // b 已清除：有效表里不再有它
+	}
+	prev := inject.HashesFrom(entries)
+	if _, ok := prev["b"]; ok {
+		t.Fatalf("已清除的 b 不应复活：%v", prev)
+	}
+	if prev["a"] != "h1" {
+		t.Fatalf("a 应保留：%v", prev)
+	}
+	// 再按当前状态（只有 a）算：不应再发一次 b 的清除。
+	if c := inject.Cleared([]inject.Item{{Key: "a", Kind: inject.KindStatus}}, prev); len(c) != 0 {
+		t.Fatalf("已清除过的 key 不应再次清除：%+v", c)
+	}
+}
+
 func TestHashesFromEntries(t *testing.T) {
 	entries := []*session.Entry{
 		{Item: session.Item{Kind: session.KindUser}, Meta: map[string]any{inject.MetaStatus: map[string]string{"a": "h1"}}},

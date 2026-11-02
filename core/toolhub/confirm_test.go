@@ -206,3 +206,17 @@ func TestTransformOwnConfirmRejected(t *testing.T) {
 		t.Fatalf("%+v", rs[0].Output)
 	}
 }
+
+// D 组：崩溃恢复时已结清（done）的记录按存的状态还原——取消的结果恢复后仍是取消，不变成成功。
+func TestRecoveredDoneKeepsCancelledStatus(t *testing.T) {
+	st := newMem()
+	b, _ := json.Marshal(newStored(Output{Kind: Done, Content: session.Content{session.NewTextPart("partial")}, Status: session.ToolTurnCancelled}))
+	st.recs["1"] = &Record{Status: "done", Output: string(b)}
+	h := New(Options{Store: st})
+	_ = h.Register(&Tool{Spec: spec("r"), Risk: Read,
+		Call: func(context.Context, *Cx, json.RawMessage) (Output, error) { return Text("again"), nil }})
+	rs := drain(h.Execute(context.Background(), kctx("s"), []session.ToolCall{call("1", "r", `{}`)}, nil))
+	if rs[0].Output.Status != session.ToolTurnCancelled {
+		t.Fatalf("恢复的结果应仍是取消，得 %+v", rs[0].Output.Status)
+	}
+}
