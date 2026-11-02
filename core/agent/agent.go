@@ -61,6 +61,10 @@ type Agent struct {
 	Store     PersistStore // nil = 不持久化
 	SessionID string
 
+	// Origin 会话来源（store.SessionMeta.Origin）：空 = 顶层会话，非空 = 派生（subagent / member / fork / side）。
+	// 所属树策略按它判断「子会话一轮失败」该怎么处理（02 2.2）。
+	Origin string
+
 	committed int // 存储里已提交的 log_len（条件写期望值）
 	// Epoch 会话写租约纪元（02 2.2 fencing）：非零时每次 checkpoint 都带它，过期纪元的写入被存储拒绝。
 	Epoch     int64

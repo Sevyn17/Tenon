@@ -124,6 +124,11 @@ type Host struct {
 	// SleepAfter 空闲多久后休眠（0 = 不休眠）。休眠的会话释放进程内对象与写租约，
 	// 只剩存储里的几行；有新信件时任一节点抢到租约即可唤醒（02 2.2）。
 	SleepAfter time.Duration
+	// TreePolicy 所属树策略（02 2.2）：子会话一轮运行失败时 restart | give_up | escalate；
+	// 空/未知按 give_up（标记失败并告知父会话——当前实现是 actor 退出、错误原样交回调用方）。
+	TreePolicy string
+	// TreeRestarts restart 策略下的最大重跑次数（<=0 按 1）。
+	TreeRestarts int
 
 	mu     sync.Mutex
 	actors map[string]*actor
@@ -416,9 +421,14 @@ func (a *actor) run() {
 	ctx := context.Background()
 	// 打开时有未完成回合：先续跑（WaitingModel 原样重发，WaitingTools 按原 id 续答）。
 	if a.ag.Pending() {
-		if err := a.turn(ctx, func(tctx context.Context) (session.EndReason, error) { return a.ag.Recover(tctx) }); err != nil {
-			a.exitErr = err
-			return
+		end, err := a.turn(ctx, func(tctx context.Context) (session.EndReason, error) { return a.ag.Recover(tctx) })
+		if err == nil {
+			err = turnErr(end)
+		}
+		if err != nil {
+			if a.turnFailed(ctx, err) {
+				return
+			}
 		}
 	}
 	if err := a.drainInbox(ctx); err != nil {
@@ -468,9 +478,13 @@ func (a *actor) run() {
 }
 
 // sleep 空闲超时：把会话置为休眠并让 actor 退出（defer 释放租约与对象，02 2.2）。
-// 还有未完成回合、未处理信件或刚到的命令时不休眠。返回 true 表示已休眠。
+// 还有未完成回合、未处理信件、预算挂起或刚到的命令时不休眠。返回 true 表示已休眠。
 func (a *actor) sleep(ctx context.Context) (bool, error) {
 	if a.ag.Pending() {
+		return false, nil
+	}
+	// 预算挂起的会话保持活跃（对象与租约都不释放），只是不开回合。
+	if st, err := a.h.DB.SessionStatus(ctx, a.id); err == nil && st != store.StatusActive {
 		return false, nil
 	}
 	items, err := a.h.DB.Inbox(ctx, a.id)
@@ -544,6 +558,54 @@ func (h *Host) ScanLoop(ctx context.Context, every time.Duration) {
 	}
 }
 
+// Suspend 预算挂起（02 2.2）：停在检查点、不再开新回合，信箱里的信件保留；
+// 补足预算或应用显式 Resume 后从检查点继续（T3 起由守卫在预算用尽时调用）。
+func (h *Host) Suspend(ctx context.Context, id, reason string) error {
+	h.mu.Lock()
+	a := h.actors[id]
+	h.mu.Unlock()
+	if a == nil {
+		return fmt.Errorf("host: 会话 %s 没打开，不能挂起", id)
+	}
+	a.mu.Lock()
+	busy := a.inTurn
+	a.mu.Unlock()
+	if busy {
+		return fmt.Errorf("host: 会话 %s 正在运行，不能在回合中途挂起", id)
+	}
+	if err := h.DB.SetSessionStatus(ctx, id, store.StatusActive, store.StatusSuspended, a.epoch); err != nil {
+		return err
+	}
+	if err := a.ag.Core.SetExt("rt.suspended", reason); err != nil {
+		return err
+	}
+	if err := a.ag.CommitRun(ctx, "suspended"); err != nil {
+		return err
+	}
+	h.publish(id, "session.suspended", map[string]any{"reason": reason})
+	return nil
+}
+
+// cancelChildren 取消本会话直接派生、仍在运行的子会话（Rewind 的所属树处理，02 2.2）。
+// 只处理内存里打开的子会话：没打开的子会话没有进行中的一轮，无需取消。
+func (h *Host) cancelChildren(ctx context.Context, parent string) {
+	list, err := h.DB.ListSessions(ctx, 0, 500, false)
+	if err != nil {
+		return
+	}
+	for _, m := range list {
+		if m.ParentID != parent {
+			continue
+		}
+		hd, ok := h.Get(m.ID)
+		if !ok {
+			continue
+		}
+		_ = hd.Do(Command{Kind: Close})
+		h.publish(m.ID, "session.closed", map[string]any{"reason": "parent_rewind"})
+	}
+}
+
 // idle 主循环只处理 Idle（H6）。返回 true 表示 actor 退出。
 func (a *actor) idle(ctx context.Context, c Command) (bool, error) {
 	core := a.ag.Core
@@ -551,11 +613,30 @@ func (a *actor) idle(ctx context.Context, c Command) (bool, error) {
 	case Send, Note, "barrier":
 		return false, nil // 已落 inbox，由 drainInbox 处理
 	case Resume:
+		// 预算挂起 → 恢复（02 2.2）：不重开回合，回到活跃并交给主循环处理信箱。
+		if st, serr := a.h.DB.SessionStatus(ctx, a.id); serr == nil && st == store.StatusSuspended {
+			if err := a.h.DB.SetSessionStatus(ctx, a.id, store.StatusSuspended, store.StatusActive, a.epoch); err != nil {
+				return false, err
+			}
+			_ = core.SetExt("rt.suspended", nil)
+			if err := a.ag.CommitRun(ctx, "idle"); err != nil {
+				return false, err
+			}
+			a.h.publish(a.id, "session.resumed", nil)
+			return false, nil
+		}
 		_, need, err := core.Resume()
 		if err != nil {
 			return false, err
 		}
-		return false, a.turn(ctx, func(tctx context.Context) (session.EndReason, error) { return a.ag.Drive(tctx, need) })
+		end, terr := a.turn(ctx, func(tctx context.Context) (session.EndReason, error) { return a.ag.Drive(tctx, need) })
+		if terr == nil {
+			terr = turnErr(end)
+		}
+		if terr != nil && a.turnFailed(ctx, terr) {
+			return true, terr
+		}
+		return false, nil
 	case Steer:
 		return false, session.ErrNotWaiting
 	case Record:
@@ -582,7 +663,13 @@ func (a *actor) idle(ctx context.Context, c Command) (bool, error) {
 		if _, err := core.Rewind(c.To); err != nil {
 			return false, err
 		}
-		return false, a.ag.Commit(ctx)
+		if err := a.ag.Commit(ctx); err != nil {
+			return false, err
+		}
+		a.h.publish(a.id, "session.rewound", map[string]any{"to": c.To})
+		// 所属树（02 2.2）：回退点之后派生出的子会话取消；作废其 corr 随 T3 信封一起做。
+		a.h.cancelChildren(ctx, a.id)
+		return false, nil
 	case Drain:
 		_ = core.SetExt("rt.drained", true) // 区分正常退出与崩溃（D1）
 		return true, a.ag.Commit(ctx)
@@ -594,6 +681,10 @@ func (a *actor) idle(ctx context.Context, c Command) (bool, error) {
 
 // drainInbox 处理 inbox：note 拼在 input 前，逐个 input 开回合（H7 / H10）。只有 note 时留到下一个输入。
 func (a *actor) drainInbox(ctx context.Context) error {
+	// 预算挂起：信箱保留、不开新回合（02 2.2：补足预算或显式 Resume 后从检查点继续）。
+	if st, err := a.h.DB.SessionStatus(ctx, a.id); err == nil && st == store.StatusSuspended {
+		return nil
+	}
 	for {
 		items, err := a.h.DB.Inbox(ctx, a.id)
 		if err != nil {
@@ -659,10 +750,16 @@ func (a *actor) drainInbox(ctx context.Context) error {
 			}
 			content = nc
 		}
-		if err := a.turn(ctx, func(tctx context.Context) (session.EndReason, error) {
+		end, terr := a.turn(ctx, func(tctx context.Context) (session.EndReason, error) {
 			return a.ag.SendContent(tctx, content, m, consume)
-		}); err != nil {
-			return err
+		})
+		if terr == nil {
+			terr = turnErr(end)
+		}
+		if terr != nil {
+			if a.turnFailed(ctx, terr) {
+				return terr
+			}
 		}
 		a.processing = nil
 	}
@@ -681,10 +778,10 @@ func inboxSet(ids []string) map[string]bool {
 }
 
 // turn 跑一个回合：可取消的 ctx、turn span、after_turn、回合中排队的 Idle 命令在回合后处理。
-func (a *actor) turn(ctx context.Context, f func(context.Context) (session.EndReason, error)) error {
+func (a *actor) turn(ctx context.Context, f func(context.Context) (session.EndReason, error)) (session.EndReason, error) {
 	release, err := a.acquireSlot(ctx)
 	if err != nil {
-		return err
+		return session.EndReason{}, err
 	}
 	defer release()
 	tctx, cancel := context.WithCancel(ctx)
@@ -704,14 +801,83 @@ func (a *actor) turn(ctx context.Context, f func(context.Context) (session.EndRe
 	end, err := f(tctx)
 	if err != nil {
 		sp.Set("error", err.Error()).End("error")
-		return err
+		return end, err
 	}
 	sp.Set("end", end.String()).End(end.String())
+	if end.Kind == session.EndCancelled {
+		a.h.publish(a.id, "turn.interrupted", nil)
+	}
 	if a.h.Hooks.AfterTurn != nil {
 		a.h.Hooks.AfterTurn(a.id, end)
 	}
 	a.h.publish(a.id, "turn_end", map[string]any{"reason": end.String()})
-	return a.ag.Commit(ctx) // span 与 after_turn 的修改落库
+	return end, a.ag.Commit(ctx) // span 与 after_turn 的修改落库
+}
+
+// turnErr 把「回合以失败收尾」（drive 正常返回、EndReason 是 Failed）转成错误，供所属树策略处理。
+func turnErr(end session.EndReason) error {
+	if end.Kind != session.EndFailed {
+		return nil
+	}
+	msg := end.Message
+	if msg == "" {
+		msg = end.String()
+	}
+	return fmt.Errorf("回合失败：%s", msg)
+}
+
+// turnFailed 处理一轮运行的失败（02 2.2 的所属树策略）。返回 true 表示 actor 应退出，
+// 会话句柄的 Wait 会得到这个错误；false 表示已按策略重跑/降级，actor 继续服务。
+func (a *actor) turnFailed(ctx context.Context, err error) bool {
+	a.h.publish(a.id, "turn.failed", map[string]any{"error": err.Error()})
+	// 失败的一轮不留在等待态：先收尾成 Idle（未完成的工具按 Abort 语义处理）。
+	if a.ag.Core.Status() != session.StatusIdle {
+		_, _, _ = a.ag.Core.Abort(session.FailedReason("TURN_FAILED"))
+	}
+	if cerr := a.ag.CommitRun(ctx, "idle"); cerr != nil {
+		a.exitErr = cerr
+		return true
+	}
+	if a.ag.Origin == "" { // 顶层会话：保持原行为，错误原样交回调用方
+		a.exitErr = err
+		return true
+	}
+	switch a.h.treePolicy() {
+	case "restart":
+		max := a.h.TreeRestarts
+		if max <= 0 {
+			max = 1
+		}
+		for i := 0; i < max; i++ {
+			end, rerr := a.turn(ctx, a.ag.Retry)
+			if rerr == nil {
+				rerr = turnErr(end)
+			}
+			if rerr == nil {
+				return false
+			}
+			err = rerr
+		}
+		a.exitErr = err
+		return true
+	case "escalate":
+		a.h.publish(a.id, "session.escalated", map[string]any{"error": err.Error()})
+		a.exitErr = err
+		return true
+	default: // give_up：标记失败并告知父会话（同步子智能体的错误随句柄返回）
+		a.exitErr = err
+		return true
+	}
+}
+
+// treePolicy 所属树策略，缺省 give_up。
+func (h *Host) treePolicy() string {
+	switch h.TreePolicy {
+	case "restart", "escalate":
+		return h.TreePolicy
+	default:
+		return "give_up"
+	}
 }
 
 // between 需求边界（回合内）：取出回合中到达的命令，插话 / 改向 / Idle 类配置在这里交给内核。

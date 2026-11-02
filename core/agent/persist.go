@@ -38,6 +38,7 @@ func (a *Agent) OpenAs(ctx context.Context, cfg *session.Config, meta store.Sess
 	if errors.Is(err, store.ErrNotFound) {
 		a.Core = session.New(cfg)
 		meta.ID = a.SessionID
+		a.Origin = meta.Origin
 		if err := a.fillUseConfig(ctx, &meta); err != nil {
 			return false, err
 		}
@@ -56,6 +57,7 @@ func (a *Agent) OpenAs(ctx context.Context, cfg *session.Config, meta store.Sess
 		return false, err
 	}
 	a.Core = c
+	a.Origin = l.Meta.Origin
 	a.bindCtx(l.Meta)
 	a.committed = l.Snapshot.Header.LogLen
 	a.resume = c.Resumed()

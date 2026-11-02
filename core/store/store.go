@@ -36,8 +36,9 @@ var ErrLeaseLost = errors.New("store: 会话写租约已失效")
 
 // 会话生命周期状态（02 2.2）。deleted 由 DeleteSession 置墓碑。
 const (
-	StatusActive   = "active"
-	StatusSleeping = "sleeping"
+	StatusActive    = "active"
+	StatusSleeping  = "sleeping"
+	StatusSuspended = "suspended" // 预算挂起：停在检查点、不再开新回合，信箱保留
 )
 
 // Store 内核用到的全部存储能力。
