@@ -13,6 +13,7 @@ import (
 	"ybase-kernel/core/session"
 	"ybase-kernel/core/store"
 	"ybase-kernel/core/store/sqlite"
+	"ybase-kernel/core/toolhub"
 )
 
 // admitEnvelope 直接往 inbox 写一封信封（绕过投递守卫，测信箱合并语义）。
@@ -403,5 +404,87 @@ func TestOutboxDispatchedAfterCommit(t *testing.T) {
 	}
 	if len(items) != 0 {
 		t.Fatalf("派发后发件箱应为空，得到 %+v", items)
+	}
+}
+
+// toolResults 把历史里的工具结果文本拼起来（caps 测试用）。
+func toolResults(c *session.Core) string {
+	var b strings.Builder
+	for _, m := range agent.History(c) {
+		if m.Role != "tool" {
+			continue
+		}
+		for _, p := range m.Content {
+			b.WriteString(p.Text)
+		}
+	}
+	return b.String()
+}
+
+// TestCapsRestrictToolCall 信封 caps 交集限制本轮可调用的工具（08 8.x / 13 13.3）：
+// 模型请求范围外的工具时返回错误结果、不交给执行器；下一轮换新 caps 生效，回合结束清空。
+func TestCapsRestrictToolCall(t *testing.T) {
+	ctx := context.Background()
+	db, err := sqlite.Open(ctx, filepath.Join(t.TempDir(), "s.db"), sqlite.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+	executed := new(int)
+	m := &fakeModel{}
+	h := &Host{DB: db, New: func(id, def string) (*agent.Agent, *session.Config, error) {
+		hub := toolhub.New(toolhub.Options{Store: agent.ToolStore{DB: db}})
+		echo := &toolhub.Tool{
+			Spec: session.ToolSpec{Name: "echo", Schema: json.RawMessage(`{"type":"object"}`)},
+			Risk: toolhub.Read,
+			Call: func(context.Context, *toolhub.Cx, json.RawMessage) (toolhub.Output, error) {
+				*executed++
+				return toolhub.Text("echoed"), nil
+			},
+		}
+		if err := hub.Register(echo); err != nil {
+			return nil, nil, err
+		}
+		a := &agent.Agent{Store: db, SessionID: id, Model: m, Hub: hub}
+		cfg := &session.Config{Model: "m", Tools: hub.Exposed(hub.SpecsFor(nil, 0)), Policy: session.DefaultPolicy()}
+		return a, cfg, nil
+	}}
+	hd, err := h.Open(ctx, "s1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := hd.Wait(); err != nil {
+		t.Fatal(err)
+	}
+	deliver := func(caps []string) {
+		t.Helper()
+		if err := h.Deliver(ctx, mail.Envelope{
+			From: mail.Address{Kind: mail.AddrHuman, ID: "u1"},
+			To:   mail.Address{Kind: mail.AddrSession, ID: "s1"},
+			Kind: mail.KindRequest, Body: "tool", Caps: caps,
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if err := hd.Wait(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	deliver([]string{"read_file"}) // echo 不在范围
+	if got := toolResults(hd.Agent().Core); !strings.Contains(got, "不在本轮授权范围") {
+		t.Fatalf("超出 caps 的调用应被拒绝：%s", got)
+	}
+	if *executed != 0 {
+		t.Fatalf("被 caps 拒绝的工具不应执行，实际执行 %d 次", *executed)
+	}
+	if got := hd.Agent().Caps(); len(got) != 0 {
+		t.Fatalf("回合结束后 caps 应清空，得到 %v", got)
+	}
+	deliver([]string{"echo"}) // 放行
+	got := toolResults(hd.Agent().Core)
+	if !strings.Contains(got, "echoed") || *executed != 1 {
+		t.Fatalf("caps 放行后应执行，执行 %d 次：%s", *executed, got)
+	}
+	if strings.Count(got, "不在本轮授权范围") != 1 {
+		t.Fatalf("新一轮不该再被 caps 拒：%s", got)
 	}
 }

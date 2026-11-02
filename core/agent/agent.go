@@ -102,6 +102,11 @@ type Agent struct {
 	// Statuses 状态提交登记（框架设计 12.5）：每次调模型前收集，按 key 只发变化的片段。
 	Statuses []inject.Reg
 
+	// caps 本轮的授权工具范围（信封 caps 交集，T3）；nil/空 = 不限。
+	capsMu      sync.RWMutex
+	caps        []string
+	capsGuarded bool
+
 	spanMu   sync.Mutex
 	hubSpans []store.Span
 

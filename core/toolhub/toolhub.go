@@ -272,6 +272,9 @@ func (h *Hub) Register(t *Tool) error {
 // AddLayer 追加一层（调用方按 plugin-manager §5.2 已排好序，由外到内）。
 func (h *Hub) AddLayer(l Layer) { h.layers = append(h.layers, l) }
 
+// PrependLayer 在最外层插一层（内核守卫先于组件层执行，如信封 caps 范围）。
+func (h *Hub) PrependLayer(l Layer) { h.layers = append([]Layer{l}, h.layers...) }
+
 // Authorized 层链里是否有负责授权判定的层。
 func (h *Hub) Authorized() bool {
 	for _, l := range h.layers {

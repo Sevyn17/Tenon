@@ -275,6 +275,7 @@ func (h *Host) open(ctx context.Context, id, def string, f Factory, pre func(*ag
 	}
 	ag.Epoch = epoch
 	a.epoch, a.holder = epoch, holder
+	ag.InstallCapsGuard() // 信封 caps 交集限制本轮可调用的工具（T3）
 	go a.run()
 	return Handle{a}, nil
 }
@@ -342,8 +343,10 @@ type actor struct {
 	waiters map[string]chan bool // 等确认的调用
 	// processing 是 drainInbox 当前回合正在消费的 inbox 项（T2a-1：回合中插入不重复取同一条）。
 	processing map[string]bool
-	exitErr    error
-	once       sync.Once
+	// turnCaps 是本轮的工具授权范围（信封 caps 交集）：turn 开始时设给 agent，结束时清空。
+	turnCaps []string
+	exitErr  error
+	once     sync.Once
 }
 
 // enqueue 外部命令入口：Cancel / Confirm 立即生效；其余排队。
@@ -754,6 +757,7 @@ func (a *actor) drainInbox(ctx context.Context) error {
 			}
 			content = nc
 		}
+		a.turnCaps = batchCaps(batch) // 信封 caps 交集：本轮只许调这些工具（空=不限）
 		end, terr := a.turn(ctx, func(tctx context.Context) (session.EndReason, error) {
 			return a.ag.SendContent(tctx, content, m, consume)
 		})
@@ -766,6 +770,7 @@ func (a *actor) drainInbox(ctx context.Context) error {
 			}
 		}
 		a.processing = nil
+		a.turnCaps = nil
 	}
 }
 
@@ -802,6 +807,8 @@ func (a *actor) turn(ctx context.Context, f func(context.Context) (session.EndRe
 	a.ag.TurnSpanID = sp.ID()
 	defer func() { a.ag.TurnSpanID = "" }()
 	a.h.publish(a.id, "turn_start", nil)
+	a.ag.SetCaps(a.turnCaps) // 本轮授权范围（信封 caps 交集，T3）
+	defer a.ag.SetCaps(nil)
 	end, err := f(tctx)
 	if err != nil {
 		sp.Set("error", err.Error()).End("error")
@@ -1054,6 +1061,9 @@ func (a *actor) insertInput(ctx context.Context) error {
 		content = nc
 	}
 	m := envelopeMeta(env, untrusted)
+	// 回合中插入的信封同样收窄本轮授权范围（触发链 caps 取交集）。
+	a.turnCaps = intersectCaps(a.turnCaps, batchCaps(batch))
+	a.ag.SetCaps(a.turnCaps)
 	if _, err := a.ag.Core.MidInput(content, m); err != nil {
 		if errors.Is(err, session.ErrNotWaiting) {
 			return nil // 回合刚好结束：inbox 留给下一回合

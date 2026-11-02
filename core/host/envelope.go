@@ -186,6 +186,10 @@ func (h *Host) control(ctx context.Context, id string, env mail.Envelope) error 
 	if err != nil {
 		return err
 	}
+	if env.Origin == mail.OriginExternal { // 外部来源不能发 control（08 联系名单：外部一律降权，不能控制会话）
+		h.publish(id, "guard.denied", map[string]any{"from": env.From.String(), "reason": "control_external"})
+		return fmt.Errorf("host: 外部来源 %s 不能发送 control 信封", env.From)
+	}
 	if !controlAllowed(env.From, l.Meta) {
 		h.publish(id, "guard.denied", map[string]any{"from": env.From.String(), "reason": "control"})
 		return fmt.Errorf("host: %s 无权发送 control 信封", env.From)
@@ -401,6 +405,41 @@ func (a *actor) applyNotices(ctx context.Context, items []store.InboxItem) (bool
 	}
 	a.processing = nil
 	return true, nil
+}
+
+// batchCaps 一批信封的 caps 交集（信封 caps 已是触发链上的交集；不同发送方再取交集）。
+// nil = 不限；空集不参与（表示该封没有收紧）。返回拷贝，避免调用方改到信封数据。
+func batchCaps(items []store.InboxItem) []string {
+	var out []string
+	for _, it := range items {
+		e, ok := parseEnvelope(it)
+		if !ok || len(e.Caps) == 0 {
+			continue
+		}
+		out = intersectCaps(out, e.Caps)
+	}
+	return out
+}
+
+// intersectCaps 两个授权范围的交集；nil 表示不限，空集按空集处理。
+func intersectCaps(a, b []string) []string {
+	if a == nil {
+		return append([]string(nil), b...)
+	}
+	if b == nil {
+		return append([]string(nil), a...)
+	}
+	keep := make(map[string]bool, len(b))
+	for _, s := range b {
+		keep[s] = true
+	}
+	var out []string
+	for _, s := range a {
+		if keep[s] {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 // guardContact 实现 08 D4 的联系名单第一版：创建者本人、登记组件（经 Mailer，
