@@ -143,6 +143,15 @@ func TestIdempotency(t *testing.T) {
 	if !strings.Contains(text(rs[0].Output), "结果未知") || runs != 1 {
 		t.Fatalf("started 应回状态未知: %q", text(rs[0].Output))
 	}
+	// 结果未知的记录要结清：从 started 改成 done（存的就是交给模型的那条结果），
+	// 再次恢复时按 done 原样返回、仍是错误结果，不再停在 started（2026-11-03 演示）。
+	if r := st.recs["c2"]; r.Status != "done" || !strings.Contains(r.Output, "结果未知") {
+		t.Fatalf("started 记录恢复后应结清为 done：%+v", r)
+	}
+	rs = drain(h.Execute(context.Background(), kctx("s"), []session.ToolCall{call("c2", "w", `{}`)}, nil))
+	if runs != 1 || rs[0].Output.Status != session.ToolError || !strings.Contains(text(rs[0].Output), "结果未知") {
+		t.Fatalf("再次恢复应按 done 原样返回：runs=%d %+v", runs, rs[0].Output)
+	}
 }
 
 // —— 并行：读并发、写独占、结果按调用顺序；先写后读读到新值 ——

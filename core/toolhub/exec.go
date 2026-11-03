@@ -146,7 +146,10 @@ func (h *Hub) one(ctx context.Context, stopped <-chan struct{}, ts *Toolset, k *
 				res.Output = o.output()
 				return res
 			case "started":
-				res.Output = Output{Kind: Done, Content: session.Content{session.NewTextPart(UnknownOutcome)}, Status: session.ToolError}
+				// 结果未知：不重跑；把记录从 started 结清成这条错误结果——否则记录永远停在 started，
+				// 再次恢复也读不到已交给模型的结果（2026-11-03 演示：杀进程续跑后记录仍是 started）。
+				out := Output{Kind: Done, Content: session.Content{session.NewTextPart(UnknownOutcome)}, Status: session.ToolError}
+				res.Output, res.Err = h.finish(sctx, sessionID, call.ID, "started", out)
 				ev.Status = "unknown"
 				return res
 			case "delivered":
