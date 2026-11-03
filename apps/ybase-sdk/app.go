@@ -56,6 +56,8 @@ func (a *App) Start(ctx context.Context) error {
 		go a.host.ScanLoop(bgCtx, a.sleepAfter)
 	}
 	go a.host.Maintain(bgCtx, 0, 0) // 存储清理：过期的待回复、已派发外发、trace 事件
+	// 启动时派发一次发件箱：上次进程在提交之后、派发之前退出时留下的外发。
+	go func() { _, _ = a.host.FlushOutbox(bgCtx) }()
 	kern, err := kr.ParseKernel(nil)
 	if err != nil {
 		return fmt.Errorf("ybase: 内核配置: %w", err)

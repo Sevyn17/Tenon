@@ -174,75 +174,26 @@ func (u *termUI) Ask(ctx context.Context, q string, options []string) (string, e
 	}
 }
 
-// overrides 命令行参数 → 插件配置覆盖（只覆盖给了值的项）。
-func overrides(o opts, root string) map[string]map[string]any {
-	ov := map[string]map[string]any{
-		"store-sqlite": {"dir": filepath.Join(root, ".ybase")},
-	}
-	set := func(plugin, key string, v any) {
-		if ov[plugin] == nil {
-			ov[plugin] = map[string]any{}
-		}
-		ov[plugin][key] = v
-	}
-	if o.base != "" {
-		set("models", "base_url", o.base)
-	}
-	if o.model != "" {
-		set("models", "model", o.model)
-	}
-	switch {
-	case o.mode != "":
-		set("permission", "force_mode", o.mode)
-	case o.yes:
-		set("permission", "force_mode", string(permission.Full))
-	}
-	if o.sandbox != "" {
-		set("permission", "sandbox", o.sandbox)
-	}
-	if o.projectHooks {
-		set("hooks", "project_hooks", true)
-	}
-	if o.mcp != "" {
-		set("mcp", "config", o.mcp)
-	}
-	return ov
-}
-
-// withRuntime 读 profile → 装配（预置宿主 / 界面 / 工作目录）→ 启动进程作用域 → 执行 f → 关闭作用域（资源全部回收）。
+// withRuntime 读信任与 profile → 装配并启动进程（boot.Start，与桌面端 / api-server 同一条路径：
+// [kernel] 的宿主参数、存储清理、启动时派发发件箱都在这里接上）→ 执行 f → 关闭（资源全部回收）。
 func withRuntime(o opts, f func(*app) error) error {
-	root, err := filepath.Abs(o.workdir)
-	if err != nil {
-		return err
+	var ask func(string) bool
+	if interactive && flag.Arg(0) == "" {
+		ask = askTrustStdin
 	}
-	trusted, why, err := resolveTrust(o, root, interactive && flag.Arg(0) == "")
-	if err != nil {
-		return err
-	}
-	p, ps, notes, err := boot.LoadAll(o.profile, root, trusted)
-	if err != nil {
-		return fmt.Errorf("读 profile: %w", err)
-	}
-	b := bus.New(0)
-	defer b.Close()
-	a := &app{profile: p, root: root, bus: b, h: &host.Host{Bus: b}, ui: &termUI{ask: make(chan askReq)},
-		trusted: trusted, trustWhy: why, notes: notes, packages: ps}
-	a.rt, err = assemble(p, overrides(o, root), map[string]any{
-		runtime.ServiceWorkdir: root,
-		runtime.ServiceHost:    a.h,
-		runtime.ServiceUI:      runtime.UI(a.ui),
-		runtime.ServiceTrust:   trusted,
-		pkgs.Service:           ps,
+	ui := &termUI{ask: make(chan askReq)}
+	r, err := boot.Start(boot.StartOptions{
+		Flags: boot.Flags{Base: o.base, Model: o.model, Workdir: o.workdir, Profile: o.profile, Sandbox: o.sandbox,
+			MCP: o.mcp, Mode: o.mode, Yes: o.yes, ProjectHooks: o.projectHooks, TrustProject: o.trustProject, MaxSteps: o.maxSteps},
+		AskTrust: ask,
+		UI:       func(*bus.Bus) runtime.UI { return ui },
 	})
 	if err != nil {
-		return fmt.Errorf("装配: %w", err)
-	}
-	proc := plugin.NewRoot("process")
-	defer proc.Close(context.Background())
-	if err := a.rt.Asm.Start(proc); err != nil {
 		return err
 	}
-	a.h.DB = a.rt.Store.DB() // 数据库在 store-sqlite 启动后才打开
+	defer r.Close()
+	a := &app{rt: r.Rt, profile: r.Profile, root: r.Root, bus: r.Bus, h: r.Host, ui: ui,
+		trusted: r.Trusted, trustWhy: r.TrustWhy, notes: r.Notes, packages: r.Packages}
 	return f(a)
 }
 

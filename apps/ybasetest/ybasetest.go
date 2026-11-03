@@ -13,13 +13,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"sync"
 	"testing"
 
 	"ybase-kernel/apps/ybase-sdk"
 	"ybase-kernel/core/modelhub"
 	"ybase-kernel/core/session"
+	"ybase-kernel/core/store"
 	"ybase-kernel/core/store/memstore"
+	"ybase-kernel/core/store/sqlite"
 )
 
 const (
@@ -76,9 +79,40 @@ type App struct {
 // New 用内存存储 + 脚本模型装配并启动应用；opts 覆盖缺省项。
 func New(t *testing.T, opts ...ybase.Option) *App {
 	t.Helper()
+	return NewOn(t, memstore.New(), opts...)
+}
+
+// Backend 一种存储实现（Stores 给出 SQLite 与内存两种）。
+type Backend struct {
+	Name string
+	Open func(t *testing.T) store.Store
+}
+
+// Stores 验收用例要在两种存储上都跑（计划/01 第三节 v1 验收第 1 条）：
+//
+//	for _, b := range ybasetest.Stores() {
+//		t.Run(b.Name, func(t *testing.T) { app := ybasetest.NewOn(t, b.Open(t), ...) })
+//	}
+func Stores() []Backend {
+	return []Backend{
+		{Name: "memstore", Open: func(*testing.T) store.Store { return memstore.New() }},
+		{Name: "sqlite", Open: func(t *testing.T) store.Store {
+			t.Helper()
+			db, err := sqlite.Open(context.Background(), filepath.Join(t.TempDir(), "state.db"), sqlite.Options{})
+			if err != nil {
+				t.Fatalf("sqlite.Open: %v", err)
+			}
+			return db // 由 App.Close 关闭（WithStore 的存储归应用所有）
+		}},
+	}
+}
+
+// NewOn 同 New，存储由调用方给（Stores 里的一种）。
+func NewOn(t *testing.T, st store.Store, opts ...ybase.Option) *App {
+	t.Helper()
 	all := []ybase.Option{
 		ybase.Default(),
-		ybase.WithStore(memstore.New()),
+		ybase.WithStore(st),
 		ybase.WithWorkdir(t.TempDir()),
 		Model(), // 缺省空脚本：没写 Model(...) 时调用即失败
 	}

@@ -177,6 +177,44 @@ func TestSendFollowEntries(t *testing.T) {
 	}
 }
 
+// E 组：界面可以按 corr 回信应答确认（session.reply），并用 trace.explain 看一次任务的路径。
+func TestReplyByCorrAndExplain(t *testing.T) {
+	app := newApp(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	sub := app.Events(ctx, bus.Filter{Kinds: []string{EventHumanRequested, EventToolResult, EventTurnEnd}})
+	if _, err := app.Open(ctx, SessionArgs{Session: "s1"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := app.Send(ctx, SendArgs{Session: "s1", Text: "call tool"}); err != nil {
+		t.Fatal(err)
+	}
+	hr := next(t, sub, EventHumanRequested)
+	m, _ := hr.Data.(map[string]any)
+	corr, _ := m["corr"].(string)
+	if corr == "" {
+		t.Fatalf("human_requested 应带 corr：%v", hr.Data)
+	}
+	if _, err := app.Call(ctx, "session.reply", json.RawMessage(`{"session":"s1","corr":"`+corr+`","approve":true}`)); err != nil {
+		t.Fatalf("session.reply: %v", err)
+	}
+	if r, _ := next(t, sub, EventToolResult).Data.(map[string]any); r["preview"] != "echoed" {
+		t.Fatalf("回信批准后工具应执行：%v", r)
+	}
+	next(t, sub, EventTurnEnd)
+	// 同一 corr 再回信：已作废，拒绝。
+	if _, err := app.Call(ctx, "session.reply", json.RawMessage(`{"session":"s1","corr":"`+corr+`","approve":true}`)); err == nil {
+		t.Fatal("重复回信应被拒")
+	}
+	if _, err := app.Call(ctx, "trace.explain", json.RawMessage(`{}`)); AsError(err) == nil || AsError(err).Code != CodeBadRequest {
+		t.Fatalf("缺 trace 应为 bad_request：%v", err)
+	}
+	res, err := app.Call(ctx, "trace.explain", json.RawMessage(`{"trace":"none"}`))
+	if err != nil || !strings.Contains(res.(TraceResult).Text, "没有记录") {
+		t.Fatalf("trace.explain：%v %v", res, err)
+	}
+}
+
 func TestConfirmFlow(t *testing.T) {
 	app := newApp(t)
 	ctx, cancel := context.WithCancel(context.Background())

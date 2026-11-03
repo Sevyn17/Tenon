@@ -138,6 +138,6 @@ type Run interface {
 |---|---|---|
 | 应用通过 `runtime.Builder` 拼装，接口偏内部 | `ybase.New` + 选项 | T1b-2d 完成：SDK 落 `apps/ybase-sdk`（`New` + `Component` + 选项 + `ErrNotStarted` + `Ask`/`History`），`apps/ybasetest` 端到端测试 |
 | 没有对外承诺的接口边界 | 本篇列出的接口加版本规则 | T1 定稿，T2 起执行 |
-| 界面已经走应用接口层 `core/appapi`（protocol 1，21 条命令，`App.Call` 分发；api-server 走 WebSocket JSON 帧，见 [10 - 框架模块/12](<../90 - 归档/10 - 框架模块/12 - 应用接口层.md>)、[14](<../90 - 归档/10 - 框架模块/14 - 网页服务.md>)）。但命令按会话 id + 文本设计（`session.send`），没有信封、地址、租户和用户 | appapi 是 7.4 协议的前身：T1 把 `appapi.App` 改成包在 `ybase.App` 外面的薄适配；T3 有了信封和地址后，命令改成 `Send(to, body)`、事件改用 7.5 的名字，protocol 升到 2 | T1b-2d 完成 SDK 侧（`apps/ybase-sdk` 直接复用 `core/appapi` 起服务）；`appapi` 变成 `ybase.App` 外面的薄适配随 T3 协议升级一起做 |
-| api-server 只有随机令牌 + Host/Origin 检查，只认本机 | `server.WithAuthenticator` 返回租户和用户 | T3（随 `WithTenant` / `WithUser` 一起做） |
-| appapi 错误码 `busy`、`not_idle`、`conflict`、`not_found` 等 | 7.3 的错误类型；appapi 码按类型映射 | T1b-2d 先落 `ErrNotStarted` / `ErrInvalid` / `ErrNotFound` 三类（`apps/ybase-sdk`）；其余随 T3 协议升级映射 |
+| 界面已经走应用接口层 `core/appapi`（protocol 1，24 条命令（2026-11-02 加 `session.reply` 按 corr 回信应答确认、`trace.explain`），`App.Call` 分发；api-server 走 WebSocket JSON 帧，见 [10 - 框架模块/12](<../90 - 归档/10 - 框架模块/12 - 应用接口层.md>)、[14](<../90 - 归档/10 - 框架模块/14 - 网页服务.md>)）。但命令按会话 id + 文本设计（`session.send`），没有信封、地址、租户和用户 | appapi 是 7.4 协议的前身：T1 把 `appapi.App` 改成包在 `ybase.App` 外面的薄适配；T3 有了信封和地址后，命令改成 `Send(to, body)`、事件改用 7.5 的名字，protocol 升到 2 | T1b-2d 完成 SDK 侧（`apps/ybase-sdk` 直接复用 `core/appapi` 起服务）；`appapi` 变成 `ybase.App` 外面的薄适配随 T3 协议升级一起做 |
+| api-server 只有随机令牌 + Host/Origin 检查，只认本机 | `server.WithAuthenticator` 返回租户和用户 | v1 后：多租户 / 多用户随 T4（v1 单机一个用户） |
+| appapi 错误码 `busy`、`not_idle`、`conflict`、`not_found` 等 | 7.3 的错误类型；appapi 码按类型映射 | T1b-2d 先落 `ErrNotStarted` / `ErrInvalid` / `ErrNotFound`；`ErrLeaseLost` 已归 `conflict`（2026-11-02）；其余随 appapi 协议升 2（v1 后置 ⑤） |

@@ -12,7 +12,7 @@ W=$(mktemp -d)
 cp -r . "$W/k"; rm -rf "$W/k/.ybase" "$W/k/bin" "$W/k/.env"
 cd "$W/k" || exit 1
 # 注入 bug：Glob 末段改成前缀匹配（规则 edit(src/**.go) 之类会误判）。
-sed -i 's/\treturn strings.HasSuffix(s, last)/\treturn strings.HasPrefix(s, last)/' plugins/permission/permission.go
+sed -i 's/\treturn strings.HasSuffix(s, last)/\treturn strings.HasPrefix(s, last)/' plugins/security/permission/permission.go
 git init -q && git add -A && git commit -qm base
 echo "== 注入后 go test ./plugins/permission"; go test ./plugins/permission 2>&1 | tail -5
 ( printf '%s\n' 'go test ./plugins/permission 现在失败了。找出原因并修复产品代码（不要改测试），修完再跑一遍 go test ./plugins/permission 确认通过，最后用一句话说明根因。'; sleep 2; printf '/stats\n/exit\n' ) |

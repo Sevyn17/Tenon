@@ -129,13 +129,28 @@ func Start(o StartOptions) (*Runtime, error) {
 		return nil, err
 	}
 	r.Host.DB = r.Rt.Store.DB() // 数据库在 store-sqlite 启动后才打开
-	r.Host.SleepAfter = o.SleepAfter
+	// 宿主参数来自 profile 的 [kernel] 节（休眠、并发上限、所属树策略、保留期）；
+	// StartOptions.SleepAfter 显式给出时优先（测试与嵌入方用）。
+	kern, err := runtime.ParseKernel(p.Kernel)
+	if err != nil {
+		r.Close()
+		return nil, fmt.Errorf("profile [kernel]: %w", err)
+	}
+	sleepAfter := kern.SleepAfter
+	if o.SleepAfter > 0 {
+		sleepAfter = o.SleepAfter
+	}
+	r.Host.SleepAfter = sleepAfter
+	r.Host.Limit = kern.Concurrency
+	r.Host.TreePolicy, r.Host.TreeRestarts = kern.TreePolicy, kern.TreeRestarts
 	ctx, cancel := context.WithCancel(context.Background())
 	r.sleepStop = cancel
-	if o.SleepAfter > 0 { // 休眠会话的兜底扫描（02 2.2）：有信件的休眠会话定期唤醒
-		go r.Host.ScanLoop(ctx, o.SleepAfter)
+	if sleepAfter > 0 { // 休眠会话的兜底扫描（02 2.2）：有信件的休眠会话定期唤醒
+		go r.Host.ScanLoop(ctx, sleepAfter)
 	}
-	go r.Host.Maintain(ctx, 0, 0) // 存储清理：过期的待回复、已派发外发、trace 事件
+	go r.Host.Maintain(ctx, 0, kern.Retain) // 存储清理：过期的待回复、已派发外发、trace 事件
+	// 启动时派发一次发件箱：上次进程在提交之后、派发之前退出时留下的外发不必等到下一个回合结束。
+	go func() { _, _ = r.Host.FlushOutbox(ctx) }()
 	return r, nil
 }
 

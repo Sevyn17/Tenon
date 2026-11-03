@@ -22,11 +22,13 @@ export const COMMANDS = [
   "session.fork",
   "session.max_steps",
   "session.open",
+  "session.reply",
   "session.rewind",
   "session.send",
   "session.stats",
   "session.steer",
   "sessions.list",
+  "trace.explain",
 ] as const;
 
 export type Command = (typeof COMMANDS)[number];

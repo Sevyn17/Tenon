@@ -28,3 +28,22 @@ func TestParseKernel(t *testing.T) {
 		}
 	}
 }
+
+// E 组：宿主参数（休眠、并发上限、所属树策略、保留期）经 [kernel] 配置，非法值报错。
+func TestParseKernelHostParams(t *testing.T) {
+	k, err := ParseKernel(map[string]any{"sleep_after": "10m", "concurrency": 4, "tree_policy": "restart", "tree_restarts": 2, "retain": "48h"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if k.SleepAfter.String() != "10m0s" || k.Concurrency != 4 || k.TreePolicy != "restart" || k.TreeRestarts != 2 || k.Retain.String() != "48h0m0s" {
+		t.Fatalf("宿主参数解析错：%+v", k)
+	}
+	if k, err := ParseKernel(map[string]any{"sleep_after": "0"}); err != nil || k.SleepAfter != 0 {
+		t.Fatalf("sleep_after = 0 表示关闭：%v %v", k.SleepAfter, err)
+	}
+	for _, bad := range []map[string]any{{"tree_policy": "retry"}, {"concurrency": -1}, {"retain": "0"}, {"sleep_after": "abc"}} {
+		if _, err := ParseKernel(bad); err == nil {
+			t.Fatalf("非法值应报错：%v", bad)
+		}
+	}
+}

@@ -52,6 +52,8 @@ var commands = map[string]handler{
 	"packages.list":     bind((*App).PackagesList),
 	"plugins.set":       bind((*App).PluginsSet),
 	"artifact.get":      bind((*App).ArtifactGet),
+	"session.reply":     bind((*App).Reply),
+	"trace.explain":     bind((*App).ExplainTrace),
 }
 
 // Commands 支持的命令名（排序后）。
