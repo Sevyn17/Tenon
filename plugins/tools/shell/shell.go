@@ -32,6 +32,15 @@ const (
 // psUTF8 强制 PowerShell 以 UTF-8 输出（修中文 Windows 的 GBK 乱码）。
 const psUTF8 = "try { [Console]::OutputEncoding=[System.Text.Encoding]::UTF8; $OutputEncoding=[System.Text.Encoding]::UTF8 } catch {}\n"
 
+// packagedApp 报告可执行文件是否是 Windows 商店（MSIX）打包应用的执行别名或包内文件。
+// 打包应用跑在包容器里：不继承调用方的当前目录，%LOCALAPPDATA% 等目录被虚拟化成包内的私有视图，
+// 看不到调用方刚建的目录和文件（2026-11-03 演示：模型在商店版 pwsh 里查不到 write_file 刚写的文件，
+// 误判「工具报告成功但没落盘」）。这类 shell 不能当工具的执行环境，退回系统自带的 Windows PowerShell。
+func packagedApp(p string) bool {
+	l := strings.ToLower(filepath.ToSlash(p))
+	return strings.Contains(l, "/windowsapps/")
+}
+
 // tailBuf 只保留最近 cap 字节的并发安全缓冲。
 type tailBuf struct {
 	mu    sync.Mutex
@@ -107,7 +116,7 @@ func NewShell(root string) *Shell {
 func defaultArgv() func(string) []string {
 	if runtime.GOOS == "windows" {
 		bin := "powershell"
-		if p, err := exec.LookPath("pwsh"); err == nil {
+		if p, err := exec.LookPath("pwsh"); err == nil && !packagedApp(p) {
 			bin = p
 		}
 		return func(c string) []string {

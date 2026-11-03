@@ -3,6 +3,8 @@ package shell
 import (
 	"context"
 	"encoding/json"
+	"path/filepath"
+	"os"
 	"runtime"
 	"strings"
 	"testing"
@@ -45,6 +47,40 @@ func sleepCmd(sec int) string {
 }
 
 func itoa(i int) string { b, _ := json.Marshal(i); return string(b) }
+
+// shell 命令在工作目录里执行，不论用哪个 shell（2026-11-03 演示：商店版 pwsh 不继承进程当前目录，
+// 相对路径全部落到它的安装目录，模型误判 write_file「没写进去」）。工作目录名带空格与引号。
+func TestShellRunsInWorkdir(t *testing.T) {
+	// 放在 %LOCALAPPDATA% 下：商店版 pwsh 对这里做了包内虚拟化，复现条件与演示时一致
+	// （%TEMP% 下的 t.TempDir() 复现不出来）。
+	base := t.TempDir()
+	if la := os.Getenv("LOCALAPPDATA"); runtime.GOOS == "windows" && la != "" {
+		var err error
+		if base, err = os.MkdirTemp(la, "ybase-shelltest-"); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { os.RemoveAll(base) })
+	}
+	root := filepath.Join(base, `my 'proj'`)
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "marker.md"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s := NewShell(root)
+	cmd := "ls marker.md"
+	if runtime.GOOS == "windows" {
+		cmd = "(Get-Location).Path; Test-Path marker.md"
+	}
+	out, isErr := callT(t, s, "shell", `{"command":`+q(cmd)+`}`)
+	if isErr {
+		t.Fatalf("命令失败：%q", out)
+	}
+	if runtime.GOOS == "windows" && (!strings.Contains(out, root) || !strings.Contains(out, "True")) {
+		t.Fatalf("应在工作目录 %s 里执行：%q", root, out)
+	}
+}
 
 func TestShellForegroundUTF8AndExitCode(t *testing.T) {
 	s := NewShell(t.TempDir())

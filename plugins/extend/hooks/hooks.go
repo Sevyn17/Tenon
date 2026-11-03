@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"runtime"
 	"strings"
@@ -161,7 +162,8 @@ func New(cfg Config, cwd string, warn func(string)) *Runner {
 func defaultArgv() func(string) []string {
 	if runtime.GOOS == "windows" {
 		bin := "powershell"
-		if p, err := exec.LookPath("pwsh"); err == nil {
+		// 商店版 pwsh（WindowsApps 下）跑在包容器里，看不到调用方的目录，见 shell.packagedApp。
+		if p, err := exec.LookPath("pwsh"); err == nil && !strings.Contains(strings.ToLower(filepath.ToSlash(p)), "/windowsapps/") {
 			bin = p
 		}
 		return func(c string) []string { return []string{bin, "-NoProfile", "-NonInteractive", "-Command", c} }
