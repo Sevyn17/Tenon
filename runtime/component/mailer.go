@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"ybase/runtime/ext"
 	"ybase/runtime/mail"
 )
 
@@ -12,9 +13,6 @@ import (
 type Sender interface {
 	Deliver(ctx context.Context, env mail.Envelope) error
 }
-
-// serviceHost 与 runtime.ServiceHost 同值；plugin 不能 import runtime（runtime 依赖 plugin）。
-const serviceHost = "service:host"
 
 // Mailer 组件发信句柄：from 固定为本组件，调用方不能伪造发送者。
 type Mailer struct {
@@ -25,7 +23,7 @@ type Mailer struct {
 // Mailer 取当前组件的发信句柄（P4）。没有注入投递服务时 Send 返回错误。
 func (cx *Registrar) Mailer() *Mailer {
 	m := &Mailer{from: mail.Address{Kind: mail.AddrComponent, ID: cx.plugin}}
-	if v, ok := cx.asm.values[serviceHost]; ok {
+	if v, ok := cx.asm.values[ext.ServiceHost]; ok {
 		if s, ok := v.(Sender); ok {
 			m.host = s
 		}

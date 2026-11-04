@@ -13,6 +13,7 @@ import (
 	"sync"
 
 	"ybase/runtime/agentdef"
+	"ybase/runtime/ext"
 	"ybase/runtime/inject"
 	"ybase/runtime/useconf"
 )
@@ -57,7 +58,7 @@ type Component interface {
 }
 
 // ServiceSQL 存储的 SQL 出口服务键（值为 store.SQL），由存储插件提供。
-const ServiceSQL = "service:sql"
+const ServiceSQL = ext.ServiceSQL
 
 // Requires 插件对底层能力的要求（框架设计 05 §5.7）。装配期检查，不满足直接装配失败。
 type Requires struct {
@@ -290,7 +291,7 @@ type Spec struct {
 }
 
 // Optional 可选依赖前缀：Requires 写 "?service:sandbox"，提供者缺席也能装配。
-const Optional = "?"
+const Optional = ext.Optional
 
 // Assembly 装配结果（只读）。
 type Assembly struct {
@@ -471,7 +472,7 @@ func (a *Assembly) checkRequirements() error {
 func (a *Assembly) Items(point string) []Item { return a.items[point] }
 
 // PointStatus 状态提交点位（04 4.7 / 框架设计 12.5）。
-const PointStatus = "status"
+const PointStatus = ext.PointStatus
 
 // Statuses 已登记的状态提交（按装配顺序）。
 func (a *Assembly) Statuses() []inject.Reg {
@@ -556,4 +557,12 @@ func contains(xs []string, x string) bool {
 		}
 	}
 	return false
+}
+
+// Get 按类型化键取依赖（审查 P1-48）：返回值类型由键推出，键名不必手写字符串。语义同 Use。
+func Get[T any](cx *Registrar, k ext.Key[T]) (T, error) { return Use[T](cx, k.Name()) }
+
+// GetOptional 按类型化键取可选依赖（Requires 写 k.Maybe()）。语义同 UseOptional。
+func GetOptional[T any](cx *Registrar, k ext.Key[T]) (T, bool, error) {
+	return UseOptional[T](cx, k.Name())
 }

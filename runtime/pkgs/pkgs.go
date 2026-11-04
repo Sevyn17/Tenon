@@ -19,6 +19,7 @@ import (
 	"github.com/BurntSushi/toml"
 
 	"ybase/runtime/component"
+	"ybase/runtime/ext"
 	"ybase/runtime/toolhub"
 )
 
@@ -363,7 +364,7 @@ func Expand(s, dir string) string { return strings.ReplaceAll(s, "${"+DirVar+"}"
 
 // Service 应用把已加载的插件包（[]*Package）以这个键预置给插件；mcp / hooks / skills / prompt 插件在
 // Requires 里写 "?service:packages" 取用。未预置 = 没有插件包。
-const Service = "service:packages"
+const Service = ext.ServicePackages
 
 // From 取预置的插件包；插件须在 Requires 里写 "?service:packages"。
 func From(cx *component.Registrar) ([]*Package, error) {

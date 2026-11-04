@@ -13,7 +13,7 @@ type plug struct{}
 func init() { component.Register("redact", func() component.Component { return &plug{} }) }
 
 func (*plug) Meta() component.Meta {
-	return component.Meta{Name: "redact", Version: "0.1.0", Effects: []string{component.EffectRewriteResult}, Requires: []string{"?service:compactor"}}
+	return component.Meta{Name: "redact", Version: "0.1.0", Effects: []string{component.EffectRewriteResult}, Requires: []string{"?" + assemble.ServiceCompactor}}
 }
 
 func (*plug) Setup(cx *component.Registrar) error {

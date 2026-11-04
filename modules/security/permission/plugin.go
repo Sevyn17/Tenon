@@ -11,12 +11,13 @@ import (
 
 	"ybase/runtime/assemble"
 	"ybase/runtime/component"
+	"ybase/runtime/ext"
 	"ybase/runtime/store"
 	"ybase/runtime/toolhub"
 )
 
 // Service 本插件提供的服务键。
-const Service = "service:permission"
+const Service = ext.ServicePermission
 
 // UseConfig 定义里的 [use.permission]（03 3.2、08 8.3）：这个智能体的权限上限。
 // 只收窄、不放宽——每次调用按会话当前档位与这里的档位各判一次，取更严的结论。

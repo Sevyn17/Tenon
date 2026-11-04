@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
+	"ybase/runtime/ext"
 )
 
 const (
@@ -131,3 +132,9 @@ type SandboxPolicy interface {
 type SandboxApprover interface {
 	AllowsSandbox(sessionID, tool string, args json.RawMessage, req SandboxMode) bool
 }
+
+// 沙箱相关服务的类型化键（审查 P1-48）：sandbox 组件提供 KeySandbox，permission 组件提供 KeySandboxPolicy。
+var (
+	KeySandbox       = ext.NewKey[Confiner](ext.ServiceSandbox)
+	KeySandboxPolicy = ext.NewKey[SandboxPolicy](ext.ServicePermission)
+)

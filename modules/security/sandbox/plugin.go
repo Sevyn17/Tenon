@@ -6,14 +6,15 @@ package sandbox
 import (
 	"ybase/runtime/assemble"
 	"ybase/runtime/component"
+	"ybase/runtime/ext"
 	"ybase/runtime/toolhub"
 )
 
 // Service 本插件提供的服务键。
-const Service = "service:sandbox"
+const Service = ext.ServiceSandbox
 
 // PolicyService 会话沙箱档位来源（由权限插件提供）。
-const PolicyService = "service:permission"
+const PolicyService = ext.ServicePermission
 
 // Config sandbox 插件配置。
 type Config struct {

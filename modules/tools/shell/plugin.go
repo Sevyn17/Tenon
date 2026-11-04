@@ -25,7 +25,7 @@ func init() { component.Register("shell", func() component.Component { return &p
 func (*plug) Meta() component.Meta {
 	return component.Meta{Name: "shell", Version: "0.1.0", Default: true, Effects: []string{component.EffectTools, component.EffectExec},
 		Config:   &Config{},
-		Requires: []string{assemble.ServiceWorkdir, "?service:sandbox", "?service:permission"}}
+		Requires: []string{assemble.ServiceWorkdir, toolhub.KeySandbox.Maybe(), toolhub.KeySandboxPolicy.Maybe()}}
 }
 
 func (p *plug) Setup(cx *component.Registrar) error {
@@ -37,7 +37,7 @@ func (p *plug) Setup(cx *component.Registrar) error {
 	if c, _ := cx.Config().(*Config); c != nil {
 		sh.KeepANSI, sh.NoDenyHint, sh.NoIntro = !c.StripANSI, !c.DenyHint, !c.Intro
 	}
-	sb, ok, err := component.UseOptional[toolhub.Confiner](cx, "service:sandbox")
+	sb, ok, err := component.GetOptional(cx, toolhub.KeySandbox)
 	if err != nil {
 		return err
 	}
@@ -45,7 +45,7 @@ func (p *plug) Setup(cx *component.Registrar) error {
 		sh.Sandbox = sb
 		sh.Mode = toolhub.SandboxWorkspaceWrite
 	}
-	pol, ok, err := component.UseOptional[toolhub.SandboxPolicy](cx, "service:permission")
+	pol, ok, err := component.GetOptional(cx, toolhub.KeySandboxPolicy)
 	if err != nil {
 		return err
 	}

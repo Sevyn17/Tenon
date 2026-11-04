@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"ybase/runtime/ext"
 	"ybase/runtime/mail"
 )
 
@@ -34,7 +35,7 @@ func TestMailerSendsAsComponent(t *testing.T) {
 		}})
 	if _, aerr := Assemble(Spec{
 		Plugins: entries(name),
-		Inject:  map[string]any{serviceHost: sender},
+		Inject:  map[string]any{ext.ServiceHost: sender},
 	}); aerr != nil {
 		t.Fatalf("Assemble: %v", aerr)
 	}

@@ -29,7 +29,7 @@ func init() { component.Register("mcp", func() component.Component { return &plu
 
 func (*plug) Meta() component.Meta {
 	return component.Meta{Name: "mcp", Version: "0.1.0", Effects: []string{component.EffectTools, component.EffectExec, component.EffectNetwork}, Config: &PluginConfig{},
-		Requires: []string{assemble.ServiceWorkdir, assemble.ServiceUI, "?" + assemble.ServiceTrust, "?service:sandbox", "?service:permission", "?" + pkgs.Service}}
+		Requires: []string{assemble.ServiceWorkdir, assemble.ServiceUI, "?" + assemble.ServiceTrust, toolhub.KeySandbox.Maybe(), toolhub.KeySandboxPolicy.Maybe(), "?" + pkgs.Service}}
 }
 
 func (p *plug) Setup(cx *component.Registrar) error {
@@ -93,12 +93,12 @@ type defaultSandbox interface {
 // wireConfine stdio 服务子进程放进沙箱：服务 sandbox 字段优先，否则取缺省档位 [sandbox] 里 mcp__<服务>__* 的值；
 // 没有沙箱插件时不加沙箱并告警。
 func (p *plug) wireConfine(cx *component.Registrar) error {
-	sb, ok, err := component.UseOptional[toolhub.Confiner](cx, "service:sandbox")
+	sb, ok, err := component.GetOptional(cx, toolhub.KeySandbox)
 	if err != nil {
 		return err
 	}
 	var pol defaultSandbox
-	if v, has, err := component.UseOptional[any](cx, "service:permission"); err != nil {
+	if v, has, err := component.GetOptional(cx, toolhub.KeySandboxPolicy); err != nil {
 		return err
 	} else if has {
 		pol, _ = v.(defaultSandbox)

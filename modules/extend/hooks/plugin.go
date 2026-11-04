@@ -28,7 +28,7 @@ func init() { component.Register("hooks", func() component.Component { return &p
 
 func (*plug) Meta() component.Meta {
 	return component.Meta{Name: "hooks", Version: "0.1.0", Effects: []string{component.EffectExec, component.EffectRewriteResult}, Config: &PluginConfig{},
-		Requires: []string{assemble.ServiceWorkdir, assemble.ServiceUI, "?" + assemble.ServiceTrust, "?service:sandbox", "?" + pkgs.Service}}
+		Requires: []string{assemble.ServiceWorkdir, assemble.ServiceUI, "?" + assemble.ServiceTrust, toolhub.KeySandbox.Maybe(), "?" + pkgs.Service}}
 }
 
 func (p *plug) Setup(cx *component.Registrar) error {
@@ -87,7 +87,7 @@ func (p *plug) Setup(cx *component.Registrar) error {
 	r := New(Merge(cs...), root, func(s string) { ui.Warn("钩子", s) })
 	p.r = r
 	// 钩子命令放进沙箱（缺省 workspace-write，按条可改）；无沙箱插件时照常执行。
-	if sb, ok, err := component.UseOptional[toolhub.Confiner](cx, "service:sandbox"); err != nil {
+	if sb, ok, err := component.GetOptional(cx, toolhub.KeySandbox); err != nil {
 		return err
 	} else if ok {
 		r.Confine = sb.Apply

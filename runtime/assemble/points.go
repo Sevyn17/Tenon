@@ -10,6 +10,7 @@ import (
 
 	"ybase/runtime/agent"
 	"ybase/runtime/component"
+	"ybase/runtime/ext"
 	"ybase/runtime/inject"
 	"ybase/runtime/session"
 	"ybase/runtime/toolhub"
@@ -17,24 +18,24 @@ import (
 
 // 点位名与实现类型。
 const (
-	PointSessionTools = "session_tools" // ToolsEntry
-	PointSessionLayer = "session_layer" // LayerEntry
-	PointSystemBlock  = "system_block"  // BlockEntry
-	PointAfterTurn    = "after_turn"    // AfterTurnFunc
-	PointReady        = "ready"         // ReadyFunc：会话构造器就绪后调用一次（如补投上次未送达的结果）
+	PointSessionTools = ext.PointSessionTools // ToolsEntry
+	PointSessionLayer = ext.PointSessionLayer // LayerEntry
+	PointSystemBlock  = ext.PointSystemBlock  // BlockEntry
+	PointAfterTurn    = ext.PointAfterTurn    // AfterTurnFunc
+	PointReady        = ext.PointReady        // ReadyFunc：会话构造器就绪后调用一次（如补投上次未送达的结果）
 	// PointPermItems toolhub.Item：权限项声明（06 - 工具权限设计方案 §9.3）。
 	// 装配级而非会话级：注册表由装进来的插件汇总一次，各会话共用。
-	PointPermItems = "perm_items"
+	PointPermItems = ext.PointPermItems
 )
 
 // 应用预置服务（component.Spec.Inject 的键）。
 const (
-	ServiceHost    = "service:host"    // *host.Host（DB / New / Child 在装配后由应用填好）
-	ServiceUI      = "service:ui"      // UI
-	ServiceWorkdir = "service:workdir" // string：工作目录绝对路径
+	ServiceHost    = ext.ServiceHost    // *host.Host（DB / New / Child 在装配后由应用填好）
+	ServiceUI      = ext.ServiceUI      // UI
+	ServiceWorkdir = ext.ServiceWorkdir // string：工作目录绝对路径
 	// ServiceTrust bool：项目是否受信（plugin-switch-plan §3.3）。不受信时插件不读项目 .ybase 下的配置；
 	// 未预置时按受信处理（测试 / 嵌入方）。
-	ServiceTrust = "service:trust"
+	ServiceTrust = ext.ServiceTrust
 )
 
 // ProjectTrusted 取 service:trust；插件须在 Requires 里写 "?service:trust"。
@@ -232,3 +233,10 @@ func Collect(asm *component.Assembly) (*Collected, error) {
 	}
 	return c, nil
 }
+
+// 应用预置服务的类型化键（审查 P1-48）。
+var (
+	KeyUI      = ext.NewKey[UI](ext.ServiceUI)
+	KeyWorkdir = ext.NewKey[string](ext.ServiceWorkdir)
+	KeyTrust   = ext.NewKey[bool](ext.ServiceTrust)
+)
