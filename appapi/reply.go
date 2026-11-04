@@ -8,8 +8,8 @@ package appapi
 
 import (
 	"context"
+	"strings"
 
-	"ybase/runtime/host"
 	"ybase/runtime/mail"
 )
 
@@ -36,8 +36,8 @@ func (a *App) Reply(ctx context.Context, in ReplyArgs) (Empty, error) {
 	if user == "" {
 		user = "local"
 	}
-	body := in.Body
-	if body == "" {
+	body := ApproveWord(in.Body)
+	if strings.TrimSpace(in.Body) == "" {
 		body = "deny"
 		if in.Approve {
 			body = "approve"
@@ -66,7 +66,7 @@ func (a *App) ExplainTrace(ctx context.Context, in TraceArgs) (TraceResult, erro
 	if in.Trace == "" {
 		return TraceResult{}, Errorf(CodeBadRequest, "缺少 trace")
 	}
-	out, err := host.ExplainTrace(ctx, a.o.DB, in.Trace)
+	out, err := RenderTrace(ctx, a.o.DB, in.Trace)
 	if err != nil {
 		return TraceResult{}, wrap(err)
 	}

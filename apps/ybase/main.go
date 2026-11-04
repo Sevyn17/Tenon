@@ -102,7 +102,7 @@ func main() {
 	case "explain":
 		if args := flag.Args(); len(args) >= 3 && args[1] == "trace" {
 			err = withRuntime(o, func(a *app) error {
-				out, err := host.ExplainTrace(context.Background(), a.rt.Store.DB(), args[2])
+				out, err := appapi.RenderTrace(context.Background(), a.rt.Store.DB(), args[2])
 				if err != nil {
 					return err
 				}

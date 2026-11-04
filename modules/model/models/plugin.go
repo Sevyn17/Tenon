@@ -35,7 +35,7 @@ func (modelsPlugin) Setup(cx *component.Registrar) error {
 		return err
 	}
 	cat := modelhub.NewCatalog()
-	bf, err := modelhub.BuiltinCatalog()
+	bf, err := BuiltinCatalog()
 	if err != nil {
 		return err
 	}
@@ -43,7 +43,7 @@ func (modelsPlugin) Setup(cx *component.Registrar) error {
 		return err
 	}
 	if cfg.Discover {
-		if f, err := modelhub.DiscoverOllama(context.Background(), nil, "http://127.0.0.1:11434"); err == nil {
+		if f, err := DiscoverOllama(context.Background(), nil, "http://127.0.0.1:11434"); err == nil {
 			_ = cat.Add(modelhub.LayerDiscover, "ollama", f)
 		} // 失败只是没有本地模型，不阻塞装配
 	}

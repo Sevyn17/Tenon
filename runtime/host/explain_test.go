@@ -58,11 +58,8 @@ func TestExplainTraceListsPath(t *testing.T) {
 	if err := hd.Wait(); err != nil {
 		t.Fatalf("Wait: %v", err)
 	}
-	out, err := ExplainTrace(context.Background(), db, "tr1")
-	if err != nil {
-		t.Fatalf("ExplainTrace: %v", err)
-	}
-	for _, want := range []string{"trace tr1", "会话：s1", "信封", "会话", "工具", "echo"} {
+	out := traceText(t, db, "tr1")
+	for _, want := range []string{"envelope", "session s1", "tool s1", "echo"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("explain 缺少 %q：\n%s", want, out)
 		}
@@ -109,11 +106,22 @@ func TestExplainTraceGuardDenied(t *testing.T) {
 	if err := h.deliverQueued(context.Background(), env); err == nil {
 		t.Fatal("跳数超限应报错")
 	}
-	out, err := ExplainTrace(context.Background(), db, "tr2")
-	if err != nil {
-		t.Fatalf("ExplainTrace: %v", err)
-	}
-	if !strings.Contains(out, "拒绝") || !strings.Contains(out, "hop") {
+	out := traceText(t, db, "tr2")
+	if !strings.Contains(out, "guard_denied") || !strings.Contains(out, "hop") {
 		t.Fatalf("explain 缺少拒绝原因：\n%s", out)
 	}
+}
+
+// traceText 把一个 trace 的事件拼成「kind session detail」行（渲染在 appapi.RenderTrace，这里只看落库的事件）。
+func traceText(t *testing.T, db *sqlite.DB, trace string) string {
+	t.Helper()
+	evs, err := db.TraceEvents(context.Background(), trace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var b strings.Builder
+	for _, ev := range evs {
+		b.WriteString(ev.Kind + " " + ev.Session + " " + ev.Detail + "\n")
+	}
+	return b.String()
 }

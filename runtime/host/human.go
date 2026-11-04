@@ -35,8 +35,10 @@ func (h *Host) resolveHuman(corr, body string) bool {
 	return true
 }
 
-// decisionFromBody 解析确认回答：JSON `{"approve":true}` / `{"decision":"approve"}`，
-// 或 yes / approve / allow / 批准 / 同意 等文本；其余按拒绝处理。
+// decisionFromBody 解析确认回答。内核只认规范形式：JSON `{"approve":true}` / `{"allow":true}` /
+// `{"decision":"approve"}`，或文本 approve / allow（不分大小写）；其余按拒绝。
+// 中英文自由文本（yes / 同意 / 批准……）由应用层先规整（appapi.ApproveWord，2026-11-04 审查 P2 归属：
+// 词表是产品策略，不放内核）。
 func decisionFromBody(body string) bool {
 	s := strings.TrimSpace(body)
 	if strings.HasPrefix(s, "{") {
@@ -49,16 +51,16 @@ func decisionFromBody(body string) bool {
 				return v
 			}
 			if v, ok := m["decision"].(string); ok {
-				return allowWord(v)
+				return approveToken(v)
 			}
 		}
 	}
-	return allowWord(s)
+	return approveToken(s)
 }
 
-func allowWord(s string) bool {
+func approveToken(s string) bool {
 	switch strings.ToLower(strings.TrimSpace(s)) {
-	case "y", "yes", "ok", "true", "1", "allow", "approve", "approved", "批准", "同意", "是", "允许":
+	case "approve", "allow":
 		return true
 	}
 	return false

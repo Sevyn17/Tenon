@@ -1,10 +1,11 @@
-package modelhub
+package models
 
 import (
 	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"ybase/runtime/modelhub"
 )
 
 func TestBuiltinCatalogResolves(t *testing.T) {
@@ -12,8 +13,8 @@ func TestBuiltinCatalogResolves(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuiltinCatalog: %v", err)
 	}
-	c := NewCatalog()
-	if err := c.Add(LayerBuiltin, "builtin", f); err != nil {
+	c := modelhub.NewCatalog()
+	if err := c.Add(modelhub.LayerBuiltin, "builtin", f); err != nil {
 		t.Fatal(err)
 	}
 	for _, p := range []string{"deepseek", "openai", "anthropic", "openrouter", "ollama"} {
@@ -43,10 +44,10 @@ func TestDiscoverOllama(t *testing.T) {
 	if err != nil || len(f.Model) != 2 {
 		t.Fatalf("discover: %+v %v", f, err)
 	}
-	c := NewCatalog()
+	c := modelhub.NewCatalog()
 	b, _ := BuiltinCatalog()
-	_ = c.Add(LayerBuiltin, "builtin", b)
-	_ = c.Add(LayerDiscover, "ollama", f)
+	_ = c.Add(modelhub.LayerBuiltin, "builtin", b)
+	_ = c.Add(modelhub.LayerDiscover, "ollama", f)
 	if _, p, err := c.Lookup("qwen3:8b"); err != nil || p.BaseURL != "http://127.0.0.1:11434/v1" {
 		t.Fatalf("发现的模型应挂到内置 ollama 提供方: %+v %v", p, err)
 	}

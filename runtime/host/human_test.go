@@ -116,7 +116,7 @@ func TestDecisionFromBody(t *testing.T) {
 		in   string
 		want bool
 	}{
-		{"approve", true}, {"YES", true}, {"同意", true}, {"no", false},
+		{"approve", true}, {"ALLOW", true}, {"YES", false}, {"同意", false}, {"no", false},
 		{`{"approve":true}`, true}, {`{"approve":false}`, false}, {`{"decision":"allow"}`, true},
 	} {
 		if got := decisionFromBody(tc.in); got != tc.want {
