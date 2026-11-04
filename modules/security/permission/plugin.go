@@ -88,7 +88,19 @@ func (*plug) Setup(cx *component.Registrar) error {
 			// 没写时不加限制；写了但档位不存在时按 read-only 处理（不因笔误放开）。
 			// 会话打开后读算好的 use_config（含租户 / 用户层）；构造工具列表时会话还没打开，
 			// 先按定义里写的值（同一来源的第一层）。
-			capDef := func() *ModeDef {
+			lookup := func(mode string) *ModeDef {
+				if mode == "" {
+					return nil
+				}
+				d, ok := s.reg().Get(Mode(mode))
+				if !ok {
+					return builtinDef(ReadOnly) // 配置了却找不到：按最严处理，不放开
+				}
+				return d
+			}
+			// capDefs 本会话的全部上限档位：自己定义的 [use.permission]，以及子会话的父会话上限
+			// （子会话不越过父会话，2026-11-04 审查 P2：原先子会话用内置定义，父会话的上限管不到它）。
+			capDefs := func() []*ModeDef {
 				var u UseConfig
 				if sc.Ctx != nil {
 					_ = sc.Ctx.Config("permission", &u)
@@ -96,14 +108,17 @@ func (*plug) Setup(cx *component.Registrar) error {
 				if u.Mode == "" && sc.Def != nil {
 					u.Mode, _ = sc.Def.Use["permission"]["mode"].(string)
 				}
-				if u.Mode == "" {
-					return nil
+				var out []*ModeDef
+				if d := lookup(u.Mode); d != nil {
+					out = append(out, d)
 				}
-				d, ok := s.reg().Get(Mode(u.Mode))
-				if !ok {
-					return builtinDef(ReadOnly) // 配置了却找不到：按最严处理，不放开
+				if v, ok := sc.Parent.UseValue("permission", "mode"); ok {
+					m, _ := v.(string)
+					if d := lookup(m); d != nil {
+						out = append(out, d)
+					}
 				}
-				return d
+				return out
 			}
 			if err := hub.SetVisible(func(n string) bool {
 				t, ok := hub.Get(n)
@@ -111,8 +126,10 @@ func (*plug) Setup(cx *component.Registrar) error {
 					return true
 				}
 				items := hub.ItemsOf(t)
-				if d := capDef(); d != nil && !Visible(d, t, items) {
-					return false
+				for _, d := range capDefs() {
+					if !Visible(d, t, items) {
+						return false
+					}
 				}
 				return Visible(s.Def(id), t, items)
 			}); err != nil {
@@ -122,8 +139,11 @@ func (*plug) Setup(cx *component.Registrar) error {
 				p := s.Policy(sid)
 				// 不可信输入回合（外部入口、不可信来源的信封）：allow 降为询问（由内核按回合标记）。
 				p.Untrusted = func(cx *toolhub.Cx) bool { return cx.Ctx != nil && cx.Ctx.Untrusted() }
-				if d := capDef(); d != nil {
-					p.Cap = &Policy{Mode: d.ID, Def: d, Rules: p.Rules, Root: p.Root, Sandbox: p.Sandbox}
+				// 上限档位串成链：每一层都判一次，取最严（见 Policy.Decide）。
+				caps := capDefs()
+				for i := len(caps) - 1; i >= 0; i-- {
+					d := caps[i]
+					p.Cap = &Policy{Mode: d.ID, Def: d, Rules: p.Rules, Root: p.Root, Sandbox: p.Sandbox, Cap: p.Cap}
 				}
 				return p
 			}

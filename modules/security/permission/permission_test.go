@@ -128,6 +128,16 @@ func TestPolicyCapOnlyNarrows(t *testing.T) {
 	}
 }
 
+// 上限可以串成链（子会话：自己的定义 + 父会话），每一层都判：第二层是 read-only 时照样拒写。
+func TestPolicyCapChain(t *testing.T) {
+	wr := eff("write_file", toolhub.Write, toolhub.EffectWrite, AttrWorkspace)
+	args := json.RawMessage(`{"path":"a.txt"}`)
+	p := Policy{Mode: Full, Cap: &Policy{Mode: Full, Cap: &Policy{Mode: ReadOnly}}}
+	if got := p.Decide(wr, args).Action; got != Deny {
+		t.Fatalf("链上任一层上限 read-only 都应拒写，得到 %s", got)
+	}
+}
+
 func TestWiderSandboxAsks(t *testing.T) {
 	c := eff("shell", toolhub.Dangerous, toolhub.EffectExec, toolhub.AttrSandboxed)
 	args := json.RawMessage(`{"command":"go build","sandbox_permissions":"danger-full-access"}`)

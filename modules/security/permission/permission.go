@@ -105,8 +105,8 @@ func (p Policy) Decide(cx *toolhub.Cx, args json.RawMessage) Decision {
 		return d
 	}
 	c := *p.Cap
-	c.Cap, c.Untrusted = nil, p.Untrusted
-	cd := c.decide(cx, args)
+	c.Untrusted = p.Untrusted
+	cd := c.Decide(cx, args) // 上限可以再带上限（子会话：自己的定义 + 父会话），逐层取严
 	if severity(cd.Action) > severity(d.Action) {
 		cd.Reason = "智能体权限上限 " + string(c.Mode) + "：" + cd.Reason
 		return cd

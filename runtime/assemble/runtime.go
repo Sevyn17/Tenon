@@ -7,8 +7,10 @@ package assemble
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"path"
 	"strings"
 
@@ -35,6 +37,10 @@ type SessionCx struct {
 	Child bool
 	// Def 本会话的智能体定义（T1b-2c）；nil = 无定义会话（用户直接新建的顶层会话）。
 	Def *agentdef.Agent
+	// Parent 子会话的父会话限制（顶层会话为 nil）：子会话不越过父会话——父定义的 tools 白名单
+	// 收窄子会话的可用工具，父会话的使用配置（如 [use.permission] 上限档位）由各组件叠加到子会话上
+	// （2026-11-04 审查 P2：原先子会话用内置定义，父会话的限制一样都不继承）。
+	Parent *ParentLimits
 	// Values 同一会话内贡献函数之间共享的状态（如指令层与指令系统块共用一份已装载集合）。
 	Values map[string]any
 }
@@ -118,6 +124,11 @@ func (b *Builder) Build(id, defName string, child bool) (*agent.Agent, *session.
 	}
 	hub := toolhub.New(ho)
 	cx := &SessionCx{ID: id, Workdir: b.Workdir, Hub: hub, Agent: a, Child: child, Values: map[string]any{}, Ctx: kctx, Def: def}
+	if child {
+		if cx.Parent, err = b.parentLimits(id); err != nil {
+			return nil, nil, err
+		}
+	}
 	for _, it := range b.Items {
 		if err := hub.RegisterItem(it); err != nil {
 			return nil, nil, err
@@ -154,6 +165,13 @@ func (b *Builder) Build(id, defName string, child bool) (*agent.Agent, *session.
 	allow, err := defTools(def, hub.Names())
 	if err != nil {
 		return nil, nil, err
+	}
+	if cx.Parent != nil && cx.Parent.Def != nil {
+		pa, err := defTools(cx.Parent.Def, hub.Names())
+		if err != nil {
+			return nil, nil, err
+		}
+		allow = intersectAllow(allow, pa)
 	}
 	ts := hub.SpecsFor(allow, 0)
 	a.Hub, a.Toolset = hub, ts
@@ -252,4 +270,90 @@ func (b *Builder) loadDefinition(id, name string) (*agentdef.Agent, error) {
 		return nil, fmt.Errorf("runtime: 会话 %s 的定义 %s：%w", id, name, err)
 	}
 	return &a, nil
+}
+
+// ParentLimits 子会话的父会话限制（见 SessionCx.Parent）。
+type ParentLimits struct {
+	ID  string
+	Def *agentdef.Agent // 父会话的定义；nil = 父会话没有定义（不收窄工具）
+	// Use 父会话算好的使用配置（会话行 use_config）：组件名 → 配置。
+	Use map[string]map[string]any
+}
+
+// UseValue 父会话给某组件某项的使用配置：先看算好的 use_config，没有再看父定义的 [use.*]。
+func (p *ParentLimits) UseValue(component, key string) (any, bool) {
+	if p == nil {
+		return nil, false
+	}
+	if v, ok := p.Use[component][key]; ok {
+		return v, true
+	}
+	if p.Def != nil {
+		v, ok := p.Def.Use[component][key]
+		return v, ok
+	}
+	return nil, false
+}
+
+// parentLimits 读子会话 id 的父会话（会话行有 ParentID 就用它；新建时会话行还不存在，按 id 约定
+// "<父 id>/<子名>" 取，subagent 与 workgroup 都这样拼）。父会话不存在返回 nil。
+func (b *Builder) parentLimits(id string) (*ParentLimits, error) {
+	if b.DB == nil {
+		return nil, nil
+	}
+	ctx := context.Background()
+	noEntries := math.MaxInt
+	parent := ""
+	if l, err := b.DB.Load(ctx, id, &noEntries); err == nil {
+		parent = l.Meta.ParentID
+	} else if !errors.Is(err, store.ErrNotFound) {
+		return nil, fmt.Errorf("runtime: 读子会话 %s：%w", id, err)
+	}
+	if parent == "" {
+		i := strings.LastIndex(id, "/")
+		if i <= 0 {
+			return nil, nil
+		}
+		parent = id[:i]
+	}
+	l, err := b.DB.Load(ctx, parent, &noEntries)
+	if errors.Is(err, store.ErrNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("runtime: 读父会话 %s：%w", parent, err)
+	}
+	p := &ParentLimits{ID: parent}
+	if len(l.Meta.UseConfig) > 0 {
+		if err := json.Unmarshal(l.Meta.UseConfig, &p.Use); err != nil {
+			return nil, fmt.Errorf("runtime: 父会话 %s 的 use_config：%w", parent, err)
+		}
+	}
+	if l.Meta.AgentID != "" {
+		if p.Def, err = b.loadDefinition(parent, l.Meta.AgentID); err != nil {
+			return nil, err
+		}
+	}
+	return p, nil
+}
+
+// intersectAllow 两个工具白名单的交集；nil = 不限。
+func intersectAllow(a, b []string) []string {
+	if a == nil {
+		return b
+	}
+	if b == nil {
+		return a
+	}
+	keep := make(map[string]bool, len(b))
+	for _, n := range b {
+		keep[n] = true
+	}
+	out := []string{}
+	for _, n := range a {
+		if keep[n] {
+			out = append(out, n)
+		}
+	}
+	return out
 }
