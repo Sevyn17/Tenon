@@ -33,8 +33,8 @@ type Options struct {
 	Host *host.Host
 	Bus  *bus.Bus
 	DB   store.Store
-	// Builder 会话构造器：非空时 New 用它设置 Host.New / Host.Child，并在其钩子上并入流式事件（StreamHooks）。
-	// 为空时 Host.New / Host.Child 须由应用自己设置。
+	// Builder 会话构造器（可空）：非空时 New 在它的钩子上并入流式事件（StreamHooks）。
+	// Host.New / Host.Child 由装配（assemble.Wire）或应用自己设置，appapi 不碰（2026-11-04 审查 P1-51）。
 	Builder *assemble.Builder
 
 	Model   string // 缺省模型名（hello 显示）
@@ -56,7 +56,7 @@ type App struct {
 }
 
 // New 构造 App：把 DB 的提交事件接到总线（Follow 的实时部分）；包一层 Host.Hooks
-// （回合开始发档位变化提示 notice，回合结束先发完积压正文再交给原钩子）；给了 Builder 时设置会话构造器。
+// （回合开始发档位变化提示 notice，回合结束先发完积压正文再交给原钩子）；给了 Builder 时在它的钩子上并入流式事件。
 // Host.Hooks 里应用已设的 BeforeTurn / AfterTurn 保留并在包装里调用，须在 New 之前设置。
 func New(o Options) (*App, error) {
 	if o.Host == nil || o.Bus == nil || o.DB == nil {
@@ -100,8 +100,6 @@ func New(o Options) (*App, error) {
 			}
 			return hk
 		}
-		o.Host.New = func(id, def string) (*agent.Agent, *session.Config, error) { return rb.Build(id, def, false) }
-		o.Host.Child = func(id, def string) (*agent.Agent, *session.Config, error) { return rb.Build(id, def, true) }
 	}
 	return a, nil
 }

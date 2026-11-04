@@ -30,25 +30,17 @@ import (
 	"ybase/runtime/bus"
 	"ybase/runtime/component"
 	"ybase/runtime/host"
-	"ybase/runtime/modelhub"
 	"ybase/runtime/store"
 	"ybase/runtime/toolhub"
 	"ybase/runtime/useconf"
-)
-
-// 错误（07 7.3；errors.Is 可判）。
-var (
-	ErrNotStarted = errors.New("ybase: 未 Start")
-	ErrInvalid    = errors.New("ybase: 参数不合法")
-	ErrNotFound   = errors.New("ybase: 未找到")
 )
 
 // Component 应用自带的组件（04 4.2：Name + Setup），需要后台工作的实现 Start。
 // 内置组件由预设提供，应用一般只在 With 里加自己的组件。
 type Component interface {
 	Name() string
-	Setup(cx *component.Registrar) error
-	Start(sc *component.Scope) error
+	Setup(cx *Registrar) error
+	Start(sc *Scope) error
 }
 
 // componentPlugin 把 Component 适配成 component.Component（装配输入用）。
@@ -79,6 +71,8 @@ type config struct {
 	sleepAfter time.Duration
 	// projectTrust 工作目录是否受信（WithProjectTrust）；缺省 false。
 	projectTrust bool
+	// kernel 内核与宿主参数（WithKernel；键同 profile 的 [kernel] 节）。
+	kernel map[string]any
 }
 
 // Default 标准组件预设（10 10.2）：内核、上下文、模型、工具、权限、沙箱、协作。
@@ -128,7 +122,7 @@ func Without(names ...string) Option {
 }
 
 // WithStore 存储（必需；预设不含存储）。
-func WithStore(s store.Store) Option {
+func WithStore(s Store) Option {
 	return func(c *config) error {
 		if s == nil {
 			return fmt.Errorf("%w: WithStore 传了 nil", ErrInvalid)
@@ -139,7 +133,7 @@ func WithStore(s store.Store) Option {
 }
 
 // WithModels 用现成的模型来源替换预设里的 models + 适配器（测试、嵌入方自带模型时用）。
-func WithModels(hub *modelhub.Hub, model string) Option {
+func WithModels(hub *ModelHub, model string) Option {
 	return func(c *config) error {
 		if hub == nil {
 			return fmt.Errorf("%w: WithModels 的 hub 为 nil", ErrInvalid)
@@ -150,7 +144,7 @@ func WithModels(hub *modelhub.Hub, model string) Option {
 }
 
 // WithAgents 追加定义来源（可多个；平台层由组件模板补齐）。
-func WithAgents(srcs ...agentdef.Source) Option {
+func WithAgents(srcs ...AgentSource) Option {
 	return func(c *config) error {
 		for _, s := range srcs {
 			if s == nil {
@@ -164,7 +158,7 @@ func WithAgents(srcs ...agentdef.Source) Option {
 
 // Dir 目录定义来源（agentdef.DirSource）：root/platform/<名>、root/tenant/<租户>/<名>、
 // root/user/<租户>/<用户>/<名>。
-func Dir(root string) agentdef.Source { return agentdef.Dir(root) }
+func Dir(root string) AgentSource { return agentdef.Dir(root) }
 
 // WithWorkdir 会话工作目录（fs / shell / instructions 等组件要用）。
 func WithWorkdir(dir string) Option {
@@ -175,7 +169,7 @@ func WithWorkdir(dir string) Option {
 }
 
 // WithUI 界面输出（缺省丢弃输出）。
-func WithUI(ui assemble.UI) Option {
+func WithUI(ui UI) Option {
 	return func(c *config) error {
 		if ui == nil {
 			return fmt.Errorf("%w: WithUI 传了 nil", ErrInvalid)
@@ -203,6 +197,21 @@ func WithSleepAfter(d time.Duration) Option {
 func WithProjectTrust(trusted bool) Option {
 	return func(c *config) error {
 		c.projectTrust = trusted
+		return nil
+	}
+}
+
+// WithKernel 内核与宿主参数，键与 profile 的 [kernel] 节相同：max_steps、tool_timeout、confirm_deadline、
+// sleep_after、concurrency、tree_policy、tree_restarts、retain 等。未知键或非法值在 New 里报 ErrInvalid。
+// 多次调用按键合并，后者覆盖前者（2026-11-04 审查 P1-51：原先 SDK 设不了并发上限、所属树策略与保留期）。
+func WithKernel(kv map[string]any) Option {
+	return func(c *config) error {
+		if c.kernel == nil {
+			c.kernel = map[string]any{}
+		}
+		for k, v := range kv {
+			c.kernel[k] = v
+		}
 		return nil
 	}
 }
@@ -303,6 +312,13 @@ func build(c *config) (*App, error) {
 		}
 		names = kept
 	}
+	kern, err := assemble.ParseKernel(c.kernel)
+	if err != nil {
+		errs = append(errs, fmt.Errorf("%w: WithKernel: %v", ErrInvalid, err))
+	}
+	if c.sleepAfter > 0 {
+		kern.SleepAfter = c.sleepAfter
+	}
 	if len(errs) > 0 {
 		return nil, errors.Join(errs...)
 	}
@@ -361,7 +377,7 @@ func build(c *config) (*App, error) {
 	if err != nil {
 		return nil, fmt.Errorf("ybase: 定义: %w", err)
 	}
-	app := &App{asm: asm, defs: defs, host: h, bus: b, handle: st, workdir: workdir, ui: ui, sleepAfter: c.sleepAfter}
+	app := &App{asm: asm, defs: defs, host: h, bus: b, handle: st, workdir: workdir, ui: ui, kern: kern}
 	if v, ok := asm.Value(assemble.ServiceModelhub); ok {
 		app.models, _ = v.(*assemble.Models)
 	}
@@ -412,11 +428,11 @@ type App struct {
 	ui      assemble.UI
 	scope   *component.Scope
 	builder *assemble.Builder
-	// sleepAfter / sleepStop：空闲休眠超时与兜底扫描的取消函数（02 2.2）。
-	sleepAfter time.Duration
-	sleepStop  context.CancelFunc
-	started    bool
-	closed     bool
+	// kern 内核与宿主参数（WithKernel、WithSleepAfter）；bgStop 后台循环的取消函数。
+	kern    assemble.Kernel
+	bgStop  context.CancelFunc
+	started bool
+	closed  bool
 }
 
 // —— 存储句柄：外部 store.Store + 内存工件 —— //

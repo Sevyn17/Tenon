@@ -19,7 +19,6 @@ import (
 	"ybase/runtime/component"
 	"ybase/runtime/host"
 	"ybase/runtime/pkgs"
-	"ybase/runtime/session"
 	"ybase/runtime/store"
 )
 
@@ -80,8 +79,10 @@ type Runtime struct {
 	// Packages 已加载的插件包（用户级在前、项目级在后）。
 	Packages []*pkgs.Package
 
-	proc      *component.Scope
-	sleepStop context.CancelFunc // 后台循环（兜底扫描、存储清理）的取消函数
+	proc       *component.Scope
+	kern       assemble.Kernel
+	sleepAfter time.Duration
+	bgStop     context.CancelFunc // 后台循环（兜底扫描、存储清理、发件箱）的取消函数；BuildApp 之后才有
 }
 
 // StartOptions Start 的参数。
@@ -129,42 +130,20 @@ func Start(o StartOptions) (*Runtime, error) {
 		return nil, err
 	}
 	r.Host.DB = r.Rt.Store.DB() // 数据库在 store-sqlite 启动后才打开
-	// 宿主参数来自 profile 的 [kernel] 节（休眠、并发上限、所属树策略、保留期）；
-	// StartOptions.SleepAfter 显式给出时优先（测试与嵌入方用）。
-	kern, err := assemble.ParseKernel(p.Kernel)
-	if err != nil {
+	// 宿主参数来自 profile 的 [kernel] 节（休眠、并发上限、所属树策略、保留期），在 BuildApp 里由 assemble.Wire 接上。
+	if r.kern, err = assemble.ParseKernel(p.Kernel); err != nil {
 		r.Close()
 		return nil, fmt.Errorf("profile [kernel]: %w", err)
 	}
-	sleepAfter := kern.SleepAfter
-	if o.SleepAfter > 0 {
-		sleepAfter = o.SleepAfter
-	}
-	r.Host.SleepAfter = sleepAfter
-	r.Host.Limit = kern.Concurrency
-	r.Host.TreePolicy, r.Host.TreeRestarts = kern.TreePolicy, kern.TreeRestarts
-	ctx, cancel := context.WithCancel(context.Background())
-	r.sleepStop = cancel
-	if sleepAfter > 0 { // 休眠会话的兜底扫描（02 2.2）：有信件的休眠会话定期唤醒
-		go r.Host.ScanLoop(ctx, sleepAfter)
-	}
-	// 工件文件回收（审查 P1-41）：没有引用、超过宽限期未触碰的文件删掉。宽限期防止刚写入、引用还没落库的文件被误删。
-	if gc, ok := r.Rt.Store.Blobs().(interface {
-		GC(context.Context, time.Duration) (int, error)
-	}); ok {
-		r.Host.GC = func(ctx context.Context) (int, error) { return gc.GC(ctx, BlobGrace) }
-	}
-	go r.Host.Maintain(ctx, 0, kern.Retain) // 存储清理：过期的待回复、已派发外发、trace 事件、无引用的工件
-	// 启动时派发一次发件箱：上次进程在提交之后、派发之前退出时留下的外发不必等到下一个回合结束。
-	go func() { _, _ = r.Host.FlushOutbox(ctx) }()
+	r.sleepAfter = o.SleepAfter
 	return r, nil
 }
 
 // Close 关闭进程作用域与总线（先插件后总线，与原 withRuntime 的 defer 顺序一致）。
 func (r *Runtime) Close() {
-	if r.sleepStop != nil {
-		r.sleepStop()
-		r.sleepStop = nil
+	if r.bgStop != nil {
+		r.bgStop()
+		r.bgStop = nil
 	}
 	if r.proc != nil {
 		r.proc.Close(context.Background())
@@ -193,74 +172,32 @@ type Built struct {
 	Model   string
 	Perms   *permission.Sessions // 未装 permission 插件时为 nil
 	Builder *assemble.Builder
-	ready   []assemble.ReadyFunc
+	wired   *assemble.Wired
 }
 
 // Ready 跑 ready 点位（构造器就绪后再跑：如工作组补投会打开领导会话），返回各自的错误。
-func (b *Built) Ready(ctx context.Context) []error {
-	var errs []error
-	for _, f := range b.ready {
-		if err := f(ctx); err != nil {
-			errs = append(errs, err)
-		}
-	}
-	return errs
-}
+func (b *Built) Ready(ctx context.Context) []error { return b.wired.Ready(ctx) }
 
-// BuildApp 收集点位、建会话构造器并构造应用接口层（不跑 ready，调用方在接好输出后调 Built.Ready）。
+// BuildApp 接线（assemble.Wire：会话构造器与 [kernel] 宿主参数）、构造应用接口层，再启动后台循环。
+// 不跑 ready，调用方在接好输出后调 Built.Ready。只跑一次性子命令（export / explain）的不调它，也就不起后台循环。
 func (r *Runtime) BuildApp(o AppOptions) (*Built, error) {
 	rt := r.Rt
 	if rt.Models == nil {
 		return nil, fmt.Errorf("profile 中没有 models 插件")
 	}
 	db := rt.Store.DB()
-	modelName := rt.Models.Model
 	var perms *permission.Sessions
 	if v, ok := rt.Asm.Value(permission.Service); ok {
 		perms, _ = v.(*permission.Sessions)
 	}
-	kern, err := assemble.ParseKernel(r.Profile.Kernel)
-	if err != nil {
-		return nil, fmt.Errorf("profile [kernel]: %w", err)
-	}
-	col, err := assemble.Collect(rt.Asm)
+	w, err := assemble.Wire(assemble.WireOptions{Asm: rt.Asm, Host: r.Host, DB: db, Blobs: rt.Store.Blobs(),
+		Models: rt.Models, Workdir: r.Root, Kernel: r.kern, Definitions: rt.Defs,
+		MaxSteps: o.MaxSteps, SleepAfter: r.sleepAfter, Hooks: o.Hooks})
 	if err != nil {
 		return nil, err
 	}
-	// 每回合开始的档位变化提示由 appapi 发 notice 事件。
-	// 组件登记的守卫规则（04 4.2、08 D4）：投递/建会话等内核点位在 Host 里执行。
-	r.Host.Guards = rt.Asm.GuardRules()
-	r.Host.Hooks.AfterTurn = func(id string, end session.EndReason) {
-		for _, f := range col.AfterTurn {
-			f(id, end)
-		}
-	}
-	maxSteps := o.MaxSteps
-	rb := &assemble.Builder{DB: db, Artifacts: rt.Store.Blobs(), Models: rt.Models.Hub, Model: modelName, Workdir: r.Root,
-		Policy: func() session.Policy {
-			pol := kern.Policy
-			if maxSteps >= 0 {
-				pol.MaxSteps = uint32(maxSteps)
-			}
-			return pol
-		},
-		Tools:     col.Tools,
-		Layers:    col.Layers,
-		Items:     col.Items,
-		Kernel:    &kern,
-		Compactor: col.Compactor, // 自动压缩与超限后的强制压缩（审查 P0-1）
-		// 会话定义来源：子智能体 / 工作组成员按内置模板名构造（T1b-2c）。
-		Definitions: rt.Defs,
-		// 状态提交登记（框架设计 12.5）：agent 每次调模型前收集变化的片段。
-		Statuses: col.Statuses,
-		// 使用配置原型（06 6.2）：定义里的 [use.*] 按它算成会话的 use_config。
-		Schemas: rt.Asm.AgentSchemas(),
-	}
-	rb.Hooks = o.Hooks
-	rb.Blocks = col.Blocks // 系统提示词由 prompt 插件提供（plugin-switch-plan §2.1）
-	// 应用接口层：设置会话构造器（顶层会话带委派 / 领导工具；子会话与工作组成员按 child 构造，深度 1）、
-	// 把提交事件接到总线、档位变化提示发 notice。
-	ao := appapi.Options{Host: r.Host, Bus: r.Bus, DB: db, Builder: rb, Model: modelName, Workdir: r.Root,
+	// 应用接口层：在构造器钩子上并入流式事件、把提交事件接到总线、档位变化提示发 notice。
+	ao := appapi.Options{Host: r.Host, Bus: r.Bus, DB: db, Builder: w.Builder, Model: rt.Models.Model, Workdir: r.Root,
 		Trusted: r.Trusted, Profile: r.Profile, Packages: r.Packages, UI: o.UI}
 	if perms != nil {
 		ao.Modes = PermModes{P: perms, Workdir: o.ModesWorkdir}
@@ -277,8 +214,8 @@ func (r *Runtime) BuildApp(o AppOptions) (*Built, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Built{API: api, DB: db, Model: modelName, Perms: perms, Builder: rb, ready: col.Ready}, nil
+	if r.bgStop == nil {
+		r.bgStop = w.Background()
+	}
+	return &Built{API: api, DB: db, Model: rt.Models.Model, Perms: perms, Builder: w.Builder, wired: w}, nil
 }
-
-// BlobGrace 工件回收的宽限期：没有引用的文件超过这么久未被触碰才删（约束清单「存储」）。
-const BlobGrace = 24 * time.Hour

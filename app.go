@@ -8,12 +8,10 @@ import (
 	"strings"
 
 	"ybase/appapi"
-	"ybase/runtime/agent"
 	"ybase/runtime/agentdef"
 	"ybase/runtime/assemble"
 	"ybase/runtime/component"
 	"ybase/runtime/mail"
-	"ybase/runtime/session"
 )
 
 // Meta 会话业务 meta（写进会话行，组件经 *Ctx 读）。
@@ -27,7 +25,9 @@ type Reply struct {
 	SessionID string
 }
 
-// Start 启动后台工作：打开存储、跑 ready 点位、接上应用接口层。
+// Start 启动组件、接上会话构造器与 [kernel] 宿主参数（assemble.Wire，与应用同一条路径）、
+// 接上应用接口层、跑 ready 点位，最后启动后台循环（兜底扫描、存储清理、启动时派发发件箱）。
+// 后台循环放在构造器接上之后：派发发件箱会打开会话，要用 Host.New（审查 P1-51）。
 func (a *App) Start(ctx context.Context) (err error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -42,14 +42,12 @@ func (a *App) Start(ctx context.Context) (err error) {
 		_ = scope.Close(ctx)
 		return fmt.Errorf("ybase: 启动组件: %w", err)
 	}
-	bgCtx, cancel := context.WithCancel(context.Background())
-	// 中途失败整体回滚：停后台协程、关组件作用域，再 Start 从头来（审查 P1-23：原先留着已启动的
+	// 中途失败整体回滚：关组件作用域，再 Start 从头来（审查 P1-23：原先留着已启动的
 	// 作用域和后台协程，再次 Start 会让组件启动两次）。
 	defer func() {
 		if err != nil {
-			cancel()
 			_ = scope.Close(context.WithoutCancel(ctx))
-			a.scope, a.sleepStop = nil, nil
+			a.scope = nil
 		}
 	}()
 	a.scope = scope
@@ -57,60 +55,22 @@ func (a *App) Start(ctx context.Context) (err error) {
 	if db == nil {
 		return fmt.Errorf("%w: 存储没有打开", ErrInvalid)
 	}
-	a.host.DB = db
-	a.host.SleepAfter = a.sleepAfter
-	a.sleepStop = cancel
-	if a.sleepAfter > 0 { // 休眠会话的兜底扫描（02 2.2）
-		go a.host.ScanLoop(bgCtx, a.sleepAfter)
-	}
-	go a.host.Maintain(bgCtx, 0, 0) // 存储清理：过期的待回复、已派发外发、trace 事件
-	// 启动时派发一次发件箱：上次进程在提交之后、派发之前退出时留下的外发。
-	go func() { _, _ = a.host.FlushOutbox(bgCtx) }()
-	kern, err := assemble.ParseKernel(nil)
+	w, err := assemble.Wire(assemble.WireOptions{Asm: a.asm, Host: a.host, DB: db, Blobs: a.handle.Blobs(),
+		Models: a.models, Workdir: a.workdir, Kernel: a.kern, Definitions: a.defs, MaxSteps: -1})
 	if err != nil {
-		return fmt.Errorf("ybase: 内核配置: %w", err)
+		return fmt.Errorf("ybase: 接线: %w", err)
 	}
-	col, err := assemble.Collect(a.asm)
-	if err != nil {
-		return fmt.Errorf("ybase: 收集点位: %w", err)
-	}
-	// 组件登记的守卫规则（04 4.2、08 D4）。
-	a.host.Guards = a.asm.GuardRules()
-	a.host.Hooks.AfterTurn = func(id string, end session.EndReason) {
-		for _, f := range col.AfterTurn {
-			f(id, end)
-		}
-	}
-	rb := &assemble.Builder{
-		DB:          db,
-		Artifacts:   a.handle.Blobs(),
-		Models:      a.models.Hub,
-		Model:       a.models.Model,
-		Workdir:     a.workdir,
-		Policy:      func() session.Policy { return kern.Policy },
-		Tools:       col.Tools,
-		Layers:      col.Layers,
-		Blocks:      col.Blocks,
-		Items:       col.Items,
-		Kernel:      &kern,
-		Definitions: a.defs,
-		Statuses:    col.Statuses,
-		Schemas:     a.asm.AgentSchemas(),
-		Compactor:   col.Compactor, // 自动压缩与超限后的强制压缩（审查 P0-1）
-	}
-	rb.Hooks = func(*assemble.SessionCx) agent.Hooks { return agent.Hooks{} }
 	if _, err := appapi.New(appapi.Options{
-		Host: a.host, Bus: a.bus, DB: db, Builder: rb,
+		Host: a.host, Bus: a.bus, DB: db, Builder: w.Builder,
 		Model: a.models.Model, Workdir: a.workdir, Trusted: true,
 	}); err != nil {
 		return fmt.Errorf("ybase: 应用接口: %w", err)
 	}
-	for _, f := range col.Ready {
-		if err := f(ctx); err != nil {
-			return fmt.Errorf("ybase: ready: %w", err)
-		}
+	if errs := w.Ready(ctx); len(errs) > 0 {
+		return fmt.Errorf("ybase: ready: %w", errors.Join(errs...))
 	}
-	a.builder = rb
+	a.builder = w.Builder
+	a.bgStop = w.Background()
 	a.started = true
 	return nil
 }
@@ -124,7 +84,7 @@ func (a *App) Close(ctx context.Context) error {
 	}
 	a.closed = true
 	scope := a.scope
-	stop := a.sleepStop
+	stop := a.bgStop
 	a.mu.Unlock()
 	var errs []error
 	if stop != nil {
@@ -158,6 +118,9 @@ func (a *App) Ask(ctx context.Context, agentName, text string, meta Meta) (*Repl
 	if !started || closed {
 		return nil, ErrNotStarted
 	}
+	if err := checkTenant(ctx); err != nil {
+		return nil, err
+	}
 	if strings.TrimSpace(agentName) == "" {
 		return nil, fmt.Errorf("%w: 定义名为空", ErrInvalid)
 	}
@@ -187,36 +150,39 @@ func (a *App) Ask(ctx context.Context, agentName, text string, meta Meta) (*Repl
 		if errors.Is(err, agentdef.ErrNotFound) {
 			return nil, fmt.Errorf("%w: 定义 %s", ErrNotFound, agentName)
 		}
-		return nil, err
+		return nil, wrapErr(err)
 	}
 	hd, ok := a.host.Get(id)
 	if !ok {
 		var err error
 		if hd, err = a.host.Open(ctx, id); err != nil {
-			return nil, err
+			return nil, wrapErr(err)
 		}
 	}
 	if err := hd.Wait(); err != nil {
-		return nil, err
+		return nil, wrapErr(err)
 	}
 	out, err := lastAssistant(ctx, a.handle, id)
 	if err != nil {
-		return nil, err
+		return nil, wrapErr(err)
 	}
 	return &Reply{Text: out, SessionID: id}, nil
 }
 
 // History 读一个会话的条目（断言与回放用）。
-func (a *App) History(ctx context.Context, id string) ([]*session.Entry, error) {
+func (a *App) History(ctx context.Context, id string) ([]*Entry, error) {
 	a.mu.Lock()
 	handle, started := a.handle, a.started
 	a.mu.Unlock()
 	if !started || handle == nil {
 		return nil, ErrNotStarted
 	}
+	if err := checkTenant(ctx); err != nil {
+		return nil, err
+	}
 	l, err := handle.db.Load(ctx, id, nil)
 	if err != nil {
-		return nil, err
+		return nil, wrapErr(err)
 	}
 	if l == nil {
 		return nil, fmt.Errorf("%w: 会话 %s", ErrNotFound, id)
