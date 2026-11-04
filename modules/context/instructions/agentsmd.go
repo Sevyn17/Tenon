@@ -24,10 +24,13 @@ const (
 
 // Instructions 项目指令（AGENTS.md）装载：会话基线 + 工具到达更深目录时追加。
 type Instructions struct {
-	Workdir  string
-	Home     string // 用户全局目录（含 AGENTS.md）；空 = 不读
-	MaxBytes int
-	MaxFile  int
+	Workdir string
+	Home    string // 用户全局目录（含 AGENTS.md）；空 = 不读
+	// Untrusted 项目不受信：只读用户全局 AGENTS.md，不读项目里的指令文件、不做嵌套发现
+	// （2026-11-04 审查 P1-4：与 permission / mcp 的项目信任语义一致，防止不受信仓库注入系统提示）。
+	Untrusted bool
+	MaxBytes  int
+	MaxFile   int
 
 	mu     sync.Mutex
 	loaded map[string]bool // 已装载文件（绝对路径）
@@ -184,8 +187,10 @@ func (in *Instructions) Baseline() (string, error) {
 			files = append(files, p)
 		}
 	}
-	for _, d := range chain(root, in.Workdir) {
-		files = append(files, dirFiles(d)...)
+	if !in.Untrusted {
+		for _, d := range chain(root, in.Workdir) {
+			files = append(files, dirFiles(d)...)
+		}
 	}
 	text := in.render(files)
 	if text == "" {
@@ -210,7 +215,7 @@ func (in *Instructions) Block() (*session.SystemBlock, error) {
 
 // Discover 目标路径所在目录链（工作目录之下）中新出现的指令文件；无则空串。
 func (in *Instructions) Discover(target string) string {
-	if target == "" {
+	if target == "" || in.Untrusted {
 		return ""
 	}
 	if !filepath.IsAbs(target) {

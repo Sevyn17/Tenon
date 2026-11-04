@@ -83,7 +83,7 @@ func (t *tail) String() string {
 
 func newStdio(s Server) (transport, error) {
 	cmd := exec.Command(s.Command, s.Args...)
-	cmd.Env = scrubEnv(os.Environ(), s.Env)
+	cmd.Env = scrubEnvWith(os.Environ(), s.Env, s.expand)
 	cmd.Dir = s.Cwd
 	t := &stdioTransport{cmd: cmd, wait: map[int64]chan message{}, stderr: &tail{}, done: make(chan struct{})}
 	cmd.Stderr = t.stderr
@@ -177,7 +177,7 @@ func (t *stdioTransport) call(ctx context.Context, id int64, method string, para
 	t.mu.Lock()
 	if t.dead {
 		t.mu.Unlock()
-		return nil, t.deadErr()
+		return nil, errUnsent
 	}
 	t.wait[id] = ch
 	t.mu.Unlock()
@@ -185,7 +185,7 @@ func (t *stdioTransport) call(ctx context.Context, id int64, method string, para
 		t.mu.Lock()
 		delete(t.wait, id)
 		t.mu.Unlock()
-		return nil, t.deadErr()
+		return nil, errUnsent
 	}
 	select {
 	case m, ok := <-ch:
@@ -249,7 +249,7 @@ func (h *httpTransport) post(ctx context.Context, body []byte) (*http.Response, 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
 	for k, v := range h.s.Headers {
-		req.Header.Set(k, os.ExpandEnv(v))
+		req.Header.Set(k, h.s.expand(v))
 	}
 	h.mu.Lock()
 	sess, ver := h.session, h.version
@@ -274,7 +274,7 @@ func (h *httpTransport) post(ctx context.Context, body []byte) (*http.Response, 
 	}
 	if resp.StatusCode == http.StatusNotFound && sess != "" { // 会话过期：重新初始化
 		resp.Body.Close()
-		return nil, fmt.Errorf("%w：会话已过期", errDead)
+		return nil, fmt.Errorf("%w：会话已过期", errUnsent) // 服务端拒收，未执行
 	}
 	if resp.StatusCode >= 300 {
 		b, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<10))

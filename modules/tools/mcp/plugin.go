@@ -157,7 +157,8 @@ func (p *plug) addPackages(cx *component.Registrar) error {
 				}
 			}
 			p.cfg.Server = append(p.cfg.Server, Server{Name: s.Name, Command: pkgs.Expand(s.Command, k.Dir), Args: args,
-				Env: env, Cwd: cwd, URL: s.URL, Headers: s.Headers, Timeout: s.Timeout, Trust: s.Trust, Sandbox: s.Sandbox})
+				Env: env, Cwd: cwd, URL: s.URL, Headers: s.Headers, Timeout: s.Timeout, Trust: s.Trust, Sandbox: s.Sandbox,
+				noExpand: true})
 		}
 	}
 	return nil

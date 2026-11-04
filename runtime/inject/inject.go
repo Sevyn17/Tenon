@@ -116,10 +116,10 @@ func Collect(ctx *callctx.Ctx, regs []Reg) []Item {
 			if it.Key == "" {
 				it.Key = strings.TrimSuffix(r.Key, "*")
 			}
-			if it.Source == "" {
-				it.Source = r.Owner
-			}
-			if it.Trust == "" {
+			// 来源与信任由内核定（12.5）：来源一律是登记者；信任只能由组件降成 external（转述外部内容），
+			// 其余一律 internal——组件不能冒充别的来源，也不能写出内核不认识的信任值（2026-11-04 审查 P1-2）。
+			it.Source = r.Owner
+			if it.Trust != TrustExternal {
 				it.Trust = TrustInternal
 			}
 			out = append(out, it)

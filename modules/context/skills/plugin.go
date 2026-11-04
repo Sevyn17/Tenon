@@ -17,7 +17,7 @@ type plug struct{}
 func init() { component.Register("skills", func() component.Component { return &plug{} }) }
 
 func (*plug) Meta() component.Meta {
-	return component.Meta{Name: "skills", Version: "0.1.0", Effects: []string{component.EffectTools, component.EffectSystemPrompt}, Requires: []string{assemble.ServiceWorkdir, assemble.ServiceUI, "?" + pkgs.Service}}
+	return component.Meta{Name: "skills", Version: "0.1.0", Effects: []string{component.EffectTools, component.EffectSystemPrompt}, Requires: []string{assemble.ServiceWorkdir, assemble.ServiceUI, "?" + assemble.ServiceTrust, "?" + pkgs.Service}}
 }
 
 func (*plug) Setup(cx *component.Registrar) error {
@@ -44,7 +44,7 @@ func (*plug) Setup(cx *component.Registrar) error {
 		cx.Register(assemble.PointPermItems, "skills", it)
 	}
 	// 技能索引装配期扫一次，各会话共用（工具与系统块读同一份）。
-	s := NewSkills(root, extra...)
+	s := NewSkillsTrust(root, assemble.ProjectTrusted(cx), extra...) // 不受信项目不读项目技能（审查 P1-4）
 	for _, w := range s.Warnings {
 		ui.Warn("技能", w)
 	}

@@ -46,6 +46,25 @@ type Hook struct {
 	Sandbox string `toml:"sandbox"`
 
 	re *regexp.Regexp
+	// scrub 第三方来源（插件包、项目目录）：子进程环境去掉像密钥的变量与 YBASE_* 变量
+	// （2026-11-04 审查 P1-6：原先钩子拿到完整环境含 API key，mcp 却脱敏）。用户级钩子不脱敏。
+	scrub bool
+}
+
+// secretName 像密钥的环境变量名（与 mcp 的 scrubEnv 同规则；组件之间不互相 import，各留一份）。
+var secretName = regexp.MustCompile(`(?i)KEY|PASSWORD|SECRET|TOKEN`)
+
+// scrubEnv 去掉像密钥的变量与 YBASE_* 变量。
+func scrubEnv(environ []string) []string {
+	out := make([]string, 0, len(environ))
+	for _, kv := range environ {
+		k, _, _ := strings.Cut(kv, "=")
+		if secretName.MatchString(k) || strings.HasPrefix(strings.ToUpper(k), "YBASE_") {
+			continue
+		}
+		out = append(out, kv)
+	}
+	return out
 }
 
 // Config 钩子配置文件。
@@ -230,7 +249,11 @@ func (r *Runner) run(ctx context.Context, h *Hook, in Input) Result {
 	cmd := exec.CommandContext(ctx, a[0], a[1:]...)
 	cmd.Dir = r.Cwd
 	cmd.Stdin = bytes.NewReader(body)
-	cmd.Env = append(os.Environ(), "YBASE_HOOK_EVENT="+in.Event, "YBASE_SESSION_ID="+in.SessionID)
+	env := os.Environ()
+	if h.scrub {
+		env = scrubEnv(env)
+	}
+	cmd.Env = append(env, "YBASE_HOOK_EVENT="+in.Event, "YBASE_SESSION_ID="+in.SessionID)
 	cmd.WaitDelay = 2 * time.Second
 	var so, se capBuf
 	cmd.Stdout, cmd.Stderr = &so, &se

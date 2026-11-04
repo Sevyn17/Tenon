@@ -58,6 +58,9 @@ func (*plug) Setup(cx *component.Registrar) error {
 		if err != nil {
 			return err
 		}
+		for i := range c.Hook {
+			c.Hook[i].scrub = true // 项目目录来源：不给宿主密钥
+		}
 		cs = append(cs, c)
 	}
 	// 插件包里的钩子（已由 runtime/pkgs 校验）：排在用户级、项目级之后。
@@ -68,7 +71,7 @@ func (*plug) Setup(cx *component.Registrar) error {
 	for _, k := range ps {
 		var c Config
 		for _, h := range k.Hook {
-			hk := Hook{Event: h.Event, Matcher: h.Matcher, Command: pkgs.Expand(h.Command, k.Dir), Timeout: h.Timeout, Sandbox: h.Sandbox}
+			hk := Hook{Event: h.Event, Matcher: h.Matcher, Command: pkgs.Expand(h.Command, k.Dir), Timeout: h.Timeout, Sandbox: h.Sandbox, scrub: true}
 			if h.Matcher != "" {
 				re, err := regexp.Compile("^(?:" + h.Matcher + ")$")
 				if err != nil {

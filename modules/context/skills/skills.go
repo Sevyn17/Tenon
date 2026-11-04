@@ -44,14 +44,26 @@ type Skills struct {
 
 // NewSkills 默认根：项目 .ybase/skills、.agents/skills，再用户 ~/.ybase/skills，最后 extra（插件包的技能目录）。
 func NewSkills(workdir string, extra ...string) *Skills {
+	return newSkills(workdir, true, extra...)
+}
+
+// NewSkillsTrust 同 NewSkills；trusted=false（项目不受信）时不读项目里的 .ybase/skills、.agents/skills，
+// 只读用户级与插件包的技能（2026-11-04 审查 P1-4：与 permission / mcp 的项目信任语义一致）。
+func NewSkillsTrust(workdir string, trusted bool, extra ...string) *Skills {
+	return newSkills(workdir, trusted, extra...)
+}
+
+func newSkills(workdir string, trusted bool, extra ...string) *Skills {
 	workdir, _ = filepath.Abs(workdir)
 	root, err := projectRoot(workdir)
 	if err != nil {
 		root = workdir
 	}
 	roots := []string{}
-	for _, d := range []string{workdir, root} {
-		roots = append(roots, filepath.Join(d, ".ybase", "skills"), filepath.Join(d, ".agents", "skills"))
+	if trusted {
+		for _, d := range []string{workdir, root} {
+			roots = append(roots, filepath.Join(d, ".ybase", "skills"), filepath.Join(d, ".agents", "skills"))
+		}
 	}
 	if h := userHome(); h != "" {
 		roots = append(roots, filepath.Join(h, "skills"))

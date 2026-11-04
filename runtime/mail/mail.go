@@ -157,7 +157,12 @@ func (e *Envelope) Normalize() error {
 		return fmt.Errorf("%w: 回信缺 corr", ErrInvalid)
 	}
 	if e.Origin == "" {
-		e.Origin = OriginHuman
+		// 缺省按发信方推导：只有 human: 地址才默认是鉴权后的用户；其余一律按智能体（较低信任），
+		// 不能因调用方漏写而失败即放开（2026-11-04 审查 P1-1）。
+		e.Origin = OriginAgent
+		if e.From.Kind == AddrHuman {
+			e.Origin = OriginHuman
+		}
 	}
 	if e.ID == "" {
 		e.ID = NewID()

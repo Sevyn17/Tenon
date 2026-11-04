@@ -134,3 +134,26 @@ func fakeRead(root string) *toolhub.Tool {
 
 // kctx 测试用调用上下文（框架设计 04 §4.4）。
 func kctx(id string) *callctx.Ctx { return callctx.New(callctx.Options{SessionID: id}) }
+
+// 不受信项目只读用户全局 AGENTS.md，不读项目指令、不做嵌套发现（审查 P1-4）。
+func TestInstructionsUntrustedProject(t *testing.T) {
+	root, home := t.TempDir(), t.TempDir()
+	if err := os.Mkdir(filepath.Join(root, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	put(t, filepath.Join(home, "AGENTS.md"), "全局规则")
+	put(t, filepath.Join(root, "AGENTS.md"), "项目注入")
+	put(t, filepath.Join(root, "sub", "AGENTS.md"), "子目录注入")
+	put(t, filepath.Join(root, "sub", "x.go"), "package x")
+	in := &Instructions{Workdir: root, Home: home, Untrusted: true}
+	text, err := in.Baseline()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(text, "全局规则") || strings.Contains(text, "项目注入") {
+		t.Fatalf("不受信项目基线应只有全局规则:\n%s", text)
+	}
+	if d := in.Discover("sub/x.go"); d != "" {
+		t.Fatalf("不受信项目不应嵌套发现: %q", d)
+	}
+}

@@ -16,14 +16,15 @@ type plug struct{}
 func init() { component.Register("instructions", func() component.Component { return &plug{} }) }
 
 func (*plug) Meta() component.Meta {
-	return component.Meta{Name: "instructions", Version: "0.1.0", Default: true, Effects: []string{component.EffectSystemPrompt, component.EffectRewriteResult}, Requires: []string{assemble.ServiceWorkdir}}
+	return component.Meta{Name: "instructions", Version: "0.1.0", Default: true, Effects: []string{component.EffectSystemPrompt, component.EffectRewriteResult}, Requires: []string{assemble.ServiceWorkdir, "?" + assemble.ServiceTrust}}
 }
 
-func get(sc *assemble.SessionCx, root string) *Instructions {
+func get(sc *assemble.SessionCx, root string, trusted bool) *Instructions {
 	if in, ok := sc.Values[valueKey].(*Instructions); ok {
 		return in
 	}
 	in := NewInstructions(root)
+	in.Untrusted = !trusted
 	sc.Values[valueKey] = in
 	return in
 }
@@ -33,12 +34,13 @@ func (*plug) Setup(cx *component.Registrar) error {
 	if err != nil {
 		return err
 	}
+	trusted := assemble.ProjectTrusted(cx) // 不受信项目：只读用户全局 AGENTS.md（审查 P1-4）
 	cx.Register(assemble.PointSessionLayer, "instructions", assemble.LayerEntry{Order: 20,
 		Func: func(sc *assemble.SessionCx) ([]toolhub.Layer, error) {
-			return []toolhub.Layer{get(sc, root).Layer()}, nil
+			return []toolhub.Layer{get(sc, root, trusted).Layer()}, nil
 		}})
 	cx.Register(assemble.PointSystemBlock, "instructions", assemble.BlockEntry{Order: 10,
-		Func: func(sc *assemble.SessionCx) (*session.SystemBlock, error) { return get(sc, root).Block() }})
+		Func: func(sc *assemble.SessionCx) (*session.SystemBlock, error) { return get(sc, root, trusted).Block() }})
 	return nil
 }
 

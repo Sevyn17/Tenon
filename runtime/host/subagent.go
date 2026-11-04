@@ -28,12 +28,27 @@ func (h *Host) Get(id string) (Handle, bool) {
 // Spawn 新建（或续用）子会话 id，投递 task，等回合结束，返回最后一条助手文本。
 // f 为子会话的 agent 工厂（通常不含委派工具：深度 1）；def 是子会话内置定义名（T1b-2c）。
 // ctx 取消 → 取消子回合。
+// 子回合的可信度跟随父会话当前回合（Spawn 在父回合内同步调用，读到的就是派出时的值）。
 func (h *Host) Spawn(ctx context.Context, parent, id, def string, f Factory, task string) (string, error) {
-	return h.SpawnAs(ctx, parent, id, "subagent", def, f, task)
+	out, _, err := h.SpawnAs(ctx, parent, id, "subagent", def, f, task, h.Untrusted(parent))
+	return out, err
 }
 
-// SpawnAs 同 Spawn，子会话 origin 可选（subagent / member）。
-func (h *Host) SpawnAs(ctx context.Context, parent, id, origin, def string, f Factory, task string) (string, error) {
+// Untrusted 已打开会话的当前回合是否含不可信输入（未打开返回 false）。
+func (h *Host) Untrusted(id string) bool {
+	hd, ok := h.Get(id)
+	return ok && hd.Agent().Ctx.Untrusted()
+}
+
+// SpawnAs 同 Spawn，子会话 origin 可选（subagent / member）。untrusted 为派出时父回合的可信度：
+// 不可信回合派出的任务按不可信投给子会话，只降不升（2026-11-04 审查 P1-3：原先一律可信，
+// 网页内容可借子会话"洗白"成可信回合）。返回子回合结束时是否含不可信输入，供调用方回投结果时沿用。
+func (h *Host) SpawnAs(ctx context.Context, parent, id, origin, def string, f Factory, task string, untrusted bool) (string, bool, error) {
+	out, err := h.spawn(ctx, parent, id, origin, def, f, task, untrusted)
+	return out, untrusted || h.Untrusted(id), err
+}
+
+func (h *Host) spawn(ctx context.Context, parent, id, origin, def string, f Factory, task string, untrusted bool) (string, error) {
 	existed, err := h.DB.Exists(ctx, id)
 	if err != nil {
 		return "", err
@@ -71,7 +86,7 @@ func (h *Host) SpawnAs(ctx context.Context, parent, id, origin, def string, f Fa
 			return "", err
 		}
 	}
-	if err := hd.Do(Command{Kind: Send, ItemID: NewItemID(), Text: task, Source: "agent"}); err != nil {
+	if err := hd.Do(Command{Kind: Send, ItemID: NewItemID(), Text: task, Source: "agent", Trust: TrustOf(untrusted)}); err != nil {
 		return "", err
 	}
 	done := make(chan error, 1)
@@ -104,4 +119,12 @@ func lastAssistant(ms []session.Message) (string, error) {
 		}
 	}
 	return "", errors.New("子智能体没有给出文本结果")
+}
+
+// TrustOf 可信度标记（Command.Trust）：true → "untrusted"，false → ""（缺省可信）。
+func TrustOf(untrusted bool) string {
+	if untrusted {
+		return "untrusted"
+	}
+	return ""
 }

@@ -251,7 +251,7 @@ func TestRecoverRedelivers(t *testing.T) {
 		t.Fatalf("二次 Recover = %d %v", n, err)
 	}
 	// 同 item id 重投被 inbox 拒绝（幂等）
-	if err := g.deliverID(ctx, "L", "member:a", "item-a", "dup"); err != nil {
+	if err := g.deliverID(ctx, "L", "member:a", "item-a", "dup", false); err != nil {
 		t.Fatal(err)
 	}
 	if err := hd.Wait(); err != nil {

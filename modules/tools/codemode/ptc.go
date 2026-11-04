@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"runtime/metrics"
 	"sort"
 	"strings"
 	"sync"
@@ -27,7 +28,17 @@ const (
 	MaxOutput     = 50 << 10 // 输出（console + 返回值）上限
 	MaxSubCalls   = 200      // 单次程序的子调用上限
 	MaxCodeLength = 64 << 10
+	// MaxCallStack JS 调用栈深度上限：无限递归立即报错，不跑到超时（2026-11-04 审查 P1-10）。
+	MaxCallStack = 1000
+	// MaxHeapGrowth 程序运行期间进程堆增长上限：超过即中断，防止一段程序把整个进程撑爆（P1-10）。
+	// 按进程堆统计（goja 没有按 VM 的内存计数），阈值放宽，并发的其他工作不至于误判。
+	MaxHeapGrowth = 512 << 20
+	// heapCheck 堆检查间隔。
+	heapCheck = 50 * time.Millisecond
 )
+
+// maxHeap 实际生效的堆增长上限（测试可调小）。
+var maxHeap uint64 = MaxHeapGrowth
 
 // Tool 构造 run_code。子调用走本次调用所在的 tool-hub（toolhub.Cx.Hub）。
 func Tool() *toolhub.Tool {
@@ -84,6 +95,8 @@ var (
 	ErrAbort   = errors.New("[abort] 回合已取消")
 	ErrOutput  = errors.New("[output-limit] 输出超过上限")
 	ErrCalls   = errors.New("[call-limit] 子调用次数超过上限")
+	ErrStack   = errors.New("[stack-limit] 调用栈过深（可能是无限递归）")
+	ErrMemory  = errors.New("[memory-limit] 程序占用内存超过上限")
 )
 
 // Run 执行程序，返回输出文本。出错时 out 为已产生的输出（可空），err 为分类后的错误。
@@ -92,6 +105,7 @@ func Run(ctx context.Context, hub *toolhub.Hub, cx *toolhub.Cx, code string, d t
 	defer cancel()
 	vm := goja.New()
 	vm.SetFieldNameMapper(goja.UncapFieldNameMapper())
+	vm.SetMaxCallStackSize(MaxCallStack)
 
 	var (
 		mu    sync.Mutex
@@ -115,13 +129,26 @@ func Run(ctx context.Context, hub *toolhub.Hub, cx *toolhub.Cx, code string, d t
 		}
 		vm.Interrupt(err)
 	}
-	// 外部取消 / 超时中断 VM。
+	// 外部取消 / 超时中断 VM；运行期间按间隔查堆增长，超限中断。
+	base := heapBytes()
 	go func() {
-		<-ctx.Done()
-		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			vm.Interrupt(ErrTimeout)
-		} else {
-			vm.Interrupt(ErrAbort)
+		tk := time.NewTicker(heapCheck)
+		defer tk.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+					vm.Interrupt(ErrTimeout)
+				} else {
+					vm.Interrupt(ErrAbort)
+				}
+				return
+			case <-tk.C:
+				if heapBytes() > base+maxHeap {
+					vm.Interrupt(ErrMemory)
+					return
+				}
+			}
 		}
 	}()
 
@@ -189,6 +216,10 @@ func Run(ctx context.Context, hub *toolhub.Hub, cx *toolhub.Cx, code string, d t
 		if fatal != nil {
 			return out, fatal
 		}
+		var so *goja.StackOverflowError
+		if errors.As(err, &so) {
+			return out, ErrStack
+		}
 		var ex *goja.Exception
 		if errors.As(err, &ex) {
 			return out, fmt.Errorf("[exception] %s", ex.Error())
@@ -225,6 +256,16 @@ func available(hub *toolhub.Hub, cx *toolhub.Cx) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// heapBytes 进程堆上存活对象的字节数（runtime/metrics，不停顿全世界）。
+func heapBytes() uint64 {
+	s := []metrics.Sample{{Name: "/memory/classes/heap/objects:bytes"}}
+	metrics.Read(s)
+	if s[0].Value.Kind() != metrics.KindUint64 {
+		return 0
+	}
+	return s[0].Value.Uint64()
 }
 
 func show(vm *goja.Runtime, v goja.Value) string {

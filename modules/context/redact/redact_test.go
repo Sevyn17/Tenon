@@ -23,6 +23,11 @@ func TestString(t *testing.T) {
 		{"DATABASE_URL postgresql://bus:Pa55w0rd!x@localhost:5432/bus", "DATABASE_URL postgresql://bus:" + Placeholder + "@localhost:5432/bus"},
 		{"redis://:s3cretpass@127.0.0.1:6379", "redis://:" + Placeholder + "@127.0.0.1:6379"},
 		{"-----BEGIN RSA PRIVATE KEY-----\nMIIE\n-----END RSA PRIVATE KEY-----", Placeholder},
+		// JSON / YAML 常见形状（审查 P1-11：原先键名带引号、引号值带空格都漏）。
+		{`{"api_key": "abcd1234efgh5678"}`, `{"api_key": "` + Placeholder + `"}`},
+		{`"x-api-key": "zzzzzzzzzzzzzzzz"`, `"x-api-key": "` + Placeholder + `"`},
+		{`password: "correct horse battery"`, `password: "` + Placeholder + `"`},
+		{`'db_password': 'p4ss w0rd!!'`, `'db_password': '` + Placeholder + `'`},
 	}
 	for _, c := range cases {
 		if got, n := r.String(c.in); got != c.want || n == 0 {
@@ -43,6 +48,17 @@ func TestFromEnv(t *testing.T) {
 	}
 	if got, _ := r.String("/usr/bin:/bin/abcdefgh abc"); got != "/usr/bin:/bin/abcdefgh abc" {
 		t.Fatal("非密钥变量不应替换：", got)
+	}
+	// 名字像密钥、值却是路径的变量不收（审查 P1-12：否则该路径处处变占位符，WriteGuard 再拒写）。
+	r = FromEnv([]string{`SSH_KEY_DIR=C:\Users\me\.ssh`, "KEYCHAIN_PATH=/Users/me/Library/kc",
+		"GPG_KEYFILE=secring.gpg", `MONKEY=D:\work\repo`, "API_KEY=abcd1234efgh"})
+	for _, s := range []string{`C:\Users\me\.ssh`, "/Users/me/Library/kc", "secring.gpg", `D:\work\repo`} {
+		if got, _ := r.String(s); got != s {
+			t.Errorf("路径值不应当成密钥：%q → %q", s, got)
+		}
+	}
+	if got, _ := r.String("k=abcd1234efgh"); got != "k="+Placeholder {
+		t.Fatal("真正的密钥仍应替换：", got)
 	}
 }
 

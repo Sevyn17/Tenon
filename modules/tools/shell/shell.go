@@ -109,7 +109,9 @@ type Shell struct {
 }
 
 type job struct {
-	id      string
+	id string
+	// session 启动它的会话：只有同一会话能读 / 杀（2026-11-04 审查 P1-9：原先键全局，A 会话能操作 B 的 job）。
+	session string
 	command string
 	buf     *tailBuf
 	read    int64
@@ -382,7 +384,7 @@ func failText(s string) toolhub.Output {
 
 func (s *Shell) startJob(command string, cx *toolhub.Cx, raw json.RawMessage) (toolhub.Output, error) {
 	ctx, cancel := context.WithCancel(context.Background())
-	j := &job{command: command, buf: &tailBuf{cap: JobBuffer}, done: make(chan struct{}), cancel: cancel, started: time.Now()}
+	j := &job{session: sessionOf(cx), command: command, buf: &tailBuf{cap: JobBuffer}, done: make(chan struct{}), cancel: cancel, started: time.Now()}
 	cmd := s.command(ctx, command, j.buf)
 	cleanup, err := s.confine(cmd, cx, raw)
 	if err != nil {
@@ -408,14 +410,34 @@ func (s *Shell) startJob(command string, cx *toolhub.Cx, raw json.RawMessage) (t
 	return toolhub.Text(fmt.Sprintf("已在后台启动 %s（pid %d）。用 job_output 读取输出，job_kill 终止。", j.id, cmd.Process.Pid)), nil
 }
 
-func (s *Shell) lookup(id string) (*job, bool) {
+func sessionOf(cx *toolhub.Cx) string {
+	if cx == nil {
+		return ""
+	}
+	return cx.SessionID
+}
+
+// lookup 取本会话的 job；别的会话的 job 按不存在处理。
+func (s *Shell) lookup(id, session string) (*job, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	j, ok := s.jobs[id]
-	return j, ok
+	if !ok || j.session != session {
+		return nil, false
+	}
+	return j, true
 }
 
-func (s *Shell) callOutput(ctx context.Context, _ *toolhub.Cx, raw json.RawMessage) (toolhub.Output, error) {
+// forget 已结束、输出已读完的 job 从表里删掉（每个占最多 JobBuffer 字节，原先从不回收）。
+func (s *Shell) forget(j *job) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.jobs[j.id] == j {
+		delete(s.jobs, j.id)
+	}
+}
+
+func (s *Shell) callOutput(ctx context.Context, cx *toolhub.Cx, raw json.RawMessage) (toolhub.Output, error) {
 	var a struct {
 		ID      string `json:"id"`
 		Wait    bool   `json:"wait"`
@@ -424,9 +446,9 @@ func (s *Shell) callOutput(ctx context.Context, _ *toolhub.Cx, raw json.RawMessa
 	if err := json.Unmarshal(raw, &a); err != nil {
 		return toolhub.Errorf("参数不合法：%v", err), nil
 	}
-	j, ok := s.lookup(a.ID)
+	j, ok := s.lookup(a.ID, sessionOf(cx))
 	if !ok {
-		return toolhub.Errorf("job %s 不存在（进程重启后后台任务已丢失）", a.ID), nil
+		return toolhub.Errorf("job %s 不存在（进程重启后后台任务已丢失；已结束的 job 读完输出后即清理）", a.ID), nil
 	}
 	if a.Wait {
 		to := JobWait
@@ -451,6 +473,13 @@ func (s *Shell) callOutput(ctx context.Context, _ *toolhub.Cx, raw json.RawMessa
 	}
 	select {
 	case <-j.done:
+		// 已结束：上面读到的就是剩余的全部输出，交出后清理。
+		s.mu.Lock()
+		rest, _, _ := j.buf.since(j.read)
+		s.mu.Unlock()
+		if rest == "" {
+			s.forget(j)
+		}
 		status := fmt.Sprintf("[%s 已结束，退出码 %d]", j.id, j.exit)
 		if j.err != nil {
 			status = fmt.Sprintf("[%s 异常结束：%v]", j.id, j.err)
@@ -461,19 +490,20 @@ func (s *Shell) callOutput(ctx context.Context, _ *toolhub.Cx, raw json.RawMessa
 	}
 }
 
-func (s *Shell) callKill(_ context.Context, _ *toolhub.Cx, raw json.RawMessage) (toolhub.Output, error) {
+func (s *Shell) callKill(_ context.Context, cx *toolhub.Cx, raw json.RawMessage) (toolhub.Output, error) {
 	var a struct {
 		ID string `json:"id"`
 	}
 	if err := json.Unmarshal(raw, &a); err != nil {
 		return toolhub.Errorf("参数不合法：%v", err), nil
 	}
-	j, ok := s.lookup(a.ID)
+	j, ok := s.lookup(a.ID, sessionOf(cx))
 	if !ok {
 		return toolhub.Errorf("job %s 不存在", a.ID), nil
 	}
 	select {
 	case <-j.done:
+		s.forget(j)
 		return toolhub.Text(fmt.Sprintf("%s 早已结束（退出码 %d）", j.id, j.exit)), nil
 	default:
 	}
@@ -483,6 +513,7 @@ func (s *Shell) callKill(_ context.Context, _ *toolhub.Cx, raw json.RawMessage) 
 	case <-time.After(5 * time.Second):
 		return toolhub.Errorf("已发送终止信号，%s 5 秒内未退出", j.id), nil
 	}
+	s.forget(j)
 	return toolhub.Text(fmt.Sprintf("已终止 %s", j.id)), nil
 }
 

@@ -51,6 +51,11 @@ func runFake(mode string) {
 	case "fail":
 		os.Stderr.WriteString("boom")
 		os.Exit(3)
+	case "envkey": // 能看到宿主密钥就阻止（脱敏测试）
+		if os.Getenv("HOOKTEST_API_KEY") != "" {
+			os.Stderr.WriteString("看到了密钥")
+			os.Exit(2)
+		}
 	}
 	os.Exit(0)
 }
@@ -213,5 +218,18 @@ func TestPreBlocksNativeExit2ThroughShell(t *testing.T) {
 	out, ran := call(t, r.Layers(), "shell", ok)
 	if ran || out.Status != session.ToolError || !strings.Contains(text(out), "禁止删除") {
 		t.Fatalf("原生程序退出码 2 应阻止: ran=%v out=%q", ran, text(out))
+	}
+}
+
+// 第三方来源（项目目录、插件包）的钩子拿不到宿主密钥；用户级钩子照常（审查 P1-6）。
+func TestThirdPartyHookEnvScrubbed(t *testing.T) {
+	t.Setenv("HOOKTEST_API_KEY", "sk-host")
+	r, _ := runner(t, Hook{Event: PreToolUse, Command: "envkey", scrub: true})
+	if _, ran := call(t, r.Layers(), "shell", ok); !ran {
+		t.Fatal("第三方钩子不应看到宿主密钥")
+	}
+	r, _ = runner(t, Hook{Event: PreToolUse, Command: "envkey"})
+	if _, ran := call(t, r.Layers(), "shell", ok); ran {
+		t.Fatal("用户级钩子应看到完整环境（测试自检）")
 	}
 }

@@ -51,6 +51,9 @@ var (
 	granted sync.Map // root → error（每进程每工作区只授一次）
 )
 
+// platformSupported 本平台有受限模式的实现（写受限令牌 + 能力 SID）。变量而非常量：测试可切换。
+var platformSupported = true
+
 func apply(s *Sandbox, cmd *exec.Cmd, mode Mode) (func(), error) {
 	root, err := filepath.Abs(s.Root)
 	if err != nil {

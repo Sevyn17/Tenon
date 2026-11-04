@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	goruntime "runtime"
 
 	"ybase/runtime/assemble"
 	"ybase/runtime/component"
@@ -206,9 +205,7 @@ func Open(root, project, force, fixedSandbox string, db func() store.Store) (*Se
 		if s.Fixed, err = toolhub.ParseSandboxMode(fixedSandbox); err != nil {
 			return nil, err
 		}
-	} else if goruntime.GOOS != "windows" { // 其他平台 P0 尚无沙箱实现
-		s.Fixed = toolhub.SandboxFull
-	}
+	} // 平台有没有沙箱由沙箱插件判断（PlatformSupported / Degrade），这里不写死（审查 P1-14）
 	s.Load = func(id string) (Mode, []string) {
 		d := db()
 		if d == nil {

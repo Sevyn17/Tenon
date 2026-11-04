@@ -111,3 +111,21 @@ func TestObjectResult(t *testing.T) {
 
 // kctx 测试用调用上下文（框架设计 04 §4.4）。
 func kctx(id string) *callctx.Ctx { return callctx.New(callctx.Options{SessionID: id}) }
+
+// 无限递归立即报栈超限，不跑到超时；大量分配被内存上限中断（2026-11-04 审查 P1-10）。
+func TestResourceLimits(t *testing.T) {
+	hub, ts, _ := setup(t)
+	start := time.Now()
+	out := call(t, hub, ts, `function f(n) { return f(n + 1) + 1 } f(0)`)
+	if !strings.Contains(text(out), "[stack-limit]") || time.Since(start) > 5*time.Second {
+		t.Fatalf("无限递归应报栈超限: %q after %v", text(out), time.Since(start))
+	}
+	old := maxHeap
+	maxHeap = 64 << 20 // 测试里调小，避免真分配 512 MiB
+	defer func() { maxHeap = old }()
+	start = time.Now()
+	out = call(t, hub, ts, `var a = []; for (;;) a.push(new Array(1e6).fill(1))`)
+	if !strings.Contains(text(out), "[memory-limit]") || time.Since(start) > 15*time.Second {
+		t.Fatalf("大量分配应报内存超限: %q after %v", text(out), time.Since(start))
+	}
+}

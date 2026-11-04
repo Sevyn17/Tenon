@@ -28,7 +28,7 @@ func init() { component.Register("sandbox", func() component.Component { return 
 func (*plug) Meta() component.Meta {
 	return component.Meta{Name: "sandbox", Version: "0.1.0", Default: false, // 独立开关，缺省关闭（§9.9）
 		Config:   &Config{},
-		Requires: []string{assemble.ServiceWorkdir, PolicyService}, Provides: []string{Service}}
+		Requires: []string{assemble.ServiceWorkdir, PolicyService, "?" + assemble.ServiceUI}, Provides: []string{Service}}
 }
 
 func (*plug) Setup(cx *component.Registrar) error {
@@ -49,7 +49,12 @@ func (*plug) Setup(cx *component.Registrar) error {
 		Func: func(*assemble.SessionCx) ([]toolhub.Layer, error) {
 			return []toolhub.Layer{Layer(pol.SandboxMode, ap)}, nil
 		}})
-	return cx.Provide("sandbox", toolhub.Confiner(&Sandbox{Root: root, TempDir: c.TempDir, KeepGoCache: c.KeepGoCache}))
+	if !platformSupported {
+		if ui, ok, _ := component.UseOptional[assemble.UI](cx, assemble.ServiceUI); ok && ui != nil {
+			ui.Warn("沙箱", "本平台尚无沙箱实现：shell、用户钩子、MCP 子进程按 danger-full-access 执行，不受限")
+		}
+	}
+	return cx.Provide("sandbox", toolhub.Confiner(&Sandbox{Root: root, TempDir: c.TempDir, KeepGoCache: c.KeepGoCache, Degrade: true}))
 }
 
 func (*plug) Start(*component.Scope) error { return nil }

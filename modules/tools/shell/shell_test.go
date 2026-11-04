@@ -164,3 +164,38 @@ func TestShellNativeExitCode(t *testing.T) {
 		}
 	}
 }
+
+// 后台 job 属于启动它的会话；结束且输出读完后清理（2026-11-04 审查 P1-9）。
+func TestJobScopedToSession(t *testing.T) {
+	s := NewShell(t.TempDir())
+	defer s.Close()
+	call := func(sid, name, args string) string {
+		out, err := shellTool(s, name).Call(context.Background(), &toolhub.Cx{SessionID: sid}, json.RawMessage(args))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var sb strings.Builder
+		for _, p := range out.Content {
+			sb.WriteString(p.Text)
+		}
+		return sb.String()
+	}
+	if out := call("A", "shell", `{"command":`+q("echo hi")+`,"background":true}`); !strings.Contains(out, "job-1") {
+		t.Fatalf("应启动 job-1: %q", out)
+	}
+	if out := call("B", "job_output", `{"id":"job-1","wait":true,"timeout":20}`); !strings.Contains(out, "不存在") {
+		t.Fatalf("别的会话不应读到: %q", out)
+	}
+	if out := call("B", "job_kill", `{"id":"job-1"}`); !strings.Contains(out, "不存在") {
+		t.Fatalf("别的会话不应杀掉: %q", out)
+	}
+	if out := call("A", "job_output", `{"id":"job-1","wait":true,"timeout":20}`); !strings.Contains(out, "hi") || !strings.Contains(out, "已结束") {
+		t.Fatalf("本会话应读到输出: %q", out)
+	}
+	s.mu.Lock()
+	n := len(s.jobs)
+	s.mu.Unlock()
+	if n != 0 {
+		t.Fatalf("结束且读完的 job 应清理，还剩 %d 个", n)
+	}
+}

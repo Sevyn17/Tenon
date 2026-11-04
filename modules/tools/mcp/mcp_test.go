@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -81,6 +82,11 @@ func TestMain(m *testing.M) {
 				continue
 			}
 			if msg.Method == "tools/call" && strings.Contains(string(msg.Params), `"exit"`) {
+				if p := os.Getenv("FAKE_LOG"); p != "" { // 记下"已执行"：断线重发会多出一行
+					f, _ := os.OpenFile(p, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+					f.WriteString("exit\n")
+					f.Close()
+				}
 				os.Exit(3)
 			}
 			if b := reply(msg); b != nil {
@@ -253,5 +259,26 @@ func TestLoadConfig(t *testing.T) {
 	}
 	if c, err := LoadConfig(t.TempDir() + "/none.toml"); err != nil || len(c.Server) != 0 {
 		t.Fatal(err)
+	}
+}
+
+// 调用途中服务端断开：有副作用的工具不重连重发，按结果未知报给模型（2026-11-04 审查 P1-8：
+// 原先断线后一律重发，服务端可能已经执行过，写操作会做两次）。
+func TestCallNotResentAfterDisconnect(t *testing.T) {
+	log := filepath.Join(t.TempDir(), "calls.log")
+	sv := stdioServer(t)
+	sv.Env["FAKE_LOG"] = log
+	s := Open(context.Background(), Config{Server: []Server{sv}})
+	defer s.Close()
+	o := callTool(t, s.Tools, "mcp__fake__echo", `{"exit":1}`)
+	if o.Status != session.ToolError || !strings.Contains(text(o), "结果未知") {
+		t.Fatalf("断线应报结果未知: %q", text(o))
+	}
+	b, _ := os.ReadFile(log)
+	if n := strings.Count(string(b), "exit"); n != 1 {
+		t.Fatalf("服务端执行了 %d 次，应只 1 次（不重发）", n)
+	}
+	if o := callTool(t, s.Tools, "mcp__fake__echo", `{"b":2}`); o.Status != session.ToolOK {
+		t.Fatalf("下一次调用应重连成功: %q", text(o))
 	}
 }

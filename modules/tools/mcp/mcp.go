@@ -50,6 +50,17 @@ type Server struct {
 	Sandbox string `toml:"sandbox"`
 
 	confine func(cmd *exec.Cmd) (func(), error) // 由 Open 按 Config.Confine 填入
+	// noExpand 插件包来源（第三方）：env / headers 不展开宿主环境变量，只认已替换好的 ${YBASE_PLUGIN_DIR}
+	// （2026-11-04 审查 P1-7：否则包里写 "${YBASE_API_KEY}" 就能把宿主密钥带进子进程或发到自己的 URL）。
+	noExpand bool
+}
+
+// expand 按来源展开值：用户自己的配置展开宿主环境变量，插件包来源原样使用。
+func (s Server) expand(v string) string {
+	if s.noExpand {
+		return v
+	}
+	return os.ExpandEnv(v)
 }
 
 // 信任级别。
@@ -220,10 +231,20 @@ func (c *Client) Close() error {
 // errDead 传输已断开（stdio 进程退出等），可重连一次。
 var errDead = errors.New("mcp: 连接已断开")
 
-// Call 发一个请求；连接断开时重连一次再发。
+// errUnsent 请求没有发到服务端（连接早已断开、写失败、会话过期被拒）：重连后重发总是安全的。
+// 与"发出后才断开"区分：后者服务端可能已经执行，有副作用的 tools/call 不能重发（审查 P1-8）。
+var errUnsent = fmt.Errorf("%w（请求未发出）", errDead)
+
+// Call 发一个请求；连接断开时重连一次再发。tools/call 不走这里（见 callTool）：断开时服务端可能已经执行，
+// 重发会让有副作用的工具执行两次。
 func (c *Client) Call(ctx context.Context, method string, params any) (json.RawMessage, error) {
+	return c.invoke(ctx, method, params, true)
+}
+
+// invoke 发一个请求；retry 时连接断开重连一次再发。
+func (c *Client) invoke(ctx context.Context, method string, params any, retry bool) (json.RawMessage, error) {
 	res, err := c.call(ctx, method, params)
-	if errors.Is(err, errDead) && ctx.Err() == nil {
+	if (errors.Is(err, errUnsent) || retry && errors.Is(err, errDead)) && ctx.Err() == nil {
 		c.mu.Lock()
 		if c.tr != nil {
 			c.tr.close()
@@ -341,6 +362,8 @@ func (c *Client) Tools(remote []RemoteTool) []*toolhub.Tool {
 		if h := rt.Annotations.DestructiveHint; h != nil && *h && c.Server.Trust != TrustReadonly {
 			attrs[AttrDestructive] = true
 		}
+		// 只读工具断线后可以安全重发（2026-11-04 审查 P1-8：原先所有调用都重连重发）。
+		readOnly := c.Server.Trust == TrustReadonly || (rt.Annotations.ReadOnlyHint != nil && *rt.Annotations.ReadOnlyHint)
 		out = append(out, &toolhub.Tool{
 			Spec:     session.ToolSpec{Name: PublicName(c.Server.Name, raw), Description: desc, Schema: schema},
 			Risk:     risk,
@@ -350,21 +373,25 @@ func (c *Client) Tools(remote []RemoteTool) []*toolhub.Tool {
 			Attrs:    attrs,
 			Items:    []string{ItemID(c.Server.Name)},
 			Call: func(ctx context.Context, cx *toolhub.Cx, args json.RawMessage) (toolhub.Output, error) {
-				return c.callTool(ctx, raw, args), nil
+				return c.callTool(ctx, raw, args, readOnly), nil
 			},
 		})
 	}
 	return out
 }
 
-func (c *Client) callTool(ctx context.Context, raw string, args json.RawMessage) toolhub.Output {
+// callTool 调一次远端工具。readOnly=false 时断线不重发，按结果未知报给模型。
+func (c *Client) callTool(ctx context.Context, raw string, args json.RawMessage, readOnly bool) toolhub.Output {
 	if len(args) == 0 {
 		args = json.RawMessage(`{}`)
 	}
 	cctx, cancel := context.WithTimeout(ctx, c.Server.timeout())
 	defer cancel()
-	res, err := c.Call(cctx, "tools/call", map[string]any{"name": raw, "arguments": args})
+	res, err := c.invoke(cctx, "tools/call", map[string]any{"name": raw, "arguments": args}, readOnly)
 	if err != nil {
+		if errors.Is(err, errDead) && !errors.Is(err, errUnsent) && ctx.Err() == nil && !readOnly {
+			return toolhub.Errorf("MCP 服务 %s 在调用 %s 时断开，服务端可能已经执行，结果未知。请先核对状态再决定是否重试。", c.Server.Name, raw)
+		}
 		if ctx.Err() != nil {
 			return toolhub.Output{Kind: toolhub.Done, Content: session.Content{session.NewTextPart("调用已取消")}, Status: session.ToolTurnCancelled}
 		}
@@ -433,6 +460,11 @@ func renderResult(res json.RawMessage) toolhub.Output {
 var secretName = regexp.MustCompile(`(?i)KEY|PASSWORD|SECRET|TOKEN`)
 
 func scrubEnv(environ []string, extra map[string]string) []string {
+	return scrubEnvWith(environ, extra, os.ExpandEnv)
+}
+
+// scrubEnvWith 同 scrubEnv，extra 的值用 expand 展开（插件包来源传原样函数）。
+func scrubEnvWith(environ []string, extra map[string]string, expand func(string) string) []string {
 	var out []string
 	for _, kv := range environ {
 		k, _, _ := strings.Cut(kv, "=")
@@ -445,7 +477,7 @@ func scrubEnv(environ []string, extra map[string]string) []string {
 		out = append(out, kv)
 	}
 	for k, v := range extra {
-		out = append(out, k+"="+os.ExpandEnv(v))
+		out = append(out, k+"="+expand(v))
 	}
 	return out
 }

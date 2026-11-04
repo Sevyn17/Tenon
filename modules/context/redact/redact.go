@@ -29,7 +29,12 @@ const MinValueLen = 8
 var (
 	reBearer = regexp.MustCompile(`(?i:\bBearer)[ \t]+[A-Za-z0-9._~+/-]{16,}=*`)
 	rePrefix = regexp.MustCompile(`\b(?:sk-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{40,}|xox[baprs]-[A-Za-z0-9-]{10,}|AIza[0-9A-Za-z_-]{35})`)
-	reAssign = regexp.MustCompile(`(?i)\b([a-z0-9_]*(?:api[_-]?key|token|secret|password|passwd)[a-z0-9_]*)\b(\s*[:=]\s*)(["']?)([^\s"']{8,})`)
+	// reAssign 键 = 值。键名可被引号包住（JSON / YAML 的 "api_key": "…"），带引号的值允许空格
+	// （2026-11-04 审查 P1-11：原先这两种最常见的配置文件写法都漏掉）。分组：1 键名、2 分隔（含键的右引号）、
+	// 3 双引号值、4 单引号值、5 不带引号的值。
+	reAssign = regexp.MustCompile(`(?i)\b([a-z0-9_]*(?:api[_-]?key|token|secret|password|passwd)[a-z0-9_]*)\b(["']?\s*[:=]\s*)(?:"([^"\n]{8,})"|'([^'\n]{8,})'|([^\s"']{8,}))`)
+	// reNotSecretName 名字像密钥、但按惯例装的是路径的变量（KEYCHAIN_PATH、SSH_KEY_DIR、*_KEYFILE）。
+	reNotSecretName = regexp.MustCompile(`(?i)(_PATH|_DIR|_FILE|FILE)$`)
 	// reIdent 不带引号的值若只是标识符 / 成员访问（createToken、process.env.TOKEN），是代码不是密钥。
 	reIdent = regexp.MustCompile(`^[A-Za-z_$][A-Za-z_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*$`)
 	// reURL 连接串里的口令：scheme://user:password@host（保留用户名）。
@@ -58,16 +63,32 @@ func New(values ...string) *Redactor {
 	return r
 }
 
-// FromEnv 收集环境变量中名字像密钥的值。
+// FromEnv 收集环境变量中名字像密钥的值。名字按惯例是路径的变量、值像路径的不收：
+// 否则工作目录这类路径在所有输出里都变成占位符，WriteGuard 再拒写（2026-11-04 审查 P1-12）。
 func FromEnv(environ []string) *Redactor {
 	var vals []string
 	for _, kv := range environ {
 		k, v, ok := strings.Cut(kv, "=")
-		if ok && reName.MatchString(k) {
+		if ok && reName.MatchString(k) && !reNotSecretName.MatchString(k) && !looksLikePath(v) {
 			vals = append(vals, v)
 		}
 	}
 	return New(vals...)
+}
+
+// looksLikePath 值像文件路径：绝对路径（/、~、\\、盘符）或 ./ ../ 开头。只看开头：
+// 密钥里也可能带 /（如 base64），但不会以这些开头。
+func looksLikePath(v string) bool {
+	v = strings.TrimSpace(v)
+	switch {
+	case v == "":
+		return false
+	case strings.HasPrefix(v, "/"), strings.HasPrefix(v, "~"), strings.HasPrefix(v, `\`),
+		strings.HasPrefix(v, "./"), strings.HasPrefix(v, "../"), strings.HasPrefix(v, `.\`):
+		return true
+	}
+	return len(v) >= 3 && v[1] == ':' && (v[2] == '\\' || v[2] == '/') &&
+		(v[0]|0x20 >= 'a' && v[0]|0x20 <= 'z')
 }
 
 // Default 当前进程环境。
@@ -97,11 +118,23 @@ func (r *Redactor) String(s string) (string, int) {
 	count(reURL, "${1}"+Placeholder+"@")
 	s = reAssign.ReplaceAllStringFunc(s, func(m string) string {
 		g := reAssign.FindStringSubmatch(m)
-		if strings.Contains(m, Placeholder) || (g[3] == "" && looksLikeCode(g[4])) {
+		if strings.Contains(m, Placeholder) {
 			return m
 		}
+		var v string
+		switch {
+		case g[3] != "":
+			v = `"` + Placeholder + `"`
+		case g[4] != "":
+			v = `'` + Placeholder + `'`
+		default:
+			if looksLikeCode(g[5]) {
+				return m
+			}
+			v = Placeholder
+		}
 		n++
-		return g[1] + g[2] + g[3] + Placeholder
+		return g[1] + g[2] + v
 	})
 	return s, n
 }

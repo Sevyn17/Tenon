@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"ybase/runtime/agent"
+	"ybase/runtime/callctx"
 	"ybase/runtime/session"
 )
 
@@ -92,4 +93,39 @@ func mustGet(t *testing.T, h *Host, id string) Handle {
 		t.Fatalf("会话 %s 未打开", id)
 	}
 	return hd
+}
+
+// 不可信回合派出的子任务按不可信投给子会话（审查 P1-3：原先一律可信，子回合的权限不再降级）。
+func TestSpawnInheritsUntrusted(t *testing.T) {
+	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{})
+	ctx := context.Background()
+	// 测试工厂不带调用上下文；生产会话由 Builder 建（assemble.Build）。
+	withCtx := func(id, def string) (*agent.Agent, *session.Config, error) {
+		a, cfg, err := r.h.New(id, def)
+		if err == nil {
+			a.Ctx = callctx.New(callctx.Options{SessionID: id})
+		}
+		return a, cfg, err
+	}
+	hd, err := r.h.open(ctx, "p", "", withCtx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hd.Agent().Ctx.SetUntrusted(true) // 父会话当前回合读过不可信内容
+	if _, err := r.h.Spawn(ctx, "p", "p/sub-1", "", r.h.New, "查"); err != nil {
+		t.Fatal(err)
+	}
+	l, err := r.db.Load(ctx, "p/sub-1", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range l.Snapshot.Entries {
+		if e.Item.Kind == session.KindUser {
+			if e.Meta[session.MetaTrust] != "untrusted" {
+				t.Fatalf("子会话的任务应标为不可信: meta=%v", e.Meta)
+			}
+			return
+		}
+	}
+	t.Fatal("子会话没有用户条目")
 }

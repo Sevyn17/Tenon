@@ -28,6 +28,13 @@ func TestNormalizeDefaults(t *testing.T) {
 	if e.ID == "" || e.Mode != ModeWake || e.Kind != KindRequest || e.Origin != OriginHuman || e.At.IsZero() {
 		t.Fatalf("缺省值: %+v", e)
 	}
+	// 缺 origin：只有 human: 发信方默认 human，其余按 agent（审查 P1-1：原先一律 human，失败即放开）。
+	for _, k := range []string{AddrSession, AddrAgent, AddrComponent} {
+		o := Envelope{From: Address{Kind: k, ID: "x"}, To: Address{Kind: AddrSession, ID: "s1"}, Body: "hi"}
+		if err := o.Normalize(); err != nil || o.Origin != OriginAgent {
+			t.Fatalf("from=%s 缺省 origin 应为 agent: %q %v", k, o.Origin, err)
+		}
+	}
 	// 回信必须有 corr。
 	if err := (&Envelope{From: Address{Kind: AddrAgent, ID: "a"}, To: Address{Kind: AddrSession, ID: "s"},
 		Kind: KindReply, Body: "x"}).Normalize(); err == nil {

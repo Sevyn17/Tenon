@@ -23,22 +23,27 @@ func TestCollectFillsDefaults(t *testing.T) {
 						Key: "todo:2", Kind: inject.KindSnapshot,
 						Body: "任务 2", Source: "custom", Trust: inject.TrustExternal,
 					},
+					{Key: "todo:3", Body: "任务 3", Source: "system", Trust: "kernel"}, // 冒充来源、写未知信任值
 				}
 			},
 		},
 		{Key: "no-fn", Owner: "skip"}, // 无登记函数：跳过
 	}
 	items := inject.Collect(nil, regs)
-	if len(items) != 2 {
-		t.Fatalf("Collect 得到 %d 条，应为 2：%+v", len(items), items)
+	if len(items) != 3 {
+		t.Fatalf("Collect 得到 %d 条，应为 3：%+v", len(items), items)
+	}
+	// 来源一律是登记者；信任只认 external 降级，其余改成 internal（审查 P1-2）。
+	if third := items[2]; third.Source != "todo" || third.Trust != inject.TrustInternal {
+		t.Fatalf("组件不能冒充来源或写未知信任值：%+v", third)
 	}
 	first := items[0]
 	if first.Kind != inject.KindStatus || first.Key != "todo" || first.Source != "todo" || first.Trust != inject.TrustInternal {
 		t.Fatalf("缺省补全不对：%+v", first)
 	}
 	second := items[1]
-	if second.Kind != inject.KindSnapshot || second.Source != "custom" || second.Trust != inject.TrustExternal {
-		t.Fatalf("显式字段被覆盖：%+v", second)
+	if second.Kind != inject.KindSnapshot || second.Source != "todo" || second.Trust != inject.TrustExternal {
+		t.Fatalf("kind 与 external 降级应保留、来源改为登记者：%+v", second)
 	}
 	if second.Key != "todo:2" {
 		t.Fatalf("显式 key 被覆盖：%+v", second)

@@ -126,7 +126,7 @@ func (g *Group) spawnTool() *toolhub.Tool {
 			}
 			id := MemberID(leader, a.Name)
 			cx.ChildSessionID = id
-			if err := g.start(leader, id, a.Name, a.Task); err != nil {
+			if err := g.start(leader, id, a.Name, a.Task, cx.Ctx.Untrusted()); err != nil {
 				return toolhub.Errorf("%v", err), nil
 			}
 			return toolhub.Text(fmt.Sprintf("已派成员 %s（会话 %s），完成后结果会作为新消息送达。", a.Name, id)), nil
@@ -135,7 +135,8 @@ func (g *Group) spawnTool() *toolhub.Tool {
 }
 
 // start 后台跑成员一个回合；结束后把结果投递回领导。
-func (g *Group) start(leader, id, name, task string) error {
+// untrusted 派出时本回合的可信度：不可信回合派出的任务按不可信投给成员（审查 P1-3）。
+func (g *Group) start(leader, id, name, task string, untrusted bool) error {
 	g.mu.Lock()
 	if g.running[id] {
 		g.mu.Unlock()
@@ -168,7 +169,7 @@ func (g *Group) start(leader, id, name, task string) error {
 		defer g.wg.Done()
 		ctx, cancel := context.WithTimeout(g.ctx, MemberTimeout)
 		defer cancel()
-		out, err := g.Host.SpawnAs(ctx, leader, id, "member", MemberDefinition, g.Member, task)
+		out, tainted, err := g.Host.SpawnAs(ctx, leader, id, "member", MemberDefinition, g.Member, task, untrusted)
 		g.mu.Lock()
 		delete(g.running, id)
 		g.mu.Unlock()
@@ -184,14 +185,15 @@ func (g *Group) start(leader, id, name, task string) error {
 			WHERE member = ? AND item_id = ?`, msg, time.Now().UnixMilli(), id, item); err != nil {
 			return
 		}
-		g.settle(bg, id, leader, name, item, msg)
+		g.settle(bg, id, leader, name, item, msg, tainted)
 	}()
 	return nil
 }
 
-// settle 投递一条结果并销账；投递失败则留账，下次 Recover 再投。
-func (g *Group) settle(ctx context.Context, member, leader, name, item, msg string) error {
-	if err := g.deliverID(ctx, leader, "member:"+name, item, msg); err != nil {
+// settle 投递一条结果并销账；投递失败则留账，下次 Recover 再投。untrusted：成员回合含不可信输入，
+// 结果按不可信投给领导（只降不升）。
+func (g *Group) settle(ctx context.Context, member, leader, name, item, msg string, untrusted bool) error {
+	if err := g.deliverID(ctx, leader, "member:"+name, item, msg, untrusted); err != nil {
 		return err
 	}
 	_, err := g.SQL.DB().ExecContext(ctx, `DELETE FROM p_workgroup_runs WHERE member = ? AND item_id = ?`, member, item)
@@ -231,7 +233,8 @@ func (g *Group) Recover(ctx context.Context) (int, error) {
 		if r.state != "done" {
 			msg = fmt.Sprintf("[成员 %s 中断] 上次进程退出时它还没做完；会话已保留，可用 team_send 让它继续。", r.name)
 		}
-		if err := g.settle(ctx, r.member, r.leader, r.name, r.item, msg); err != nil {
+		// 重启后不知道成员回合的可信度：已完成的结果按不可信补投（只降不升）；"中断"通知是本组件写的，可信。
+		if err := g.settle(ctx, r.member, r.leader, r.name, r.item, msg, r.state == "done"); err != nil {
 			return n, err
 		}
 		n++
@@ -240,12 +243,12 @@ func (g *Group) Recover(ctx context.Context) (int, error) {
 }
 
 // deliver 把一条消息作为输入投递到会话 inbox（会话未打开则先打开）。
-func (g *Group) deliver(ctx context.Context, to, from, text string) error {
-	return g.deliverID(ctx, to, from, host.NewItemID(), text)
+func (g *Group) deliver(ctx context.Context, to, from, text string, untrusted bool) error {
+	return g.deliverID(ctx, to, from, host.NewItemID(), text, untrusted)
 }
 
 // deliverID 同 deliver，item id 由调用方给（重投幂等）。
-func (g *Group) deliverID(ctx context.Context, to, from, item, text string) error {
+func (g *Group) deliverID(ctx context.Context, to, from, item, text string, untrusted bool) error {
 	hd, ok := g.Host.Get(to)
 	if !ok {
 		var err error
@@ -253,7 +256,7 @@ func (g *Group) deliverID(ctx context.Context, to, from, item, text string) erro
 			return err
 		}
 	}
-	return hd.Do(host.Command{Kind: host.Send, ItemID: item, Text: text, Source: from})
+	return hd.Do(host.Command{Kind: host.Send, ItemID: item, Text: text, Source: from, Trust: host.TrustOf(untrusted)})
 }
 
 func (g *Group) sendTool() *toolhub.Tool {
@@ -274,7 +277,7 @@ func (g *Group) sendTool() *toolhub.Tool {
 			}
 			text := fmt.Sprintf("[来自 %s] %s", self, a.Message)
 			if a.To == "lead" {
-				if err := g.deliver(ctx, leader, "member:"+self, text); err != nil {
+				if err := g.deliver(ctx, leader, "member:"+self, text, cx.Ctx.Untrusted()); err != nil {
 					return toolhub.Errorf("发送失败：%v", err), nil
 				}
 				return toolhub.Text("已发送给 lead"), nil
@@ -296,13 +299,14 @@ func (g *Group) sendTool() *toolhub.Tool {
 			if busy { // 回合进行中：进 inbox，当前回合结束后处理（结果随后台回合一并回报）
 				hd, ok := g.Host.Get(id)
 				if ok {
-					if err := hd.Do(host.Command{Kind: host.Send, ItemID: host.NewItemID(), Text: text, Source: "member:" + self}); err != nil {
+					if err := hd.Do(host.Command{Kind: host.Send, ItemID: host.NewItemID(), Text: text, Source: "member:" + self,
+						Trust: host.TrustOf(cx.Ctx.Untrusted())}); err != nil {
 						return toolhub.Errorf("发送失败：%v", err), nil
 					}
 					return toolhub.Text("已发送给 " + a.To + "（它正在工作，处理完当前任务后会看到）"), nil
 				}
 			}
-			if err := g.start(leader, id, a.To, text); err != nil { // 空闲成员：开新回合，完成后结果回报领导
+			if err := g.start(leader, id, a.To, text, cx.Ctx.Untrusted()); err != nil { // 空闲成员：开新回合，完成后结果回报领导
 				return toolhub.Errorf("%v", err), nil
 			}
 			return toolhub.Text("已发送给 " + a.To), nil

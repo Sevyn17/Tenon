@@ -53,7 +53,13 @@ type Sandbox struct {
 	TempDir string
 	// KeepGoCache true = 不把 GOCACHE 改到沙箱临时目录（用户自己保证缓存可写）。
 	KeepGoCache bool
+	// Degrade 本平台没有受限模式实现时按 danger-full-access 执行（不报错）。插件装配时设为真并告警一次；
+	// 平台能力只由本包判断（2026-11-04 审查 P1-14：原先权限插件写死"非 Windows 一律 full access"，且不提示）。
+	Degrade bool
 }
+
+// PlatformSupported 本平台是否有受限模式（read-only / workspace-write）的实现。
+func PlatformSupported() bool { return platformSupported }
 
 // DefaultProtect 缺省受保护路径：
 //   - .ybase：本框架的项目配置（权限档位、钩子、MCP）；
@@ -78,6 +84,9 @@ func (s *Sandbox) Apply(cmd *exec.Cmd, mode Mode) (cleanup func(), err error) {
 	}
 	if rank(mode) < 0 {
 		return nil, fmt.Errorf("%w：未知模式 %q", ErrUnavailable, mode)
+	}
+	if !platformSupported && s.Degrade {
+		return func() {}, nil
 	}
 	return apply(s, cmd, mode)
 }

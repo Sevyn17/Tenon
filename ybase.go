@@ -77,6 +77,8 @@ type config struct {
 	ui         assemble.UI
 	// sleepAfter 空闲会话休眠超时（0 = 不休眠，02 2.2）；>0 时启动兜底扫描。
 	sleepAfter time.Duration
+	// projectTrust 工作目录是否受信（WithProjectTrust）；缺省 false。
+	projectTrust bool
 }
 
 // Default 标准组件预设（10 10.2）：内核、上下文、模型、工具、权限、沙箱、协作。
@@ -191,6 +193,16 @@ func WithSleepAfter(d time.Duration) Option {
 			return fmt.Errorf("%w: WithSleepAfter 不能为负", ErrInvalid)
 		}
 		c.sleepAfter = d
+		return nil
+	}
+}
+
+// WithProjectTrust 声明工作目录受信：受信时才读其中的 .ybase/hooks.toml、mcp.toml、项目权限档位、
+// AGENTS.md 与项目技能。缺省不受信——嵌入方指向任意目录时不执行目录里的钩子与 MCP 命令
+// （2026-11-04 审查 P1-5：原先写死受信）。
+func WithProjectTrust(trusted bool) Option {
+	return func(c *config) error {
+		c.projectTrust = trusted
 		return nil
 	}
 }
@@ -318,7 +330,7 @@ func build(c *config) (*App, error) {
 		assemble.ServiceHost:    h,
 		assemble.ServiceUI:      ui,
 		assemble.ServiceWorkdir: workdir,
-		assemble.ServiceTrust:   true,
+		assemble.ServiceTrust:   c.projectTrust,
 		assemble.ServiceDB:      assemble.DBHandle(st),
 	}
 	if hasSQL {
