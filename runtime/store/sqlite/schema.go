@@ -146,4 +146,15 @@ var coreMigrations = []migration{
 		`CREATE INDEX session_outbox_prune ON session_outbox(sent, created_at)`,
 		`CREATE INDEX tool_results_tdeadline ON tool_results(tenant, status, deadline)`,
 	}},
+	// v9：索引清理（2026-11-04 审查 P2）。三条旧索引已被 v8 带 tenant 前缀的同列索引覆盖；
+	// session_entries_turn 没有查询用；sessions_list 的 status 是不等条件（!= 'deleted'），
+	// 后面的 updated_at 排序用不上，换成 (tenant, updated_at)。
+	{version: 9, stmts: []string{
+		`DROP INDEX IF EXISTS session_pending_s`,
+		`DROP INDEX IF EXISTS tool_results_deadline`,
+		`DROP INDEX IF EXISTS trace_events_t`,
+		`DROP INDEX IF EXISTS session_entries_turn`,
+		`DROP INDEX IF EXISTS sessions_list`,
+		`CREATE INDEX sessions_recent ON sessions(tenant, updated_at)`,
+	}},
 }
