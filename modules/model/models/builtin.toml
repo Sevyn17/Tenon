@@ -114,3 +114,4 @@ context_window = 200000
 max_output = 64000
 [model."anthropic/claude-sonnet-4-5".caps]
 reasoning = true
+images = true

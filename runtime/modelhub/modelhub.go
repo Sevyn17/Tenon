@@ -79,7 +79,9 @@ type Endpoint struct {
 	Model    string // 厂商模型名
 	// MaxOutput 模型目录里的输出上限（0 = 未知，适配器用自己的缺省；2026-11-04 审查 P2：Anthropic 原先写死 8192）。
 	MaxOutput int
-	Compat    Compat
+	// Images 模型目录声明了 caps.images = true：适配器可以发图片（见 SplitContent）。
+	Images bool
+	Compat Compat
 }
 
 // Compat 兼容标志（数据，不为每个厂商分叉适配器，D2）。
@@ -95,6 +97,8 @@ type Request struct {
 	RequestID  string // need id：回交内核用（R3）
 	AttemptKey string // 发厂商的幂等键 = need id + 计划项序号（R3），调度器填
 	SessionKey string // 会话缓存亲和 id（D5）
+	// Media 可空：按媒体引用（artifact://<sha256>）取回内容，适配器发图片用（见 SplitContent）。
+	Media func(uri string) ([]byte, error)
 }
 
 // Adapter 协议适配器：单次流式调用，不重试、不聚合、不计量。

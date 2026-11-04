@@ -123,6 +123,9 @@ func (b *Builder) Build(id, defName string, child bool) (*agent.Agent, *session.
 		ho.Thresholds, ho.ToolTimeout, ho.ConfirmDeadline = &th, b.Kernel.ToolTimeout, b.Kernel.ConfirmDeadline
 	}
 	hub := toolhub.New(ho)
+	if ms, ok := a.Model.(*modelhub.Session); ok && b.Artifacts != nil {
+		ms.Media = hub.ReadArtifact // 工具结果里的图片按工件引用取回，发给支持图片的模型
+	}
 	cx := &SessionCx{ID: id, Workdir: b.Workdir, Hub: hub, Agent: a, Child: child, Values: map[string]any{}, Ctx: kctx, Def: def}
 	if child {
 		if cx.Parent, err = b.parentLimits(id); err != nil {

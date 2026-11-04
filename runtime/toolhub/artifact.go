@@ -6,6 +6,7 @@ package toolhub
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -120,4 +121,33 @@ func (h *Hub) readArtifactTool() *Tool {
 			return Text(body), nil
 		},
 	}
+}
+
+// ErrNoArtifacts 本会话没有工件存储（PutMedia 用）。
+var ErrNoArtifacts = errors.New("toolhub: 没有工件存储")
+
+// PutMedia 把工具产出的二进制内容（图片等）存成工件，返回引用它的媒体片段（URI = artifact://<sha256>）。
+// 会话日志只记引用，不记内容；适配器发请求时按 URI 取回（modelhub.Session.Media）。
+// 2026-11-04 审查 P2 工具体验：原先 MCP 返回的图片直接丢弃，只留一句"未显示"。
+func (h *Hub) PutMedia(ctx context.Context, sessionID, mime string, data []byte) (session.Part, error) {
+	if h == nil || h.art == nil {
+		return session.Part{}, ErrNoArtifacts
+	}
+	hash, err := h.art.Put(ctx, sessionID, mime, data)
+	if err != nil {
+		return session.Part{}, err
+	}
+	return session.Part{Kind: "media", Media: &session.MediaRef{URI: ArtifactPrefix + hash, MIME: mime,
+		Bytes: uint64(len(data)), SHA256: hash}}, nil
+}
+
+// ReadArtifact 按 artifact://<sha256> 取回工件内容（适配器解析媒体引用用）。
+func (h *Hub) ReadArtifact(uri string) ([]byte, error) {
+	if h == nil || h.art == nil {
+		return nil, ErrNoArtifacts
+	}
+	if !strings.HasPrefix(uri, ArtifactPrefix) {
+		return nil, fmt.Errorf("toolhub: 不是工件引用：%s", uri)
+	}
+	return h.art.Get(strings.TrimPrefix(uri, ArtifactPrefix))
 }

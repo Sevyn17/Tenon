@@ -11,6 +11,7 @@ package anthropic
 import (
 	"bufio"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
@@ -66,7 +67,8 @@ type anBlock struct {
 	Name         string          `json:"name,omitempty"`
 	Input        json.RawMessage `json:"input,omitempty"`
 	ToolUseID    string          `json:"tool_use_id,omitempty"`
-	Content      string          `json:"content,omitempty"`
+	Content      any             `json:"content,omitempty"` // tool_result：文本，或带图片时的块数组；nil = 不写
+	Source       *anSource       `json:"source,omitempty"`  // image
 	IsError      bool            `json:"is_error,omitempty"`
 	Thinking     *string         `json:"thinking,omitempty"` // 指针：thinking 块即使为空串也要带上该字段
 	Signature    string          `json:"signature,omitempty"`
@@ -76,6 +78,23 @@ type anBlock struct {
 
 type anCache struct {
 	Type string `json:"type"`
+}
+
+// anSource image 块的内容（base64 内嵌）。
+type anSource struct {
+	Type      string `json:"type"`
+	MediaType string `json:"media_type"`
+	Data      string `json:"data"`
+}
+
+// anImages 把取回的图片转成 image 块（审查 P2 工具体验：原先图片一律丢弃）。
+func anImages(imgs []modelhub.Image) []anBlock {
+	out := make([]anBlock, 0, len(imgs))
+	for _, im := range imgs {
+		out = append(out, anBlock{Type: "image", Source: &anSource{Type: "base64", MediaType: im.MIME,
+			Data: base64.StdEncoding.EncodeToString(im.Data)}})
+	}
+	return out
 }
 
 type anMsg struct {
@@ -117,7 +136,7 @@ func anthropicBody(r *modelhub.Request, ep modelhub.Endpoint) map[string]any {
 		msgs = append(msgs, anMsg{Role: role, Content: blocks})
 	}
 	for _, m := range req.Messages {
-		t := modelhub.ContentString(m.Content)
+		t, imgs := modelhub.SplitContent(r, ep, m.Content)
 		switch m.Role {
 		case "assistant":
 			var bs []anBlock
@@ -157,9 +176,24 @@ func anthropicBody(r *modelhub.Request, ep modelhub.Endpoint) map[string]any {
 			if id == "" {
 				id = m.ToolCallID
 			}
-			push("user", anBlock{Type: "tool_result", ToolUseID: id, Content: t, IsError: m.IsError})
+			var content any
+			switch {
+			case len(imgs) > 0: // 带图片：内容写成块数组
+				blocks := []anBlock{}
+				if t != "" {
+					blocks = append(blocks, anBlock{Type: "text", Text: t})
+				}
+				content = append(blocks, anImages(imgs)...)
+			case t != "":
+				content = t
+			}
+			push("user", anBlock{Type: "tool_result", ToolUseID: id, Content: content, IsError: m.IsError})
 		default:
-			push("user", anBlock{Type: "text", Text: t})
+			var bs []anBlock
+			if t != "" || len(imgs) == 0 {
+				bs = append(bs, anBlock{Type: "text", Text: t})
+			}
+			push("user", append(bs, anImages(imgs)...)...)
 		}
 	}
 	// 缓存断点（审查 P1-46：原先只有最后一条 user 消息打断点，工具循环里一条 user 消息并入很多 tool_result，

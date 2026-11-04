@@ -378,7 +378,7 @@ func (c *Client) Tools(remote []RemoteTool) []*toolhub.Tool {
 			Attrs:    attrs,
 			Items:    []string{ItemID(c.Server.Name)},
 			Call: func(ctx context.Context, cx *toolhub.Cx, args json.RawMessage) (toolhub.Output, error) {
-				return c.callTool(ctx, raw, args, readOnly), nil
+				return c.callTool(ctx, cx, raw, args, readOnly), nil
 			},
 		})
 	}
@@ -386,7 +386,7 @@ func (c *Client) Tools(remote []RemoteTool) []*toolhub.Tool {
 }
 
 // callTool 调一次远端工具。readOnly=false 时断线不重发，按结果未知报给模型。
-func (c *Client) callTool(ctx context.Context, raw string, args json.RawMessage, readOnly bool) toolhub.Output {
+func (c *Client) callTool(ctx context.Context, cx *toolhub.Cx, raw string, args json.RawMessage, readOnly bool) toolhub.Output {
 	if len(args) == 0 {
 		args = json.RawMessage(`{}`)
 	}
@@ -405,16 +405,29 @@ func (c *Client) callTool(ctx context.Context, raw string, args json.RawMessage,
 		}
 		return toolhub.Failf("MCP 服务 %s 调用 %s 失败：%v", c.Server.Name, raw, err)
 	}
-	return renderResult(res)
+	return renderResult(res, mediaPutter(ctx, cx))
 }
 
-// renderResult 把 tools/call 结果转成文本。
-func renderResult(res json.RawMessage) toolhub.Output {
+// mediaPutter 把 MCP 返回的图片存成本会话的工件（cx.Hub 没有工件存储时返回 nil，图片留占位文字）。
+func mediaPutter(ctx context.Context, cx *toolhub.Cx) func(mime string, data []byte) (session.Part, bool) {
+	if cx == nil || cx.Hub == nil {
+		return nil
+	}
+	return func(mime string, data []byte) (session.Part, bool) {
+		p, err := cx.Hub.PutMedia(ctx, cx.SessionID, mime, data)
+		return p, err == nil
+	}
+}
+
+// renderResult 把 tools/call 结果转成工具输出：文本拼成一段；图片经 put 存成工件、作为媒体片段跟在文本后面
+// （2026-11-04 审查 P2 工具体验：原先图片一律丢弃）。put 为 nil 或存不了的图片、音频留占位文字。
+func renderResult(res json.RawMessage, put func(mime string, data []byte) (session.Part, bool)) toolhub.Output {
 	var r struct {
 		Content []struct {
 			Type     string `json:"type"`
 			Text     string `json:"text"`
 			MimeType string `json:"mimeType"`
+			Data     []byte `json:"data"` // image / audio：base64（encoding/json 自动解码）
 			URI      string `json:"uri"`
 			Name     string `json:"name"`
 			Resource *struct {
@@ -430,7 +443,14 @@ func renderResult(res json.RawMessage) toolhub.Output {
 		return toolhub.Failf("MCP 结果不合法：%v", err)
 	}
 	var parts []string
+	var media session.Content
 	for _, c := range r.Content {
+		if c.Type == "image" && put != nil && len(c.Data) > 0 {
+			if p, ok := put(c.MimeType, c.Data); ok {
+				media = append(media, p)
+				continue
+			}
+		}
 		switch c.Type {
 		case "text":
 			parts = append(parts, c.Text)
@@ -458,7 +478,9 @@ func renderResult(res json.RawMessage) toolhub.Output {
 		}
 		return toolhub.Failf("%s", text)
 	}
-	return toolhub.Text(text)
+	out := toolhub.Text(text)
+	out.Content = append(out.Content, media...)
+	return out
 }
 
 // scrubEnv 去掉名字像密钥的环境变量与 YBASE_* 变量（DSH 同规则）。

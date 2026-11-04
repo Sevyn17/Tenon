@@ -14,13 +14,15 @@ import (
 type Session struct {
 	Hub        *Hub
 	SessionKey string // 会话缓存亲和 id：重试、压缩、换模型不变；fork 换新
+	// Media 可空：按媒体引用取回内容（会话的工件存储），随请求交给适配器。
+	Media func(uri string) ([]byte, error)
 }
 
 // StreamRequest 发起一次会话调用，增量文本经 onText 送出；Reset 时 onReset 被调用（界面撤掉已显示的半截）。
 // 失败时返回已收到的部分回复（中断时宿主写 interrupted 条目）与 *Failure。
 func (s *Session) StreamRequest(ctx context.Context, requestID string, req session.Request,
 	onText func(string), onReset func()) (session.AssistantItem, session.StopReason, error) {
-	r := &Request{Req: req, RequestID: requestID, SessionKey: s.SessionKey}
+	r := &Request{Req: req, RequestID: requestID, SessionKey: s.SessionKey, Media: s.Media}
 	var (
 		done *Done
 		fail *Failure
