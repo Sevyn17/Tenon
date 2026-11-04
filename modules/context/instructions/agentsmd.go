@@ -3,15 +3,14 @@ package instructions
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
+	"ybase/modules/internal/workspace"
 	"ybase/runtime/session"
 	"ybase/runtime/toolhub"
 )
@@ -125,24 +124,6 @@ func (in *Instructions) init() {
 	}
 }
 
-// projectRoot 向上找 .git；找不到返回工作目录。“不存在”以外的错误直接返回。
-func projectRoot(dir string) (string, error) {
-	for d := dir; ; {
-		_, err := os.Stat(filepath.Join(d, ".git"))
-		if err == nil {
-			return d, nil
-		}
-		if !errors.Is(err, fs.ErrNotExist) {
-			return "", fmt.Errorf("探测项目根 %s: %w", d, err)
-		}
-		p := filepath.Dir(d)
-		if p == d {
-			return dir, nil
-		}
-		d = p
-	}
-}
-
 // chain 从 from（含）到 to（含）的目录序列；to 必须在 from 之下。
 func chain(from, to string) []string {
 	rel, err := filepath.Rel(from, to)
@@ -197,7 +178,7 @@ func (in *Instructions) render(files []string) string {
 		in.bodies[body] = true
 		cut := false
 		if len(body) > in.MaxFile {
-			body, cut = clipUTF8(body, in.MaxFile), true
+			body, cut = workspace.ClipUTF8(body, in.MaxFile), true
 		}
 		label := p
 		if r, err := filepath.Rel(in.Workdir, p); err == nil {
@@ -211,7 +192,7 @@ func (in *Instructions) render(files []string) string {
 			break
 		}
 		if len(head)+len(body) > left {
-			body, cut = clipUTF8(body, left-len(head)), true
+			body, cut = workspace.ClipUTF8(body, left-len(head)), true
 		}
 		if cut {
 			body += "\n…（已截断）"
@@ -222,25 +203,12 @@ func (in *Instructions) render(files []string) string {
 	return strings.TrimSpace(b.String())
 }
 
-func clipUTF8(s string, n int) string {
-	if n <= 0 {
-		return ""
-	}
-	if len(s) <= n {
-		return s
-	}
-	for n > 0 && n < len(s) && s[n]&0xC0 == 0x80 {
-		n--
-	}
-	return s[:n]
-}
-
 // Baseline 会话基线：用户全局 → 项目根 … 工作目录。无文件返回空串。
 func (in *Instructions) Baseline() (string, error) {
 	in.mu.Lock()
 	defer in.mu.Unlock()
 	in.init()
-	root, err := projectRoot(in.Workdir)
+	root, err := workspace.ProjectRoot(in.Workdir)
 	if err != nil {
 		return "", err
 	}

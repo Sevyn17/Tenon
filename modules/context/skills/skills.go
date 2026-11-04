@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 
+	"ybase/modules/internal/workspace"
 	"ybase/runtime/session"
 	"ybase/runtime/toolhub"
 )
@@ -55,7 +56,7 @@ func NewSkillsTrust(workdir string, trusted bool, extra ...string) *Skills {
 
 func newSkills(workdir string, trusted bool, extra ...string) *Skills {
 	workdir, _ = filepath.Abs(workdir)
-	root, err := projectRoot(workdir)
+	root, err := workspace.ProjectRoot(workdir)
 	if err != nil {
 		root = workdir
 	}
@@ -291,7 +292,7 @@ func (s *Skills) Load(name string) (string, error) {
 	_, body, _ := splitFrontmatter(string(b))
 	body = strings.TrimSpace(body)
 	if len(body) > SkillBodyMax {
-		body = clipUTF8(body, SkillBodyMax) + "\n…（技能正文超出 64KB，已截断）"
+		body = workspace.ClipUTF8(body, SkillBodyMax) + "\n…（技能正文超出 64KB，已截断）"
 	}
 	return fmt.Sprintf("<skill_content name=%q>\n%s\n\n技能目录：%s\n文中的相对路径以该目录为基准解析，用绝对路径调用工具。\n</skill_content>", name, body, hit.Dir), nil
 }

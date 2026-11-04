@@ -4,14 +4,10 @@ package subagent
 // 子会话经 service:host 的 Child 构造（可空 = New）。
 
 import (
-	"fmt"
-
-	"ybase/runtime/agent"
 	"ybase/runtime/agentdef"
 	"ybase/runtime/assemble"
 	"ybase/runtime/component"
 	"ybase/runtime/host"
-	"ybase/runtime/session"
 	"ybase/runtime/toolhub"
 )
 
@@ -44,20 +40,6 @@ func (*plug) Meta() component.Meta {
 	return component.Meta{Name: "subagent", Version: "0.1.0", Effects: []string{component.EffectTools}, Requires: []string{assemble.ServiceHost}}
 }
 
-// ChildFactory 返回按 h.Child（可空 = h.New）构造子会话的工厂；调用时才取值，装配后由应用填好也可。
-func ChildFactory(h *host.Host) host.Factory {
-	return func(id, def string) (*agent.Agent, *session.Config, error) {
-		f := h.Child
-		if f == nil {
-			f = h.New
-		}
-		if f == nil {
-			return nil, nil, fmt.Errorf("subagent: 宿主未配置会话构造")
-		}
-		return f(id, def)
-	}
-}
-
 func (*plug) Setup(cx *component.Registrar) error {
 	h, err := component.Use[*host.Host](cx, assemble.ServiceHost)
 	if err != nil {
@@ -68,7 +50,7 @@ func (*plug) Setup(cx *component.Registrar) error {
 		return err
 	}
 	cx.Template(src)
-	t := Tool(h, ChildFactory(h)).WithItems(ItemSpawn)
+	t := Tool(h, h.ChildFactory()).WithItems(ItemSpawn)
 	for _, it := range Items() {
 		cx.Register(assemble.PointPermItems, it.ID, it)
 	}

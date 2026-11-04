@@ -128,3 +128,18 @@ func TrustOf(untrusted bool) string {
 	}
 	return ""
 }
+
+// ChildFactory 按 Child（可空 = New）构造子会话的工厂；调用时才取值，装配后再填 New / Child 也可。
+// subagent 与 workgroup 共用（2026-11-04 审查 P2：原先两个组件各写一份）。
+func (h *Host) ChildFactory() Factory {
+	return func(id, def string) (*agent.Agent, *session.Config, error) {
+		f := h.Child
+		if f == nil {
+			f = h.New
+		}
+		if f == nil {
+			return nil, nil, errors.New("host: 未配置会话构造")
+		}
+		return f(id, def)
+	}
+}

@@ -110,8 +110,8 @@ func WithIDs(f func() string) Option { return func(c *Core) { c.genID = f } }
 func New(cfg *Config, opts ...Option) *Core {
 	c := &Core{
 		hdr:   Header{Version: 1, Config: cfg, Status: StatusIdle, Ext: map[string]any{}},
-		now:   time.Now,
-		genID: func() string { id, _ := uuid.NewV7(); return id.String() },
+		now:   defaultClock(),
+		genID: defaultIDs(),
 	}
 	for _, o := range opts {
 		o(c)
@@ -687,18 +687,7 @@ func (c *Core) MidInput(content Content, meta map[string]any) ([]Change, error) 
 
 // Cancel 取消（T17）：先 flush 暂存项；未回传调用补 Cancelled(TurnCancelled)；Done(Cancelled)。
 func (c *Core) Cancel() ([]Change, *Need, error) {
-	if err := c.checkReadOnly(); err != nil {
-		return nil, nil, err
-	}
-	if c.hdr.Status == StatusIdle {
-		return nil, nil, ErrNotWaiting
-	}
-	var ch []Change
-	if c.hdr.Status == StatusWaitingTools {
-		ch = c.flushCancelled(ToolTurnCancelled)
-	}
-	// T17：未消费的插话（含改向输入）原样交还，不随回合结束丢失（03 §6.3）。
-	return ch, c.endTurn(CancelledReason(), c.takePendingInputs()), nil
+	return c.Abort(CancelledReason())
 }
 
 // Abort 直接结束回合（T18）：宿主在恢复循环等场景使用。
@@ -763,11 +752,8 @@ func (c *Core) ModelDone(requestID string, needID uint64, reply AssistantItem, s
 	if err := c.checkReadOnly(); err != nil {
 		return nil, nil, err
 	}
-	if c.hdr.Status != StatusWaitingModel {
-		return nil, nil, ErrNotWaiting
-	}
-	if requestID != c.hdr.PendingModelRequestID || needID != c.hdr.NextNeedID {
-		return nil, nil, errStale("模型结果与当前需求不匹配")
+	if err := c.checkModelFact(requestID, needID); err != nil {
+		return nil, nil, err
 	}
 
 	// 为调用分配内核 id（S6），wire_id 存厂商原始 id；不合法的参数 JSON 先规整（见 normalizeCalls）。
@@ -831,11 +817,8 @@ func (c *Core) ModelInterrupted(requestID string, needID uint64, reply Assistant
 	if err := c.checkReadOnly(); err != nil {
 		return nil, nil, err
 	}
-	if c.hdr.Status != StatusWaitingModel {
-		return nil, nil, ErrNotWaiting
-	}
-	if requestID != c.hdr.PendingModelRequestID || needID != c.hdr.NextNeedID {
-		return nil, nil, errStale("模型结果与当前需求不匹配")
+	if err := c.checkModelFact(requestID, needID); err != nil {
+		return nil, nil, err
 	}
 	var ch []Change
 	if len(reply.Content) > 0 || len(reply.ToolCalls) > 0 {
@@ -857,11 +840,8 @@ func (c *Core) ModelFailed(requestID string, needID uint64, reason EndReason) ([
 	if err := c.checkReadOnly(); err != nil {
 		return nil, nil, err
 	}
-	if c.hdr.Status != StatusWaitingModel {
-		return nil, nil, ErrNotWaiting
-	}
-	if requestID != c.hdr.PendingModelRequestID || needID != c.hdr.NextNeedID {
-		return nil, nil, errStale("模型结果与当前需求不匹配")
+	if err := c.checkModelFact(requestID, needID); err != nil {
+		return nil, nil, err
 	}
 	return nil, c.endTurn(reason, c.takePendingInputs()), nil // 暂存插话交还宿主（审查 P1-19）
 }
@@ -1009,3 +989,15 @@ func contentSize(ct Content) uint64 {
 }
 
 func itoa(i int) string { return strconv.Itoa(i) }
+
+// checkModelFact 模型事实（ModelDone / ModelInterrupted / ModelFailed）的公共前置校验：
+// 须在 WaitingModel，requestID / needID 与当前需求一致，否则 Stale（S2 / S7）。
+func (c *Core) checkModelFact(requestID string, needID uint64) error {
+	if c.hdr.Status != StatusWaitingModel {
+		return ErrNotWaiting
+	}
+	if requestID != c.hdr.PendingModelRequestID || needID != c.hdr.NextNeedID {
+		return errStale("模型结果与当前需求不匹配")
+	}
+	return nil
+}

@@ -10,12 +10,10 @@ import (
 	"context"
 	"fmt"
 
-	"ybase/runtime/agent"
 	"ybase/runtime/agentdef"
 	"ybase/runtime/assemble"
 	"ybase/runtime/component"
 	"ybase/runtime/host"
-	"ybase/runtime/session"
 	"ybase/runtime/store"
 	"ybase/runtime/toolhub"
 )
@@ -126,17 +124,7 @@ func (p *plug) Setup(cx *component.Registrar) error {
 }
 
 func (p *plug) Start(sc *component.Scope) error {
-	member := func(id, def string) (*agent.Agent, *session.Config, error) {
-		f := p.h.Child
-		if f == nil {
-			f = p.h.New
-		}
-		if f == nil {
-			return nil, nil, fmt.Errorf("workgroup: 宿主未配置会话构造")
-		}
-		return f(id, def)
-	}
-	g, err := New(context.Background(), p.h, p.sql, p.db.DB(), member)
+	g, err := New(context.Background(), p.h, p.sql, p.db.DB(), p.h.ChildFactory())
 	if err != nil {
 		return err
 	}
