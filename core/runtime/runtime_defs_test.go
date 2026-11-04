@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"ybase-kernel/core/agentdef"
+	"ybase-kernel/core/modelhub"
 	"ybase-kernel/core/session"
 	"ybase-kernel/core/store"
 	"ybase-kernel/core/store/memstore"
@@ -92,5 +93,41 @@ func TestBuildRestoresDefinitionFromSession(t *testing.T) {
 	b.Definitions = defsSource(t)
 	if _, _, err := b.Build("r1", "", true); err == nil || !strings.Contains(err.Error(), "定义") {
 		t.Fatalf("定义缺失时应报错，实际 err=%v", err)
+	}
+}
+
+// 定义写了 model：会话用它（目录里能解析才行，写错 Build 报错）；没写用全局缺省
+// （2026-11-04 审查 P0-3：原先一律用全局模型）。
+func TestDefinitionModelUsed(t *testing.T) {
+	cat := modelhub.NewCatalog()
+	if err := cat.Add(modelhub.LayerUser, "t", modelhub.CatalogFile{
+		Provider: map[string]modelhub.Provider{"p": {Protocol: "x"}},
+		Model:    map[string]modelhub.Model{"p/fast-1": {Provider: "p"}, "p/main-1": {Provider: "p"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	hub := modelhub.New(cat, func(string) (string, error) { return "", nil }, nil)
+	m := agentdef.Mem()
+	for name, model := range map[string]string{"quick": "fast-1", "plain": "", "typo": "nope"} {
+		toml := "format = \"ybase/v1\"\nid = \"" + name + "\"\n"
+		if model != "" {
+			toml += "model = \"" + model + "\"\n"
+		}
+		if err := m.Put(agentdef.Ref{Namespace: agentdef.Platform, Name: name}, agentdef.Files{"agent.toml": []byte(toml)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	b := &Builder{DB: memstore.New(), Layers: []LayerFunc{permLayer()}, Definitions: m, Models: hub, Model: "main-1"}
+	for def, want := range map[string]string{"quick": "fast-1", "plain": "main-1", "": "main-1"} {
+		_, cfg, err := b.Build("s-"+def, def, false)
+		if err != nil {
+			t.Fatalf("Build %q: %v", def, err)
+		}
+		if cfg.Model != want {
+			t.Fatalf("定义 %q 的会话模型 = %q，期望 %q", def, cfg.Model, want)
+		}
+	}
+	if _, _, err := b.Build("s-typo", "typo", false); err == nil || !strings.Contains(err.Error(), "nope") {
+		t.Fatalf("定义里写错的模型应报错: %v", err)
 	}
 }

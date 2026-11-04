@@ -342,8 +342,10 @@ func parseAnthropic(ctx context.Context, r io.Reader, model string, out chan<- m
 				out <- modelhub.Event{ReasoningDelta: ev.Delta.Thinking}
 			case "signature_delta":
 				b.sig += ev.Delta.Signature
+				out <- modelhub.Event{} // 心跳：不展示的增量也要重置空闲计时（P0-13）
 			case "input_json_delta":
 				b.buf.WriteString(ev.Delta.PartialJSON)
+				out <- modelhub.Event{} // 心跳：长工具参数流期间不被判超时（P0-13）
 			}
 		case "message_delta":
 			if ev.Delta != nil && ev.Delta.StopReason != "" {

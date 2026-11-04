@@ -229,6 +229,37 @@ func TestCompactionReinjectsSnapshotAndStatus(t *testing.T) {
 	}
 }
 
+// 快照与状态同时登记、内容都不变：多回合只在第一回合注入，不出现"已清除"，
+// 超过单条预算（被截断）的内容也不重发（审查 P0-10 / P0-11：原先每回合多写一条注入）。
+func TestInjectStableSnapshotStatusAndTruncated(t *testing.T) {
+	db := tempStore(t)
+	a := newAgent(t, db, agentOpts{model: &recordModel{}})
+	long := strings.Repeat("长内容 ", 600) // 远超 DefaultItemBudget，会被截断
+	a.Statuses = []inject.Reg{
+		{Key: "agents_md", Owner: "instructions", Fn: func(*callctx.Ctx) []inject.Item {
+			return []inject.Item{{Key: "agents_md", Kind: inject.KindSnapshot, Body: "AGENTS 基线"}}
+		}},
+		{Key: "todo", Owner: "todo", Fn: func(*callctx.Ctx) []inject.Item {
+			return []inject.Item{{Body: "任务 1"}}
+		}},
+		{Key: "big", Owner: "big", Fn: func(*callctx.Ctx) []inject.Item {
+			return []inject.Item{{Body: long}}
+		}},
+	}
+	for i := 0; i < 4; i++ {
+		if _, err := a.Send(context.Background(), fmt.Sprintf("q%d", i)); err != nil {
+			t.Fatalf("Send %d: %v", i, err)
+		}
+	}
+	snaps, stats := injected(a, session.KindSnapshot), injected(a, session.KindStatus)
+	if len(snaps) != 1 || len(stats) != 1 {
+		t.Fatalf("内容不变时只应注入一次：快照 %d 条、状态 %d 条", len(snaps), len(stats))
+	}
+	if strings.Contains(stats[0], "cleared") {
+		t.Fatalf("快照不应被当成已清除：%s", stats[0])
+	}
+}
+
 // TestReplayRequestPrefixStable：重放同一会话得到相同请求（缓存安全）。
 func TestReplayRequestPrefixStable(t *testing.T) {
 	db := tempStore(t)

@@ -272,8 +272,20 @@ func (h *Hub) chain(i int, call session.ToolCall) Next {
 		// 内层（Guard）返回的 Confirm 经过 Transform 层原样上传是合法的；
 		// 只有 Transform 自己造出 Confirm 才拒绝。
 		innerConfirm := false
+		// 内层只许执行一次：本层调过 next 之后才超时 / panic 时，FailOpen 不能再调一次 inner——
+		// 有副作用的工具会被重放（无存储时真的执行两次，有存储时被 started 记录挡住、真实结果丢失）
+		// （2026-11-04 审查 P0-8）。
+		var (
+			innerMu   sync.Mutex
+			innerDone bool
+			innerOut  Output
+			innerErr  error
+		)
 		watched := func(ctx context.Context, cx *Cx, args json.RawMessage) (Output, error) {
 			o, e := inner(ctx, cx, args)
+			innerMu.Lock()
+			innerDone, innerOut, innerErr = true, o, e
+			innerMu.Unlock()
 			if e == nil && o.Kind == Confirm {
 				innerConfirm = true
 			}
@@ -283,6 +295,12 @@ func (h *Hub) chain(i int, call session.ToolCall) Next {
 		if err != nil {
 			if l.Guard || !l.FailOpen {
 				return Errorf("调用被 %s 拒绝：%v", l.Name, err), nil // Guard FailClosed
+			}
+			innerMu.Lock()
+			done, o, e := innerDone, innerOut, innerErr
+			innerMu.Unlock()
+			if done { // Transform FailOpen：内层已跑过 → 用它的结果，丢弃本层改动
+				return o, e
 			}
 			return inner(ctx, cx, args) // Transform FailOpen：跳过本层
 		}

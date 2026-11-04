@@ -145,3 +145,22 @@ func TestTailBuf(t *testing.T) {
 		t.Fatalf("增量读错: %q", s)
 	}
 }
+
+// 原生程序的退出码原样报给模型（审查 P0-15：Windows PowerShell 原先一律报 1）。
+func TestShellNativeExitCode(t *testing.T) {
+	s := NewShell(t.TempDir())
+	cmd := "cmd /c exit 7"
+	if runtime.GOOS != "windows" {
+		cmd = "sh -c 'exit 7'"
+	}
+	out, isErr := callT(t, s, "shell", `{"command":`+q(cmd)+`}`)
+	if !isErr || !strings.Contains(out, "[退出码 7]") {
+		t.Fatalf("原生程序退出码应为 7: %q", out)
+	}
+	if runtime.GOOS == "windows" {
+		out, isErr = callT(t, s, "shell", `{"command":`+q("cmd /c exit 7; echo after")+`}`)
+		if isErr || !strings.Contains(out, "[退出码 0]") {
+			t.Fatalf("最后一条成功时退出码应为 0: %q", out)
+		}
+	}
+}

@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"path/filepath"
 	"time"
 
 	"ybase-kernel/core/toolhub"
@@ -46,7 +47,7 @@ func Wider(a, b Mode) bool { return toolhub.SandboxWider(a, b) }
 type Sandbox struct {
 	Root string // 工作区根（绝对路径）
 	Mode Mode   // 会话默认模式
-	// Protect 工作区内即使 workspace-write 也不可写的子目录（相对 Root），默认 .ybase。
+	// Protect 工作区内即使 workspace-write 也不可写的子目录（相对 Root），默认 DefaultProtect。
 	Protect []string
 	// TempDir 沙箱专用临时 / 缓存目录的上级；空 = %LOCALAPPDATA%\ybase\sbtmp（plugin-switch-plan §2.2）。
 	TempDir string
@@ -54,9 +55,18 @@ type Sandbox struct {
 	KeepGoCache bool
 }
 
+// DefaultProtect 缺省受保护路径：
+//   - .ybase：本框架的项目配置（权限档位、钩子、MCP）；
+//   - .git：沙箱里写进 .git/hooks、.git/config 的东西，会在用户之后于沙箱外执行 git 时以完整权限运行，
+//     等于逃出沙箱（2026-11-04 审查 P0-14）。代价：workspace-write 里不能 git commit，需要时申请更宽沙箱。
+var DefaultProtect = []string{".ybase", ".git"}
+
+// existingOnly 只在已存在时才保护、不存在不新建的路径（新建空 .git 会让 git 误以为这是仓库）。
+func existingOnly(p string) bool { return filepath.Clean(p) == ".git" }
+
 func (s *Sandbox) protect() []string {
 	if s.Protect == nil {
-		return []string{".ybase"}
+		return DefaultProtect
 	}
 	return s.Protect
 }

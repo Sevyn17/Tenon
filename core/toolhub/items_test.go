@@ -162,3 +162,31 @@ func TestVisibility(t *testing.T) {
 		t.Fatalf("deny 的工具仍应留在可用集：%s", avail)
 	}
 }
+
+// 缺省授权层（未装权限组件时用，审查 P0-7）：只读、声明无需授权的工具放行；有副作用的要确认，确认后放行。
+func TestDefaultAuthorizer(t *testing.T) {
+	ran := map[string]int{}
+	mk := func(name string, risk Risk, noAuth bool) *Tool {
+		return &Tool{Spec: spec(name), Risk: risk, NoAuth: noAuth, Call: func(context.Context, *Cx, json.RawMessage) (Output, error) {
+			ran[name]++
+			return Text("ok"), nil
+		}}
+	}
+	h := New(Options{})
+	for _, tl := range []*Tool{mk("r", Read, false), mk("w", Write, false), mk("n", Write, true)} {
+		if err := h.Register(tl); err != nil {
+			t.Fatal(err)
+		}
+	}
+	h.AddLayer(DefaultAuthorizer())
+	if err := h.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	rs := drain(h.Execute(context.Background(), kctx("s"), []session.ToolCall{call("1", "r", `{}`), call("2", "n", `{}`), call("3", "w", `{}`)}, nil))
+	if ran["r"] != 1 || ran["n"] != 1 {
+		t.Fatalf("只读与无需授权的工具应放行: %v", ran)
+	}
+	if ran["w"] != 0 || rs[2].Output.Kind == Done && rs[2].Output.Status == session.ToolOK {
+		t.Fatalf("写工具未确认不应执行: ran=%v out=%+v", ran, rs[2].Output)
+	}
+}

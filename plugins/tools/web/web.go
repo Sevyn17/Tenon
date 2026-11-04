@@ -516,14 +516,11 @@ type DeepSeekSearch struct {
 	HTTP    *http.Client
 }
 
-// NewDeepSeekSearch 从环境读 key（YBASE_API_KEY / DEEPSEEK_API_KEY）；没有 key 返回 nil。
+// NewDeepSeekSearch 从环境读 DEEPSEEK_API_KEY；没有 key 返回 nil（不提供 web_search 后端）。
+// 不读通用的 YBASE_API_KEY：它可能是别家模型的 key（CLI 搭配任意 -base 用），发给 DeepSeek 就是泄露
+// （2026-11-04 审查 P0-16）。
 func NewDeepSeekSearch() SearchProvider {
-	key := func() string {
-		if k := os.Getenv("YBASE_API_KEY"); k != "" {
-			return k
-		}
-		return os.Getenv("DEEPSEEK_API_KEY")
-	}
+	key := func() string { return os.Getenv("DEEPSEEK_API_KEY") }
 	if key() == "" {
 		return nil
 	}

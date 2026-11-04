@@ -50,6 +50,28 @@ type Item struct {
 	Source   string // 内核填：组件名
 	Trust    string // 内核填：internal / external
 	Cleared  bool   // 渲染成「已清除」（key 被撤销）；由 Cleared() 生成
+	// orig 截断前的原文；哈希一律按它算。按截断后的文本记哈希、按原文比较，超预算的片段内容没变也会
+	// 每次重发（2026-11-04 审查 P0-11）。空 = Body 未截断。
+	orig string
+}
+
+// hashBody 片段用于"是否变化"判断的哈希：按截断前的原文。
+func (it Item) hashBody() string {
+	if it.orig != "" {
+		return Hash(it.orig)
+	}
+	return Hash(it.Body)
+}
+
+// cut 截断 Body，原文记进 orig。
+func (it Item) cut(budget int) Item {
+	if t := truncate(it.Body, budget); t != it.Body {
+		if it.orig == "" {
+			it.orig = it.Body
+		}
+		it.Body = t
+	}
+	return it
 }
 
 // Func 状态提交函数：每次调模型前被调用，返回当前片段。
@@ -110,7 +132,7 @@ func Collect(ctx *callctx.Ctx, regs []Reg) []Item {
 func Hashes(items []Item) map[string]string {
 	out := make(map[string]string, len(items))
 	for _, it := range items {
-		out[it.Key] = Hash(it.Body)
+		out[it.Key] = it.hashBody()
 	}
 	return out
 }
@@ -164,7 +186,7 @@ func Changes(items []Item, prev map[string]string) []Item {
 	kept := make([]Item, 0, len(order))
 	for _, k := range order {
 		it := byKey[k]
-		if h, ok := prev[k]; ok && h == Hash(it.Body) {
+		if h, ok := prev[k]; ok && h == it.hashBody() {
 			continue
 		}
 		kept = append(kept, it)
@@ -202,8 +224,7 @@ func Cleared(items []Item, prev map[string]string) []Item {
 func Fit(items []Item) []Item {
 	out := make([]Item, len(items))
 	for i, it := range items {
-		it.Body = truncate(it.Body, budgetOf(it))
-		out[i] = it
+		out[i] = it.cut(budgetOf(it))
 	}
 	return out
 }
@@ -233,7 +254,7 @@ func Budget(items []Item, total int) ([]Item, []Dropped) {
 		used    int
 	)
 	for _, it := range sorted {
-		it.Body = truncate(it.Body, budgetOf(it))
+		it = it.cut(budgetOf(it))
 		n := Estimate(it.Body)
 		if used+n > total {
 			dropped = append(dropped, Dropped{Key: it.Key, Tokens: n})

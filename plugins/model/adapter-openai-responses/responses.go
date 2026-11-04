@@ -323,6 +323,7 @@ loop:
 			out <- modelhub.Event{ReasoningDelta: ev.Delta}
 		case "response.function_call_arguments.delta":
 			get(ev.OutputIndex, "function_call").buf.WriteString(ev.Delta)
+			out <- modelhub.Event{} // 心跳：长工具参数流期间不被判超时（P0-13）
 		case "response.output_item.done":
 			if ev.Item == nil {
 				continue

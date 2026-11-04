@@ -45,6 +45,35 @@ func TestWorkspaceWrite(t *testing.T) {
 	}
 }
 
+// workspace-write 不能写 .git（钩子、配置会在沙箱外以完整权限执行）；没有 .git 的工作区不新建它
+// （审查 P0-14：原先只保护 .ybase，沙箱进程能写 .git/hooks 逃出沙箱）。
+func TestWorkspaceWriteProtectsGit(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, ".git", "hooks"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	s := &Sandbox{Root: root, Mode: WorkspaceWrite}
+	if tryWrite(t, s, WorkspaceWrite, filepath.Join(root, ".git", "hooks", "pre-commit")) {
+		t.Fatal("workspace-write 不应能写 .git/hooks")
+	}
+	if tryWrite(t, s, WorkspaceWrite, filepath.Join(root, ".git", "config")) {
+		t.Fatal("workspace-write 不应能写 .git/config")
+	}
+	if !tryWrite(t, s, WorkspaceWrite, filepath.Join(root, "src.txt")) {
+		t.Fatal("工作区其他位置仍应可写")
+	}
+	bare := t.TempDir()
+	if !tryWrite(t, &Sandbox{Root: bare, Mode: WorkspaceWrite}, WorkspaceWrite, filepath.Join(bare, "a.txt")) {
+		t.Fatal("没有 .git 的工作区应可写")
+	}
+	if _, err := os.Stat(filepath.Join(bare, ".git")); !os.IsNotExist(err) {
+		t.Fatalf("不应新建 .git: %v", err)
+	}
+	if err := Reset(root, nil); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestReadOnly(t *testing.T) {
 	root := t.TempDir()
 	s := &Sandbox{Root: root, Mode: ReadOnly}

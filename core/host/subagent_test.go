@@ -4,6 +4,9 @@ import (
 	"context"
 	"path/filepath"
 	"testing"
+
+	"ybase-kernel/core/agent"
+	"ybase-kernel/core/session"
 )
 
 func TestSpawnSubagent(t *testing.T) {
@@ -37,6 +40,48 @@ func TestSpawnSubagent(t *testing.T) {
 	// 别的父会话不能续用
 	if _, err := r.h.Spawn(ctx, "q", "p/sub-1", "", r.h.New, "x"); err == nil {
 		t.Fatal("非本会话的子智能体应被拒绝")
+	}
+}
+
+// 子会话关闭后被 Open 重新打开（休眠唤醒、重启后收信、control 都走 Open）仍按 Child 构造；
+// 普通会话仍按 New（审查 P0-5：原先一律 New，委派工具重新可见、深度限制失效）。
+func TestReopenedChildUsesChildFactory(t *testing.T) {
+	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{})
+	ctx := context.Background()
+	var built []string
+	newF := r.h.New
+	r.h.New = func(id, def string) (*agent.Agent, *session.Config, error) {
+		built = append(built, "new:"+id)
+		return newF(id, def)
+	}
+	r.h.Child = func(id, def string) (*agent.Agent, *session.Config, error) {
+		built = append(built, "child:"+id)
+		return newF(id, def)
+	}
+	if _, err := r.h.Open(ctx, "p"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.h.Spawn(ctx, "p", "p/sub-1", "", r.h.Child, "查"); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{"p", "p/sub-1"} {
+		hd, ok := r.h.Get(id)
+		if !ok {
+			continue // Spawn 结束后子会话可能已关
+		}
+		if err := hd.Do(Command{Kind: Close}); err != nil {
+			t.Fatal(err)
+		}
+		<-hd.Done()
+	}
+	built = nil
+	for _, id := range []string{"p/sub-1", "p"} {
+		if _, err := r.h.Open(ctx, id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(built) != 2 || built[0] != "child:p/sub-1" || built[1] != "new:p" {
+		t.Fatalf("重开时的构造方 = %v，期望 [child:p/sub-1 new:p]", built)
 	}
 }
 

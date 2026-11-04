@@ -275,6 +275,19 @@ func (h *Hub) AddLayer(l Layer) { h.layers = append(h.layers, l) }
 // PrependLayer 在最外层插一层（内核守卫先于组件层执行，如信封 caps 范围）。
 func (h *Hub) PrependLayer(l Layer) { h.layers = append([]Layer{l}, h.layers...) }
 
+// DefaultAuthorizer 没有装权限组件时的缺省授权层：只读与声明无需授权的工具放行，其余一律询问
+// （与"未声明权限项的工具按一律询问"同一口径，失败即收紧）。权限组件提供自己的授权层时不用它。
+// 原先没有授权层时会话构造直接报错，Minimal 预设起不了任何会话（2026-11-04 审查 P0-7）。
+func DefaultAuthorizer() Layer {
+	return Layer{Name: "default-authorizer", Guard: true, Authorizes: true,
+		Call: func(ctx context.Context, cx *Cx, args json.RawMessage, next Next) (Output, error) {
+			if cx.Approved || cx.Tool == nil || cx.Tool.Risk == Read || cx.Tool.NoAuth {
+				return next(ctx, cx, args)
+			}
+			return Output{Kind: Confirm, Reason: cx.Tool.Spec.Name + " 有副作用，需要确认（未装权限组件）"}, nil
+		}}
+}
+
 // Authorized 层链里是否有负责授权判定的层。
 func (h *Hub) Authorized() bool {
 	for _, l := range h.layers {

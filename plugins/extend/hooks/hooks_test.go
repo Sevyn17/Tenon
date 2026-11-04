@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -193,5 +194,24 @@ func TestEmpty(t *testing.T) {
 	var r *Runner
 	if !r.Empty() || len(New(Config{}, ".", nil).Layers()) != 0 {
 		t.Fatal("空配置不应产生层")
+	}
+}
+
+// 走真实的 shell（Windows 上是 PowerShell）：钩子是原生程序、退出码 2 时要阻止
+// （审查 P0-15：原先 PowerShell 把原生程序的非零退出码都报成 1，守卫钩子静默失效）。
+func TestPreBlocksNativeExit2ThroughShell(t *testing.T) {
+	self, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := "'" + strings.ReplaceAll(self, "'", "''") + "' " + modePrefix + "exit2"
+	if runtime.GOOS == "windows" {
+		cmd = "& " + cmd
+	}
+	r := New(Config{Hook: []Hook{{Event: PreToolUse, Matcher: "shell", Command: cmd, re: regexp.MustCompile("^(?:shell)$")}}},
+		t.TempDir(), func(string) {})
+	out, ran := call(t, r.Layers(), "shell", ok)
+	if ran || out.Status != session.ToolError || !strings.Contains(text(out), "禁止删除") {
+		t.Fatalf("原生程序退出码 2 应阻止: ran=%v out=%q", ran, text(out))
 	}
 }

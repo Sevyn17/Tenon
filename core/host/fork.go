@@ -41,22 +41,15 @@ func (h *Host) Fork(ctx context.Context, src, dst string, upto int, origin strin
 	if core.Status() != session.StatusIdle {
 		return Handle{}, fmt.Errorf("host: 来源会话 %s 有进行中的回合，不能分叉", src)
 	}
-	cut := false
 	if upto >= 0 && upto < l.Snapshot.Header.LogLen {
-		// 分叉点 = 某回合首条 User 的下标。Rewind(upto+1) 恰好校验"upto 处是回合起点"并处理压缩边界，
-		// 之后再去掉保留下来的那条 User。
-		if _, err := core.Rewind(upto + 1); err != nil {
+		// 分叉点 = 某回合首条 User 的下标：Rewind(upto) 校验它是回合起点、截到 [0, upto) 并处理压缩边界。
+		if _, err := core.Rewind(upto); err != nil {
 			return Handle{}, fmt.Errorf("host: 分叉点 %d 不是回合起点: %w", upto, err)
 		}
-		cut = true
 	}
 	snap := core.Snapshot()
 	src0 := snap.Entries
 	hdr := snap.Header
-	if cut {
-		src0 = src0[:len(src0)-1]
-		hdr.LogLen--
-	}
 	entries, last, err := remap(src0)
 	if err != nil {
 		return Handle{}, err

@@ -245,6 +245,30 @@ func TestLayerFailurePolicies(t *testing.T) {
 		t.Fatalf("Transform FailOpen 应跳过: %q", text(rs[0].Output))
 	}
 
+	// Transform FailOpen 调过 next 之后才 panic / 超时：工具只执行一次，结果用工具本身的
+	// （审查 P0-8：原先再调一次 inner，写工具被执行两次）。
+	for _, mode := range []string{"panic", "timeout"} {
+		runs := 0
+		hf := New(Options{})
+		_ = hf.Register(&Tool{Spec: spec("w"), Risk: Write, Call: func(context.Context, *Cx, json.RawMessage) (Output, error) {
+			runs++
+			return Text("wrote"), nil
+		}})
+		hf.AddLayer(Layer{Name: "t-late", FailOpen: true, Timeout: 10 * time.Millisecond,
+			Call: func(ctx context.Context, cx *Cx, args json.RawMessage, next Next) (Output, error) {
+				out, err := next(ctx, cx, args)
+				if mode == "panic" {
+					panic("after next")
+				}
+				time.Sleep(30 * time.Millisecond)
+				return out, err
+			}})
+		rs := drain(hf.Execute(context.Background(), kctx("s"), []session.ToolCall{call("1", "w", `{}`)}, nil))
+		if runs != 1 || text(rs[0].Output) != "wrote" {
+			t.Fatalf("%s：工具应只执行一次并返回其结果: runs=%d out=%q", mode, runs, text(rs[0].Output))
+		}
+	}
+
 	h2 := New(Options{})
 	_ = h2.Register(&Tool{Spec: spec("r"), Call: func(context.Context, *Cx, json.RawMessage) (Output, error) { return Text("ran"), nil }})
 	h2.AddLayer(Layer{Name: "perm", Guard: true, Call: func(context.Context, *Cx, json.RawMessage, Next) (Output, error) {

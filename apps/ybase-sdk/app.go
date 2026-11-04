@@ -88,6 +88,7 @@ func (a *App) Start(ctx context.Context) error {
 		Definitions: a.defs,
 		Statuses:    col.Statuses,
 		Schemas:     a.asm.AgentSchemas(),
+		Compactor:   col.Compactor, // 自动压缩与超限后的强制压缩（审查 P0-1）
 	}
 	rb.Hooks = func(*kr.SessionCx) agent.Hooks { return agent.Hooks{} }
 	if _, err := appapi.New(appapi.Options{

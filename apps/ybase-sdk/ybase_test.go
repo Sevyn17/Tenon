@@ -93,6 +93,33 @@ description = "客服"
 	}
 }
 
+// Minimal 预设（不含权限组件）能跑带定义的会话：内核补缺省授权层（审查 P0-7：原先 Ask 报
+// "装配必须恰好有一个权限策略层"）；定义里的 prompt 也进了会话的系统段（P0-2）。
+func TestMinimalAsk(t *testing.T) {
+	dir := t.TempDir()
+	writeAgent(t, dir, "support", `format = "ybase/v1"
+id = "support"
+prompt = "你是售后客服"
+`)
+	opts := append(base(t), ybase.WithAgents(ybase.Dir(dir)))
+	app, err := ybase.New(opts...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	if err := app.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+	defer app.Close(ctx)
+	r, err := app.Ask(ctx, "support", "hi", nil)
+	if err != nil {
+		t.Fatalf("Minimal 预设应能跑会话: %v", err)
+	}
+	if r.Text != "ok" {
+		t.Fatalf("回复 = %q", r.Text)
+	}
+}
+
 // writeAgent 在 <root>/platform/<name>/agent.toml 写一个定义。
 func writeAgent(t *testing.T, root, name, manifest string) {
 	t.Helper()

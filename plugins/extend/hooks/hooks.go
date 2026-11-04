@@ -159,6 +159,14 @@ func New(cfg Config, cwd string, warn func(string)) *Runner {
 	return &Runner{Cfg: cfg, Cwd: cwd, Warn: warn, argv: defaultArgv()}
 }
 
+// psExitPre / psExitPost 让 PowerShell 的退出码等于最后一条命令的结果（与 shell 插件同一份写法）：
+// 不加时原生程序的任何非零退出码都被报成 1，`python guard.py` 退出 2 也不会阻止工具——
+// 守卫钩子在 Windows 上静默失效（2026-11-04 审查 P0-15）。
+const (
+	psExitPre  = "$global:LASTEXITCODE = 0\n"
+	psExitPost = "\nif (-not $?) { if ($LASTEXITCODE) { exit $LASTEXITCODE }; exit 1 }"
+)
+
 func defaultArgv() func(string) []string {
 	if runtime.GOOS == "windows" {
 		bin := "powershell"
@@ -166,7 +174,9 @@ func defaultArgv() func(string) []string {
 		if p, err := exec.LookPath("pwsh"); err == nil && !strings.Contains(strings.ToLower(filepath.ToSlash(p)), "/windowsapps/") {
 			bin = p
 		}
-		return func(c string) []string { return []string{bin, "-NoProfile", "-NonInteractive", "-Command", c} }
+		return func(c string) []string {
+			return []string{bin, "-NoProfile", "-NonInteractive", "-Command", psExitPre + c + psExitPost}
+		}
 	}
 	bin := "sh"
 	if p, err := exec.LookPath("bash"); err == nil {

@@ -96,6 +96,9 @@ type Sub struct {
 	err  error
 	done bool
 	gate func(Envelope) bool // Follow 用：实时事件先过闸
+	// quit 注销时关闭（先于取 mu）：Follow 的后台回放阻塞送时据此让出锁。
+	quit     chan struct{}
+	quitOnce sync.Once
 }
 
 // C 事件通道；关闭后读 Err()。
@@ -134,12 +137,12 @@ func (b *Bus) Publish(e Envelope) {
 }
 
 func (s *Sub) offer(e Envelope) {
-	s.mu.Lock()
-	if s.done {
-		s.mu.Unlock()
+	// 闸门在取 s.mu 之前：Follow 回放期间后台送端阻塞时持有 s.mu，实时事件只进缓存，不能被它卡住（D4 不阻塞发布者）。
+	if s.gate != nil && !s.gate(e) {
 		return
 	}
-	if s.gate != nil && !s.gate(e) {
+	s.mu.Lock()
+	if s.done {
 		s.mu.Unlock()
 		return
 	}
@@ -160,6 +163,9 @@ func (b *Bus) drop(s *Sub, why error) {
 	b.mu.Lock()
 	delete(b.subs, s)
 	b.mu.Unlock()
+	if s.quit != nil {
+		s.quitOnce.Do(func() { close(s.quit) })
+	}
 	s.mu.Lock()
 	if !s.done {
 		s.done, s.err = true, why
@@ -201,7 +207,7 @@ func (b *Bus) Follow(ctx context.Context, src Source, f Filter, after int64) (*S
 		syncing = true
 		water   int64
 	)
-	s := &Sub{b: b, f: f, ch: make(chan Envelope, b.cap)}
+	s := &Sub{b: b, f: f, ch: make(chan Envelope, b.cap), quit: make(chan struct{})}
 	s.gate = func(e Envelope) bool {
 		if e.Seq == 0 { // 易失事件不进可靠通道
 			return false
@@ -233,38 +239,44 @@ func (b *Bus) Follow(ctx context.Context, src Source, f Filter, after int64) (*S
 		}
 	}
 	out = append(out, Envelope{V: Version, Seq: wm, At: b.now().UnixMilli(), Session: f.Session, Kind: KindSynced})
-	// 回放与缓存一起按序送出；送完之前实时事件继续进缓存，保证顺序。
 	mu.Lock()
 	water = wm
 	mu.Unlock()
-	for {
-		mu.Lock()
-		for _, e := range buf {
-			if e.Seq > water {
-				out = append(out, e)
-				water = e.Seq
+	// 回放与缓存在后台按序送出（阻塞送，等消费者读），送完之前实时事件继续进缓存，保证顺序。
+	// 不能在返回前同步送：消费者要等 Follow 返回才开始读，回放多于队列容量时必然被判"过慢"断开
+	// （2026-11-04 审查 P0-9）。回放阶段的慢是消费者在追历史，不算过慢；实时阶段仍按队列满断开。
+	go func() {
+		for {
+			mu.Lock()
+			for _, e := range buf {
+				if e.Seq > water {
+					out = append(out, e)
+					water = e.Seq
+				}
 			}
-		}
-		buf = nil
-		if len(out) == 0 {
-			syncing = false
+			buf = nil
+			if len(out) == 0 {
+				syncing = false
+				mu.Unlock()
+				return
+			}
 			mu.Unlock()
-			break
+			if !s.sendBlocking(out) {
+				return
+			}
+			out = out[:0]
 		}
-		mu.Unlock()
-		s.sendAll(out)
-		out = out[:0]
-	}
+	}()
 	return s, nil
 }
 
-// sendAll 按序送出；队列满则断开。
-func (s *Sub) sendAll(out []Envelope) {
+// sendBlocking 按序送出，队列满就等消费者读；订阅被注销时返回 false。
+func (s *Sub) sendBlocking(out []Envelope) bool {
 	for _, e := range out {
 		s.mu.Lock()
 		if s.done {
 			s.mu.Unlock()
-			break
+			return false
 		}
 		select {
 		case s.ch <- e:
@@ -272,13 +284,12 @@ func (s *Sub) sendAll(out []Envelope) {
 				s.last = e.Seq
 			}
 			s.mu.Unlock()
-		default:
-			bp := s.last
+		case <-s.quit: // drop 先关 quit 再取锁，这里让出锁
 			s.mu.Unlock()
-			s.b.drop(s, &ErrSlow{Breakpoint: bp})
-			return
+			return false
 		}
 	}
+	return true
 }
 
 // Close 关闭总线，结束全部订阅。

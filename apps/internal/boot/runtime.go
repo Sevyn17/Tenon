@@ -238,10 +238,11 @@ func (r *Runtime) BuildApp(o AppOptions) (*Built, error) {
 			}
 			return pol
 		},
-		Tools:  col.Tools,
-		Layers: col.Layers,
-		Items:  col.Items,
-		Kernel: &kern,
+		Tools:     col.Tools,
+		Layers:    col.Layers,
+		Items:     col.Items,
+		Kernel:    &kern,
+		Compactor: col.Compactor, // 自动压缩与超限后的强制压缩（审查 P0-1）
 		// 会话定义来源：子智能体 / 工作组成员按内置模板名构造（T1b-2c）。
 		Definitions: rt.Defs,
 		// 状态提交登记（框架设计 12.5）：agent 每次调模型前收集变化的片段。

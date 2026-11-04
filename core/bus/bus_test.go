@@ -145,6 +145,77 @@ func TestFollowReplayThenLiveNoGapNoDup(t *testing.T) {
 	}
 }
 
+// 回放量远超队列容量：消费者在 Follow 返回后才开始读，不能因此被判过慢断开；
+// 回放期间的实时发布不阻塞发布者，且在 Synced 之后按序衔接（审查 P0-9：原先回放 > 容量必然 ErrSlow）。
+func TestFollowReplayLargerThanQueue(t *testing.T) {
+	b := New(8)
+	src := &memSource{}
+	pub := func(seq int64) {
+		e := Envelope{Session: "s1", Kind: "item", Seq: seq}
+		src.add(e)
+		b.Publish(e)
+	}
+	for i := int64(1); i <= 300; i++ {
+		src.add(Envelope{Session: "s1", Kind: "item", Seq: i})
+	}
+	s, err := b.Follow(context.Background(), src, Filter{Session: "s1"}, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 消费者还没读：这时发布不能阻塞（D4）。
+	published := make(chan struct{})
+	go func() {
+		for i := int64(301); i <= 320; i++ {
+			pub(i)
+		}
+		close(published)
+	}()
+	select {
+	case <-published:
+	case <-time.After(2 * time.Second):
+		t.Fatal("回放期间发布者被阻塞")
+	}
+	var seqs []int64
+	synced := false
+	for len(seqs) < 320 {
+		e := recv(t, s)
+		if e.Kind == KindSynced {
+			synced = true
+			continue
+		}
+		seqs = append(seqs, e.Seq)
+	}
+	if !synced || s.Err() != nil {
+		t.Fatalf("应收到 Synced 且订阅仍有效: synced=%v err=%v", synced, s.Err())
+	}
+	for i, q := range seqs {
+		if q != int64(i)+1 {
+			t.Fatalf("第 %d 个 seq=%d，期望 %d", i, q, i+1)
+		}
+	}
+	// 回放中途注销：后台送端退出，通道关闭。
+	s2, err := b.Follow(context.Background(), src, Filter{Session: "s1"}, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	recv(t, s2)
+	s2.Close()
+	deadline := time.After(2 * time.Second)
+	for {
+		select {
+		case _, ok := <-s2.C():
+			if !ok {
+				if !errors.Is(s2.Err(), ErrClosed) {
+					t.Fatalf("注销原因应为 ErrClosed: %v", s2.Err())
+				}
+				return
+			}
+		case <-deadline:
+			t.Fatal("注销后通道应关闭")
+		}
+	}
+}
+
 func TestFollowIgnoresVolatileAndRequiresSession(t *testing.T) {
 	b := New(8)
 	src := &memSource{}

@@ -277,6 +277,10 @@ func (c *Core) endTurn(reason EndReason, unconsumed []PendingInput) *Need {
 			Compaction: &CompactionItem{Upto: pc.Upto, Summary: pc.Summary}})
 		c.hdr.CompactionBase = pc.Upto
 	}
+	// 暂存配置在回合结束时照样生效：宿主已向调用方确认受理，不能因为回合先结束就丢掉。
+	for _, p := range c.hdr.PendingConfig {
+		_ = c.applyConfigPatch(p)
+	}
 	c.hdr.Status = StatusIdle
 	c.hdr.Turn = nil
 	c.hdr.PendingCalls = nil
@@ -469,7 +473,8 @@ func (c *Core) Resume() ([]Change, *Need, error) {
 	return nil, c.newModelNeed(turn, 1), nil
 }
 
-// Rewind 截断（T4）：to 必须是回合起点；截掉压缩条目时起点退回上一次压缩。
+// Rewind 截断（T4）：to 是某回合首条 User 条目的下标，截到 [0, to)——这一回合及之后的全部去掉。
+// to == base（0 或压缩点）、to == 日志长度（不截）也合法。截掉压缩条目时起点退回上一次压缩。
 func (c *Core) Rewind(to int) ([]Change, error) {
 	if err := c.checkReadOnly(); err != nil {
 		return nil, err
@@ -480,10 +485,10 @@ func (c *Core) Rewind(to int) ([]Change, error) {
 	if to < c.base || to > c.absLen() {
 		return nil, ErrBadRewind
 	}
-	if to > c.base { // to == base（0 或压缩点）合法
+	if to > c.base && to < c.absLen() {
 		off := to - c.base
-		if c.items[off-1].Item.Kind != KindUser || // 回合起点 = User 条目
-			(off >= 2 && c.items[off-2].Turn == c.items[off-1].Turn) {
+		if c.items[off].Item.Kind != KindUser || // 回合起点 = 该回合的首条 User 条目
+			c.items[off-1].Turn == c.items[off].Turn {
 			return nil, ErrBadRewind
 		}
 	}

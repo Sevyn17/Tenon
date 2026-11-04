@@ -223,10 +223,23 @@ func grantWorkspace(s *Sandbox, root string, cap *windows.SID) (string, error) {
 		}
 		for _, p := range s.protect() {
 			d := filepath.Join(root, p)
-			if err := os.MkdirAll(d, 0o755); err != nil {
+			fi, err := os.Stat(d)
+			switch {
+			case err == nil:
+			case !os.IsNotExist(err):
 				return err
+			case existingOnly(p):
+				continue // .git 不存在就不建（建个空 .git 会让 git 误以为这是仓库）
+			default:
+				if err := os.MkdirAll(d, 0o755); err != nil {
+					return err
+				}
 			}
-			deny := grant(cap, denyWrite, inheritBoth)
+			inherit := uint32(inheritBoth)
+			if fi != nil && !fi.IsDir() { // worktree / 子模块的 .git 是文件
+				inherit = windows.NO_INHERITANCE
+			}
+			deny := grant(cap, denyWrite, inherit)
 			deny.AccessMode = windows.DENY_ACCESS
 			if err := editDACL(d, []windows.EXPLICIT_ACCESS{deny}); err != nil {
 				return err
@@ -273,7 +286,7 @@ func Reset(root string, protect []string) error {
 	revoke := grant(cap, 0, windows.NO_INHERITANCE)
 	revoke.AccessMode = windows.REVOKE_ACCESS
 	if protect == nil {
-		protect = []string{".ybase"}
+		protect = DefaultProtect
 	}
 	paths := []string{root}
 	for _, p := range protect {

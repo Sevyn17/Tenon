@@ -61,7 +61,9 @@ func (a *Agent) injectStatuses(reset bool) (bool, error) {
 	// L3 状态更新：只发变化的 key，合并成一条 <status-update>；超出总预算的低优先级条目丢弃，
 	// 丢弃的 key 不更新哈希，下次再试（12.5）。
 	changed := inject.Changes(stats, prev)
-	cleared := inject.Cleared(stats, prev)
+	// 撤销对全部片段算：prev 里也有快照的 key，只拿状态比会把仍在的快照当成"已清除"，
+	// 于是在"发快照 / 发已清除"之间来回（2026-11-04 审查 P0-10）。
+	cleared := inject.Cleared(items, prev)
 	if len(changed) == 0 && len(cleared) == 0 {
 		return injected, nil
 	}
@@ -69,8 +71,8 @@ func (a *Agent) injectStatuses(reset bool) (bool, error) {
 	sent := make([]inject.Item, 0, len(kept)+len(cleared))
 	sent = append(sent, kept...)
 	sent = append(sent, cleared...)
-	for _, it := range kept {
-		effective[it.Key] = inject.Hash(it.Body)
+	for k, v := range inject.Hashes(kept) { // 按截断前原文记哈希（P0-11）
+		effective[k] = v
 	}
 	for _, it := range cleared {
 		delete(effective, it.Key)

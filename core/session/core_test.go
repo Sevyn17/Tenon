@@ -119,6 +119,64 @@ func TestT3_T4_CompactAndRewind(t *testing.T) {
 	}
 }
 
+// T4：to 是回合首条 User 的下标。两回合普通对话 u1 a1 u2 a2：Rewind(2) 去掉第二回合，
+// Rewind(0) 清空；Rewind(1)（assistant）、Rewind(3) 不是回合起点（2026-11-04 审查 P0-4：
+// 原先 to 被当成"保留到 User 之后"，appapi 按 User 下标传入时普通会话必失败）。
+func TestRewindToTurnStartIndex(t *testing.T) {
+	h := newHarness(t, 8)
+	for _, q := range []string{"u1", "u2"} {
+		_, n, err := h.core.Input(txt(q), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, _, err := h.core.ModelDone(n.Model.RequestID, n.ID, AssistantItem{Content: txt("re:" + q)}, StopReason{}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if h.core.hdr.LogLen != 4 {
+		t.Fatalf("两回合应有 4 条: %d", h.core.hdr.LogLen)
+	}
+	for _, bad := range []int{1, 3} {
+		if _, err := h.core.Rewind(bad); !errors.Is(err, ErrBadRewind) {
+			t.Fatalf("Rewind(%d) 不是回合起点，应 ErrBadRewind: %v", bad, err)
+		}
+	}
+	if _, err := h.core.Rewind(2); err != nil {
+		t.Fatalf("Rewind(2) 应退掉第二回合: %v", err)
+	}
+	if h.core.hdr.LogLen != 2 || h.core.items[1].Item.Kind != KindAssistant {
+		t.Fatalf("应只剩第一回合 u1 a1: len=%d", h.core.hdr.LogLen)
+	}
+	if _, err := h.core.Rewind(2); err != nil { // to == 日志长度：不截，合法
+		t.Fatalf("Rewind(日志长度) 应合法: %v", err)
+	}
+	if _, err := h.core.Rewind(0); err != nil || h.core.hdr.LogLen != 0 {
+		t.Fatalf("Rewind(0) 应清空: %v len=%d", err, h.core.hdr.LogLen)
+	}
+}
+
+// T5：等待态的 SetConfig 暂存；回合没到步边界就结束时也要生效，不能丢（审查 P0-12）。
+func TestPendingConfigAppliedWhenTurnEnds(t *testing.T) {
+	h := newHarness(t, 8)
+	_, n, err := h.core.Input(txt("问"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	steps := uint32(3)
+	if _, _, err := h.core.SetConfig(ConfigPatch{Model: strPtr("m2"), MaxSteps: &steps}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := h.core.ModelDone(n.Model.RequestID, n.ID, AssistantItem{Content: txt("答")}, StopReason{}); err != nil {
+		t.Fatal(err)
+	}
+	if h.core.Status() != StatusIdle {
+		t.Fatalf("回合应结束: %v", h.core.Status())
+	}
+	if c := h.core.hdr.Config; c.Model != "m2" || c.Policy.MaxSteps != 3 || len(h.core.hdr.PendingConfig) != 0 {
+		t.Fatalf("暂存配置应在回合结束时生效: model=%s max=%d pending=%d", c.Model, c.Policy.MaxSteps, len(h.core.hdr.PendingConfig))
+	}
+}
+
 // T4：截掉的压缩条目即使 upto 在截断点之前（压缩条目写在更后面），也要退回上一次压缩；
 // 否则压缩基点仍指向已删的摘要，重建请求会丢掉摘要和它之前的全部历史。
 func TestRewindPastCompactionEntryResetsBase(t *testing.T) {

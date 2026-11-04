@@ -53,6 +53,9 @@ type Failure struct {
 func (f *Failure) Error() string { return string(f.Code) + ": " + f.Message }
 
 // Event 流事件。恰好一个终止事件（Done 或 Failed），之后通道关闭。
+// 全部字段为空的事件是心跳：只重置调度器的首事件 / 空闲计时，不改变任何状态。适配器在收到
+// 不对外展示的增量（工具参数、推理签名）时发它——否则模型一开口就流一个大工具参数时，
+// 一分钟以上没有事件，被判首事件超时再重试（2026-11-04 审查 P0-13）。
 type Event struct {
 	TextDelta      string
 	ReasoningDelta string

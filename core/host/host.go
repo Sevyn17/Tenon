@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"sync"
 	"time"
 
@@ -186,6 +187,14 @@ func (h Handle) Do(c Command) error {
 	}
 }
 
+// Post 投递命令，入队即返回、不等受理（队列满返回 ErrBusy，已退出返回 ErrClosed）。
+// 发件箱派发 control 用：Close 在回合中要等回合结束才执行，同步等会卡住整个派发、超过认领期限后被重复投递
+// （2026-11-04 审查 P0-6）。
+func (h Handle) Post(c Command) error {
+	c.done = nil
+	return h.a.enqueue(c)
+}
+
 // Wait 等到会话空闲（无进行中回合且 inbox 已处理）。测试与 CLI 用。
 func (h Handle) Wait() error {
 	done := make(chan error, 1)
@@ -213,8 +222,37 @@ func (h Handle) Done() <-chan struct{} { return h.a.exit }
 func (h Handle) Err() error { return h.a.exitErr }
 
 // Open 打开（不存在则新建，origin = new）。已打开的返回同一句柄。
+// 已存在的子会话（origin = subagent / member）按 Child 构造：休眠唤醒、重启后收信、control
+// 都走这里，用 New 会让委派工具重新可见、深度限制失效（2026-11-04 审查 P0-5）。
 func (h *Host) Open(ctx context.Context, id string) (Handle, error) {
-	return h.open(ctx, id, "", h.New, nil)
+	if hd, ok := h.Get(id); ok {
+		return hd, nil
+	}
+	f := h.New
+	if h.Child != nil {
+		child, err := h.isChild(ctx, id)
+		if err != nil {
+			return Handle{}, err
+		}
+		if child {
+			f = h.Child
+		}
+	}
+	return h.open(ctx, id, "", f, nil)
+}
+
+// isChild 会话是否是子会话（子智能体或工作组成员）；会话不存在返回 false。
+// 只要会话行：base 取到最大，不读任何条目。
+func (h *Host) isChild(ctx context.Context, id string) (bool, error) {
+	noEntries := math.MaxInt
+	l, err := h.DB.Load(ctx, id, &noEntries)
+	if errors.Is(err, store.ErrNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return l.Meta.ParentID != "" && (l.Meta.Origin == "subagent" || l.Meta.Origin == "member"), nil
 }
 
 // open 打开会话；def 是要用的智能体定义名（空 = 无定义，恢复已有会话时从会话行取）；

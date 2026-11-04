@@ -78,6 +78,20 @@ type Builder struct {
 	Schemas []useconf.Schema
 }
 
+// modelFor 会话用的模型：定义写了 model 就用它（经目录解析校验，写错即报错），否则用全局缺省。
+// 原先一律用全局模型，定义里的 model 不生效（2026-11-04 审查 P0-3）。
+func (b *Builder) modelFor(def *agentdef.Agent) (string, error) {
+	if def == nil || def.Model == "" {
+		return b.Model, nil
+	}
+	if b.Models != nil {
+		if _, err := b.Models.Catalog().Resolve(def.Model); err != nil {
+			return "", fmt.Errorf("runtime: 定义 %s 的模型 %q：%w", def.ID, def.Model, err)
+		}
+	}
+	return def.Model, nil
+}
+
 // Build 构造会话 id 的 agent 与新会话配置。
 //
 // defName 是要用的定义名（空 = 无定义；恢复已有会话时从会话行 meta 里取，见 loadDefinition），
@@ -131,6 +145,9 @@ func (b *Builder) Build(id, defName string, child bool) (*agent.Agent, *session.
 			hub.AddLayer(l)
 		}
 	}
+	if !hub.Authorized() { // 没装权限组件：用内核缺省授权层（有副作用的工具一律询问，P0-7）
+		hub.AddLayer(toolhub.DefaultAuthorizer())
+	}
 	if err := hub.Validate(); err != nil {
 		return nil, nil, err
 	}
@@ -150,7 +167,11 @@ func (b *Builder) Build(id, defName string, child bool) (*agent.Agent, *session.
 	if b.Policy != nil {
 		pol = b.Policy()
 	}
-	cfg := &session.Config{Model: b.Model, Tools: hub.Exposed(ts), Policy: pol}
+	model, err := b.modelFor(def)
+	if err != nil {
+		return nil, nil, err
+	}
+	cfg := &session.Config{Model: model, Tools: hub.Exposed(ts), Policy: pol}
 	for _, f := range b.Blocks {
 		blk, err := f(cx)
 		if err != nil {

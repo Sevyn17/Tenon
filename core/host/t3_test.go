@@ -240,11 +240,55 @@ func TestDeliverControlOnlyCreator(t *testing.T) {
 		To: mail.Address{Kind: mail.AddrSession, ID: "s1"}, Kind: mail.KindControl, Body: "close"}); err != nil {
 		t.Fatalf("创建者 close: %v", err)
 	}
-	if err := hd.Wait(); err == nil {
-		// 已关闭的 actor 退出，Wait 返回 ErrClosed 或 nil 均可；用 Get 判断。
+	select { // close 入队即返回（P0-6），actor 随后退出
+	case <-hd.Done():
+	case <-time.After(5 * time.Second):
+		t.Fatal("close 后 actor 应退出")
 	}
 	if _, ok := r.h.Get("s1"); ok {
 		t.Fatal("close 后 actor 应退出")
+	}
+}
+
+// 回合进行中投递 control:close：投递立即返回（不等目标回合跑完），回合结束后会话关闭
+// （审查 P0-6：原先同步等整个回合，期间卡住整个发件箱派发）。
+func TestControlCloseMidTurnDoesNotBlock(t *testing.T) {
+	ctx := context.Background()
+	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{block: make(chan struct{})})
+	hd, err := r.h.open(ctx, "s1", "", r.h.New, func(ag *agent.Agent, cfg *session.Config) error {
+		_, err := ag.OpenAs(ctx, cfg, store.SessionMeta{ID: "s1", Creator: "u1"})
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := hd.Do(Command{Kind: Send, Text: "慢"}); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, func() bool { r.m.mu.Lock(); defer r.m.mu.Unlock(); return r.m.calls == 1 })
+	done := make(chan error, 1)
+	go func() {
+		done <- r.h.Deliver(ctx, mail.Envelope{From: mail.Address{Kind: mail.AddrHuman, ID: "u1"},
+			To: mail.Address{Kind: mail.AddrSession, ID: "s1"}, Kind: mail.KindControl, Body: "close"})
+	}()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("close 投递: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("回合中的 control:close 投递不应等回合结束")
+	}
+	select {
+	case <-hd.Done():
+		t.Fatal("回合未结束时会话不应已关闭")
+	default:
+	}
+	close(r.m.block)
+	select {
+	case <-hd.Done():
+	case <-time.After(5 * time.Second):
+		t.Fatal("回合结束后会话应关闭")
 	}
 }
 
@@ -275,8 +319,8 @@ func TestRewindVoidsCorr(t *testing.T) {
 	if err := r.db.IssueCorr(ctx, store.Pending{Corr: "new", SessionID: "s1", ReplyTo: "agent:a", IssuedIdx: hidx}); err != nil {
 		t.Fatal(err)
 	}
-	// 回退到第一轮：之后签发的新 corr 作废；更早的仍有效。
-	if err := hd.Do(Command{Kind: Rewind, To: 1}); err != nil {
+	// 回退到第一轮：截掉第二轮（下标 2 起），之后签发的新 corr 作废；更早的仍有效。
+	if err := hd.Do(Command{Kind: Rewind, To: 2}); err != nil {
 		t.Fatal(err)
 	}
 	if err := hd.Wait(); err != nil {

@@ -76,6 +76,20 @@ func (*plug) Setup(cx *plugin.Registrar) error {
 		Func: func(*kr.SessionCx) (*session.SystemBlock, error) {
 			return &session.SystemBlock{Text: text, Source: "agent"}, nil
 		}})
+	// 会话定义的 prompt（框架设计 12 L1：定义 prompt 进系统段）：接在基础提示词之后，
+	// 基础提示词里的工作目录与工具用法照样保留。原先没有任何代码读它，定义里写的角色被静默丢弃
+	// （2026-11-04 审查 P0-2）。
+	cx.Register(kr.PointSystemBlock, "prompt-def", kr.BlockEntry{Order: 1,
+		Func: func(sc *kr.SessionCx) (*session.SystemBlock, error) {
+			if sc == nil || sc.Def == nil {
+				return nil, nil
+			}
+			t := sc.Def.PromptText()
+			if t == "" {
+				return nil, nil
+			}
+			return &session.SystemBlock{Text: t, Source: "agent-def:" + sc.Def.ID}, nil
+		}})
 	ps, err := pkgs.From(cx)
 	if err != nil {
 		return err

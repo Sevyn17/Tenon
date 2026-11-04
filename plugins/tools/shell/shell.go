@@ -32,6 +32,19 @@ const (
 // psUTF8 强制 PowerShell 以 UTF-8 输出（修中文 Windows 的 GBK 乱码）。
 const psUTF8 = "try { [Console]::OutputEncoding=[System.Text.Encoding]::UTF8; $OutputEncoding=[System.Text.Encoding]::UTF8 } catch {}\n"
 
+// psExit 让 PowerShell 的退出码等于最后一条命令的结果：最后一条是原生程序且失败时用它的真实退出码。
+// 不加时 `powershell -Command` 把原生程序的任何非零退出码都报成 1（`cmd /c exit 2` → 1），
+// 钩子的"退出码 2 = 阻止"在 Windows 上静默失效，shell 报给模型的退出码也失真（2026-11-04 审查 P0-15）。
+// 只在最后一条失败（$? 为假）时生效，其余语义不变：成功仍是 0，cmdlet 失败仍是 1，显式 exit N 原样。
+const (
+	psExitPre  = "$global:LASTEXITCODE = 0\n"
+	psExitPost = "\nif (-not $?) { if ($LASTEXITCODE) { exit $LASTEXITCODE }; exit 1 }"
+)
+
+// psCommand 包装成 PowerShell -Command 的参数：UTF-8 输出 + 真实退出码。
+// hooks 插件有同样的一份（插件之间不互相 import，见 core/runtime/deps_test.go）。
+func psCommand(c string) string { return psUTF8 + psExitPre + c + psExitPost }
+
 // packagedApp 报告可执行文件是否是 Windows 商店（MSIX）打包应用的执行别名或包内文件。
 // 打包应用跑在包容器里：不继承调用方的当前目录，%LOCALAPPDATA% 等目录被虚拟化成包内的私有视图，
 // 看不到调用方刚建的目录和文件（2026-11-03 演示：模型在商店版 pwsh 里查不到 write_file 刚写的文件，
@@ -120,7 +133,7 @@ func defaultArgv() func(string) []string {
 			bin = p
 		}
 		return func(c string) []string {
-			return []string{bin, "-NoProfile", "-NonInteractive", "-Command", psUTF8 + c}
+			return []string{bin, "-NoProfile", "-NonInteractive", "-Command", psCommand(c)}
 		}
 	}
 	bin := "sh"

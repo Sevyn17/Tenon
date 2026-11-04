@@ -298,6 +298,9 @@ func parseOpenAI(ctx context.Context, r io.Reader, model string, out chan<- mode
 				}
 				a.args.WriteString(tc.Function.Arguments)
 			}
+			if len(d.ToolCalls) > 0 {
+				out <- modelhub.Event{} // 心跳：长工具参数流期间不被判超时（P0-13）
+			}
 		}
 		if u := ck.Usage; u != nil {
 			cache := u.PromptTokensDetails.CachedTokens

@@ -149,3 +149,17 @@ func TestDeepSeekSearch(t *testing.T) {
 		t.Error("401 应报错")
 	}
 }
+
+// 搜索只认 DEEPSEEK_API_KEY：通用的 YBASE_API_KEY 可能是别家模型的 key，不能发给 DeepSeek（审查 P0-16）。
+func TestDeepSeekSearchIgnoresGenericKey(t *testing.T) {
+	t.Setenv("DEEPSEEK_API_KEY", "")
+	t.Setenv("YBASE_API_KEY", "sk-other-vendor")
+	if p := NewDeepSeekSearch(); p != nil {
+		t.Fatal("只有 YBASE_API_KEY 时不应启用 DeepSeek 搜索")
+	}
+	t.Setenv("DEEPSEEK_API_KEY", "ds-key")
+	p, ok := NewDeepSeekSearch().(*DeepSeekSearch)
+	if !ok || p.Key() != "ds-key" {
+		t.Fatalf("应使用 DEEPSEEK_API_KEY: %+v", p)
+	}
+}

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"sort"
 
+	"ybase-kernel/core/agent"
 	"ybase-kernel/core/inject"
 	"ybase-kernel/core/plugin"
 	"ybase-kernel/core/session"
@@ -95,6 +96,8 @@ type Collected struct {
 	Items []toolhub.Item
 	// Statuses 状态提交登记（框架设计 12.5）：每次调模型前由 agent 收集变化片段。
 	Statuses []inject.Reg
+	// Compactor 装配里的压缩器（service:compactor）；nil = 没装压缩组件。交给 Builder.Compactor。
+	Compactor agent.Compactor
 }
 
 // Collect 按点位取出登记项；工具、层、系统块按上面的规则排序（确定）。类型不符报错。
@@ -193,5 +196,14 @@ func Collect(asm *plugin.Assembly) (*Collected, error) {
 	}
 	sort.SliceStable(c.Items, func(i, j int) bool { return c.Items[i].ID < c.Items[j].ID })
 	c.Statuses = asm.Statuses()
+	// 压缩器（service:compactor）：会话的自动压缩与上下文超限后的强制压缩都要它。原先只交给 appapi 的
+	// 手动压缩入口，Builder 从没拿到，自动压缩一直不生效（2026-11-04 审查 P0-1）。
+	if v, ok := asm.Value(ServiceCompactor); ok {
+		cp, ok := v.(agent.Compactor)
+		if !ok {
+			return nil, fmt.Errorf("runtime: %s 类型不符（%T，需实现 agent.Compactor）", ServiceCompactor, v)
+		}
+		c.Compactor = cp
+	}
 	return c, nil
 }

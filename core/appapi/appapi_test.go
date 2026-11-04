@@ -314,3 +314,31 @@ func TestSessionsList(t *testing.T) {
 		t.Fatalf("JSON：%s", b)
 	}
 }
+
+// session.rewind：两回合普通对话退回 1 回合，只剩第一回合（审查 P0-4：原先报"目标必须是回合起点"）。
+func TestRewindOneTurnKeepsFirst(t *testing.T) {
+	app := newApp(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	sub := app.Events(ctx, bus.Filter{Kinds: []string{EventTurnEnd}})
+	if _, err := app.Open(ctx, SessionArgs{Session: "s1"}); err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range []string{"u1", "u2"} {
+		if _, err := app.Send(ctx, SendArgs{Session: "s1", Text: s}); err != nil {
+			t.Fatal(err)
+		}
+		next(t, sub, EventTurnEnd)
+	}
+	r, err := app.Rewind(ctx, RewindArgs{Session: "s1", Turns: 1})
+	if err != nil {
+		t.Fatalf("退回 1 回合: %v", err)
+	}
+	es, err := app.Entries(ctx, EntriesArgs{Session: "s1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.To != 2 || es.LogLen != 2 || es.Entries[1].Entry.Item.Kind != session.KindAssistant {
+		t.Fatalf("应只剩第一回合: to=%d log_len=%d", r.To, es.LogLen)
+	}
+}
