@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"ybase-kernel/plugins/collab/subagent"
-	"ybase-kernel/plugins/collab/workgroup"
+	"ybase/modules/collab/subagent"
+	"ybase/modules/collab/workgroup"
 )
 
 // CLI 聊天的会话构造器要和桌面端 / api-server 同一份装配：打开 subagent / workgroup 后，

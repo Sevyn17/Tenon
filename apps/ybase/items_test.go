@@ -6,16 +6,16 @@ package main
 import (
 	"testing"
 
-	"ybase-kernel/core/toolhub"
-	"ybase-kernel/plugins/collab/subagent"
-	"ybase-kernel/plugins/collab/workgroup"
-	"ybase-kernel/plugins/context/skills"
-	"ybase-kernel/plugins/security/permission"
-	"ybase-kernel/plugins/tools/codemode"
-	"ybase-kernel/plugins/tools/fs"
-	"ybase-kernel/plugins/tools/mcp"
-	"ybase-kernel/plugins/tools/shell"
-	"ybase-kernel/plugins/tools/web"
+	"ybase/modules/collab/subagent"
+	"ybase/modules/collab/workgroup"
+	"ybase/modules/context/skills"
+	"ybase/modules/security/permission"
+	"ybase/modules/tools/codemode"
+	"ybase/modules/tools/fs"
+	"ybase/modules/tools/mcp"
+	"ybase/modules/tools/shell"
+	"ybase/modules/tools/web"
+	"ybase/runtime/toolhub"
 )
 
 func TestPluginItemsWithinCaps(t *testing.T) {

@@ -11,8 +11,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"ybase-kernel/apps/internal/boot"
-	"ybase-kernel/core/pkgs"
+	"ybase/apps/internal/boot"
+	"ybase/runtime/pkgs"
 )
 
 func pluginCmd(args []string, o opts) error {

@@ -8,8 +8,8 @@ import (
 	"errors"
 	"sync"
 
-	"ybase-kernel/core/appapi"
-	"ybase-kernel/core/bus"
+	"ybase/appapi"
+	"ybase/runtime/bus"
 )
 
 // EventName 前端订阅的 Wails 事件名；数据为 bus.Envelope。

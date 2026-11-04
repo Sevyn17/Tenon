@@ -7,8 +7,8 @@ import (
 	"sort"
 	"strings"
 
-	"ybase-kernel/core/pkgs"
-	"ybase-kernel/core/plugin"
+	"ybase/runtime/component"
+	"ybase/runtime/pkgs"
 )
 
 // packageLines 已加载插件包的展示行：名字 版本（用户级 / 项目级）← 清单路径，下一行列内容。
@@ -37,11 +37,11 @@ func packageLines(ps []*pkgs.Package) []string {
 }
 
 var effectText = map[string]string{
-	plugin.EffectSystemPrompt:  "改系统提示词",
-	plugin.EffectTools:         "加工具",
-	plugin.EffectRewriteResult: "改写结果",
-	plugin.EffectExec:          "执行程序",
-	plugin.EffectNetwork:       "联网",
+	component.EffectSystemPrompt:  "改系统提示词",
+	component.EffectTools:         "加工具",
+	component.EffectRewriteResult: "改写结果",
+	component.EffectExec:          "执行程序",
+	component.EffectNetwork:       "联网",
 }
 
 func effects(es []string) string {
@@ -57,7 +57,7 @@ func effects(es []string) string {
 }
 
 // stateLine 一行：开/关 名字（影响）← 来源。
-func stateLine(st plugin.State) string {
+func stateLine(st component.State) string {
 	on := "关"
 	if st.On {
 		on = "开"
@@ -77,7 +77,7 @@ func stateLine(st plugin.State) string {
 }
 
 // enabledLine 已开启插件名，非缺省开启的标 *。
-func enabledLine(p *plugin.Profile) string {
+func enabledLine(p *component.Profile) string {
 	var on []string
 	for _, st := range p.States() {
 		if !st.On {
@@ -96,7 +96,7 @@ func enabledLine(p *plugin.Profile) string {
 const extAssembly = "assembly.plugins"
 
 // onNames 已开启插件名（profile 顺序）。
-func onNames(p *plugin.Profile) []string {
+func onNames(p *component.Profile) []string {
 	var on []string
 	for _, st := range p.States() {
 		if st.On {

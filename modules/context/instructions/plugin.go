@@ -1,0 +1,45 @@
+package instructions
+
+// 插件登记（thin-kernel-plan §2.2）：AGENTS.md 系统块 + 嵌套指令 Transform 层（每会话一份，已装载集合属于本会话）。
+
+import (
+	"ybase/runtime/assemble"
+	"ybase/runtime/component"
+	"ybase/runtime/session"
+	"ybase/runtime/toolhub"
+)
+
+const valueKey = "instructions"
+
+type plug struct{}
+
+func init() { component.Register("instructions", func() component.Component { return &plug{} }) }
+
+func (*plug) Meta() component.Meta {
+	return component.Meta{Name: "instructions", Version: "0.1.0", Default: true, Effects: []string{component.EffectSystemPrompt, component.EffectRewriteResult}, Requires: []string{assemble.ServiceWorkdir}}
+}
+
+func get(sc *assemble.SessionCx, root string) *Instructions {
+	if in, ok := sc.Values[valueKey].(*Instructions); ok {
+		return in
+	}
+	in := NewInstructions(root)
+	sc.Values[valueKey] = in
+	return in
+}
+
+func (*plug) Setup(cx *component.Registrar) error {
+	root, err := component.Use[string](cx, assemble.ServiceWorkdir)
+	if err != nil {
+		return err
+	}
+	cx.Register(assemble.PointSessionLayer, "instructions", assemble.LayerEntry{Order: 20,
+		Func: func(sc *assemble.SessionCx) ([]toolhub.Layer, error) {
+			return []toolhub.Layer{get(sc, root).Layer()}, nil
+		}})
+	cx.Register(assemble.PointSystemBlock, "instructions", assemble.BlockEntry{Order: 10,
+		Func: func(sc *assemble.SessionCx) (*session.SystemBlock, error) { return get(sc, root).Block() }})
+	return nil
+}
+
+func (*plug) Start(*component.Scope) error { return nil }

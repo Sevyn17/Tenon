@@ -1,4 +1,4 @@
-// 应用接口层协议的 TypeScript 类型（对应 kernel/core/appapi，协议版本见 PROTOCOL）。
+// 应用接口层协议的 TypeScript 类型（对应 kernel/appapi，协议版本见 PROTOCOL）。
 // 命令名清单 COMMANDS 由 Go 测试 kernel/apps/desktop/service_test.go（TestProtocolCommands） 校验与 appapi.Commands() 一致；
 // 改 appapi 命令时同步改这里。
 
@@ -101,7 +101,7 @@ export interface HumanRequestedEvent { call_id: string; tool: string; reason?: s
 export interface TurnEndEvent { reason: string }
 export interface TurnDeniedEvent { unconsumed?: unknown }
 
-// ---- 会话日志条目（core/session/types.go；内层结构无 json tag，键为 Go 字段名） ----
+// ---- 会话日志条目（runtime/session/types.go；内层结构无 json tag，键为 Go 字段名） ----
 
 export interface Part {
   kind: "text" | "media" | "data" | "unknown" | string;

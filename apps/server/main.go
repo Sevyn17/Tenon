@@ -18,11 +18,11 @@ import (
 	"syscall"
 	"time"
 
-	"ybase-kernel/apps/internal/boot"
-	"ybase-kernel/core/appapi"
-	"ybase-kernel/core/bus"
-	"ybase-kernel/core/runtime"
-	"ybase-kernel/web"
+	"ybase/appapi"
+	"ybase/apps/internal/boot"
+	"ybase/runtime/assemble"
+	"ybase/runtime/bus"
+	"ybase/web"
 )
 
 type options struct {
@@ -117,7 +117,7 @@ func run(o options) error {
 
 	var ui *appapi.UI
 	// 网页端没有终端可问：无信任记录的项目按不受信（同桌面端）。
-	rt, err := boot.Start(boot.StartOptions{Flags: o.boot, UI: func(b *bus.Bus) runtime.UI {
+	rt, err := boot.Start(boot.StartOptions{Flags: o.boot, UI: func(b *bus.Bus) assemble.UI {
 		ui = appapi.NewUI(b)
 		return ui
 	}})

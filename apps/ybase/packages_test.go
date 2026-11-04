@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"ybase-kernel/apps/internal/boot"
+	"ybase/apps/internal/boot"
 )
 
 func writePkg(t *testing.T, dir, manifest string) {

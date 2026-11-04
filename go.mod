@@ -1,4 +1,4 @@
-module ybase-kernel
+module ybase
 
 go 1.26.0
 

@@ -15,8 +15,8 @@ import (
 
 	"github.com/BurntSushi/toml"
 
-	"ybase-kernel/core/pkgs"
-	"ybase-kernel/core/plugin"
+	"ybase/runtime/component"
+	"ybase/runtime/pkgs"
 )
 
 // 信任级别。
@@ -121,7 +121,7 @@ func Home() string {
 }
 
 // PackageNotices 插件包带了内容、但负责的内置插件没开时的提示（插件包不替用户开插件）。
-func PackageNotices(p *plugin.Profile, ps []*pkgs.Package) []string {
+func PackageNotices(p *component.Profile, ps []*pkgs.Package) []string {
 	on := map[string]bool{}
 	for _, st := range p.States() {
 		on[st.Name] = st.On
@@ -286,7 +286,7 @@ var projectDenied = map[string][]string{
 }
 
 // LoadProfiles 同 LoadAll，不要插件包列表。
-func LoadProfiles(extra, root string, trusted bool) (*plugin.Profile, []string, error) {
+func LoadProfiles(extra, root string, trusted bool) (*component.Profile, []string, error) {
 	p, _, notes, err := LoadAll(extra, root, trusted)
 	return p, notes, err
 }
@@ -294,8 +294,8 @@ func LoadProfiles(extra, root string, trusted bool) (*plugin.Profile, []string, 
 // LoadAll 读插件包与各层 profile：
 // 内置 < 插件包 [config.*] < ~/.ybase/profile.toml < <dir>/.ybase/profile.toml（受信时）< extra（-profile）。
 // 插件包：用户级 <home>/plugins/*，项目级 <dir>/.ybase/plugins/*（只在受信时）。
-func LoadAll(extra, root string, trusted bool) (*plugin.Profile, []*pkgs.Package, []string, error) {
-	p, err := plugin.ParseProfile(defaultProfileTOML, ".")
+func LoadAll(extra, root string, trusted bool) (*component.Profile, []*pkgs.Package, []string, error) {
+	p, err := component.ParseProfile(defaultProfileTOML, ".")
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -323,7 +323,7 @@ func LoadAll(extra, root string, trusted bool) (*plugin.Profile, []*pkgs.Package
 		if _, err := os.Stat(path); err != nil {
 			return nil
 		}
-		q, err := plugin.LoadProfile(path)
+		q, err := component.LoadProfile(path)
 		if err != nil {
 			return err
 		}
@@ -350,7 +350,7 @@ func LoadAll(extra, root string, trusted bool) (*plugin.Profile, []*pkgs.Package
 		notes = append(notes, "项目未受信，未读 "+proj+"（ybase trust 可信任）")
 	}
 	if extra != "" {
-		q, err := plugin.LoadProfile(extra)
+		q, err := component.LoadProfile(extra)
 		if err != nil {
 			return nil, nil, nil, err
 		}

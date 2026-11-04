@@ -11,11 +11,11 @@ import (
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 
-	"ybase-kernel/apps/internal/boot"
-	"ybase-kernel/core/appapi"
-	"ybase-kernel/core/bus"
-	"ybase-kernel/core/runtime"
-	"ybase-kernel/web"
+	"ybase/appapi"
+	"ybase/apps/internal/boot"
+	"ybase/runtime/assemble"
+	"ybase/runtime/bus"
+	"ybase/web"
 )
 
 func main() {
@@ -40,7 +40,7 @@ func main() {
 func run(f boot.Flags) error {
 	var ui *appapi.UI
 	// 桌面端没有终端可问：无信任记录的项目按不受信（需要时用 -trust-project 或 ybase trust 保存）。
-	rt, err := boot.Start(boot.StartOptions{Flags: f, UI: func(b *bus.Bus) runtime.UI {
+	rt, err := boot.Start(boot.StartOptions{Flags: f, UI: func(b *bus.Bus) assemble.UI {
 		ui = appapi.NewUI(b) // ask_user 等经 appapi 的 ask 事件 + session.answer 往返
 		return ui
 	}})

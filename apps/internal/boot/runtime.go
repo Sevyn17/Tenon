@@ -11,16 +11,16 @@ import (
 	"strings"
 	"time"
 
-	"ybase-kernel/core/agent"
-	"ybase-kernel/core/appapi"
-	"ybase-kernel/core/bus"
-	"ybase-kernel/core/host"
-	"ybase-kernel/core/pkgs"
-	"ybase-kernel/core/plugin"
-	"ybase-kernel/core/runtime"
-	"ybase-kernel/core/session"
-	"ybase-kernel/core/store"
-	"ybase-kernel/plugins/security/permission"
+	"ybase/appapi"
+	"ybase/modules/security/permission"
+	"ybase/runtime/agent"
+	"ybase/runtime/assemble"
+	"ybase/runtime/bus"
+	"ybase/runtime/component"
+	"ybase/runtime/host"
+	"ybase/runtime/pkgs"
+	"ybase/runtime/session"
+	"ybase/runtime/store"
 )
 
 // Flags 命令行参数（CLI 与桌面端同名同义）。
@@ -68,11 +68,11 @@ func Overrides(f Flags, root string) map[string]map[string]any {
 // Runtime 装配好且已启动的进程：插件运行时 + 应用预置给插件的服务。用完调 Close。
 type Runtime struct {
 	Rt      *Assembled
-	Profile *plugin.Profile
+	Profile *component.Profile
 	Root    string
 	Bus     *bus.Bus
 	Host    *host.Host
-	UI      runtime.UI
+	UI      assemble.UI
 	// 项目信任结果与装配提示（横幅 / explain 显示）。
 	Trusted  bool
 	TrustWhy string
@@ -80,7 +80,7 @@ type Runtime struct {
 	// Packages 已加载的插件包（用户级在前、项目级在后）。
 	Packages []*pkgs.Package
 
-	proc      *plugin.Scope
+	proc      *component.Scope
 	sleepStop context.CancelFunc // 后台循环（兜底扫描、存储清理）的取消函数
 }
 
@@ -90,7 +90,7 @@ type StartOptions struct {
 	// AskTrust 无信任记录且项目带 .ybase 配置时询问用户；nil = 按不受信。
 	AskTrust func(key string) bool
 	// UI 用总线构造界面服务（service:ui）；必填。
-	UI func(b *bus.Bus) runtime.UI
+	UI func(b *bus.Bus) assemble.UI
 	// SleepAfter 空闲会话的休眠超时（0 = 不休眠，02 2.2）。>0 时同时启动兜底扫描。
 	SleepAfter time.Duration
 }
@@ -113,17 +113,17 @@ func Start(o StartOptions) (*Runtime, error) {
 	r := &Runtime{Profile: p, Root: root, Bus: b, Host: &host.Host{Bus: b}, UI: o.UI(b),
 		Trusted: trusted, TrustWhy: why, Notes: notes, Packages: ps}
 	r.Rt, err = Assemble(p, Overrides(o.Flags, root), map[string]any{
-		runtime.ServiceWorkdir: root,
-		runtime.ServiceHost:    r.Host,
-		runtime.ServiceUI:      r.UI,
-		runtime.ServiceTrust:   trusted,
-		pkgs.Service:           ps,
+		assemble.ServiceWorkdir: root,
+		assemble.ServiceHost:    r.Host,
+		assemble.ServiceUI:      r.UI,
+		assemble.ServiceTrust:   trusted,
+		pkgs.Service:            ps,
 	})
 	if err != nil {
 		b.Close()
 		return nil, fmt.Errorf("装配: %w", err)
 	}
-	r.proc = plugin.NewRoot("process")
+	r.proc = component.NewRoot("process")
 	if err := r.Rt.Asm.Start(r.proc); err != nil {
 		r.Close()
 		return nil, err
@@ -131,7 +131,7 @@ func Start(o StartOptions) (*Runtime, error) {
 	r.Host.DB = r.Rt.Store.DB() // 数据库在 store-sqlite 启动后才打开
 	// 宿主参数来自 profile 的 [kernel] 节（休眠、并发上限、所属树策略、保留期）；
 	// StartOptions.SleepAfter 显式给出时优先（测试与嵌入方用）。
-	kern, err := runtime.ParseKernel(p.Kernel)
+	kern, err := assemble.ParseKernel(p.Kernel)
 	if err != nil {
 		r.Close()
 		return nil, fmt.Errorf("profile [kernel]: %w", err)
@@ -173,7 +173,7 @@ func (r *Runtime) Close() {
 type AppOptions struct {
 	MaxSteps int // -1 = 用 profile [kernel] 的缺省
 	// Hooks 应用自己的会话钩子（CLI 打印正文）；可空。appapi 的流式事件钩子总会并入。
-	Hooks func(*runtime.SessionCx) agent.Hooks
+	Hooks func(*assemble.SessionCx) agent.Hooks
 	// UI 事件化界面（桌面端 / api-server）；CLI 用终端界面，传 nil。
 	UI *appapi.UI
 	// ModesWorkdir 项目档位确认记录（trust.toml）用的目录；CLI 沿用 -dir 原值。
@@ -186,8 +186,8 @@ type Built struct {
 	DB      store.Store
 	Model   string
 	Perms   *permission.Sessions // 未装 permission 插件时为 nil
-	Builder *runtime.Builder
-	ready   []runtime.ReadyFunc
+	Builder *assemble.Builder
+	ready   []assemble.ReadyFunc
 }
 
 // Ready 跑 ready 点位（构造器就绪后再跑：如工作组补投会打开领导会话），返回各自的错误。
@@ -213,11 +213,11 @@ func (r *Runtime) BuildApp(o AppOptions) (*Built, error) {
 	if v, ok := rt.Asm.Value(permission.Service); ok {
 		perms, _ = v.(*permission.Sessions)
 	}
-	kern, err := runtime.ParseKernel(r.Profile.Kernel)
+	kern, err := assemble.ParseKernel(r.Profile.Kernel)
 	if err != nil {
 		return nil, fmt.Errorf("profile [kernel]: %w", err)
 	}
-	col, err := runtime.Collect(rt.Asm)
+	col, err := assemble.Collect(rt.Asm)
 	if err != nil {
 		return nil, err
 	}
@@ -230,7 +230,7 @@ func (r *Runtime) BuildApp(o AppOptions) (*Built, error) {
 		}
 	}
 	maxSteps := o.MaxSteps
-	rb := &runtime.Builder{DB: db, Artifacts: rt.Store.Blobs(), Models: rt.Models.Hub, Model: modelName, Workdir: r.Root,
+	rb := &assemble.Builder{DB: db, Artifacts: rt.Store.Blobs(), Models: rt.Models.Hub, Model: modelName, Workdir: r.Root,
 		Policy: func() session.Policy {
 			pol := kern.Policy
 			if maxSteps >= 0 {

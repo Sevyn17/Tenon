@@ -10,8 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"ybase-kernel/apps/internal/boot"
-	"ybase-kernel/core/plugin"
+	"ybase/apps/internal/boot"
+	"ybase/runtime/component"
 )
 
 const (
@@ -45,7 +45,7 @@ func resolveTrust(o opts, root string, interactive bool) (bool, string, error) {
 }
 
 // loadProfiles 内置 < ~/.ybase/profile.toml < <dir>/.ybase/profile.toml（受信时）< -profile。
-func loadProfiles(o opts, root string, trusted bool) (*plugin.Profile, []string, error) {
+func loadProfiles(o opts, root string, trusted bool) (*component.Profile, []string, error) {
 	return boot.LoadProfiles(o.profile, root, trusted)
 }
 

@@ -1,7 +1,7 @@
 package boot
 
 // 真实装配回归快照（计划/01 T1b-0）：走 boot.Start + BuildApp（profile 缺省插件 + subagent + workgroup，
-// 即 runtime.Builder 与全部会话点位），只把模型换成假模型，录四种场景的完整模型请求：
+// 即 assemble.Builder 与全部会话点位），只把模型换成假模型，录四种场景的完整模型请求：
 // 主会话、子智能体、工作组组长、工作组成员。T1b-1 改插件装配时靠它证明"模型看到的内容不变"。
 // 有意变化时用 `go test ./apps/internal/boot -run TestAssembledSnapshot -update` 重录。
 
@@ -19,14 +19,14 @@ import (
 	"testing"
 	"time"
 
-	"ybase-kernel/core/agent"
-	"ybase-kernel/core/agentdef"
-	"ybase-kernel/core/appapi"
-	"ybase-kernel/core/bus"
-	"ybase-kernel/core/host"
-	"ybase-kernel/core/runtime"
-	"ybase-kernel/core/session"
-	"ybase-kernel/core/store"
+	"ybase/appapi"
+	"ybase/runtime/agent"
+	"ybase/runtime/agentdef"
+	"ybase/runtime/assemble"
+	"ybase/runtime/bus"
+	"ybase/runtime/host"
+	"ybase/runtime/session"
+	"ybase/runtime/store"
 )
 
 var update = flag.Bool("update", false, "重录回归快照")
@@ -99,7 +99,7 @@ func TestAssembledSnapshot(t *testing.T) {
 	}
 	var ui *appapi.UI
 	rt, err := Start(StartOptions{Flags: Flags{Workdir: root, Profile: extra, Yes: true, MaxSteps: -1},
-		UI: func(b *bus.Bus) runtime.UI { ui = appapi.NewUI(b); return ui }})
+		UI: func(b *bus.Bus) assemble.UI { ui = appapi.NewUI(b); return ui }})
 	if err != nil {
 		t.Fatal(err)
 	}

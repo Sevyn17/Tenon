@@ -60,7 +60,7 @@ type App interface {
     // 订阅事件（04 4.6），从 cursor 之后开始；cursor 可持久化，断线后续读
     Events(ctx context.Context, after Cursor, filter EventFilter) (<-chan Event, error)
 
-    // 回答人工确认 / 提问；底座核对 ctx 里的用户就是被问的人、corr 未过期未用过（D3）
+    // 回答人工确认 / 提问；框架核对 ctx 里的用户就是被问的人、corr 未过期未用过（D3）
     Respond(ctx context.Context, corr string, answer Answer) error
 
     // 诊断
@@ -92,7 +92,7 @@ type Run interface {
 
 错误类型：`ErrNotStarted`（未 `Start`）、`ErrDenied`（守卫拒绝，带原因）、`ErrBudget`（预算用尽）、`ErrNotFound`、`ErrSessionNotFound`（`session:` 地址找不到会话）、`ErrSessionClosed`（会话已关闭，发送方应新建会话）、`ErrConflict`（租约或条件写冲突）、`ErrInvalid`（定义或参数校验失败），都能用 `errors.Is` 判断。
 
-租户和用户是一等字段，不放 `meta`：应用用 `ybase.WithTenant(ctx, t)`、`ybase.WithUser(ctx, u)` 写进调用上下文，底座把它们记为会话的租户和信封的发送者 `from`（02 2.4、08 8.3）。取不到租户的调用直接报错（08 8.8）；单机应用用 `ybase.WithTenant(ctx, "local")` 或装配时设缺省租户。
+租户和用户是一等字段，不放 `meta`：应用用 `ybase.WithTenant(ctx, t)`、`ybase.WithUser(ctx, u)` 写进调用上下文，框架把它们记为会话的租户和信封的发送者 `from`（02 2.4、08 8.3）。取不到租户的调用直接报错（08 8.8）；单机应用用 `ybase.WithTenant(ctx, "local")` 或装配时设缺省租户。
 
 多人会话：每个用户用自己的 ctx 调 `Session.Send`，发送者各不相同；谁能往这个会话发，由成员组件的守卫规则决定（08 8.2）。
 
@@ -102,7 +102,7 @@ type Run interface {
 
 同一套接口通过 `ybase/server` 暴露成 HTTP + WebSocket（或 SSE），供非 Go 应用和界面使用。路径和 Go 方法一一对应，OpenAPI 文档由接口定义生成。协议和 Go SDK 用同一个版本号。
 
-鉴权由应用提供：`server.WithAuthenticator(func(*http.Request) (tenant, user string, err error))`，底座用返回值调用 `WithTenant` / `WithUser`。没有配置 Authenticator 时服务只监听本机回环地址。
+鉴权由应用提供：`server.WithAuthenticator(func(*http.Request) (tenant, user string, err error))`，框架用返回值调用 `WithTenant` / `WithUser`。没有配置 Authenticator 时服务只监听本机回环地址。
 
 ## 7.5 事件名
 
@@ -130,14 +130,14 @@ type Run interface {
 - 弃用：标 `// Deprecated:` 并在运行时第一次调用时打一条警告日志，**至少保留两个小版本**再在下一个大版本删除。弃用说明必须写替代方式。
 - 定义包格式有自己的版本 `format = "ybase/v1"`（03 3.4），和 SDK 版本分开：新 SDK 读旧格式必须兼容，读到不认识的新格式直接拒绝。
 - 事件结构只加字段不改字段；订阅者要容忍不认识的字段。
-- `x.*` 和 `meta` 的内容底座永远原样保存，任何版本都不会去解释它们。
+- `x.*` 和 `meta` 的内容框架永远原样保存，任何版本都不会去解释它们。
 
 ## 7.7 现状差距
 
 | 现状 | 目标 | 处理 |
 |---|---|---|
-| 应用通过 `runtime.Builder` 拼装，接口偏内部 | `ybase.New` + 选项 | T1b-2d 完成：SDK 落 `apps/ybase-sdk`（`New` + `Component` + 选项 + `ErrNotStarted` + `Ask`/`History`），`apps/ybasetest` 端到端测试 |
+| 应用通过 `runtime.Builder` 拼装，接口偏内部 | `ybase.New` + 选项 | T1b-2d 完成：SDK 落模块根（package `ybase`）（`New` + `Component` + 选项 + `ErrNotStarted` + `Ask`/`History`），`ybasetest` 端到端测试 |
 | 没有对外承诺的接口边界 | 本篇列出的接口加版本规则 | T1 定稿，T2 起执行 |
-| 界面已经走应用接口层 `core/appapi`（protocol 1，24 条命令（2026-11-02 加 `session.reply` 按 corr 回信应答确认、`trace.explain`），`App.Call` 分发；api-server 走 WebSocket JSON 帧，见 [10 - 框架模块/12](<../90 - 归档/10 - 框架模块/12 - 应用接口层.md>)、[14](<../90 - 归档/10 - 框架模块/14 - 网页服务.md>)）。但命令按会话 id + 文本设计（`session.send`），没有信封、地址、租户和用户 | appapi 是 7.4 协议的前身：T1 把 `appapi.App` 改成包在 `ybase.App` 外面的薄适配；T3 有了信封和地址后，命令改成 `Send(to, body)`、事件改用 7.5 的名字，protocol 升到 2 | T1b-2d 完成 SDK 侧（`apps/ybase-sdk` 直接复用 `core/appapi` 起服务）；`appapi` 变成 `ybase.App` 外面的薄适配随 T3 协议升级一起做 |
+| 界面已经走应用接口层 `appapi`（protocol 1，24 条命令（2026-11-02 加 `session.reply` 按 corr 回信应答确认、`trace.explain`），`App.Call` 分发；api-server 走 WebSocket JSON 帧，见 [10 - 框架模块/12](<../90 - 归档/10 - 框架模块/12 - 应用接口层.md>)、[14](<../90 - 归档/10 - 框架模块/14 - 网页服务.md>)）。但命令按会话 id + 文本设计（`session.send`），没有信封、地址、租户和用户 | appapi 是 7.4 协议的前身：T1 把 `appapi.App` 改成包在 `ybase.App` 外面的薄适配；T3 有了信封和地址后，命令改成 `Send(to, body)`、事件改用 7.5 的名字，protocol 升到 2 | T1b-2d 完成 SDK 侧（模块根的 SDK 直接复用 `appapi` 起服务）；`appapi` 变成 `ybase.App` 外面的薄适配随 T3 协议升级一起做 |
 | api-server 只有随机令牌 + Host/Origin 检查，只认本机 | `server.WithAuthenticator` 返回租户和用户 | v1 后：多租户 / 多用户随 T4（v1 单机一个用户） |
 | appapi 错误码 `busy`、`not_idle`、`conflict`、`not_found` 等 | 7.3 的错误类型；appapi 码按类型映射 | T1b-2d 先落 `ErrNotStarted` / `ErrInvalid` / `ErrNotFound`；`ErrLeaseLost` 已归 `conflict`（2026-11-02）；其余随 appapi 协议升 2（v1 后置 ⑤） |

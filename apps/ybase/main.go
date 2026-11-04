@@ -24,36 +24,36 @@ import (
 	"strconv"
 	"strings"
 
-	"ybase-kernel/apps/internal/boot"
-	"ybase-kernel/core/agent"
-	"ybase-kernel/core/appapi"
-	"ybase-kernel/core/bus"
-	"ybase-kernel/core/host"
-	"ybase-kernel/core/pkgs"
-	"ybase-kernel/core/plugin"
-	"ybase-kernel/core/reqlog"
-	"ybase-kernel/core/runtime"
-	"ybase-kernel/core/session"
-	"ybase-kernel/core/store"
-	"ybase-kernel/core/store/sqlite"
-	"ybase-kernel/plugins/security/permission"
-	"ybase-kernel/plugins/security/sandbox"
+	"ybase/appapi"
+	"ybase/apps/internal/boot"
+	"ybase/modules/security/permission"
+	"ybase/modules/security/sandbox"
+	"ybase/runtime/agent"
+	"ybase/runtime/assemble"
+	"ybase/runtime/bus"
+	"ybase/runtime/component"
+	"ybase/runtime/host"
+	"ybase/runtime/pkgs"
+	"ybase/runtime/reqlog"
+	"ybase/runtime/session"
+	"ybase/runtime/store"
+	"ybase/runtime/store/sqlite"
 
-	// 插件登记（init 里 plugin.Register）；装配哪些由 profile 决定
-	_ "ybase-kernel/plugins/collab/subagent"
-	_ "ybase-kernel/plugins/collab/workgroup"
-	_ "ybase-kernel/plugins/context/instructions"
-	_ "ybase-kernel/plugins/context/prompt"
-	_ "ybase-kernel/plugins/context/redact"
-	_ "ybase-kernel/plugins/context/skills"
-	_ "ybase-kernel/plugins/extend/hooks"
-	_ "ybase-kernel/plugins/tools/ask-user"
-	_ "ybase-kernel/plugins/tools/codemode"
-	_ "ybase-kernel/plugins/tools/fs"
-	_ "ybase-kernel/plugins/tools/mcp"
-	_ "ybase-kernel/plugins/tools/shell"
-	_ "ybase-kernel/plugins/tools/todo"
-	_ "ybase-kernel/plugins/tools/web"
+	// 插件登记（init 里 component.Register）；装配哪些由 profile 决定
+	_ "ybase/modules/collab/subagent"
+	_ "ybase/modules/collab/workgroup"
+	_ "ybase/modules/context/instructions"
+	_ "ybase/modules/context/prompt"
+	_ "ybase/modules/context/redact"
+	_ "ybase/modules/context/skills"
+	_ "ybase/modules/extend/hooks"
+	_ "ybase/modules/tools/ask-user"
+	_ "ybase/modules/tools/codemode"
+	_ "ybase/modules/tools/fs"
+	_ "ybase/modules/tools/mcp"
+	_ "ybase/modules/tools/shell"
+	_ "ybase/modules/tools/todo"
+	_ "ybase/modules/tools/web"
 )
 
 // 恢复会话时回显的最近消息条数。
@@ -142,7 +142,7 @@ func main() {
 // app 装配好的进程：插件运行时 + 应用预置给插件的服务（宿主、终端界面、工作目录）。
 type app struct {
 	rt      *assembled
-	profile *plugin.Profile
+	profile *component.Profile
 	root    string
 	bus     *bus.Bus
 	h       *host.Host
@@ -186,7 +186,7 @@ func withRuntime(o opts, f func(*app) error) error {
 		Flags: boot.Flags{Base: o.base, Model: o.model, Workdir: o.workdir, Profile: o.profile, Sandbox: o.sandbox,
 			MCP: o.mcp, Mode: o.mode, Yes: o.yes, ProjectHooks: o.projectHooks, TrustProject: o.trustProject, MaxSteps: o.maxSteps},
 		AskTrust: ask,
-		UI:       func(*bus.Bus) runtime.UI { return ui },
+		UI:       func(*bus.Bus) assemble.UI { return ui },
 	})
 	if err != nil {
 		return err
@@ -210,7 +210,7 @@ type cli struct {
 	asks     []askReq     // ask_user 待回答的问题（确认优先）
 	exitWant bool
 	perms    *permission.Sessions // 未装 permission 插件时为 nil
-	profile  *plugin.Profile
+	profile  *component.Profile
 	packages []*pkgs.Package
 }
 
@@ -230,7 +230,7 @@ func buildChat(o opts, a *app) (*boot.Built, error) {
 	return br.BuildApp(boot.AppOptions{
 		MaxSteps:     o.maxSteps,
 		ModesWorkdir: o.workdir,
-		Hooks: func(*runtime.SessionCx) agent.Hooks {
+		Hooks: func(*assemble.SessionCx) agent.Hooks {
 			return agent.Hooks{
 				OnReset: func() { fmt.Print("\n[重试中…]\n") },
 				OnText:  func(d string) { fmt.Print(d) },

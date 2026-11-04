@@ -6,9 +6,9 @@ import (
 	"encoding/json"
 	"strings"
 
-	"ybase-kernel/core/appapi"
-	"ybase-kernel/core/toolhub"
-	"ybase-kernel/plugins/security/permission"
+	"ybase/appapi"
+	"ybase/modules/security/permission"
+	"ybase/runtime/toolhub"
 )
 
 // PermModes 用 permission 插件的会话服务实现 appapi.Modes。workdir 用于项目档位的确认记录（trust.toml）。

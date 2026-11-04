@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"ybase-kernel/plugins/security/permission"
+	"ybase/modules/security/permission"
 )
 
 // printModes 列出全部档位（内置在前，自定义按名字）。

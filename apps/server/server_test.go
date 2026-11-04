@@ -17,13 +17,13 @@ import (
 
 	"golang.org/x/net/websocket"
 
-	"ybase-kernel/core/agent"
-	"ybase-kernel/core/appapi"
-	"ybase-kernel/core/bus"
-	"ybase-kernel/core/host"
-	"ybase-kernel/core/session"
-	"ybase-kernel/core/store/sqlite"
-	"ybase-kernel/core/toolhub"
+	"ybase/appapi"
+	"ybase/runtime/agent"
+	"ybase/runtime/bus"
+	"ybase/runtime/host"
+	"ybase/runtime/session"
+	"ybase/runtime/store/sqlite"
+	"ybase/runtime/toolhub"
 )
 
 type fakeModel struct{}

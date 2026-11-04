@@ -9,12 +9,12 @@ import (
 	"strings"
 	"testing"
 
-	"ybase-kernel/core/agentdef"
-	"ybase-kernel/core/appapi"
-	"ybase-kernel/core/bus"
-	"ybase-kernel/core/runtime"
-	"ybase-kernel/core/session"
-	"ybase-kernel/core/store"
+	"ybase/appapi"
+	"ybase/runtime/agentdef"
+	"ybase/runtime/assemble"
+	"ybase/runtime/bus"
+	"ybase/runtime/session"
+	"ybase/runtime/store"
 )
 
 func TestDefinitionToolsAndUsePermissionEnforced(t *testing.T) {
@@ -24,7 +24,7 @@ func TestDefinitionToolsAndUsePermissionEnforced(t *testing.T) {
 	t.Setenv("YBASE_MODEL", "")
 	var ui *appapi.UI
 	rt, err := Start(StartOptions{Flags: Flags{Workdir: root, Yes: true, MaxSteps: -1}, // -yes：会话档位 full
-		UI: func(b *bus.Bus) runtime.UI { ui = appapi.NewUI(b); return ui }})
+		UI: func(b *bus.Bus) assemble.UI { ui = appapi.NewUI(b); return ui }})
 	if err != nil {
 		t.Fatal(err)
 	}

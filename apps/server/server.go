@@ -20,8 +20,8 @@ import (
 
 	"golang.org/x/net/websocket"
 
-	"ybase-kernel/core/appapi"
-	"ybase-kernel/core/bus"
+	"ybase/appapi"
+	"ybase/runtime/bus"
 )
 
 const (

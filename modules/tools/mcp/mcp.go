@@ -1,0 +1,490 @@
+// Package mcp MCP 客户端：把外部 MCP 服务的工具注册为 toolhub 工具（动态来源，默认延迟显露）。
+//
+// 纯 Go 的 JSON-RPC 2.0；传输支持 stdio 与 Streamable HTTP。见 docs/90 - 归档/20 - 插件/13 - MCP 客户端.md。
+package mcp
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
+	"os/exec"
+	"regexp"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/BurntSushi/toml"
+
+	"ybase/runtime/session"
+	"ybase/runtime/toolhub"
+)
+
+// ProtocolVersion 请求的协议版本。
+const ProtocolVersion = "2025-06-18"
+
+// DefaultTimeout 单次调用超时。
+const DefaultTimeout = 60 * time.Second
+
+// DescMax 工具描述上限。
+const DescMax = 2 << 10
+
+var serverNameRe = regexp.MustCompile(`^[A-Za-z0-9_-]{1,32}$`)
+
+// Server 一个服务的配置。
+type Server struct {
+	Name    string            `toml:"name"`
+	Command string            `toml:"command"`
+	Args    []string          `toml:"args"`
+	Env     map[string]string `toml:"env"`
+	Cwd     string            `toml:"cwd"`
+	URL     string            `toml:"url"`
+	Headers map[string]string `toml:"headers"`
+	Timeout int               `toml:"timeout"` // 秒；0 = 60
+	// Trust 对本服务工具的信任："ask"（缺省，按档位 external 效果）/ "readonly"（按读）/ "trusted"（按写工作区）。
+	Trust string `toml:"trust"`
+	// Sandbox stdio 子进程的沙箱：read-only / workspace-write / danger-full-access；空 = 缺省档位的 [sandbox]。
+	Sandbox string `toml:"sandbox"`
+
+	confine func(cmd *exec.Cmd) (func(), error) // 由 Open 按 Config.Confine 填入
+}
+
+// 信任级别。
+const (
+	TrustAsk      = "ask"
+	TrustReadonly = "readonly"
+	TrustTrusted  = "trusted"
+)
+
+// Config 配置文件。
+type Config struct {
+	Server []Server `toml:"server"`
+	// Confine 启动 stdio 子进程前调用（放进沙箱）；返回的 cleanup 在 Start 之后调用。nil = 不加沙箱。
+	Confine func(cmd *exec.Cmd, s Server) (cleanup func(), err error) `toml:"-"`
+}
+
+// LoadConfig 读 TOML 配置；文件不存在返回空配置。
+func LoadConfig(path string) (Config, error) {
+	var c Config
+	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+		return c, nil
+	}
+	if _, err := toml.DecodeFile(path, &c); err != nil {
+		return c, fmt.Errorf("mcp: 配置 %s：%w", path, err)
+	}
+	seen := map[string]bool{}
+	for _, s := range c.Server {
+		if !serverNameRe.MatchString(s.Name) {
+			return c, fmt.Errorf("mcp: 服务名 %q 不合法（[A-Za-z0-9_-]{1,32}）", s.Name)
+		}
+		if seen[s.Name] {
+			return c, fmt.Errorf("mcp: 服务名 %q 重复", s.Name)
+		}
+		seen[s.Name] = true
+		if (s.Command == "") == (s.URL == "") {
+			return c, fmt.Errorf("mcp: 服务 %s 须且只能配置 command 或 url 之一", s.Name)
+		}
+		switch s.Trust {
+		case "", TrustAsk, TrustReadonly, TrustTrusted:
+		default:
+			return c, fmt.Errorf("mcp: 服务 %s 的 trust %q 不合法（ask / readonly / trusted）", s.Name, s.Trust)
+		}
+		if s.Sandbox != "" {
+			if _, err := toolhub.ParseSandboxMode(s.Sandbox); err != nil {
+				return c, fmt.Errorf("mcp: 服务 %s：%w", s.Name, err)
+			}
+		}
+	}
+	return c, nil
+}
+
+func (s Server) timeout() time.Duration {
+	if s.Timeout > 0 {
+		return time.Duration(s.Timeout) * time.Second
+	}
+	return DefaultTimeout
+}
+
+// RPCError JSON-RPC 错误。
+type RPCError struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+}
+
+func (e *RPCError) Error() string { return fmt.Sprintf("mcp: %d %s", e.Code, e.Message) }
+
+type message struct {
+	JSONRPC string           `json:"jsonrpc"`
+	ID      *json.RawMessage `json:"id,omitempty"`
+	Method  string           `json:"method,omitempty"`
+	Params  json.RawMessage  `json:"params,omitempty"`
+	Result  json.RawMessage  `json:"result,omitempty"`
+	Error   *RPCError        `json:"error,omitempty"`
+}
+
+// transport 一种传输。call 发请求等响应；notify 发通知。
+type transport interface {
+	call(ctx context.Context, id int64, method string, params any) (json.RawMessage, error)
+	notify(ctx context.Context, method string, params any) error
+	close() error
+}
+
+// RemoteTool 服务端工具定义。
+type RemoteTool struct {
+	Name        string          `json:"name"`
+	Description string          `json:"description"`
+	InputSchema json.RawMessage `json:"inputSchema"`
+	Annotations struct {
+		ReadOnlyHint    *bool `json:"readOnlyHint"`
+		DestructiveHint *bool `json:"destructiveHint"`
+	} `json:"annotations"`
+}
+
+// AttrDestructive 与权限插件约定的属性名：服务端声明工具有破坏性。
+const AttrDestructive = "destructive"
+
+// Client 一个服务的连接。
+type Client struct {
+	Server   Server
+	Protocol string // 服务端回的协议版本
+	Info     json.RawMessage
+
+	mu   sync.Mutex
+	tr   transport
+	next int64
+}
+
+// Connect 建立连接并完成初始化握手。
+func Connect(ctx context.Context, s Server) (*Client, error) {
+	c := &Client{Server: s}
+	if err := c.connect(ctx); err != nil {
+		return nil, err
+	}
+	return c, nil
+}
+
+func (c *Client) connect(ctx context.Context) error {
+	var tr transport
+	var err error
+	if c.Server.Command != "" {
+		tr, err = newStdio(c.Server)
+	} else {
+		tr = newHTTP(c.Server)
+	}
+	if err != nil {
+		return err
+	}
+	ictx, cancel := context.WithTimeout(ctx, c.Server.timeout())
+	defer cancel()
+	c.next++
+	res, err := tr.call(ictx, c.next, "initialize", map[string]any{
+		"protocolVersion": ProtocolVersion,
+		"capabilities":    map[string]any{},
+		"clientInfo":      map[string]any{"name": "ybase", "version": "0.1"},
+	})
+	if err != nil {
+		tr.close()
+		return fmt.Errorf("mcp: %s 初始化失败：%w", c.Server.Name, err)
+	}
+	var ir struct {
+		ProtocolVersion string          `json:"protocolVersion"`
+		ServerInfo      json.RawMessage `json:"serverInfo"`
+	}
+	_ = json.Unmarshal(res, &ir)
+	if h, ok := tr.(*httpTransport); ok {
+		h.setVersion(ir.ProtocolVersion)
+	}
+	if err := tr.notify(ictx, "notifications/initialized", nil); err != nil {
+		tr.close()
+		return fmt.Errorf("mcp: %s 初始化失败：%w", c.Server.Name, err)
+	}
+	c.tr, c.Protocol, c.Info = tr, ir.ProtocolVersion, ir.ServerInfo
+	return nil
+}
+
+// Close 断开。
+func (c *Client) Close() error {
+	c.mu.Lock()
+	tr := c.tr
+	c.tr = nil
+	c.mu.Unlock()
+	if tr != nil {
+		return tr.close()
+	}
+	return nil
+}
+
+// errDead 传输已断开（stdio 进程退出等），可重连一次。
+var errDead = errors.New("mcp: 连接已断开")
+
+// Call 发一个请求；连接断开时重连一次再发。
+func (c *Client) Call(ctx context.Context, method string, params any) (json.RawMessage, error) {
+	res, err := c.call(ctx, method, params)
+	if errors.Is(err, errDead) && ctx.Err() == nil {
+		c.mu.Lock()
+		if c.tr != nil {
+			c.tr.close()
+			c.tr = nil
+		}
+		c.mu.Unlock()
+		res, err = c.call(ctx, method, params)
+	}
+	return res, err
+}
+
+func (c *Client) call(ctx context.Context, method string, params any) (json.RawMessage, error) {
+	c.mu.Lock()
+	if c.tr == nil {
+		if err := c.connect(ctx); err != nil {
+			c.mu.Unlock()
+			return nil, err
+		}
+	}
+	c.next++
+	id, tr := c.next, c.tr
+	c.mu.Unlock()
+	res, err := tr.call(ctx, id, method, params)
+	if err != nil && ctx.Err() != nil {
+		// 取消：告知服务端（尽力）
+		nctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		_ = tr.notify(nctx, "notifications/cancelled", map[string]any{"requestId": id, "reason": "cancelled"})
+		cancel()
+	}
+	return res, err
+}
+
+// ListTools 拉取全部工具（处理分页）。
+func (c *Client) ListTools(ctx context.Context) ([]RemoteTool, error) {
+	var all []RemoteTool
+	cursor := ""
+	for i := 0; i < 100; i++ {
+		params := map[string]any{}
+		if cursor != "" {
+			params["cursor"] = cursor
+		}
+		cctx, cancel := context.WithTimeout(ctx, c.Server.timeout())
+		res, err := c.Call(cctx, "tools/list", params)
+		cancel()
+		if err != nil {
+			return nil, err
+		}
+		var page struct {
+			Tools      []RemoteTool `json:"tools"`
+			NextCursor string       `json:"nextCursor"`
+		}
+		if err := json.Unmarshal(res, &page); err != nil {
+			return nil, fmt.Errorf("mcp: tools/list 响应不合法：%w", err)
+		}
+		all = append(all, page.Tools...)
+		if page.NextCursor == "" {
+			return all, nil
+		}
+		cursor = page.NextCursor
+	}
+	return all, nil
+}
+
+// PublicName 模型侧工具名：mcp__<server>__<tool>；有损规范化或超长时追加 12 位哈希。
+func PublicName(server, raw string) string {
+	prefix := "mcp__" + server + "__"
+	var b strings.Builder
+	lossy := false
+	for _, r := range raw {
+		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '_' || r == '-' {
+			b.WriteRune(r)
+		} else {
+			b.WriteByte('_')
+			lossy = true
+		}
+	}
+	name := b.String()
+	if name == "" {
+		lossy = true
+	}
+	if !lossy && len(prefix)+len(name) <= 64 {
+		return prefix + name
+	}
+	sum := sha256.Sum256([]byte(server + "\x00" + raw))
+	h := "_" + hex.EncodeToString(sum[:])[:12]
+	if max := 64 - len(prefix) - len(h); len(name) > max {
+		name = name[:max]
+	}
+	return prefix + name + h
+}
+
+// Tools 把服务端工具转成 toolhub 工具。
+func (c *Client) Tools(remote []RemoteTool) []*toolhub.Tool {
+	no := false
+	var out []*toolhub.Tool
+	for _, rt := range remote {
+		raw := rt.Name
+		schema := rt.InputSchema
+		if len(schema) == 0 || string(schema) == "null" {
+			schema = json.RawMessage(`{"type":"object"}`)
+		}
+		desc := rt.Description
+		if len(desc) > DescMax {
+			desc = desc[:DescMax] + "…"
+		}
+		desc = fmt.Sprintf("[MCP 服务 %s 提供] %s", c.Server.Name, desc)
+		risk, effect := toolhub.Write, toolhub.EffectExternal
+		switch c.Server.Trust {
+		case TrustReadonly:
+			risk, effect = toolhub.Read, toolhub.EffectRead
+		case TrustTrusted:
+			effect = toolhub.EffectWrite
+		}
+		attrs := map[string]any{"mcp_server": c.Server.Name, "mcp_tool": raw, toolhub.AttrEffect: effect}
+		if h := rt.Annotations.DestructiveHint; h != nil && *h && c.Server.Trust != TrustReadonly {
+			attrs[AttrDestructive] = true
+		}
+		out = append(out, &toolhub.Tool{
+			Spec:     session.ToolSpec{Name: PublicName(c.Server.Name, raw), Description: desc, Schema: schema},
+			Risk:     risk,
+			Parallel: &no,
+			Timeout:  c.Server.timeout() + 5*time.Second,
+			Deferred: true,
+			Attrs:    attrs,
+			Items:    []string{ItemID(c.Server.Name)},
+			Call: func(ctx context.Context, cx *toolhub.Cx, args json.RawMessage) (toolhub.Output, error) {
+				return c.callTool(ctx, raw, args), nil
+			},
+		})
+	}
+	return out
+}
+
+func (c *Client) callTool(ctx context.Context, raw string, args json.RawMessage) toolhub.Output {
+	if len(args) == 0 {
+		args = json.RawMessage(`{}`)
+	}
+	cctx, cancel := context.WithTimeout(ctx, c.Server.timeout())
+	defer cancel()
+	res, err := c.Call(cctx, "tools/call", map[string]any{"name": raw, "arguments": args})
+	if err != nil {
+		if ctx.Err() != nil {
+			return toolhub.Output{Kind: toolhub.Done, Content: session.Content{session.NewTextPart("调用已取消")}, Status: session.ToolTurnCancelled}
+		}
+		if cctx.Err() != nil {
+			return toolhub.Errorf("MCP 服务 %s 调用 %s 超时（%s）", c.Server.Name, raw, c.Server.timeout())
+		}
+		return toolhub.Errorf("MCP 服务 %s 调用 %s 失败：%v", c.Server.Name, raw, err)
+	}
+	return renderResult(res)
+}
+
+// renderResult 把 tools/call 结果转成文本。
+func renderResult(res json.RawMessage) toolhub.Output {
+	var r struct {
+		Content []struct {
+			Type     string `json:"type"`
+			Text     string `json:"text"`
+			MimeType string `json:"mimeType"`
+			URI      string `json:"uri"`
+			Name     string `json:"name"`
+			Resource *struct {
+				URI      string `json:"uri"`
+				Text     string `json:"text"`
+				MimeType string `json:"mimeType"`
+			} `json:"resource"`
+		} `json:"content"`
+		StructuredContent json.RawMessage `json:"structuredContent"`
+		IsError           bool            `json:"isError"`
+	}
+	if err := json.Unmarshal(res, &r); err != nil {
+		return toolhub.Errorf("MCP 结果不合法：%v", err)
+	}
+	var parts []string
+	for _, c := range r.Content {
+		switch c.Type {
+		case "text":
+			parts = append(parts, c.Text)
+		case "resource_link":
+			parts = append(parts, fmt.Sprintf("[资源 %s] %s", c.Name, c.URI))
+		case "resource":
+			if c.Resource != nil && c.Resource.Text != "" {
+				parts = append(parts, c.Resource.Text)
+			} else if c.Resource != nil {
+				parts = append(parts, fmt.Sprintf("[内嵌资源 %s（%s）未显示]", c.Resource.URI, c.Resource.MimeType))
+			}
+		case "image", "audio":
+			parts = append(parts, fmt.Sprintf("[%s 内容（%s）未显示]", c.Type, c.MimeType))
+		default:
+			parts = append(parts, fmt.Sprintf("[未知内容类型 %s]", c.Type))
+		}
+	}
+	if len(parts) == 0 && len(r.StructuredContent) > 0 {
+		parts = append(parts, string(r.StructuredContent))
+	}
+	text := strings.Join(parts, "\n")
+	if r.IsError {
+		if text == "" {
+			text = "MCP 工具报错（无详情）"
+		}
+		return toolhub.Errorf("%s", text)
+	}
+	return toolhub.Text(text)
+}
+
+// scrubEnv 去掉名字像密钥的环境变量与 YBASE_* 变量（DSH 同规则）。
+var secretName = regexp.MustCompile(`(?i)KEY|PASSWORD|SECRET|TOKEN`)
+
+func scrubEnv(environ []string, extra map[string]string) []string {
+	var out []string
+	for _, kv := range environ {
+		k, _, _ := strings.Cut(kv, "=")
+		if secretName.MatchString(k) || strings.HasPrefix(strings.ToUpper(k), "YBASE_") {
+			continue
+		}
+		if _, over := extra[k]; over {
+			continue
+		}
+		out = append(out, kv)
+	}
+	for k, v := range extra {
+		out = append(out, k+"="+os.ExpandEnv(v))
+	}
+	return out
+}
+
+// Source 一组服务的连接与工具。
+type Source struct {
+	Clients  []*Client
+	Tools    []*toolhub.Tool
+	Warnings []string
+}
+
+// Open 连接配置里的全部服务并拉工具；失败的服务只告警。
+func Open(ctx context.Context, cfg Config) *Source {
+	s := &Source{}
+	for _, sv := range cfg.Server {
+		if cfg.Confine != nil && sv.Command != "" {
+			conf, orig := cfg.Confine, sv
+			sv.confine = func(cmd *exec.Cmd) (func(), error) { return conf(cmd, orig) }
+		}
+		c, err := Connect(ctx, sv)
+		if err != nil {
+			s.Warnings = append(s.Warnings, err.Error())
+			continue
+		}
+		ts, err := c.ListTools(ctx)
+		if err != nil {
+			s.Warnings = append(s.Warnings, fmt.Sprintf("mcp: %s tools/list 失败：%v", sv.Name, err))
+			c.Close()
+			continue
+		}
+		s.Clients = append(s.Clients, c)
+		s.Tools = append(s.Tools, c.Tools(ts)...)
+	}
+	return s
+}
+
+// Close 断开全部。
+func (s *Source) Close() {
+	for _, c := range s.Clients {
+		c.Close()
+	}
+}
