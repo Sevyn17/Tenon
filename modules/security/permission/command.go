@@ -4,117 +4,17 @@ package permission
 
 import (
 	"encoding/json"
-	"strings"
 
+	"ybase/modules/internal/cmdline"
 	"ybase/runtime/toolhub"
 )
 
-// safeHeads 无副作用、不需要规则即可出现在复合命令里的命令（不区分大小写）。
-var safeHeads = map[string]bool{
-	"cd": true, "set-location": true, "pwd": true, "get-location": true,
-	"echo": true, "write-output": true, "write-host": true, "true": true,
-	"select-object": true, "out-string": true, "out-null": true,
-	"format-table": true, "format-list": true, "measure-object": true,
-	"head": true, "tail": true, "wc": true,
-}
-
-// harmless 可直接去掉的重定向（只合并 / 丢弃输出，不写文件）。
-var harmless = []string{"2>&1", "2>$null", ">$null", "2>/dev/null", ">/dev/null", "*>$null"}
-
-// SplitCommand 把命令按 ; && || | 换行拆成简单命令。含命令替换、脚本块、后台 &、写文件重定向时 ok=false。
-func SplitCommand(c string) (segs []string, ok bool) {
-	var cur strings.Builder
-	flush := func() {
-		if s := strings.TrimSpace(cur.String()); s != "" {
-			segs = append(segs, s)
-		}
-		cur.Reset()
-	}
-	var quote byte
-	for i := 0; i < len(c); i++ {
-		ch := c[i]
-		if quote != 0 {
-			if ch == quote {
-				quote = 0
-			} else if quote == '"' && (ch == '`' || (ch == '$' && i+1 < len(c) && c[i+1] == '(')) {
-				return nil, false // 双引号内的命令替换 / 转义
-			}
-			cur.WriteByte(ch)
-			continue
-		}
-		rest := c[i:]
-		if h := harmlessAt(rest); h != "" {
-			i += len(h) - 1
-			continue
-		}
-		switch ch {
-		case '\'', '"':
-			quote = ch
-			cur.WriteByte(ch)
-		case ';', '\n', '\r':
-			flush()
-		case '|', '&':
-			if i+1 < len(c) && c[i+1] == ch { // && ||
-				i++
-				flush()
-			} else if ch == '|' {
-				flush()
-			} else {
-				return nil, false // 单个 &：后台（bash）/ 调用运算符（PowerShell）
-			}
-		case '`', '{', '}', '<', '>':
-			return nil, false
-		case '$':
-			if i+1 < len(c) && c[i+1] == '(' {
-				return nil, false
-			}
-			cur.WriteByte(ch)
-		default:
-			cur.WriteByte(ch)
-		}
-	}
-	if quote != 0 {
-		return nil, false
-	}
-	flush()
-	return segs, len(segs) > 0
-}
-
-func harmlessAt(s string) string {
-	for _, h := range harmless {
-		if strings.HasPrefix(s, h) {
-			return h
-		}
-	}
-	return ""
-}
-
-func head(seg string) string {
-	f := strings.Fields(seg)
-	if len(f) == 0 {
-		return ""
-	}
-	return strings.ToLower(f[0])
-}
-
-// Safe 简单命令是否无需规则。
-func Safe(seg string) bool { return safeHeads[head(seg)] }
-
-// Prefix 简单命令的规则前缀：首词，第二词是子命令（不以 - / 引号开头、不像路径）时带上。
-func Prefix(seg string) string {
-	f := strings.Fields(seg)
-	if len(f) == 0 {
-		return ""
-	}
-	n := 1
-	if len(f) > 1 {
-		w := f[1]
-		if !strings.ContainsAny(w[:1], "-\"'$@") && !strings.ContainsAny(w, `/\.:=*`) {
-			n = 2
-		}
-	}
-	return strings.Join(f[:n], " ")
-}
+// 命令拆分与安全段判断与 shell 插件共用一份（modules/internal/cmdline，审查 P1-61）。
+var (
+	SplitCommand = cmdline.SplitCommand
+	Safe         = cmdline.Safe
+	Prefix       = cmdline.Prefix
+)
 
 // SessionAllow “本次会话内都允许”对应的规则。
 // shell：复合命令里每个非安全简单命令生成一条前缀规则（`git push:*`）；无法拆分的命令不生成规则（只批准本次）；
@@ -139,6 +39,11 @@ func SessionAllow(tool string, args json.RawMessage) []Rule {
 		}
 	}
 	for _, s := range segs {
+		// 启动器停止线：sh / python / npm run 这类执行的是别处的程序，前缀规则会放行任意内容，
+		// 只批准本次、不生成会话规则（约束清单「shell 本次会话内都允许」；审查 P1-61：原先这里没判断，停止线从未生效）。
+		if cmdline.Launcher(s) {
+			return nil
+		}
 		if !Safe(s) {
 			add(s)
 		}

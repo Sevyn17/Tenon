@@ -13,7 +13,7 @@ const PointBeforeCompact = "before_compact"
 
 // Config compact-basic 配置。
 type Config struct {
-	Auto      bool    `cfg:"auto" default:"true" title:"自动压缩" widget:"switch" override:"agent"`
+	Auto      bool    `cfg:"auto" default:"true" title:"自动压缩" widget:"switch"`
 	Headroom  int     `cfg:"headroom" default:"16384" title:"阈值余量（token）"`
 	KeepRatio float64 `cfg:"keep_ratio" default:"0.16" title:"保留最近比例" widget:"slider"`
 	Model     string  `cfg:"model" title:"摘要模型（空 = 会话模型）"`

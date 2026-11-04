@@ -100,46 +100,8 @@ func TestAssembleSelfChecks(t *testing.T) {
 	}
 }
 
-func TestLayerOrderingAndGuardRules(t *testing.T) {
-	mk := func(name string, specs ...LayerSpec) string {
-		return reg(t, name, &fake{setup: func(cx *Registrar) error {
-			for _, s := range specs {
-				if err := cx.AddLayer(s, nil); err != nil {
-					return err
-				}
-			}
-			return nil
-		}})
-	}
-	compact := mk("compact", LayerSpec{Point: "model", Position: Transform, Outermost: true})
-	route := mk("route", LayerSpec{Point: "model", Position: Transform, Order: 1})
-	redact := mk("redact", LayerSpec{Point: "model", Position: Transform})
-	perm := mk("perm", LayerSpec{Point: "model", Position: Guard, Failure: FailClosed})
-	check := mk("check", LayerSpec{Point: "model", Position: Guard, Failure: FailClosed})
-	a, err := Assemble(Spec{Plugins: entries(perm, redact, route, compact, check), Mandatory: []string{perm, redact}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	var got []string
-	for _, l := range a.Layers("model") {
-		got = append(got, strings.TrimPrefix(l.Plugin, t.Name()+"/"))
-	}
-	// 外→内：Outermost Transform；可选 Transform（route）；强制 Transform（redact）；可选 Guard；强制 Guard 最内。
-	if strings.Join(got, ",") != "compact,route,redact,check,perm" {
-		t.Fatalf("层序 %v", got)
-	}
-	bad := mk("bad", LayerSpec{Point: "model", Position: Guard, Failure: FailOpen})
-	if _, err := Assemble(Spec{Plugins: entries(bad)}); err == nil {
-		t.Fatal("Guard 不能 FailOpen")
-	}
-	c2 := mk("c2", LayerSpec{Point: "model", Position: Transform, Outermost: true})
-	if _, err := Assemble(Spec{Plugins: entries(compact, c2)}); err == nil {
-		t.Fatal("两个 Outermost 应失败")
-	}
-}
-
 type compactCfg struct {
-	Threshold float64 `cfg:"threshold" default:"0.85" title:"触发阈值" group:"压缩" widget:"slider" override:"agent"`
+	Threshold float64 `cfg:"threshold" default:"0.85" title:"触发阈值" group:"压缩" widget:"slider"`
 	Keep      int     `cfg:"keep_recent_turns" default:"2"`
 	Name      string  `cfg:"summary_alias" default:"cheap"`
 	On        bool    `cfg:"enabled" default:"true"`
@@ -162,7 +124,7 @@ func TestConfigDecodeAndSchema(t *testing.T) {
 		t.Fatalf("来源 %v", a.sources[n])
 	}
 	sch := SchemaOf(&compactCfg{})
-	if len(sch) != 4 || sch[0].Widget != "slider" || !sch[0].Override || sch[1].Override {
+	if len(sch) != 4 || sch[0].Widget != "slider" {
 		t.Fatalf("schema %+v", sch)
 	}
 	if _, err := Assemble(Spec{Plugins: []Entry{{Name: n, Config: map[string]any{"typo": 1}}}}); err == nil {
@@ -245,7 +207,8 @@ func TestExplain(t *testing.T) {
 	n := reg(t, "compact", &fake{meta: Meta{Version: "1", Config: &compactCfg{}},
 		setup: func(cx *Registrar) error {
 			cx.Register("tool", "read", nil)
-			return cx.AddLayer(LayerSpec{Point: "model", Position: Transform, Outermost: true}, nil)
+			cx.Register("session_layer", "compact-layer", nil)
+			return nil
 		}})
 	a, err := Assemble(Spec{Plugins: entries(n), Defaults: map[string]any{"slot:Secrets": "env"}})
 	if err != nil {
@@ -254,7 +217,7 @@ func TestExplain(t *testing.T) {
 	var b strings.Builder
 	a.Explain(&b, map[string]string{n: "base.toml"})
 	out := b.String()
-	for _, want := range []string{"compact", "base.toml", "threshold", "default", "tool", "read", "model", "Transform", "slot:Secrets"} {
+	for _, want := range []string{"compact", "base.toml", "threshold", "default", "tool", "read", "session_layer", "compact-layer", "slot:Secrets"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("explain 缺 %q:\n%s", want, out)
 		}

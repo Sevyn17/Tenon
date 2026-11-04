@@ -11,7 +11,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"time"
 
 	"ybase/runtime/agentdef"
 	"ybase/runtime/inject"
@@ -127,55 +126,6 @@ func Instantiate(name string) (Component, bool) {
 	return f(), true
 }
 
-// —— 层（调用点中间件栈）——//
-
-// Position 层的位置。
-type Position int
-
-const (
-	Transform Position = iota
-	Guard
-)
-
-func (p Position) String() string {
-	if p == Guard {
-		return "Guard"
-	}
-	return "Transform"
-}
-
-// Failure 层失败策略。
-type Failure int
-
-const (
-	FailOpen Failure = iota
-	FailClosed
-)
-
-// LayerSpec 层登记规格。
-type LayerSpec struct {
-	Point     string // "model" / "tool"
-	Position  Position
-	Failure   Failure
-	Timeout   time.Duration
-	Order     int  // 同组内显式序
-	Outermost bool // 必须是该调用点最外层 Transform（如 compact）
-}
-
-// Layer 一条已登记的层。Impl 由调用点模块按自己的接口断言。
-type Layer struct {
-	Spec      LayerSpec
-	Plugin    string
-	Mandatory bool
-	Impl      any
-}
-
-// 层默认超时（01 §3.2）。
-const (
-	DefaultTransformTimeout = 2 * time.Second
-	DefaultGuardTimeout     = 5 * time.Second
-)
-
 // —— 装配期上下文 ——//
 
 // Registrar 插件 Setup 时拿到的登记入口。
@@ -290,32 +240,6 @@ func UseOptional[T any](cx *Registrar, key string) (T, bool, error) {
 	return t, err == nil, err
 }
 
-// AddLayer 登记调用点层。Guard 只能 FailClosed；超时 0 取默认值。
-func (cx *Registrar) AddLayer(spec LayerSpec, impl any) error {
-	if spec.Point != "model" && spec.Point != "tool" {
-		return fmt.Errorf("未知调用点 %q", spec.Point)
-	}
-	if spec.Position == Guard {
-		if spec.Failure != FailClosed {
-			return fmt.Errorf("插件 %s：Guard 层只能 FailClosed", cx.plugin)
-		}
-		if spec.Outermost {
-			return fmt.Errorf("插件 %s：Outermost 只适用于 Transform", cx.plugin)
-		}
-	}
-	if spec.Timeout == 0 {
-		spec.Timeout = DefaultTransformTimeout
-		if spec.Position == Guard {
-			spec.Timeout = DefaultGuardTimeout
-		}
-	}
-	cx.asm.layers = append(cx.asm.layers, Layer{Spec: spec, Plugin: cx.plugin,
-		Mandatory: cx.asm.mandatory[cx.plugin], Impl: impl})
-	cx.asm.points = append(cx.asm.points, Registration{Plugin: cx.plugin, Point: spec.Point + "_layer",
-		Name: spec.Position.String()})
-	return nil
-}
-
 // Register 通用点位登记（工具、适配器、钩子、事件订阅、OnSessionDelete、乙类点位……）。
 // 由开位的模块按 point 名取用（Items）。
 func (cx *Registrar) Register(point, name string, impl any) {
@@ -377,7 +301,6 @@ type Assembly struct {
 	values    map[string]any
 	fromDef   map[string]bool
 	injected  map[string]bool
-	layers    []Layer
 	items     map[string][]Item
 	points    []Registration
 	mandatory map[string]bool
@@ -524,9 +447,6 @@ func Assemble(spec Spec) (*Assembly, error) {
 	if err := a.checkRequirements(); err != nil {
 		return nil, err
 	}
-	if err := a.checkLayers(); err != nil {
-		return nil, err
-	}
 	return a, nil
 }
 
@@ -545,47 +465,6 @@ func (a *Assembly) checkRequirements() error {
 		}
 	}
 	return nil
-}
-
-// checkLayers 自检：每个调用点至多一个 Outermost，且必须是排序后的第一层。
-func (a *Assembly) checkLayers() error {
-	for _, pt := range []string{"model", "tool"} {
-		ls := a.Layers(pt)
-		for i, l := range ls {
-			if l.Spec.Outermost && i != 0 {
-				return fmt.Errorf("plugin: %s 调用点有多个 Outermost 层或排序冲突（%s）", pt, l.Plugin)
-			}
-		}
-	}
-	return nil
-}
-
-// Layers 返回调用点 point 的层，由外到内（plugin-manager §5.2）：
-// Transform 在 Guard 外；同位置可选在外、强制在内；Outermost 最外；同组按 Order、再按插件名。
-func (a *Assembly) Layers(point string) []Layer {
-	var out []Layer
-	for _, l := range a.layers {
-		if l.Spec.Point == point {
-			out = append(out, l)
-		}
-	}
-	sort.SliceStable(out, func(i, j int) bool {
-		x, y := out[i], out[j]
-		if x.Spec.Position != y.Spec.Position {
-			return x.Spec.Position < y.Spec.Position
-		}
-		if x.Spec.Outermost != y.Spec.Outermost {
-			return x.Spec.Outermost
-		}
-		if x.Mandatory != y.Mandatory {
-			return !x.Mandatory
-		}
-		if x.Spec.Order != y.Spec.Order {
-			return x.Spec.Order < y.Spec.Order
-		}
-		return x.Plugin < y.Plugin
-	})
-	return out
 }
 
 // Items 通用点位上的全部登记（按装配顺序）。

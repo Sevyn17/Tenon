@@ -3,11 +3,11 @@ package component
 // 插件配置（plugin-manager D2）：配置 = Go struct + tag，是唯一来源。
 //
 //	type Cfg struct {
-//	    Threshold float64 `cfg:"threshold" default:"0.85" title:"触发阈值" group:"压缩" widget:"slider" override:"agent"`
+//	    Threshold float64 `cfg:"threshold" default:"0.85" title:"触发阈值" group:"压缩" widget:"slider"`
 //	}
 //
 // tag：cfg = 键名；default = 默认值；title / description / group / widget = UI 注解（frontend D4 预留）；
-// override = "agent" 表示可在智能体层覆盖，缺省不可覆盖。
+// 智能体层的覆盖走 Registrar.AgentConfig（[use.<组件>]），不在这里标注（审查 P1-58：原 override 标签从未生效）。
 
 import (
 	"encoding/json"
@@ -25,7 +25,6 @@ type Field struct {
 	Description string `json:"description,omitempty"`
 	Group       string `json:"group,omitempty"`
 	Widget      string `json:"widget,omitempty"`
-	Override    bool   `json:"override,omitempty"`
 }
 
 // SchemaOf 读配置结构体的 Schema；proto 为 nil 返回 nil。
@@ -43,7 +42,7 @@ func SchemaOf(proto any) []Field {
 		}
 		out = append(out, Field{Key: key, Type: f.Type.Kind().String(), Default: f.Tag.Get("default"),
 			Title: f.Tag.Get("title"), Description: f.Tag.Get("description"), Group: f.Tag.Get("group"),
-			Widget: f.Tag.Get("widget"), Override: f.Tag.Get("override") == "agent"})
+			Widget: f.Tag.Get("widget")})
 	}
 	return out
 }

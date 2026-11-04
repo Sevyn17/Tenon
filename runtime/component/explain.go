@@ -48,20 +48,10 @@ func (a *Assembly) Explain(w io.Writer, profileSources map[string]string) {
 		}
 		fmt.Fprintf(w, "  %s ← %s\n", k, by)
 	}
-	for _, pt := range []string{"model", "tool"} {
-		ls := a.Layers(pt)
-		if len(ls) == 0 {
-			continue
-		}
-		fmt.Fprintf(w, "%s 调用栈（由外到内）：\n", pt)
-		for _, l := range ls {
-			fmt.Fprintf(w, "  %s %s（%s，超时 %s）\n", l.Spec.Position, l.Plugin, failName(l.Spec.Failure), l.Spec.Timeout)
-		}
-	}
 	fmt.Fprintln(w, "点位登记：")
 	byPoint := map[string][]string{}
 	for _, r := range a.points {
-		if r.Point == "slot" || r.Point == "service" || (strings.HasSuffix(r.Point, "_layer") && r.Point != "session_layer") {
+		if r.Point == "slot" || r.Point == "service" {
 			continue
 		}
 		byPoint[r.Point] = append(byPoint[r.Point], r.Name+"（"+r.Plugin+"）")
@@ -99,13 +89,6 @@ func fieldByKey(v reflect.Value, key string) any {
 		}
 	}
 	return nil
-}
-
-func failName(f Failure) string {
-	if f == FailClosed {
-		return "FailClosed"
-	}
-	return "FailOpen"
 }
 
 func orDefault(s, d string) string {

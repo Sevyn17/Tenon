@@ -13,17 +13,9 @@ import (
 	"ybase/runtime/toolhub"
 )
 
-// 插槽键。
-const (
-	SlotSessionStore    = "slot:session_store"
-	SlotToolResultStore = "slot:tool_result_store"
-	SlotBlobStore       = "slot:blob_store"
-	SlotAgentStore      = "slot:agent_store"
-	SlotModelCatalog    = "slot:model_catalog"
-	SlotSecrets         = "slot:secrets"
-	SlotAuth            = "slot:auth"
-	SlotCoordinator     = "slot:coordinator"
-)
+// SlotSecrets 凭证解析插槽（models 组件消费；缺省 EnvSecrets，应用可覆盖）。
+// 其余插槽（存储四个、模型目录、Auth、Coordinator）没有消费方，已删（2026-11-04 审查 P1-50）。
+const SlotSecrets = "slot:secrets"
 
 // 内核约定的服务键。
 const (
@@ -77,29 +69,9 @@ func (EnvSecrets) Resolve(ref string) (string, error) {
 	return v, nil
 }
 
-// ModelCatalog 别名 → 模型名。
-type ModelCatalog interface {
-	Resolve(alias string) string
-}
-
-// IdentityCatalog 默认实现：别名即模型名。
-type IdentityCatalog struct{}
-
-// Resolve 原样返回。
-func (IdentityCatalog) Resolve(alias string) string { return alias }
-
-// NopAuth 本地单用户（review-1 R7：只留接口）。
-type NopAuth struct{}
-
-// NopCoordinator 单进程（review-1 R7）。
-type NopCoordinator struct{}
-
 // SlotDefaults 插槽默认实现（未被插件填充时使用）。
 func SlotDefaults() map[string]any {
 	return map[string]any{
-		SlotModelCatalog: IdentityCatalog{},
-		SlotSecrets:      Secrets(EnvSecrets{}),
-		SlotAuth:         NopAuth{},
-		SlotCoordinator:  NopCoordinator{},
+		SlotSecrets: Secrets(EnvSecrets{}),
 	}
 }

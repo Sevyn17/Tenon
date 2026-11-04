@@ -203,7 +203,6 @@ export interface Field {
   description?: string;
   group?: string;
   widget?: string;
-  override?: boolean;
 }
 export interface PluginInfo {
   name: string;

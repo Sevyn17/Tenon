@@ -1,4 +1,4 @@
-// Package storesqlite 存储插件 store-sqlite（强制）：填四个存储插槽（同一个 DB），提供 service:db。
+// Package storesqlite 存储插件 store-sqlite（强制）：提供 service:db（会话存储 + 工件）与 service:sql（组件自有表）。
 package storesqlite
 
 import (
@@ -87,17 +87,11 @@ func init() { component.Register("store-sqlite", func() component.Component { re
 
 func (p *storePlugin) Meta() component.Meta {
 	return component.Meta{Name: "store-sqlite", Version: "0.1.0", Default: true, Config: &Config{},
-		Provides: []string{assemble.SlotSessionStore, assemble.SlotToolResultStore, assemble.SlotBlobStore, assemble.SlotAgentStore,
-			assemble.ServiceDB, component.ServiceSQL}}
+		Provides: []string{assemble.ServiceDB, component.ServiceSQL}}
 }
 
 func (p *storePlugin) Setup(cx *component.Registrar) error {
 	p.h, p.cfg = &Store{}, cx.Config().(*Config)
-	for _, s := range []string{"session_store", "tool_result_store", "blob_store", "agent_store"} {
-		if err := cx.FillSlot(s, p.h); err != nil {
-			return err
-		}
-	}
 	if err := cx.Provide("sql", p.h.SQL()); err != nil {
 		return err
 	}

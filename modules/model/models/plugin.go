@@ -13,7 +13,7 @@ import (
 
 // Config models 插件配置。
 type Config struct {
-	Model    string `cfg:"model" default:"deepseek-chat" title:"模型或别名" override:"agent"`
+	Model    string `cfg:"model" default:"deepseek-chat" title:"模型或别名"`
 	Catalog  string `cfg:"catalog" title:"用户目录 models.toml" description:"整条覆盖内置目录（model-hub D3）" widget:"file"`
 	BaseURL  string `cfg:"base_url" title:"临时 OpenAI 兼容端点" description:"非空时注册提供方 cli（key = env:YBASE_API_KEY）"`
 	Discover bool   `cfg:"discover_ollama" title:"发现本地 Ollama 模型" widget:"switch"`
