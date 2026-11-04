@@ -36,7 +36,7 @@ func (a *Agent) AwaitFunc(ask Ask) toolhub.Await {
 			return false, ctx.Err()
 		case r := <-ch:
 			if a.Store != nil {
-				if err := a.Store.Decide(ctx, cx.SessionID, cx.CallID, r.ok); err != nil {
+				if err := Decide(ctx, a.Store, cx.SessionID, cx.CallID, r.ok); err != nil {
 					return false, err
 				}
 			}

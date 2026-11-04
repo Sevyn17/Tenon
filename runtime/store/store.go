@@ -41,7 +41,8 @@ const (
 	StatusSuspended = "suspended" // 预算挂起：停在检查点、不再开新回合，信箱保留
 )
 
-// Store 内核用到的全部存储能力。
+// Store 内核必需的存储能力（2026-11-04 审查 P1-53：去掉 9 个没有调用方的子存储访问器；
+// 清理 PruneStore、定义 DefinitionStore 改为可选，实现了就用、没有就跳过）。第三方实现只需满足这里的方法。
 type Store interface {
 	SessionStore
 	LeaseStore
@@ -50,28 +51,13 @@ type Store interface {
 	CorrStore
 	OutboxStore
 	TraceStore
-	PruneStore
 	ToolResultStore
-	DefinitionStore
 	// OnCommit 设置提交成功后的持久事件回调；回调在提交的 goroutine 里同步执行，须很快返回。
 	OnCommit(f func(bus.Envelope))
 	Close() error
 
-	// —— 按子存储访问与 Tx（05：随发件箱/session_pending 在 T3 落地）。使用方仍只依赖自己用到的小接口。——
-	// Sessions 返回会话子存储；以下访问器都返回同一个底座的子视图。
-	Sessions() SessionStore
-	Queue() InboxStore
-	Results() ToolResultStore
-	Definitions() DefinitionStore
-	Leases() LeaseStore
-	Sleeps() SleepStore
-	Pending() CorrStore
-	// OutboxQueue 返回外发队列（OutboxStore 的 Outbox 方法名冲突，故访问器带 Queue 后缀）。
-	OutboxQueue() OutboxStore
-	// Traces 返回 trace 事件表（08 8.7 explain 按 trace 还原路径）。
-	Traces() TraceStore
-	// Tx 在一个存储事务里执行 fn：fn 内通过子存储访问器的写入与最外层一起提交，出错整体回滚。
-	// 已在事务里时直接加入外层；具体隔离级别由实现决定（memstore 不保证回滚）。
+	// Tx 在一个存储事务里执行 fn：fn 拿到的视图上的写入与最外层一起提交，出错整体回滚。
+	// 已在事务里时直接加入外层（一致性套件约束回滚与嵌套，见 storetest）。
 	Tx(ctx context.Context, fn func(Store) error) error
 }
 
@@ -187,7 +173,8 @@ type CorrStore interface {
 	VoidCorr(ctx context.Context, corr string) error
 }
 
-// ToolResultStore 工具幂等 / 挂起记录（tool-hub D4）。
+// ToolResultStore 工具幂等 / 挂起记录（tool-hub D4）。只留原子操作（审查 P1-54）：读视图、决定送达这类
+// 组合放在 agent 的适配层（agent.ToolStore），不要求每个存储实现各写一遍。
 type ToolResultStore interface {
 	PutToolStarted(ctx context.Context, sessionID, callID, argsHash string) error
 	PutToolPending(ctx context.Context, r ToolRecord) error
@@ -196,13 +183,13 @@ type ToolResultStore interface {
 	GetTool(ctx context.Context, sessionID, callID string) (*ToolRecord, error)
 	PendingTools(ctx context.Context, sessionID string) ([]ToolRecord, error)
 	DeleteFinishedTools(ctx context.Context, sessionID string) error
-	LookupTool(ctx context.Context, sessionID, callID string) (ToolRecordView, bool, error)
+	// StartTool 执行前写 started：无记录则插入；已批准（delivered）且参数哈希一致则推进为 started，否则 ErrStateMismatch。
 	StartTool(ctx context.Context, sessionID, callID, argsHash string) error
-	PendConfirm(ctx context.Context, sessionID, callID, argsHash, reason string, deadline time.Time) error
-	Decide(ctx context.Context, sessionID, callID string, approve bool) error
+	// PendConfirm 写等确认记录；已存在不报错，仍是 pending 时刷新参数哈希与截止（一条原子写）。
+	PendConfirm(ctx context.Context, sessionID, callID, argsHash string, deadline time.Time) error
 }
 
-// DefinitionStore 定义类数据：每次修改插入新版本，不原地更新。
+// DefinitionStore 可选：定义类数据（存储里的智能体定义，agentdef.StoreSource 用）：每次修改插入新版本，不原地更新。
 type DefinitionStore interface {
 	// PutDefinition 写入新版本，返回版本号（从 1 起）与内容哈希（body 的 sha256 十六进制）。
 	//
@@ -348,11 +335,6 @@ type ToolRecord struct {
 	TokenHash string
 }
 
-// ToolRecordView toolhub.Record 的同构（避免 store 依赖 toolhub）。
-type ToolRecordView struct {
-	Status, Output, Decision, ArgsHash string
-}
-
 // 持久事件类型。
 const (
 	EventEntry  = "entry"  // data: {idx, entry}
@@ -454,7 +436,7 @@ func HashBytes(b []byte) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// PruneStore 过期数据清理（D 组）：只删早于 before、而且已经没用的观测与记账行——
+// PruneStore 可选：过期数据清理（D 组）：只删早于 before、而且已经没用的观测与记账行——
 // 已用或已过期的待回复、已派发或死信的外发、trace 事件。会话日志、未用的待回复、
 // 未派发的外发一律不动。返回删除的行数。宿主启动时与定期调用（保留期见约束清单）。
 type PruneStore interface {

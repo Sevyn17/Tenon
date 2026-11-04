@@ -199,15 +199,6 @@ func (s *Store) DeleteFinishedTools(ctx context.Context, sessionID string) error
 	return nil
 }
 
-// LookupTool 读记录视图。
-func (s *Store) LookupTool(ctx context.Context, sessionID, callID string) (store.ToolRecordView, bool, error) {
-	r, err := s.GetTool(ctx, sessionID, callID)
-	if err != nil || r == nil {
-		return store.ToolRecordView{}, false, err
-	}
-	return store.ToolRecordView{Status: r.Status, Output: r.Output, Decision: r.Decision, ArgsHash: r.ArgsHash}, true, nil
-}
-
 // StartTool 执行前写 started：无记录则插入；已批准（delivered）且参数哈希一致则推进为 started。
 func (s *Store) StartTool(ctx context.Context, sessionID, callID, argsHash string) error {
 	if err := s.lock(); err != nil {
@@ -226,12 +217,11 @@ func (s *Store) StartTool(ctx context.Context, sessionID, callID, argsHash strin
 }
 
 // PendConfirm 写等确认记录；已存在不报错，仍 pending 时刷新参数哈希与截止。
-func (s *Store) PendConfirm(ctx context.Context, sessionID, callID, argsHash, reason string, deadline time.Time) error {
+func (s *Store) PendConfirm(ctx context.Context, sessionID, callID, argsHash string, deadline time.Time) error {
 	if err := s.lock(); err != nil {
 		return err
 	}
 	defer s.mu.Unlock()
-	_ = reason
 	if t := s.tool(sessionID, callID); t != nil {
 		if t.r.Status == store.ToolPending {
 			t.r.ArgsHash, t.r.Deadline = argsHash, msTime(deadline)
@@ -242,11 +232,3 @@ func (s *Store) PendConfirm(ctx context.Context, sessionID, callID, argsHash, re
 		Kind: "confirm", ArgsHash: argsHash, Deadline: deadline})
 }
 
-// Decide 人工决定送达：pending → delivered（approve / deny）。
-func (s *Store) Decide(ctx context.Context, sessionID, callID string, approve bool) error {
-	d := "deny"
-	if approve {
-		d = "approve"
-	}
-	return s.Deliver(ctx, sessionID, callID, "", d)
-}

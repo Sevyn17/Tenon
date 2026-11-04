@@ -52,7 +52,7 @@ func Run(t *testing.T, open func(t *testing.T) store.Store) {
 		{"TraceOrder", testTraceOrder},
 		{"Prune", testPrune},
 		{"TraceEvents", testTraceEvents},
-		{"SubStoresAndTx", testSubStoresAndTx},
+		{"Tx", testSubStoresAndTx},
 		{"TxRollback", testTxRollback},
 		{"Concurrency", testConcurrency},
 	}
@@ -314,8 +314,12 @@ func testReplayAndList(t *testing.T, db store.Store) {
 
 // —— 定义 ——//
 
-func testDefinitions(t *testing.T, db store.Store) {
+func testDefinitions(t *testing.T, st store.Store) {
 	ctx := context.Background()
+	db, ok := st.(store.DefinitionStore)
+	if !ok {
+		t.Skip("存储未实现可选的 DefinitionStore")
+	}
 	if _, _, err := db.GetDefinition(ctx, "agent", "a", 0); !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("不存在应 ErrNotFound: %v", err)
 	}
@@ -470,19 +474,19 @@ func testToolStateMachine(t *testing.T, db store.Store) {
 
 func testConfirmLifecycle(t *testing.T, db store.Store) {
 	ctx := context.Background()
-	if err := db.PendConfirm(ctx, "s", "c", "h1", "写操作", time.Now().Add(time.Hour)); err != nil {
+	if err := db.PendConfirm(ctx, "s", "c", "h1", time.Now().Add(time.Hour)); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.PendConfirm(ctx, "s", "c", "h1", "写操作", time.Now().Add(time.Hour)); err != nil {
+	if err := db.PendConfirm(ctx, "s", "c", "h1", time.Now().Add(time.Hour)); err != nil {
 		t.Fatalf("重复挂起应幂等: %v", err)
 	}
-	if r, ok, _ := db.LookupTool(ctx, "s", "c"); !ok || r.Status != store.ToolPending {
+	if r, ok, _ := lookup(ctx, db, "s", "c"); !ok || r.Status != store.ToolPending {
 		t.Fatalf("挂起: %+v", r)
 	}
 	if err := db.StartTool(ctx, "s", "c", "h1"); !errors.Is(err, store.ErrStateMismatch) {
 		t.Fatalf("未批准不能 started: %v", err)
 	}
-	if err := db.Decide(ctx, "s", "c", true); err != nil {
+	if err := db.Deliver(ctx, "s", "c", "", "approve"); err != nil {
 		t.Fatal(err)
 	}
 	if err := db.StartTool(ctx, "s", "c", "h2"); !errors.Is(err, store.ErrStateMismatch) {
@@ -491,44 +495,44 @@ func testConfirmLifecycle(t *testing.T, db store.Store) {
 	if err := db.StartTool(ctx, "s", "c", "h1"); err != nil {
 		t.Fatalf("批准后应可 started: %v", err)
 	}
-	if err := db.PendConfirm(ctx, "s", "c", "h9", "写操作", time.Now()); err != nil {
+	if err := db.PendConfirm(ctx, "s", "c", "h9", time.Now()); err != nil {
 		t.Fatalf("非 pending 时 PendConfirm 也不报错: %v", err)
 	}
 	if err := db.FinishTool(ctx, "s", "c", store.ToolStarted, `{"text":"ok"}`); err != nil {
 		t.Fatal(err)
 	}
-	r, ok, err := db.LookupTool(ctx, "s", "c")
+	r, ok, err := lookup(ctx, db, "s", "c")
 	if err != nil || !ok || r.Status != store.ToolDone || r.Decision != "approve" || r.ArgsHash != "h1" {
 		t.Fatalf("终态: %+v %v %v", r, ok, err)
 	}
-	if _, ok, err := db.LookupTool(ctx, "s", "none"); ok || err != nil {
+	if _, ok, err := lookup(ctx, db, "s", "none"); ok || err != nil {
 		t.Fatalf("缺失: %v %v", ok, err)
 	}
 	if err := db.StartTool(ctx, "s", "fresh", "h"); err != nil {
 		t.Fatalf("无记录应插入 started: %v", err)
 	}
-	_ = db.PendConfirm(ctx, "s", "d", "h", "", time.Now().Add(time.Hour))
-	if err := db.Decide(ctx, "s", "d", false); err != nil {
+	_ = db.PendConfirm(ctx, "s", "d", "h", time.Now().Add(time.Hour))
+	if err := db.Deliver(ctx, "s", "d", "", "deny"); err != nil {
 		t.Fatal(err)
 	}
-	if r, _, _ := db.LookupTool(ctx, "s", "d"); r.Decision != "deny" || r.Status != store.ToolDelivered {
+	if r, _, _ := lookup(ctx, db, "s", "d"); r.Decision != "deny" || r.Status != store.ToolDelivered {
 		t.Fatalf("拒绝: %+v", r)
 	}
 }
 
 func testPendConfirmRefresh(t *testing.T, db store.Store) {
 	ctx := context.Background()
-	if err := db.PendConfirm(ctx, "s", "c", "old", "r", time.Now().Add(time.Hour)); err != nil {
+	if err := db.PendConfirm(ctx, "s", "c", "old", time.Now().Add(time.Hour)); err != nil {
 		t.Fatal(err)
 	}
 	dl := time.Now().Add(2 * time.Hour)
-	if err := db.PendConfirm(ctx, "s", "c", "new", "r", dl); err != nil {
+	if err := db.PendConfirm(ctx, "s", "c", "new", dl); err != nil {
 		t.Fatal(err)
 	}
 	if ps, _ := db.PendingTools(ctx, "s"); len(ps) != 1 || ps[0].Deadline.UnixMilli() != dl.UnixMilli() {
 		t.Fatalf("截止应刷新: %+v", ps)
 	}
-	if err := db.Decide(ctx, "s", "c", true); err != nil {
+	if err := db.Deliver(ctx, "s", "c", "", "approve"); err != nil {
 		t.Fatal(err)
 	}
 	if err := db.StartTool(ctx, "s", "c", "new"); err != nil {
@@ -1056,6 +1060,10 @@ func testTraceOrder(t *testing.T, db store.Store) {
 // 已派发或死信的外发、trace 事件；未用的待回复与未派发的外发不动。
 func testPrune(t *testing.T, db store.Store) {
 	ctx := context.Background()
+	pr, ok := db.(store.PruneStore)
+	if !ok {
+		t.Skip("存储未实现可选的 PruneStore")
+	}
 	h := newCore().Snapshot().Header
 	if err := db.CreateSession(ctx, store.SessionMeta{ID: "pr"}, h, nil); err != nil {
 		t.Fatal(err)
@@ -1071,7 +1079,7 @@ func testPrune(t *testing.T, db store.Store) {
 	_ = db.MarkOutbox(ctx, "o-sent")
 	_ = db.DeadOutbox(ctx, "o-dead", "x")
 	_ = db.RecordTrace(ctx, store.TraceEvent{Trace: "pt", Session: "pr", Kind: "k", At: 1})
-	n, err := db.Prune(ctx, time.Now().Add(time.Hour))
+	n, err := pr.Prune(ctx, time.Now().Add(time.Hour))
 	if err != nil {
 		t.Fatalf("Prune: %v", err)
 	}
@@ -1092,7 +1100,7 @@ func testPrune(t *testing.T, db store.Store) {
 		t.Fatalf("早于截止时间的 trace 事件应清掉: %+v", evs)
 	}
 	// 截止时间之前没有可清的：什么也不删。
-	if n, err := db.Prune(ctx, time.Unix(0, 0)); err != nil || n != 0 {
+	if n, err := pr.Prune(ctx, time.Unix(0, 0)); err != nil || n != 0 {
 		t.Fatalf("截止时间之前不应清任何行，得 %d %v", n, err)
 	}
 }
@@ -1176,18 +1184,14 @@ func testOutboxClaim(t *testing.T, db store.Store) {
 
 func testSubStoresAndTx(t *testing.T, db store.Store) {
 	ctx := context.Background()
-	if db.Sessions() == nil || db.Queue() == nil || db.Results() == nil || db.Definitions() == nil ||
-		db.Leases() == nil || db.Sleeps() == nil || db.Pending() == nil || db.OutboxQueue() == nil {
-		t.Fatal("按子存储访问器不应为空")
-	}
 	c := newCore()
 	create(t, db, store.SessionMeta{ID: "tx-1"}, c)
 	ok := false
 	err := db.Tx(ctx, func(tx store.Store) error {
-		if admitted, err := tx.Queue().Admit(ctx, "tx-1", store.InboxItem{ItemID: "t1", Kind: store.InboxInput, Input: `[]`}); err != nil || !admitted {
+		if admitted, err := tx.Admit(ctx, "tx-1", store.InboxItem{ItemID: "t1", Kind: store.InboxInput, Input: `[]`}); err != nil || !admitted {
 			return err
 		}
-		if in, _ := tx.Queue().InInbox(ctx, "tx-1", "t1"); !in {
+		if in, _ := tx.InInbox(ctx, "tx-1", "t1"); !in {
 			t.Fatal("事务内的写入应立即可见")
 		}
 		if err := tx.Commit(ctx, store.Checkpoint{SessionID: "tx-1", ExpectLogLen: 0, Header: c.Snapshot().Header}); err != nil {
@@ -1206,8 +1210,8 @@ func testSubStoresAndTx(t *testing.T, db store.Store) {
 	if err := db.Tx(ctx, func(tx store.Store) error { return sentinel }); !errors.Is(err, sentinel) {
 		t.Fatalf("Tx 应传播 fn 的错误: %v", err)
 	}
-	if _, err := db.Sessions().Exists(ctx, "tx-1"); err != nil {
-		t.Fatalf("Sessions().Exists: %v", err)
+	if _, err := db.Exists(ctx, "tx-1"); err != nil {
+		t.Fatalf("Exists: %v", err)
 	}
 }
 
@@ -1426,4 +1430,15 @@ func testConcurrency(t *testing.T, db store.Store) {
 	if ok != 1 || conflict != n-1 {
 		t.Fatalf("同一 ExpectLogLen 并发提交：成功 %d、冲突 %d，期望 1 / %d", ok, conflict, n-1)
 	}
+}
+
+// lookup 读工具记录视图（原 ToolResultStore.LookupTool，审查 P1-54 起由调用方用 GetTool 组合）。
+func lookup(ctx context.Context, db interface {
+	GetTool(ctx context.Context, sessionID, callID string) (*store.ToolRecord, error)
+}, sid, cid string) (store.ToolRecord, bool, error) {
+	r, err := db.GetTool(ctx, sid, cid)
+	if err != nil || r == nil {
+		return store.ToolRecord{}, false, err
+	}
+	return *r, true, nil
 }

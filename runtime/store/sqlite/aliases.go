@@ -28,7 +28,6 @@ type (
 	Cleaner        = store.Cleaner
 	InboxItem      = store.InboxItem
 	ToolRecord     = store.ToolRecord
-	ToolRecordView = store.ToolRecordView
 	SessionInfo    = store.SessionInfo
 	Stats          = store.Stats
 )

@@ -6,17 +6,7 @@ import (
 	"ybase/runtime/store"
 )
 
-// 按子存储访问与 Tx（05：与 sqlite 同形）。
-
-func (s *Store) Sessions() store.SessionStore       { return s }
-func (s *Store) Queue() store.InboxStore            { return s }
-func (s *Store) Results() store.ToolResultStore     { return s }
-func (s *Store) Definitions() store.DefinitionStore { return s }
-func (s *Store) Leases() store.LeaseStore           { return s }
-func (s *Store) Sleeps() store.SleepStore           { return s }
-func (s *Store) Pending() store.CorrStore           { return s }
-func (s *Store) OutboxQueue() store.OutboxStore     { return s }
-func (s *Store) Traces() store.TraceStore           { return s }
+// Tx（05：与 sqlite 同形）。
 
 // Tx 执行 fn；fn 出错时把全部状态恢复到进入 Tx 之前（审查 P1-55：原先没有回滚）。
 // 内存实现的写操作各自立即生效，事务期间别的 goroutine 能看到中间状态；Tx 之间用 txMu 串行，
