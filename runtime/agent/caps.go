@@ -14,21 +14,14 @@ import (
 
 // InstallCapsGuard 给本会话的工具栈装一层 caps 守卫（只装一次；Host 在会话打开时调用）。
 func (a *Agent) InstallCapsGuard() {
-	if a == nil || a.Hub == nil {
+	if a == nil || a.Hub == nil || !a.caps.markGuarded() {
 		return
 	}
-	a.capsMu.Lock()
-	if a.capsGuarded {
-		a.capsMu.Unlock()
-		return
-	}
-	a.capsGuarded = true
-	a.capsMu.Unlock()
 	a.Hub.PrependLayer(toolhub.Layer{
 		Name:  "caps",
 		Guard: true,
 		Call: func(ctx context.Context, cx *toolhub.Cx, args json.RawMessage, next toolhub.Next) (toolhub.Output, error) {
-			if name := cx.Tool.Spec.Name; !a.allowedByCaps(name) {
+			if name := cx.Tool.Spec.Name; !a.caps.allows(name) {
 				return toolhub.Errorf("工具 %s 不在本轮授权范围（caps）", name), nil
 			}
 			return next(ctx, cx, args)
@@ -41,13 +34,7 @@ func (a *Agent) SetCaps(caps []string) {
 	if a == nil {
 		return
 	}
-	a.capsMu.Lock()
-	if caps == nil {
-		a.caps = nil
-	} else {
-		a.caps = append([]string{}, caps...)
-	}
-	a.capsMu.Unlock()
+	a.caps.set(caps)
 }
 
 // Caps 当前本轮的授权范围（拷贝；nil = 不限，空集 = 一个都不许）。
@@ -55,25 +42,5 @@ func (a *Agent) Caps() []string {
 	if a == nil {
 		return nil
 	}
-	a.capsMu.RLock()
-	defer a.capsMu.RUnlock()
-	if a.caps == nil {
-		return nil
-	}
-	return append([]string{}, a.caps...)
-}
-
-// allowedByCaps 工具是否在本轮范围内；没有范围（nil）时全部允许，空集时全部拒绝。
-func (a *Agent) allowedByCaps(tool string) bool {
-	a.capsMu.RLock()
-	defer a.capsMu.RUnlock()
-	if a.caps == nil {
-		return true
-	}
-	for _, c := range a.caps {
-		if c == tool {
-			return true
-		}
-	}
-	return false
+	return a.caps.get()
 }

@@ -45,8 +45,8 @@ func TestCrashRecovery(t *testing.T) {
 			if a2.Pending() != tc.wantPend {
 				t.Fatalf("Pending=%v，期望 %v", a2.Pending(), tc.wantPend)
 			}
-			if (a2.recovered != nil) != tc.wantResent {
-				t.Fatalf("请求记录重组=%v，期望 %v", a2.recovered != nil, tc.wantResent)
+			if (a2.resumed.req != nil) != tc.wantResent {
+				t.Fatalf("请求记录重组=%v，期望 %v", a2.resumed.req != nil, tc.wantResent)
 			}
 			var text strings.Builder
 			a2.Hooks.OnText = func(d string) { text.WriteString(d) }

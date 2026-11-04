@@ -41,7 +41,7 @@ func (sp *span) End(status string) {
 			sp.s.Attrs = b
 		}
 	}
-	sp.a.pendingSpans = append(sp.a.pendingSpans, sp.s)
+	sp.a.buf.spans = append(sp.a.buf.spans, sp.s)
 }
 
 func (a *Agent) clock() time.Time {

@@ -8,7 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync"
+
 	"time"
 
 	"ybase/runtime/agentdef"
@@ -65,24 +65,14 @@ type Agent struct {
 	// 所属树策略按它判断「子会话一轮失败」该怎么处理（02 2.2）。
 	Origin string
 
-	committed int // 存储里已提交的 log_len（条件写期望值）
 	// Epoch 会话写租约纪元（02 2.2 fencing）：非零时每次 checkpoint 都带它，过期纪元的写入被存储拒绝。
-	Epoch     int64
-	resume    *session.Need    // Open 恢复出的待满足需求
-	recovered *session.Request // 恢复 WaitingModel 时按请求记录重组出的请求（原样重发）
-	// recoveredView 恢复出的请求所用压缩视图（重发时记录不变）。
-	recoveredView *reqlog.CompactionView
+	Epoch int64
 
 	// Compactor 可空：每次模型调用前决定是否压缩（compact-basic 插件，最外层）。
 	Compactor Compactor
 
 	// Now 时钟（测试注入）；nil = time.Now。
 	Now func() time.Time
-
-	pendingSpans []store.Span // 待随下一次 checkpoint 提交的 span（G2）
-
-	// outbox 待随下一次 checkpoint 一起提交的外发信封（08 9.6：外发与检查点同事务）。
-	outbox []store.OutboxItem
 
 	// Hub 工具管理器（必需：调用栈、并行、幂等、确认、存工件）；Toolset 为会话工具视图（可空）。
 	Hub     *toolhub.Hub
@@ -102,32 +92,23 @@ type Agent struct {
 	// Statuses 状态提交登记（框架设计 12.5）：每次调模型前收集，按 key 只发变化的片段。
 	Statuses []inject.Reg
 
-	// caps 本轮的授权工具范围（信封 caps 交集，T3）；nil/空 = 不限。
-	capsMu     sync.RWMutex
-	traceMu    sync.Mutex
-	trace      string
-	turnOrigin TurnOrigin
-	// snap 最近一次提交的快照（Committed 用；actor 之外的读者不碰 Core）。
-	snapMu      sync.RWMutex
-	snap        *session.Snapshot
-	traceEvents []store.TraceEvent
-	caps        []string
-	capsGuarded bool
-
-	spanMu   sync.Mutex
-	hubSpans []store.Span
-
-	// TurnSpanID 宿主设置的当前 turn span（step span 的父）；stepID 当前 step span（attempt / tool 的父）。
+	// TurnSpanID 宿主设置的当前 turn span（step span 的父）。
 	TurnSpanID string
-	step       *span
-	stepID     string
 
 	// Between 可空：每个需求执行前调用（会话宿主在这里应用回合中途的命令），返回替换后的需求。
 	Between func(need *session.Need) (*session.Need, error)
 
 	// unconsumed 回合结束时内核交还的暂存插话（DoneNeed.Unconsumed），宿主用 TakeUnconsumed 取走后回投。
 	unconsumed []session.PendingInput
-	consume    []string // 随下一次 checkpoint 删除的 inbox 项（session-host H7：core.Input 成功后同事务删除）
+
+	// 内部状态按归属分组（审查 P1-59，见 state.go）：各自带锁的给 host / 工具 goroutine 共用，其余 actor 独占。
+	caps    capsState
+	trace   traceState
+	snap    snapState
+	tools   toolSpans
+	buf     commitBuf
+	resumed recovery
+	step    *span // 当前 step span（attempt / compact 的父）
 
 	// crashAt 故障注入（测试）：在指定 checkpoint 点提交后返回 errCrash，模拟进程被杀。
 	crashAt string
@@ -197,9 +178,7 @@ func (a *Agent) drive(ctx context.Context, need *session.Need) (session.EndReaso
 // beginStep / endStep：一个 step = 一次模型调用 + 它产生的工具调用（M4.7）。
 func (a *Agent) beginStep(n uint32) {
 	a.step = a.startSpan("step", "", a.TurnSpanID).Set("step", n)
-	a.spanMu.Lock()
-	a.stepID = a.step.s.ID
-	a.spanMu.Unlock()
+	a.tools.setStep(a.step.s.ID)
 }
 
 func (a *Agent) endStep(status string) {
@@ -210,11 +189,7 @@ func (a *Agent) endStep(status string) {
 	a.step = nil
 }
 
-func (a *Agent) curStep() string {
-	a.spanMu.Lock()
-	defer a.spanMu.Unlock()
-	return a.stepID
-}
+func (a *Agent) curStep() string { return a.tools.step() }
 
 // point 在一个 checkpoint 点提交；命中故障注入点时提交后返回 errCrash。
 func (a *Agent) point(ctx context.Context, name, run string, rec *reqlog.Record) error {
@@ -232,11 +207,9 @@ func (a *Agent) callModel(ctx context.Context, need *session.Need) (*session.Nee
 		req  session.Request
 		view *reqlog.CompactionView
 	)
-	if a.recovered != nil { // 恢复：原样重发上次记录的请求（S7）
-		req, a.recovered = *a.recovered, nil
-		if a.recoveredView != nil {
-			view, a.recoveredView = a.recoveredView, nil
-		}
+	if a.resumed.req != nil { // 恢复：原样重发上次记录的请求（S7）
+		req, view = *a.resumed.req, a.resumed.view
+		a.resumed.req, a.resumed.view = nil, nil
 	} else {
 		var err error
 		if req, view, err = a.buildRequest(ctx, false); err != nil {

@@ -12,8 +12,8 @@ func TestSpansCommittedWithCheckpoint(t *testing.T) {
 	if _, err := a.Send(context.Background(), "ping"); err != nil {
 		t.Fatal(err)
 	}
-	if len(a.pendingSpans) != 0 {
-		t.Fatalf("回合结束后不应有未提交 span: %d", len(a.pendingSpans))
+	if len(a.buf.spans) != 0 {
+		t.Fatalf("回合结束后不应有未提交 span: %d", len(a.buf.spans))
 	}
 	counts := map[string]int{}
 	rows, err := db.SQL().Query(`SELECT kind FROM trace_spans WHERE session_id = 's1'`)

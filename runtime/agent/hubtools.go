@@ -61,14 +61,12 @@ func (a *Agent) HubSpan(ev toolhub.SpanEvent) {
 		attrs["child_session_id"] = ev.ChildSessionID // 委派：子会话可从 span 跳转（预留，M6 子智能体填）
 	}
 	b, _ := json.Marshal(attrs)
-	parent := a.stepID
+	parent := ""                                       // 空 = 挂在当前 step 下（toolSpans.add 在锁内取）
 	if i := strings.LastIndex(ev.CallID, "#"); i > 0 { // 子调用（如 run_code 的 <父>#<n>）挂在父调用 span 下
 		parent = "tool-" + ev.CallID[:i]
 	}
-	a.spanMu.Lock()
-	a.hubSpans = append(a.hubSpans, store.Span{ID: "tool-" + ev.CallID, Parent: parent, Kind: "tool", Name: ev.Tool,
+	a.tools.add(store.Span{ID: "tool-" + ev.CallID, Parent: parent, Kind: "tool", Name: ev.Tool,
 		Status: ev.Status, Start: ev.Start, End: ev.End, Attrs: b})
-	a.spanMu.Unlock()
 	a.AddTraceEvent("tool", ev.Tool+" "+ev.Status)
 }
 

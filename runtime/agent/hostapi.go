@@ -19,7 +19,7 @@ func (a *Agent) SendContent(ctx context.Context, c session.Content, meta map[str
 	if err != nil {
 		return session.EndReason{}, err
 	}
-	a.consume = append(a.consume, consume...)
+	a.buf.consume = append(a.buf.consume, consume...)
 	return a.drive(ctx, need)
 }
 
@@ -29,7 +29,7 @@ func (a *Agent) Drive(ctx context.Context, need *session.Need) (session.EndReaso
 }
 
 // Consume 把已处理的 inbox 项记入下一次 checkpoint（回合中插入用户消息时用，H7）。
-func (a *Agent) Consume(ids ...string) { a.consume = append(a.consume, ids...) }
+func (a *Agent) Consume(ids ...string) { a.buf.consume = append(a.buf.consume, ids...) }
 
 // Retry 从当前检查点重跑未完成的一轮（所属树策略 restart，02 2.2）。
 // 回合有未满足的需求（WaitingModel / WaitingTools）时重发/续答；失败的一轮已收尾、最后一条是可续位置时按 Resume 重开。
@@ -54,13 +54,13 @@ func (a *Agent) Retry(ctx context.Context) (session.EndReason, error) {
 
 // CommitRun 提交 Idle 下的修改并显式指定 run_state（suspended 用于预算挂起，02 2.2）。
 func (a *Agent) CommitRun(ctx context.Context, run string, consume ...string) error {
-	a.consume = append(a.consume, consume...)
+	a.buf.consume = append(a.buf.consume, consume...)
 	return a.checkpoint(ctx, run, nil)
 }
 
 // Commit Idle 下的修改（record / set_ext / compact / rewind）与头部同事务提交（03 §8.2 第 4 条）。
 func (a *Agent) Commit(ctx context.Context, consume ...string) error {
-	a.consume = append(a.consume, consume...)
+	a.buf.consume = append(a.buf.consume, consume...)
 	run := "idle"
 	if a.Core.Status() != session.StatusIdle {
 		run = "running"
@@ -147,7 +147,7 @@ func contains(xs []string, s string) bool {
 // 落库（08 9.6），提交成功后才由 Host 派发，崩溃时不会出现「信发了但回合没落库」。
 // 信封由调用方序列化成 JSON（通常来自 mail.Envelope）。
 func (a *Agent) EnqueueOutbox(id string, envelope []byte) {
-	a.outbox = append(a.outbox, store.OutboxItem{
+	a.buf.outbox = append(a.buf.outbox, store.OutboxItem{
 		ID:        id,
 		Envelope:  append([]byte(nil), envelope...),
 		CreatedAt: time.Now().UnixMilli(),
@@ -163,49 +163,32 @@ type TurnOrigin struct {
 
 // SetTurnOrigin 设置本回合的触发链信息。
 func (a *Agent) SetTurnOrigin(o TurnOrigin) {
-	a.traceMu.Lock()
-	a.turnOrigin = o
-	a.traceMu.Unlock()
+	a.trace.setOrigin(o)
 }
 
 // CurrentTurnOrigin 本回合的触发链信息。
 func (a *Agent) CurrentTurnOrigin() TurnOrigin {
-	a.traceMu.Lock()
-	defer a.traceMu.Unlock()
-	return a.turnOrigin
+	return a.trace.getOrigin()
 }
 
 // SetTrace 设置当前回合的 trace id（host 在取信时从信封上拿到；为空表示不记录）。
 func (a *Agent) SetTrace(trace string) {
-	a.traceMu.Lock()
-	a.trace = trace
-	a.traceMu.Unlock()
+	a.trace.setID(trace)
 }
 
 // TraceID 返回当前回合的 trace id。
 func (a *Agent) TraceID() string {
-	a.traceMu.Lock()
-	defer a.traceMu.Unlock()
-	return a.trace
+	return a.trace.getID()
 }
 
 // AddTraceEvent 记一条 trace 事件，等本回合结束时由 host 落库（避免和 checkpoint 抢写）。
 func (a *Agent) AddTraceEvent(kind, detail string) {
-	a.traceMu.Lock()
-	defer a.traceMu.Unlock()
-	if a.trace == "" {
-		return
-	}
-	a.traceEvents = append(a.traceEvents, store.TraceEvent{Trace: a.trace, Session: a.SessionID, Kind: kind, Detail: detail})
+	a.trace.add(a.SessionID, kind, detail)
 }
 
 // TakeTraceEvents 取走缓存的 trace 事件。
 func (a *Agent) TakeTraceEvents() []store.TraceEvent {
-	a.traceMu.Lock()
-	defer a.traceMu.Unlock()
-	out := a.traceEvents
-	a.traceEvents = nil
-	return out
+	return a.trace.take()
 }
 
 // TakeUnconsumed 取走上一回合结束时没进模型的插话（取消、中断、失败时内核原样交还，T17 / 审查 P1-19）。

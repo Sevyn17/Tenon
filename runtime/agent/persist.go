@@ -45,7 +45,7 @@ func (a *Agent) OpenAs(ctx context.Context, cfg *session.Config, meta store.Sess
 		if err := a.Store.CreateSession(ctx, meta, a.Core.Snapshot().Header, nil); err != nil {
 			return false, err
 		}
-		a.committed = 0
+		a.buf.committed = 0
 		a.bindCtx(meta)
 		a.publishSnapshot(a.Core.Snapshot())
 		return false, nil
@@ -60,11 +60,11 @@ func (a *Agent) OpenAs(ctx context.Context, cfg *session.Config, meta store.Sess
 	a.Core = c
 	a.Origin = l.Meta.Origin
 	a.bindCtx(l.Meta)
-	a.committed = l.Snapshot.Header.LogLen
+	a.buf.committed = l.Snapshot.Header.LogLen
 	a.publishSnapshot(c.Snapshot())
-	a.resume = c.Resumed()
-	if a.resume != nil && a.resume.Kind == session.NeedModel {
-		a.recovered = a.recoverRequest(ctx, a.resume.Model.RequestID)
+	a.resumed = recovery{need: c.Resumed()}
+	if n := a.resumed.need; n != nil && n.Kind == session.NeedModel {
+		a.resumed.req, a.resumed.view = a.recoverRequest(ctx, n.Model.RequestID)
 	}
 	return true, nil
 }
@@ -88,34 +88,34 @@ func (a *Agent) fillUseConfig(ctx context.Context, meta *store.SessionMeta) erro
 }
 
 // Pending 报告是否有恢复出的未完成回合。
-func (a *Agent) Pending() bool { return a.resume != nil }
+func (a *Agent) Pending() bool { return a.resumed.need != nil }
 
 // Recover 继续上次中断的回合；没有则立即返回 Done。
 func (a *Agent) Recover(ctx context.Context) (session.EndReason, error) {
-	if a.resume == nil {
+	need := a.resumed.need
+	if need == nil {
 		return session.DoneReason(), nil
 	}
-	need := a.resume
-	a.resume = nil
+	a.resumed.need = nil
 	return a.drive(ctx, need)
 }
 
-// recoverRequest 按请求记录重组上次发出的请求；记录缺失或哈希不符返回 nil（按当前日志重新构造）。
-func (a *Agent) recoverRequest(ctx context.Context, requestID string) *session.Request {
+// recoverRequest 按请求记录重组上次发出的请求与它所用的压缩视图（重发时请求记录保持同一视图）；
+// 记录缺失或哈希不符返回 nil（按当前日志重新构造）。
+func (a *Agent) recoverRequest(ctx context.Context, requestID string) (*session.Request, *reqlog.CompactionView) {
 	sr, err := a.Store.GetRequest(ctx, a.SessionID, requestID)
 	if err != nil || sr == nil {
-		return nil
+		return nil, nil
 	}
 	r, err := a.fromStore(ctx, sr)
 	if err != nil {
-		return nil
+		return nil, nil
 	}
 	req, err := reqlog.Rebuild(r, a.Core.Context())
 	if err != nil {
-		return nil
+		return nil, nil
 	}
-	a.recoveredView = r.View // 重发时请求记录保持同一压缩视图
-	return &req
+	return &req, r.View
 }
 
 // checkpoint 把内核自上次提交以来的变化写入一个事务。
@@ -126,9 +126,9 @@ func (a *Agent) checkpoint(ctx context.Context, run string, rec *reqlog.Record) 
 	// 持久化不随回合取消中止：取消后的收尾（cancel 条目、回合结束头部）也必须落库。
 	ctx = context.WithoutCancel(ctx)
 	s := a.Core.Snapshot()
-	cp := store.Checkpoint{SessionID: a.SessionID, Epoch: a.Epoch, ExpectLogLen: a.committed, Header: s.Header, RunState: run}
-	from := a.committed
-	if s.Header.LogLen < a.committed { // rewind 后立即 checkpoint，截断点即新 log_len
+	cp := store.Checkpoint{SessionID: a.SessionID, Epoch: a.Epoch, ExpectLogLen: a.buf.committed, Header: s.Header, RunState: run}
+	from := a.buf.committed
+	if s.Header.LogLen < a.buf.committed { // rewind 后立即 checkpoint，截断点即新 log_len
 		t := s.Header.LogLen
 		cp.TruncateFrom = &t
 		from = t
@@ -147,24 +147,17 @@ func (a *Agent) checkpoint(ctx context.Context, run string, rec *reqlog.Record) 
 		}
 		cp.Request = sr
 	}
-	cp.ConsumeInbox = a.consume
-	if len(a.outbox) > 0 {
-		cp.Outbox = append([]store.OutboxItem(nil), a.outbox...)
+	cp.ConsumeInbox = a.buf.consume
+	if len(a.buf.outbox) > 0 {
+		cp.Outbox = append([]store.OutboxItem(nil), a.buf.outbox...)
 	}
-	a.spanMu.Lock()
-	cp.Spans = append(append([]store.Span(nil), a.pendingSpans...), a.hubSpans...)
-	hubN := len(a.hubSpans)
-	a.spanMu.Unlock()
+	hub, hubN := a.tools.snapshot()
+	cp.Spans = append(append([]store.Span(nil), a.buf.spans...), hub...)
 	if err := a.Store.Commit(ctx, cp); err != nil {
 		return err
 	}
-	a.pendingSpans = nil
-	a.outbox = nil
-	a.consume = nil
-	a.spanMu.Lock()
-	a.hubSpans = a.hubSpans[hubN:]
-	a.spanMu.Unlock()
-	a.committed = s.Header.LogLen
+	a.tools.drop(hubN)
+	a.buf.reset(s.Header.LogLen)
 	a.publishSnapshot(s)
 	return nil
 }
@@ -175,20 +168,14 @@ func (a *Agent) publishSnapshot(s session.Snapshot) {
 	// 不复制条目切片：内核只往末尾追加（读者看不到超出自己长度的部分），Rewind 截掉容量后再追加
 	// 会换新底层数组，已发出去的快照不会被改写（2026-11-04 审查 P1-40：原先每次提交复制整个切片，
 	// 整条会话累计 O(n²)）。
-	a.snapMu.Lock()
-	a.snap = &s
-	a.snapMu.Unlock()
+	a.snap.set(s)
 }
 
 // Committed 最近一次提交的会话快照（只读）。actor 之外读会话状态一律用它，不要直接读 Core——
 // Core 只由会话自己的 actor 改，从别的 goroutine 读是数据竞争。会话还没打开时返回零值。
 func (a *Agent) Committed() session.Snapshot {
-	a.snapMu.RLock()
-	defer a.snapMu.RUnlock()
-	if a.snap == nil {
-		return session.Snapshot{}
-	}
-	return *a.snap
+	s, _ := a.snap.get()
+	return s
 }
 
 func toStore(r *reqlog.Record) (*store.RequestRecord, error) {
