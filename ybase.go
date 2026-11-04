@@ -339,7 +339,7 @@ func build(c *config) (*App, error) {
 	if ui == nil {
 		ui = nopUI{}
 	}
-	st := &storeHandle{db: c.store, blobs: &memArtifacts{m: map[string][]byte{}}}
+	st := &storeHandle{db: c.store, blobs: newMemArtifacts(c.store.Exists)}
 	b := bus.New(0)
 	h := &host.Host{Bus: b}
 	inject := map[string]any{
