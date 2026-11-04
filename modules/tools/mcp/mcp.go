@@ -359,14 +359,11 @@ func (c *Client) Tools(remote []RemoteTool) []*toolhub.Tool {
 			desc = clipUTF8(desc, DescMax) + "…" // 按 UTF-8 边界截，不切坏多字节字符（审查 P2）
 		}
 		desc = fmt.Sprintf("[MCP 服务 %s 提供] %s", c.Server.Name, desc)
-		risk, effect := toolhub.Write, toolhub.EffectExternal
-		switch c.Server.Trust {
-		case TrustReadonly:
-			risk, effect = toolhub.Read, toolhub.EffectRead
-		case TrustTrusted:
-			effect = toolhub.EffectWrite
+		risk := toolhub.Write // 权限类别在权限项上（Items 按 trust 定），这里只定并行与取消语义
+		if c.Server.Trust == TrustReadonly {
+			risk = toolhub.Read
 		}
-		attrs := map[string]any{"mcp_server": c.Server.Name, "mcp_tool": raw, toolhub.AttrEffect: effect}
+		attrs := map[string]any{"mcp_server": c.Server.Name, "mcp_tool": raw}
 		if h := rt.Annotations.DestructiveHint; h != nil && *h && c.Server.Trust != TrustReadonly {
 			attrs[AttrDestructive] = true
 		}

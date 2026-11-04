@@ -67,7 +67,6 @@ func AskUserIn(ask SessionAsker) *toolhub.Tool {
 	}
 	t.Parallel = &no
 	t.Timeout = AskUserTimeout
-	t.WithEffect(toolhub.EffectInteract)
 	// 行为就是“问用户”，再加一层确认只会变成两次询问：显式声明无需授权（§9.3）。
 	t.NoAuth = true
 	return t

@@ -113,7 +113,7 @@ func (g *Group) spawnTool() *toolhub.Tool {
 			Description: "派一个工作组成员（独立会话、同样的基础工具 + 看板）去做自包含的任务，立即返回，不等结果。" +
 				"成员做完时它的最终回答会作为一条新消息送回给你。同名成员已存在则把 task 作为下一条消息发给它。",
 			Schema: obj(`"name":{"type":"string","description":"成员名，小写字母数字和连字符"},"task":{"type":"string","description":"自包含的任务说明"}`, "name", "task")},
-		Risk: toolhub.Write, Parallel: &no, Attrs: map[string]any{toolhub.AttrEffect: toolhub.EffectSpawn},
+		Risk: toolhub.Write, Parallel: &no,
 		Items: []string{ItemSpawn},
 		Call: func(ctx context.Context, cx *toolhub.Cx, raw json.RawMessage) (toolhub.Output, error) {
 			var a struct{ Name, Task string }
@@ -291,7 +291,7 @@ func (g *Group) stopTool() *toolhub.Tool {
 		Spec: session.ToolSpec{Name: "team_stop",
 			Description: "中止一个正在工作的成员的当前任务（会话保留，之后可用 team_send 让它继续）。",
 			Schema:      obj(`"name":{"type":"string","description":"成员名"}`, "name")},
-		Risk: toolhub.Write, Attrs: map[string]any{toolhub.AttrEffect: toolhub.EffectCollab},
+		Risk:  toolhub.Write,
 		Items: []string{ItemSend},
 		Call: func(ctx context.Context, cx *toolhub.Cx, raw json.RawMessage) (toolhub.Output, error) {
 			var a struct{ Name string }
@@ -323,7 +323,7 @@ func (g *Group) sendTool() *toolhub.Tool {
 		Spec: session.ToolSpec{Name: "team_send",
 			Description: "给工作组里的另一位发消息：to 为 \"lead\"（领导）或成员名。消息进入对方 inbox，对方空闲时立即处理。",
 			Schema:      obj(`"to":{"type":"string"},"message":{"type":"string"}`, "to", "message")},
-		Risk: toolhub.Write, Attrs: map[string]any{toolhub.AttrEffect: toolhub.EffectCollab},
+		Risk:  toolhub.Write,
 		Items: []string{ItemSend},
 		Call: func(ctx context.Context, cx *toolhub.Cx, raw json.RawMessage) (toolhub.Output, error) {
 			var a struct{ To, Message string }
@@ -495,7 +495,7 @@ func (g *Group) boardTools() []*toolhub.Tool {
 	return []*toolhub.Tool{
 		{Spec: session.ToolSpec{Name: "task_create", Description: "在工作组看板上新建任务（pending、无负责人）。",
 			Schema: obj(`"subject":{"type":"string"},"description":{"type":"string"}`, "subject")},
-			Risk: toolhub.Write, Parallel: &no, Attrs: map[string]any{toolhub.AttrEffect: toolhub.EffectCollab},
+			Risk: toolhub.Write, Parallel: &no,
 			Items: []string{ItemBoard},
 			Call: func(ctx context.Context, cx *toolhub.Cx, raw json.RawMessage) (toolhub.Output, error) {
 				var a struct{ Subject, Description string }
@@ -521,7 +521,7 @@ func (g *Group) boardTools() []*toolhub.Tool {
 			}},
 		{Spec: session.ToolSpec{Name: "task_claim", Description: "领取一个 pending 任务（成为负责人，状态改为 in_progress）。",
 			Schema: obj(`"id":{"type":"integer"}`, "id")},
-			Risk: toolhub.Write, Parallel: &no, Attrs: map[string]any{toolhub.AttrEffect: toolhub.EffectCollab},
+			Risk: toolhub.Write, Parallel: &no,
 			Items: []string{ItemBoard},
 			Call: func(ctx context.Context, cx *toolhub.Cx, raw json.RawMessage) (toolhub.Output, error) {
 				var a struct{ ID int }
@@ -533,7 +533,7 @@ func (g *Group) boardTools() []*toolhub.Tool {
 			}},
 		{Spec: session.ToolSpec{Name: "task_complete", Description: "把自己负责的任务标为完成，附一句结果。",
 			Schema: obj(`"id":{"type":"integer"},"result":{"type":"string"}`, "id")},
-			Risk: toolhub.Write, Parallel: &no, Attrs: map[string]any{toolhub.AttrEffect: toolhub.EffectCollab},
+			Risk: toolhub.Write, Parallel: &no,
 			Items: []string{ItemBoard},
 			Call: func(ctx context.Context, cx *toolhub.Cx, raw json.RawMessage) (toolhub.Output, error) {
 				var a struct {

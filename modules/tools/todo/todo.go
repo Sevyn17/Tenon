@@ -83,7 +83,6 @@ func TodoWriteIn(onChange func(sessionID string, ts []Todo)) *toolhub.Tool {
 		return out, nil
 	}
 	t.Parallel = &no
-	t.WithEffect(toolhub.EffectInteract)
 	// 只改自己的计划列表，不碰外部资源：显式声明无需授权（§9.3）。
 	t.NoAuth = true
 	return t

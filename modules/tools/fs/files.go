@@ -29,7 +29,7 @@ func WriteFile(root string, tr ...*Tracker) *toolhub.Tool {
 			Description: "写入文本文件（新建或整体覆盖，自动创建父目录；路径相对工作目录）。修改已有文件请用 edit。",
 			Schema:      json.RawMessage(`{"type":"object","properties":{"path":{"type":"string"},"content":{"type":"string"}},"required":["path","content"]}`)},
 		Risk:  toolhub.Write,
-		Attrs: map[string]any{toolhub.AttrWorkspace: true, toolhub.AttrEffect: toolhub.EffectWrite},
+		Attrs: map[string]any{toolhub.AttrWorkspace: true},
 		Call: func(_ context.Context, cx *toolhub.Cx, raw json.RawMessage) (toolhub.Output, error) {
 			var a struct{ Path, Content string }
 			if err := json.Unmarshal(raw, &a); err != nil {

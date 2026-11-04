@@ -82,7 +82,6 @@ func (w *Web) Tools() []*toolhub.Tool {
 			return w.fetch(ctx, a.URL, a.Format)
 		})
 	f.Timeout = w.Timeout + 5*time.Second
-	f.WithEffect(toolhub.EffectNetwork)
 	s := toolhub.Simple("web_search",
 		fmt.Sprintf("搜索网页，返回来源标题、URL 与摘要。queries 最多 %d 条；需要全文时再用 web_fetch。回答时引用 URL。", WebSearchQueries),
 		fmt.Sprintf(`{"type":"object","properties":{"queries":{"type":"array","items":{"type":"string"},"maxItems":%d}},"required":["queries"]}`, WebSearchQueries),
@@ -94,7 +93,6 @@ func (w *Web) Tools() []*toolhub.Tool {
 			return w.search(ctx, a.Queries)
 		})
 	s.Timeout = w.Timeout + 5*time.Second
-	s.WithEffect(toolhub.EffectNetwork)
 	return []*toolhub.Tool{f, s}
 }
 

@@ -15,11 +15,10 @@ const (
 	AttrWorkspace = "workspace_confined"
 	// AttrSandboxed 本工具的执行受沙箱约束，参数可带 sandbox_permissions。
 	AttrSandboxed = "sandboxed"
-	// AttrEffect 工具的效果类别（权限档位按它判定），取值见 Effect* 常量。
-	AttrEffect = "effect"
 )
 
-// 效果类别（06 - 工具权限设计方案 §二）。
+// 效果类别（06 - 工具权限设计方案 §二）：权限项的 Item.Class 取这些值，权限插件按它查封顶表。
+// 原先工具上另有一份 Attrs["effect"]，与 Item.Class 重复且没有读取方（2026-11-04 审查 P2），已删。
 const (
 	EffectRead        = "read"
 	EffectWrite       = "write"
@@ -35,24 +34,6 @@ const (
 // Effects 全部效果类别。
 var Effects = []string{EffectRead, EffectWrite, EffectExec, EffectNetwork, EffectInteract,
 	EffectSpawn, EffectCollab, EffectOrchestrate, EffectExternal}
-
-// EffectOf 工具显式声明的效果类别；未声明返回空（不按 Risk 推断，§9.11）。
-func EffectOf(t *Tool) string {
-	if t == nil {
-		return ""
-	}
-	e, _ := t.Attrs[AttrEffect].(string)
-	return e
-}
-
-// WithEffect 声明工具的效果类别并返回工具本身（便于链式写法）。
-func (t *Tool) WithEffect(e string) *Tool {
-	if t.Attrs == nil {
-		t.Attrs = map[string]any{}
-	}
-	t.Attrs[AttrEffect] = e
-	return t
-}
 
 // SandboxMode 沙箱模式。
 type SandboxMode string

@@ -32,7 +32,6 @@ func Tool(h *host.Host, f host.Factory) *toolhub.Tool {
 		Risk:     toolhub.Write,
 		Parallel: &yes,
 		Timeout:  SubagentTimeout,
-		Attrs:    map[string]any{toolhub.AttrEffect: toolhub.EffectSpawn},
 		Items:    []string{ItemSpawn},
 		Call: func(ctx context.Context, cx *toolhub.Cx, raw json.RawMessage) (toolhub.Output, error) {
 			var a struct{ Task, Session string }

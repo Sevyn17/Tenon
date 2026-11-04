@@ -27,11 +27,11 @@ func cxAttr(name string, r toolhub.Risk, key string) *toolhub.Cx {
 
 func eff(name string, r toolhub.Risk, e string, attrs ...string) *toolhub.Cx {
 	c := cx(name, r)
-	c.Tool.WithEffect(e)
 	// 测试工具声明一个与效果同类别的 switch 项（无建议值 → 按封顶表取值）
 	it := toolhub.Item{ID: "t." + name, Title: name, Type: toolhub.ItemSwitch, Class: e, Owner: "test"}
 	c.Tool.Items = []string{it.ID}
 	c.Items = []toolhub.Item{it}
+	c.Tool.Attrs = map[string]any{}
 	for _, a := range attrs {
 		c.Tool.Attrs[a] = true
 	}

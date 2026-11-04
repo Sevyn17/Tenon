@@ -54,7 +54,6 @@ func Tool() *toolhub.Tool {
 		Risk:     toolhub.Dangerous,
 		Parallel: &no,
 		Timeout:  MaxTime + 10*time.Second,
-		Attrs:    map[string]any{toolhub.AttrEffect: toolhub.EffectOrchestrate},
 		Items:    []string{ItemRun},
 		Call: func(ctx context.Context, cx *toolhub.Cx, raw json.RawMessage) (toolhub.Output, error) {
 			var a struct {
