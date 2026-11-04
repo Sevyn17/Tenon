@@ -20,7 +20,7 @@ import (
 // SessionStatus 读会话生命周期状态（active / sleeping / deleted）。
 func (db *DB) SessionStatus(ctx context.Context, sessionID string) (string, error) {
 	var st string
-	err := db.rq().QueryRowContext(ctx, `SELECT status FROM sessions WHERE tenant = ? AND id = ?`, Tenant, sessionID).Scan(&st)
+	err := db.rq().QueryRowContext(ctx, `SELECT status FROM sessions WHERE tenant = ? AND id = ?`, store.Tenant, sessionID).Scan(&st)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", store.ErrNotFound
 	}
@@ -33,7 +33,7 @@ func (db *DB) SessionStatus(ctx context.Context, sessionID string) (string, erro
 // SetSessionStatus 条件迁移：当前状态必须等于 from 才改为 to；epoch 非零时还要求持有该纪元的租约。
 func (db *DB) SetSessionStatus(ctx context.Context, sessionID, from, to string, epoch int64) error {
 	q := `UPDATE sessions SET status = ?, updated_at = ? WHERE tenant = ? AND id = ? AND status = ?`
-	args := []any{to, time.Now().UnixMilli(), Tenant, sessionID, from}
+	args := []any{to, time.Now().UnixMilli(), store.Tenant, sessionID, from}
 	if epoch != 0 {
 		q += ` AND lease_epoch = ?`
 		args = append(args, epoch)
@@ -54,7 +54,7 @@ func (db *DB) SetSessionStatus(ctx context.Context, sessionID, from, to string, 
 // SessionsWithStatus 列出某状态的会话 id（按 id 升序，limit <= 0 表示不限）。
 func (db *DB) SessionsWithStatus(ctx context.Context, status string, limit int) ([]string, error) {
 	q := `SELECT id FROM sessions WHERE tenant = ? AND status = ? ORDER BY id`
-	args := []any{Tenant, status}
+	args := []any{store.Tenant, status}
 	if limit > 0 {
 		q += ` LIMIT ?`
 		args = append(args, limit)
@@ -83,7 +83,7 @@ func (db *DB) SleepingWithMail(ctx context.Context, kinds []string, limit int) (
 	q := `SELECT s.id FROM sessions s WHERE s.tenant = ? AND s.status = ? AND EXISTS (
 		SELECT 1 FROM session_inbox i WHERE i.tenant = s.tenant AND i.session_id = s.id AND i.consumed_at = 0
 		AND i.kind IN (?` + strings.Repeat(",?", len(kinds)-1) + `)) ORDER BY s.id`
-	args := []any{Tenant, store.StatusSleeping}
+	args := []any{store.Tenant, store.StatusSleeping}
 	for _, k := range kinds {
 		args = append(args, k)
 	}

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 	"time"
+	"ybase/runtime/store"
 )
 
 func TestConfirmLifecycle(t *testing.T) {
@@ -16,23 +17,23 @@ func TestConfirmLifecycle(t *testing.T) {
 	if err := db.PendConfirm(ctx, "s", "c", "h1", time.Now().Add(time.Hour)); err != nil {
 		t.Fatalf("重复挂起应幂等: %v", err)
 	}
-	if err := db.StartTool(ctx, "s", "c", "h1"); !errors.Is(err, ErrStateMismatch) {
+	if err := db.StartTool(ctx, "s", "c", "h1"); !errors.Is(err, store.ErrStateMismatch) {
 		t.Fatalf("未批准不能 started: %v", err)
 	}
 	if err := db.Deliver(ctx, "s", "c", "", "approve"); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.StartTool(ctx, "s", "c", "h2"); !errors.Is(err, ErrStateMismatch) {
+	if err := db.StartTool(ctx, "s", "c", "h2"); !errors.Is(err, store.ErrStateMismatch) {
 		t.Fatalf("参数哈希不同不能 started: %v", err)
 	}
 	if err := db.StartTool(ctx, "s", "c", "h1"); err != nil {
 		t.Fatalf("批准后应可 started: %v", err)
 	}
-	if err := db.FinishTool(ctx, "s", "c", ToolStarted, `{"text":"ok"}`); err != nil {
+	if err := db.FinishTool(ctx, "s", "c", store.ToolStarted, `{"text":"ok"}`); err != nil {
 		t.Fatal(err)
 	}
 	r, ok, err := lookup(ctx, db, "s", "c")
-	if err != nil || !ok || r.Status != ToolDone || r.Decision != "approve" {
+	if err != nil || !ok || r.Status != store.ToolDone || r.Decision != "approve" {
 		t.Fatalf("终态: %+v %v %v", r, ok, err)
 	}
 	if err := db.StartTool(ctx, "s", "fresh", "h"); err != nil {
@@ -59,11 +60,11 @@ func TestPendConfirmRefreshesHash(t *testing.T) {
 
 // lookup 读工具记录视图（原 ToolResultStore.LookupTool，审查 P1-54 起由调用方用 GetTool 组合）。
 func lookup(ctx context.Context, db interface {
-	GetTool(ctx context.Context, sessionID, callID string) (*ToolRecord, error)
-}, sid, cid string) (ToolRecord, bool, error) {
+	GetTool(ctx context.Context, sessionID, callID string) (*store.ToolRecord, error)
+}, sid, cid string) (store.ToolRecord, bool, error) {
 	r, err := db.GetTool(ctx, sid, cid)
 	if err != nil || r == nil {
-		return ToolRecord{}, false, err
+		return store.ToolRecord{}, false, err
 	}
 	return *r, true, nil
 }

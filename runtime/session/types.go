@@ -62,16 +62,15 @@ const (
 	EndDone EndKind = iota + 1
 	EndCancelled
 	EndMaxSteps
-	EndDenied
+	_ // 原 EndDenied（从未产生），留空位保持 EndFailed 的编号
 	EndFailed
 )
 
-// EndReason：回合结束原因。Denied / Failed 带载荷（错误码归 M4 §5.4）。
+// EndReason：回合结束原因。Failed 带载荷（错误码归 M4 §5.4）。
 type EndReason struct {
-	Kind       EndKind
-	Code       string // Denied：拒绝码（如 PERMISSION_DENIED）；Failed：失败原因
-	Message    string
-	RetryAfter int64 // Denied 可重试时的退避毫秒
+	Kind    EndKind
+	Code    string // Failed：失败原因
+	Message string
 }
 
 func DoneReason() EndReason              { return EndReason{Kind: EndDone} }
@@ -87,8 +86,6 @@ func (r EndReason) String() string {
 		return "Cancelled"
 	case EndMaxSteps:
 		return "MaxSteps"
-	case EndDenied:
-		return fmt.Sprintf("Denied(%s)", r.Code)
 	case EndFailed:
 		return fmt.Sprintf("Failed(%s)", r.Code)
 	default:
@@ -342,12 +339,11 @@ type PendingCompact struct {
 	Meta    map[string]any
 }
 
-// TurnInfo：回合信息（回合序号、起点、当前步、累计用量）。
+// TurnInfo：回合信息（回合序号、起点、当前步）。
 type TurnInfo struct {
 	Turn  uint32
 	Start int    // 本回合第一条条目的完整日志下标
 	Step  uint32 // 当前步（进入下一步前判定 MaxSteps，T19）
-	Usage Usage  // 累计用量
 }
 
 // Header：内核头部（每次停顿整体覆盖写；R32：不存已收到的工具结果）。
@@ -356,7 +352,7 @@ type Header struct {
 	Config                *Config
 	Ext                   map[string]any  // 键按字典序遍历，序列化确定（Go encoding/json 已保证）
 	Status                Status          // Idle / WaitingModel / WaitingTools
-	Turn                  *TurnInfo       // 回合序号、起点、当前步、累计用量
+	Turn                  *TurnInfo       // 回合序号、起点、当前步
 	PendingCalls          []ToolCall      // 尚未写入结果的调用（只存调用本身，不存已收到的结果）
 	PendingInputs         []PendingInput  // 暂存插话 (Input, SteerMode)
 	PendingConfig         []ConfigPatch   // 暂存配置修改

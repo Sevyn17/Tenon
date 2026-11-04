@@ -77,14 +77,3 @@ func TestBadJSON(t *testing.T) {
 		t.Fatal("非对象的 use 应得空")
 	}
 }
-
-func TestTrace(t *testing.T) {
-	c := New(Options{SessionID: "s"})
-	if c.Trace().ID != "" {
-		t.Fatal("未填时 trace 为空")
-	}
-	c.BindTrace(Trace{ID: "t-1"})
-	if c.Trace().ID != "t-1" {
-		t.Fatalf("Trace = %+v", c.Trace())
-	}
-}

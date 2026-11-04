@@ -8,6 +8,7 @@ package sqlite
 import (
 	"context"
 	"time"
+	"ybase/runtime/store"
 )
 
 // StartTool 执行前写 started：无记录则插入；已批准（delivered）则推进为 started。
@@ -19,10 +20,10 @@ func (db *DB) StartTool(ctx context.Context, sessionID, callID, argsHash string)
 	if r == nil {
 		return db.PutToolStarted(ctx, sessionID, callID, argsHash)
 	}
-	if r.Status != ToolDelivered || r.ArgsHash != argsHash {
-		return ErrStateMismatch
+	if r.Status != store.ToolDelivered || r.ArgsHash != argsHash {
+		return store.ErrStateMismatch
 	}
-	return db.advanceTool(ctx, sessionID, callID, ToolDelivered, `status = ?`, ToolStarted)
+	return db.advanceTool(ctx, sessionID, callID, store.ToolDelivered, `status = ?`, store.ToolStarted)
 }
 
 // PendConfirm 写等确认记录；已存在（恢复后重问同一调用）不报错。
@@ -33,6 +34,6 @@ func (db *DB) PendConfirm(ctx context.Context, sessionID, callID, argsHash strin
 		decision, deadline, created_at) VALUES(?,?,?,?,?,?,?,?,?)
 		ON CONFLICT(tenant, session_id, call_id) DO UPDATE SET args_hash = excluded.args_hash, deadline = excluded.deadline
 		WHERE tool_results.status = 'pending'`,
-		Tenant, sessionID, callID, ToolPending, "confirm", argsHash, "", unixMilli(deadline), time.Now().UnixMilli())
+		store.Tenant, sessionID, callID, store.ToolPending, "confirm", argsHash, "", unixMilli(deadline), time.Now().UnixMilli())
 	return err
 }

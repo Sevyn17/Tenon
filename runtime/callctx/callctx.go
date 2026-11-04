@@ -1,7 +1,7 @@
 // Package callctx：一次调用的上下文（框架设计 04 §4.4 的 *Ctx）。
 //
 // 组件是全局单例，会话相关的东西不放在组件字段里，而是随每次调用传进来：
-// 租户、会话（含定义名与版本）、触发者、使用配置、业务 meta、trace。
+// 租户、会话（含定义名与版本）、触发者、使用配置、业务 meta。
 // 内核写、组件只读；内核在会话打开时填好，之后不再变。
 //
 // 公共别名 ybase.Ctx 在 T1b-2 随 SDK 一起提供，本包是它的实现。
@@ -24,11 +24,6 @@ type Session struct {
 	Key        string // 会话键
 }
 
-// Trace 一次任务的追踪标识；沿信封传播（框架设计 11）。
-type Trace struct {
-	ID string
-}
-
 // Ctx 调用上下文。零值不可用，用 New 构造。
 type Ctx struct {
 	mu      sync.RWMutex
@@ -37,7 +32,6 @@ type Ctx struct {
 	session Session
 	meta    map[string]any // sessions.meta 解析结果（应用写的业务键）
 	use     map[string]any // 使用配置 [use.*] 解析结果：组件名 → 该组件的配置
-	trace   Trace
 	// untrusted 本回合输入是否含不可信来源（内核每回合设置，见 SetUntrusted）。
 	untrusted bool
 }
@@ -137,16 +131,6 @@ func (c *Ctx) Config(component string, proto any) error {
 	return nil
 }
 
-// Trace 追踪标识。
-func (c *Ctx) Trace() Trace {
-	if c == nil {
-		return Trace{}
-	}
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.trace
-}
-
 // Bind 内核填会话身份与使用配置：会话打开（或新建）后调用一次，之后不变。
 func (c *Ctx) Bind(s Session, meta, use json.RawMessage) {
 	if c == nil {
@@ -179,16 +163,6 @@ func (c *Ctx) Untrusted() bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.untrusted
-}
-
-// BindTrace 内核填 trace（一次任务贯穿多个会话时用）。
-func (c *Ctx) BindTrace(t Trace) {
-	if c == nil {
-		return
-	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.trace = t
 }
 
 // decodeObject 解析 JSON 对象；空或坏数据按空对象处理（meta 是应用写的数据，坏值不该让调用失败）。

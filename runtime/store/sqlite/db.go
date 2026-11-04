@@ -21,7 +21,7 @@ import (
 
 // DB 一个存储文件。
 type DB struct {
-	sql      *sql.DB
+	sql *sql.DB
 	// rd 只读连接池（query_only）：WAL 下读不必排在写连接后面（2026-11-04 审查 P1-33：原先单连接读写串行，
 	// Tx 超过 TxConnWait 时别的 goroutine 的合法读也报错）。nil = 没有读池（读走 sql）。
 	rd       *sql.DB

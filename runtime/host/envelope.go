@@ -243,15 +243,6 @@ func (h *Host) deliverSession(ctx context.Context, env mail.Envelope) error {
 			return nil
 		}
 	}
-	// 内核守卫（T3 分片二接入联系名单 / caps / hop）。
-	if h.Guard != nil {
-		if err := h.Guard(&env); err != nil {
-			h.recordTrace(env.Trace, id, "guard_denied", err.Error())
-			h.publish(id, "guard.denied", map[string]any{"from": env.From.String(), "to": env.To.String(),
-				"reason": err.Error()})
-			return err
-		}
-	}
 	if env.Kind == mail.KindControl || env.Mode == mail.ModeControl {
 		return h.control(ctx, id, env)
 	}

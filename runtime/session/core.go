@@ -769,12 +769,6 @@ func (c *Core) ModelDone(requestID string, needID uint64, reply AssistantItem, s
 	if requestID != c.hdr.PendingModelRequestID || needID != c.hdr.NextNeedID {
 		return nil, nil, errStale("模型结果与当前需求不匹配")
 	}
-	if c.hdr.Turn != nil {
-		c.hdr.Turn.Usage.Input += reply.Usage.Input
-		c.hdr.Turn.Usage.Output += reply.Usage.Output
-		c.hdr.Turn.Usage.CacheRead += reply.Usage.CacheRead
-		c.hdr.Turn.Usage.CacheWrite += reply.Usage.CacheWrite
-	}
 
 	// 为调用分配内核 id（S6），wire_id 存厂商原始 id；不合法的参数 JSON 先规整（见 normalizeCalls）。
 	c.normalizeCalls(reply.ToolCalls)
@@ -858,7 +852,7 @@ func (c *Core) ModelInterrupted(requestID string, needID uint64, reply Assistant
 	return ch, c.endTurn(reason, c.takePendingInputs()), nil // 暂存插话交还宿主（审查 P1-19）
 }
 
-// ModelFailed 模型调用失败（T14）：不写条目，以 Failed / Denied 结束。
+// ModelFailed 模型调用失败（T14）：不写条目，以 Failed 结束。
 func (c *Core) ModelFailed(requestID string, needID uint64, reason EndReason) ([]Change, *Need, error) {
 	if err := c.checkReadOnly(); err != nil {
 		return nil, nil, err

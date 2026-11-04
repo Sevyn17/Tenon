@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"ybase/runtime/session"
+	"ybase/runtime/store"
 )
 
 func txt(s string) session.Content { return session.Content{session.NewTextPart(s)} }
@@ -18,11 +19,11 @@ func newCore() *session.Core {
 }
 
 // commitAll 把内核当前快照中 [from, end) 的条目随头部提交。
-func commitAll(t *testing.T, db *DB, id string, c *session.Core, expect int, extra func(*Checkpoint)) int {
+func commitAll(t *testing.T, db *DB, id string, c *session.Core, expect int, extra func(*store.Checkpoint)) int {
 	t.Helper()
 	s := c.Snapshot()
 	from := expect
-	cp := Checkpoint{SessionID: id, ExpectLogLen: expect, AppendFrom: from,
+	cp := store.Checkpoint{SessionID: id, ExpectLogLen: expect, AppendFrom: from,
 		Append: s.Entries[from-s.Base:], Header: s.Header, RunState: "running"}
 	if extra != nil {
 		extra(&cp)
@@ -37,14 +38,14 @@ func TestSessionRoundTripAndRestore(t *testing.T) {
 	db := openTest(t)
 	ctx := context.Background()
 	c := newCore()
-	if err := db.CreateSession(ctx, SessionMeta{ID: "s1"}, c.Snapshot().Header, nil); err != nil {
+	if err := db.CreateSession(ctx, store.SessionMeta{ID: "s1"}, c.Snapshot().Header, nil); err != nil {
 		t.Fatalf("Create: %v", err)
 	}
 	_, n1, _ := c.Input(txt("你好"), nil)
-	n := commitAll(t, db, "s1", c, 0, func(cp *Checkpoint) {
-		cp.Request = &RequestRecord{RequestID: n1.Model.RequestID, ShellHash: "x", PrefixEnd: 1, FinalHash: "f",
+	n := commitAll(t, db, "s1", c, 0, func(cp *store.Checkpoint) {
+		cp.Request = &store.RequestRecord{RequestID: n1.Model.RequestID, ShellHash: "x", PrefixEnd: 1, FinalHash: "f",
 			Composition: json.RawMessage(`{"system":3}`)}
-		cp.Spans = []Span{{ID: "sp1", Kind: "step", Start: time.Now()}}
+		cp.Spans = []store.Span{{ID: "sp1", Kind: "step", Start: time.Now()}}
 	})
 	_, _, _ = c.ModelDone(n1.Model.RequestID, n1.ID, session.AssistantItem{Content: txt("嗨")}, session.StopReason{})
 	commitAll(t, db, "s1", c, n, nil)
@@ -77,13 +78,13 @@ func TestCommitConditionalWrite(t *testing.T) {
 	db := openTest(t)
 	ctx := context.Background()
 	c := newCore()
-	db.CreateSession(ctx, SessionMeta{ID: "s"}, c.Snapshot().Header, nil)
+	db.CreateSession(ctx, store.SessionMeta{ID: "s"}, c.Snapshot().Header, nil)
 	c.Input(txt("a"), nil)
 	commitAll(t, db, "s", c, 0, nil)
 	// 第二个写者用旧的期望值
 	s := c.Snapshot()
-	err := db.Commit(ctx, Checkpoint{SessionID: "s", ExpectLogLen: 0, Header: s.Header})
-	if !errors.Is(err, ErrConflict) {
+	err := db.Commit(ctx, store.Checkpoint{SessionID: "s", ExpectLogLen: 0, Header: s.Header})
+	if !errors.Is(err, store.ErrConflict) {
 		t.Fatalf("应冲突: %v", err)
 	}
 }
@@ -92,7 +93,7 @@ func TestTruncateArchivesAndSyncSeqMonotonic(t *testing.T) {
 	db := openTest(t)
 	ctx := context.Background()
 	c := newCore()
-	db.CreateSession(ctx, SessionMeta{ID: "s"}, c.Snapshot().Header, nil)
+	db.CreateSession(ctx, store.SessionMeta{ID: "s"}, c.Snapshot().Header, nil)
 	c.Record(txt("a"), nil)
 	c.Record(txt("b"), nil)
 	n := commitAll(t, db, "s", c, 0, nil)
@@ -102,7 +103,7 @@ func TestTruncateArchivesAndSyncSeqMonotonic(t *testing.T) {
 	c.Record(txt("c"), nil)
 	from := 1
 	s := c.Snapshot()
-	if err := db.Commit(ctx, Checkpoint{SessionID: "s", ExpectLogLen: n, TruncateFrom: &from,
+	if err := db.Commit(ctx, store.Checkpoint{SessionID: "s", ExpectLogLen: n, TruncateFrom: &from,
 		AppendFrom: 1, Append: s.Entries[1:], Header: s.Header}); err != nil {
 		t.Fatalf("Commit: %v", err)
 	}

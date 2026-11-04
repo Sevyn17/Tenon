@@ -115,7 +115,6 @@ type Envelope struct {
 	Caps      []string  `json:"caps"`
 	BudgetRef string    `json:"budget_ref,omitempty"`
 	Body      string    `json:"body"`
-	Deadline  int64     `json:"deadline,omitempty"` // Unix 毫秒，0 = 无期限
 	At        time.Time `json:"at,omitempty"`
 }
 
@@ -173,12 +172,10 @@ func (e *Envelope) Normalize() error {
 	return nil
 }
 
-// NewID 生成不可猜的 128 位随机 id（hex）。
+// NewID 生成不可猜的 128 位随机 id（hex）。crypto/rand.Read 自 Go 1.24 起不返回错误（失败直接崩溃）。
 func NewID() string {
 	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return fmt.Sprintf("t%d", time.Now().UnixNano())
-	}
+	_, _ = rand.Read(b[:])
 	return hex.EncodeToString(b[:])
 }
 
@@ -198,11 +195,7 @@ func Render(envs []Envelope) string {
 		if i > 0 {
 			b.WriteByte('\n')
 		}
-		fmt.Fprintf(&b, `<msg from=%q at=%q`, EscapeAttr(e.From.ID), e.At.Format("15:04"))
-		if e.To.Kind == AddrSession && e.To.ID != "" {
-			// 群聊/多人场景里标明"对我说"，单聊省略。
-		}
-		b.WriteString(">")
+		fmt.Fprintf(&b, `<msg from=%q at=%q>`, EscapeAttr(e.From.ID), e.At.Format("15:04"))
 		b.WriteString(EscapeText(e.Body))
 		b.WriteString("</msg>")
 	}

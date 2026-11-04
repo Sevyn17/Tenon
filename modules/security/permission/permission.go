@@ -400,11 +400,9 @@ func Glob(pat, s string) bool {
 	return strings.HasSuffix(s, last)
 }
 
-// Approved 报告某调用是否已获人工批准（参数哈希锁定）。由宿主按挂起记录实现。
-type Approved func(sessionID, callID, argsHash string) bool
-
-// Layer 构造 toolhub Guard 层。policy 按会话取（档位可切换）；approved 可空（未接挂起时）。
-func Layer(policy func(sessionID string) Policy, approved Approved) toolhub.Layer {
+// Layer 构造 toolhub Guard 层。policy 按会话取（档位可切换）。已批准的调用（cx.Approved，toolhub 按挂起记录
+// 核对过参数哈希）免确认。
+func Layer(policy func(sessionID string) Policy) toolhub.Layer {
 	return toolhub.Layer{
 		Name:       "permission",
 		Guard:      true,
@@ -419,7 +417,7 @@ func Layer(policy func(sessionID string) Policy, approved Approved) toolhub.Laye
 				return toolhub.Errorf("权限拒绝：%s", d.Reason), nil
 			default:
 				// 拒绝类在上面已判；这里只有确认类，批准记录可免确认（参数必须一致）。
-				if cx.Approved || (approved != nil && approved(cx.SessionID, cx.CallID, toolhub.ArgsHash(args))) {
+				if cx.Approved {
 					return next(ctx, cx, args)
 				}
 				return toolhub.Output{Kind: toolhub.Confirm, Reason: d.Reason}, nil

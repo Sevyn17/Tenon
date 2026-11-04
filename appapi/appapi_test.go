@@ -12,6 +12,7 @@ import (
 	"ybase/runtime/bus"
 	"ybase/runtime/host"
 	"ybase/runtime/session"
+	"ybase/runtime/store"
 	"ybase/runtime/store/sqlite"
 	"ybase/runtime/toolhub"
 )
@@ -152,8 +153,8 @@ func TestSendFollowEntries(t *testing.T) {
 	if _, err := app.Call(ctx, "session.send", json.RawMessage(`{"session":"s1","text":"你好"}`)); err != nil {
 		t.Fatal(err)
 	}
-	e1 := next(t, fol, sqlite.EventEntry)
-	e2 := next(t, fol, sqlite.EventEntry)
+	e1 := next(t, fol, store.EventEntry)
+	e2 := next(t, fol, store.EventEntry)
 	if e1.Seq <= 0 || e2.Seq <= e1.Seq {
 		t.Fatalf("持久事件 seq 应递增：%d %d", e1.Seq, e2.Seq)
 	}
@@ -172,7 +173,7 @@ func TestSendFollowEntries(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ev := next(t, fol2, sqlite.EventEntry); ev.Seq != e2.Seq {
+	if ev := next(t, fol2, store.EventEntry); ev.Seq != e2.Seq {
 		t.Fatalf("重连回放应从 %d 开始：%d", e2.Seq, ev.Seq)
 	}
 }

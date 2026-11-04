@@ -309,7 +309,7 @@ func (s *Store) Commit(ctx context.Context, cp store.Checkpoint) error {
 		}
 		rr := *r
 		rr.ShellBody = nil
-		rr.CompactionView, rr.Suffix, rr.Composition = cloneRaw(r.CompactionView), cloneRaw(r.Suffix), cloneRaw(r.Composition)
+		rr.CompactionView, rr.Composition = cloneRaw(r.CompactionView), cloneRaw(r.Composition)
 		old, ok := x.requests[r.RequestID]
 		if !ok {
 			x.reqOrder = append(x.reqOrder, r.RequestID)
@@ -476,7 +476,7 @@ func (s *Store) GetRequest(ctx context.Context, sessionID, requestID string) (*s
 		return nil, nil
 	}
 	out := r.r
-	out.CompactionView, out.Suffix, out.Composition = cloneRaw(out.CompactionView), cloneRaw(out.Suffix), cloneRaw(out.Composition)
+	out.CompactionView, out.Composition = cloneRaw(out.CompactionView), cloneRaw(out.Composition)
 	return &out, nil
 }
 
@@ -728,7 +728,7 @@ func (s *Store) Export(ctx context.Context, sessionID string, w io.Writer) error
 		r := x.requests[id]
 		if err := emit("request", map[string]any{"request_id": r.r.RequestID, "shell_hash": r.r.ShellHash,
 			"prefix_base": r.r.PrefixBase, "prefix_end": r.r.PrefixEnd, "compaction_view": rawOrNil(r.r.CompactionView),
-			"suffix": rawOrNil(r.r.Suffix), "final_hash": r.r.FinalHash, "composition": rawOrNil(r.r.Composition),
+			"final_hash": r.r.FinalHash, "composition": rawOrNil(r.r.Composition),
 			"created_at": r.createdAt}); err != nil {
 			return err
 		}

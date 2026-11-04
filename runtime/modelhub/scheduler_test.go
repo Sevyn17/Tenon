@@ -259,7 +259,7 @@ func TestShapeCheckOnTransform(t *testing.T) {
 	}
 }
 
-func TestSideCallAndMinWindowAndNarrow(t *testing.T) {
+func TestSideCallAndMinWindow(t *testing.T) {
 	ad := &fakeAdapter{script: func(int, Endpoint) []Event { return []Event{{TextDelta: "x"}, done("摘要")} }}
 	h, _ := testHub(t, ad, twoModels)
 	d, f := h.SideCall(context.Background(), "default", session.Request{})
@@ -269,15 +269,6 @@ func TestSideCallAndMinWindowAndNarrow(t *testing.T) {
 	plan, _ := h.Catalog().Resolve("default")
 	if w := h.Catalog().MinWindow(plan); w != 500 {
 		t.Fatalf("最小窗口 = %d", w)
-	}
-	tr, fa := true, false
-	c := Capabilities{Reasoning: &tr, Images: &tr}.Narrow(Capabilities{Reasoning: &fa, Images: &tr})
-	if *c.Reasoning || !*c.Images {
-		t.Fatal("Narrow 只能收窄")
-	}
-	c2 := Capabilities{Images: &fa}.Narrow(Capabilities{Images: &tr})
-	if *c2.Images {
-		t.Fatal("Narrow 不能放宽")
 	}
 }
 

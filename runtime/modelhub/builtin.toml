@@ -1,5 +1,4 @@
 # 内置目录快照（model-hub D3，最低层）。用户 models.toml 可整条覆盖任一键。
-# 单价未内置（避免过期数据误导成本统计），需要节省金额投影时在 models.toml 里补 price。
 
 [provider.deepseek]
 protocol = "openai-chat"

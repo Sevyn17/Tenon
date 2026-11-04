@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"ybase/runtime/session"
+	"ybase/runtime/store"
 )
 
 // v2 带数据的库升级到 v3：旧列保留，新列取缺省值，会话照常可读（框架设计 09 9.2，迁移只加列）。
@@ -68,7 +69,7 @@ func TestUpgradeV2WithData(t *testing.T) {
 func TestSessionMetaRoundTrip(t *testing.T) {
 	db := openTest(t)
 	ctx := context.Background()
-	m := SessionMeta{ID: "s1", AgentID: "a", AgentHash: "abc", Creator: "local", SessionKey: "k1",
+	m := store.SessionMeta{ID: "s1", AgentID: "a", AgentHash: "abc", Creator: "local", SessionKey: "k1",
 		Meta: json.RawMessage(`{"order":"42"}`), UseConfig: json.RawMessage(`{"permission":{"mode":"ask"}}`)}
 	if err := db.CreateSession(ctx, m, newCore().Snapshot().Header, nil); err != nil {
 		t.Fatal(err)
@@ -83,7 +84,7 @@ func TestSessionMetaRoundTrip(t *testing.T) {
 		t.Fatalf("回读: %+v", got)
 	}
 	// 缺省值
-	if err := db.CreateSession(ctx, SessionMeta{ID: "s2"}, newCore().Snapshot().Header, nil); err != nil {
+	if err := db.CreateSession(ctx, store.SessionMeta{ID: "s2"}, newCore().Snapshot().Header, nil); err != nil {
 		t.Fatal(err)
 	}
 	l2, _ := db.Load(ctx, "s2", nil)
@@ -98,7 +99,7 @@ func TestSessionKeyUnique(t *testing.T) {
 	ctx := context.Background()
 	h := newCore().Snapshot().Header
 	mk := func(id, agent, creator, key string) error {
-		return db.CreateSession(ctx, SessionMeta{ID: id, AgentID: agent, Creator: creator, SessionKey: key}, h, nil)
+		return db.CreateSession(ctx, store.SessionMeta{ID: id, AgentID: agent, Creator: creator, SessionKey: key}, h, nil)
 	}
 	if err := mk("a1", "客服", "u1", "k"); err != nil {
 		t.Fatal(err)

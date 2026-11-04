@@ -107,19 +107,6 @@ type Capabilities struct {
 	ParallelTools *bool `toml:"parallel_tools"`
 }
 
-// Narrow 用 o 收窄 c：o 只能把 true 改 false。
-func (c Capabilities) Narrow(o Capabilities) Capabilities {
-	nar := func(a, b *bool) *bool {
-		if b != nil && !*b {
-			f := false
-			return &f
-		}
-		return a
-	}
-	return Capabilities{Reasoning: nar(c.Reasoning, o.Reasoning), Images: nar(c.Images, o.Images),
-		ParallelTools: nar(c.ParallelTools, o.ParallelTools)}
-}
-
 // Model 目录条目。
 type Model struct {
 	Provider      string       `toml:"provider"`
@@ -127,16 +114,7 @@ type Model struct {
 	ContextWindow int          `toml:"context_window"`
 	MaxOutput     int          `toml:"max_output"`
 	Caps          Capabilities `toml:"caps"`
-	Price         Price        `toml:"price"`
 	source        string
-}
-
-// Price 单价（美元 / 百万 token），含缓存读写价，用于节省金额投影。
-type Price struct {
-	Input      float64 `toml:"input"`
-	Output     float64 `toml:"output"`
-	CacheRead  float64 `toml:"cache_read"`
-	CacheWrite float64 `toml:"cache_write"`
 }
 
 // Provider 提供方（声明式）。
@@ -151,9 +129,7 @@ type Provider struct {
 
 // Retry 提供方重试策略（D1：按提供方配置）。
 type Retry struct {
-	Max      int           `toml:"max"`
-	Initial  time.Duration `toml:"-"`
-	MaxDelay time.Duration `toml:"-"`
+	Max int `toml:"max"`
 }
 
 // PlanStep 降级计划的一项。

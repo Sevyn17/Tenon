@@ -7,15 +7,16 @@ package sqlite
 import (
 	"context"
 	"time"
+	"ybase/runtime/store"
 )
 
 // Admit 准入一条输入。返回 true 表示新写入；false 表示同 id 已存在（重放，忽略）。
-func (db *DB) Admit(ctx context.Context, sessionID string, it InboxItem) (bool, error) {
+func (db *DB) Admit(ctx context.Context, sessionID string, it store.InboxItem) (bool, error) {
 	if it.Trust == "" {
 		it.Trust = "trusted"
 	}
 	res, err := db.q().ExecContext(ctx, `INSERT INTO session_inbox(tenant, session_id, item_id, kind, input, trust, envelope, created_at)
-		VALUES(?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING`, Tenant, sessionID, it.ItemID, it.Kind, it.Input, it.Trust, it.Envelope, time.Now().UnixMilli())
+		VALUES(?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING`, store.Tenant, sessionID, it.ItemID, it.Kind, it.Input, it.Trust, it.Envelope, time.Now().UnixMilli())
 	if err != nil {
 		return false, err
 	}
@@ -24,16 +25,16 @@ func (db *DB) Admit(ctx context.Context, sessionID string, it InboxItem) (bool, 
 }
 
 // Inbox 按准入顺序列出未消费项。
-func (db *DB) Inbox(ctx context.Context, sessionID string) ([]InboxItem, error) {
+func (db *DB) Inbox(ctx context.Context, sessionID string) ([]store.InboxItem, error) {
 	rows, err := db.rq().QueryContext(ctx, `SELECT item_id, kind, input, trust, envelope, created_at FROM session_inbox
-		WHERE tenant = ? AND session_id = ? AND consumed_at = 0 ORDER BY created_at, rowid`, Tenant, sessionID)
+		WHERE tenant = ? AND session_id = ? AND consumed_at = 0 ORDER BY created_at, rowid`, store.Tenant, sessionID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []InboxItem
+	var out []store.InboxItem
 	for rows.Next() {
-		var it InboxItem
+		var it store.InboxItem
 		var at int64
 		if err := rows.Scan(&it.ItemID, &it.Kind, &it.Input, &it.Trust, &it.Envelope, &at); err != nil {
 			return nil, err
@@ -48,6 +49,6 @@ func (db *DB) Inbox(ctx context.Context, sessionID string) ([]InboxItem, error) 
 func (db *DB) InInbox(ctx context.Context, sessionID, itemID string) (bool, error) {
 	var n int
 	err := db.rq().QueryRowContext(ctx, `SELECT COUNT(*) FROM session_inbox WHERE tenant = ? AND session_id = ? AND item_id = ? AND consumed_at = 0`,
-		Tenant, sessionID, itemID).Scan(&n)
+		store.Tenant, sessionID, itemID).Scan(&n)
 	return n > 0, err
 }

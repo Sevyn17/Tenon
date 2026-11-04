@@ -4,13 +4,14 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"ybase/runtime/store"
 )
 
 // SessionStats 汇总一个会话的用量与最近一次请求组成。
-func (db *DB) SessionStats(ctx context.Context, sessionID string) (Stats, error) {
-	var st Stats
+func (db *DB) SessionStats(ctx context.Context, sessionID string) (store.Stats, error) {
+	var st store.Stats
 	rows, err := db.rq().QueryContext(ctx, `SELECT kind, status, attrs FROM trace_spans
-		WHERE tenant = ? AND session_id = ? AND kind IN ('attempt','tool','compact')`, Tenant, sessionID)
+		WHERE tenant = ? AND session_id = ? AND kind IN ('attempt','tool','compact')`, store.Tenant, sessionID)
 	if err != nil {
 		return st, err
 	}
@@ -65,7 +66,7 @@ func (db *DB) SessionStats(ctx context.Context, sessionID string) (Stats, error)
 	}
 	var comp string
 	err = db.rq().QueryRowContext(ctx, `SELECT request_id, composition FROM session_requests
-		WHERE tenant = ? AND session_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1`, Tenant, sessionID).Scan(&st.LastRequest, &comp)
+		WHERE tenant = ? AND session_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1`, store.Tenant, sessionID).Scan(&st.LastRequest, &comp)
 	if err != nil && err != sql.ErrNoRows {
 		return st, err
 	}

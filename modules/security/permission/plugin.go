@@ -127,7 +127,7 @@ func (*plug) Setup(cx *component.Registrar) error {
 				}
 				return p
 			}
-			return []toolhub.Layer{Layer(policy, nil)}, nil
+			return []toolhub.Layer{Layer(policy)}, nil
 		}})
 	return cx.Provide("permission", s)
 }

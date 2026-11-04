@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+	"ybase/runtime/store"
 )
 
 func TestSessionStats(t *testing.T) {
@@ -18,7 +19,7 @@ func TestSessionStats(t *testing.T) {
 	defer db.Close()
 	now := time.Now()
 	err = db.inTx(ctx, func(tx *sql.Tx) error {
-		for i, s := range []Span{
+		for i, s := range []store.Span{
 			{ID: "a1", Kind: "attempt", Status: "ok", Attrs: json.RawMessage(`{"input":1000,"output":10,"cache_read":800,"usage_source":"Reported"}`)},
 			{ID: "a2", Kind: "attempt", Status: "ok", Attrs: json.RawMessage(`{"input":1000,"output":20,"cache_read":0,"cache_write":5,"usage_source":"Reported"}`)},
 			{ID: "a3", Kind: "attempt", Status: "error", Attrs: json.RawMessage(`{"error":"x"}`)},
@@ -31,7 +32,7 @@ func TestSessionStats(t *testing.T) {
 			}
 		}
 		_, err := tx.ExecContext(ctx, `INSERT INTO session_requests(tenant, session_id, request_id, shell_hash, prefix_base, prefix_end, final_hash, composition, created_at)
-			VALUES(?,?,?,?,?,?,?,?,?)`, Tenant, "s", "r1", "h", 0, 0, "f", `{"total":5}`, now.UnixMilli())
+			VALUES(?,?,?,?,?,?,?,?,?)`, store.Tenant, "s", "r1", "h", 0, 0, "f", `{"total":5}`, now.UnixMilli())
 		return err
 	})
 	if err != nil {

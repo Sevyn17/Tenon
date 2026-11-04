@@ -6,13 +6,14 @@ import (
 
 	"ybase/runtime/bus"
 	"ybase/runtime/session"
+	"ybase/runtime/store"
 )
 
 func TestReplayAndList(t *testing.T) {
 	db := openTest(t)
 	ctx := context.Background()
 	c := newCore()
-	if err := db.CreateSession(ctx, SessionMeta{ID: "s1", Title: "一"}, c.Snapshot().Header, nil); err != nil {
+	if err := db.CreateSession(ctx, store.SessionMeta{ID: "s1", Title: "一"}, c.Snapshot().Header, nil); err != nil {
 		t.Fatal(err)
 	}
 	_, n1, _ := c.Input(txt("你好"), nil)
@@ -24,7 +25,7 @@ func TestReplayAndList(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(evs) != 2 || evs[0].Kind != EventEntry || evs[0].Seq != 1 || evs[1].Seq != 2 || wm != 2 {
+	if len(evs) != 2 || evs[0].Kind != store.EventEntry || evs[0].Seq != 1 || evs[1].Seq != 2 || wm != 2 {
 		t.Fatalf("回放 %+v wm=%d", evs, wm)
 	}
 	if evs, _, _ := db.Replay(ctx, "s1", 1); len(evs) != 1 || evs[0].Seq != 2 {
@@ -34,13 +35,13 @@ func TestReplayAndList(t *testing.T) {
 	// 截断：占一个 seq，回放里出现 rewind{to}
 	s := c.Snapshot()
 	one := 1
-	if err := db.Commit(ctx, Checkpoint{SessionID: "s1", ExpectLogLen: n, TruncateFrom: &one, AppendFrom: 1,
+	if err := db.Commit(ctx, store.Checkpoint{SessionID: "s1", ExpectLogLen: n, TruncateFrom: &one, AppendFrom: 1,
 		Header: s.Header, RunState: "idle"}); err == nil {
 		evs, wm, err := db.Replay(ctx, "s1", 2)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(evs) != 1 || evs[0].Kind != EventRewind || evs[0].Seq != 3 || wm != 3 {
+		if len(evs) != 1 || evs[0].Kind != store.EventRewind || evs[0].Seq != 3 || wm != 3 {
 			t.Fatalf("回退事件 %+v wm=%d", evs, wm)
 		}
 		if to := evs[0].Data.(map[string]any)["to"]; to != 1 {
@@ -55,16 +56,16 @@ func TestReplayAndList(t *testing.T) {
 	db.OnCommit(func(e bus.Envelope) { got = append(got, e) })
 	_, _, _ = c.Input(txt("再来"), nil)
 	s = c.Snapshot()
-	if err := db.Commit(ctx, Checkpoint{SessionID: "s1", ExpectLogLen: 2, AppendFrom: 2,
+	if err := db.Commit(ctx, store.Checkpoint{SessionID: "s1", ExpectLogLen: 2, AppendFrom: 2,
 		Append: s.Entries[2-s.Base:], Header: s.Header, RunState: "running"}); err != nil {
 		t.Fatal(err)
 	}
-	if len(got) == 0 || got[0].Kind != EventEntry || got[0].Seq != 4 {
+	if len(got) == 0 || got[0].Kind != store.EventEntry || got[0].Seq != 4 {
 		t.Fatalf("提交通知 %+v", got)
 	}
 	db.OnCommit(nil)
 
-	if err := db.CreateSession(ctx, SessionMeta{ID: "s1/sub-1", ParentID: "s1", Origin: "subagent"}, newCore().Snapshot().Header, nil); err != nil {
+	if err := db.CreateSession(ctx, store.SessionMeta{ID: "s1/sub-1", ParentID: "s1", Origin: "subagent"}, newCore().Snapshot().Header, nil); err != nil {
 		t.Fatal(err)
 	}
 	all, err := db.ListSessions(ctx, 0, 10, false)

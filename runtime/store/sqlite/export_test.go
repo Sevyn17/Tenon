@@ -9,19 +9,20 @@ import (
 	"time"
 
 	"ybase/runtime/session"
+	"ybase/runtime/store"
 )
 
 func TestExportJSONL(t *testing.T) {
 	db := openTest(t)
 	ctx := context.Background()
 	c := newCore()
-	if err := db.CreateSession(ctx, SessionMeta{ID: "s1"}, c.Snapshot().Header, nil); err != nil {
+	if err := db.CreateSession(ctx, store.SessionMeta{ID: "s1"}, c.Snapshot().Header, nil); err != nil {
 		t.Fatal(err)
 	}
 	_, n1, _ := c.Input(txt("你好"), nil)
-	n := commitAll(t, db, "s1", c, 0, func(cp *Checkpoint) {
-		cp.Request = &RequestRecord{RequestID: n1.Model.RequestID, ShellHash: "x", PrefixEnd: 1, FinalHash: "f"}
-		cp.Spans = []Span{{ID: "sp1", Kind: "step", Start: time.Now()}}
+	n := commitAll(t, db, "s1", c, 0, func(cp *store.Checkpoint) {
+		cp.Request = &store.RequestRecord{RequestID: n1.Model.RequestID, ShellHash: "x", PrefixEnd: 1, FinalHash: "f"}
+		cp.Spans = []store.Span{{ID: "sp1", Kind: "step", Start: time.Now()}}
 	})
 	_, _, _ = c.ModelDone(n1.Model.RequestID, n1.ID, session.AssistantItem{Content: txt("嗨")}, session.StopReason{})
 	commitAll(t, db, "s1", c, n, nil)
@@ -45,7 +46,7 @@ func TestExportJSONL(t *testing.T) {
 	if kinds["session"] != 1 || kinds["entry"] != 2 || kinds["request"] != 1 || kinds["span"] != 1 {
 		t.Fatalf("导出种类不符: %v", kinds)
 	}
-	if err := db.Export(ctx, "nope", &buf); err != ErrNotFound {
+	if err := db.Export(ctx, "nope", &buf); err != store.ErrNotFound {
 		t.Fatalf("未知会话应 ErrNotFound: %v", err)
 	}
 }

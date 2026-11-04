@@ -29,8 +29,6 @@ var (
 	ErrBadResume = fmt.Errorf("%w: resume 末尾不是 User 或 ToolResult 条目", ErrState)
 	// ErrNoTurn：无进行中的回合可恢复。
 	ErrNoTurn = fmt.Errorf("%w: 没有可恢复的回合", ErrState)
-	// ErrBadArgs：模型请求的工具参数 JSON 非法（S3）。
-	ErrBadArgs = fmt.Errorf("%w: 工具参数 JSON 非法", ErrState)
 )
 
 // FactError：事实错误（S2：过期的结果一律拒收——宿主只记日志，不回客户端）。
@@ -45,13 +43,3 @@ func (e *FactError) Unwrap() error { return ErrState }
 // ErrStale / ErrUnknownCall 构造器（S2 / S6）。
 func errStale(msg string) error       { return &FactError{Kind: "stale", Msg: msg} }
 func errUnknownCall(msg string) error { return &FactError{Kind: "unknown_call", Msg: msg} }
-
-// Denied：会话协议拒绝载荷（与错误码表共用，M4 §5.4）。
-type Denied struct {
-	Code       string
-	Message    string
-	Action     string
-	RetryAfter int64
-}
-
-func (d Denied) Error() string { return d.Code + ": " + d.Message }

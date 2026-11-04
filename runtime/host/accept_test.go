@@ -6,8 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
-
-	"ybase/runtime/store/sqlite"
+	"ybase/runtime/store"
 )
 
 // M4.9：回合结束（inbox 已消费）后重放同一 item id，不再开回合。
@@ -46,7 +45,7 @@ func TestSecondHostConflicts(t *testing.T) {
 		t.Fatal(err)
 	}
 	rejected := func(e error) bool {
-		return errors.Is(e, sqlite.ErrConflict) || errors.Is(e, sqlite.ErrLeaseLost)
+		return errors.Is(e, store.ErrConflict) || errors.Is(e, store.ErrLeaseLost)
 	}
 	// inbox 在共享库里，两个 actor 都可能取到同一输入；后打开者持新纪元租约，另一个的写必须被拒。
 	if err := h1.Do(Command{Kind: Send, Text: "a"}); err != nil {

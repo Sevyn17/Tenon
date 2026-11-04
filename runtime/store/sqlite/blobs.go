@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+	"ybase/runtime/store"
 )
 
 // Blobs 工件存储。
@@ -51,7 +52,7 @@ func (b *Blobs) Put(ctx context.Context, sessionID, mime string, data []byte) (s
 	}
 	if sessionID != "" {
 		if _, err := b.db.q().ExecContext(ctx, `INSERT INTO blob_refs(tenant, session_id, sha256) VALUES(?,?,?)
-			ON CONFLICT DO NOTHING`, Tenant, sessionID, h); err != nil {
+			ON CONFLICT DO NOTHING`, store.Tenant, sessionID, h); err != nil {
 			return "", err
 		}
 	}

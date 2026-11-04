@@ -227,7 +227,6 @@ type RequestRecord struct {
 	PrefixBase     int
 	PrefixEnd      int
 	CompactionView json.RawMessage // 可空：本次请求所用的压缩视图（BuildWithCompaction 的 summary/upto）
-	Suffix         json.RawMessage // 可空：Transform 追加的消息（带来源）
 	FinalHash      string
 	Composition    json.RawMessage // 可空：各类上下文 token 估算（G1）
 }

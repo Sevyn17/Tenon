@@ -16,7 +16,7 @@ func (db *DB) IssueCorr(ctx context.Context, p store.Pending) error {
 		return fmt.Errorf("sqlite: corr 登记缺 corr 或 session_id")
 	}
 	_, err := db.q().ExecContext(ctx, `INSERT INTO session_pending(tenant, corr, session_id, reply_to, trace, issued_idx, deadline, used, created_at)
-		VALUES(?,?,?,?,?,?,?,0,?)`, Tenant, p.Corr, p.SessionID, p.ReplyTo, p.Trace, p.IssuedIdx, p.Deadline, time.Now().UnixMilli())
+		VALUES(?,?,?,?,?,?,?,0,?)`, store.Tenant, p.Corr, p.SessionID, p.ReplyTo, p.Trace, p.IssuedIdx, p.Deadline, time.Now().UnixMilli())
 	return err
 }
 
@@ -26,7 +26,7 @@ func (db *DB) IssueCorr(ctx context.Context, p store.Pending) error {
 func (db *DB) ClaimCorr(ctx context.Context, corr, sessionID, from string) (store.Pending, error) {
 	res, err := db.q().ExecContext(ctx, `UPDATE session_pending SET used = 1
 		WHERE tenant = ? AND corr = ? AND session_id = ? AND used = 0 AND (deadline = 0 OR deadline > ?)
-		AND (reply_to = '' OR reply_to = ?)`, Tenant, corr, sessionID, time.Now().UnixMilli(), from)
+		AND (reply_to = '' OR reply_to = ?)`, store.Tenant, corr, sessionID, time.Now().UnixMilli(), from)
 	if err != nil {
 		return store.Pending{}, err
 	}
@@ -41,7 +41,7 @@ func (db *DB) ClaimCorr(ctx context.Context, corr, sessionID, from string) (stor
 func (db *DB) PendingCorr(ctx context.Context, corr string) (store.Pending, error) {
 	var p store.Pending
 	err := db.rq().QueryRowContext(ctx, `SELECT corr, session_id, reply_to, trace, issued_idx, deadline, used, created_at
-		FROM session_pending WHERE tenant = ? AND corr = ?`, Tenant, corr).
+		FROM session_pending WHERE tenant = ? AND corr = ?`, store.Tenant, corr).
 		Scan(&p.Corr, &p.SessionID, &p.ReplyTo, &p.Trace, &p.IssuedIdx, &p.Deadline, &p.Used, &p.CreatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return store.Pending{}, store.ErrNotFound
@@ -51,14 +51,14 @@ func (db *DB) PendingCorr(ctx context.Context, corr string) (store.Pending, erro
 
 // VoidCorr 作废一条 corr；已用过或不存在时什么也不做。
 func (db *DB) VoidCorr(ctx context.Context, corr string) error {
-	_, err := db.q().ExecContext(ctx, `UPDATE session_pending SET used = 1 WHERE tenant = ? AND corr = ? AND used = 0`, Tenant, corr)
+	_, err := db.q().ExecContext(ctx, `UPDATE session_pending SET used = 1 WHERE tenant = ? AND corr = ? AND used = 0`, store.Tenant, corr)
 	return err
 }
 
 // VoidCorrAfter 作废某会话在日志位置 idx 及之后签发的未用 corr（Rewind 语义，11 11.2）。
 func (db *DB) VoidCorrAfter(ctx context.Context, sessionID string, idx int) (int, error) {
 	res, err := db.q().ExecContext(ctx, `UPDATE session_pending SET used = 1
-		WHERE tenant = ? AND session_id = ? AND issued_idx >= ? AND used = 0`, Tenant, sessionID, idx)
+		WHERE tenant = ? AND session_id = ? AND issued_idx >= ? AND used = 0`, store.Tenant, sessionID, idx)
 	if err != nil {
 		return 0, err
 	}

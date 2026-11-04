@@ -30,7 +30,7 @@ func tryWrite(t *testing.T, s *Sandbox, mode Mode, target string) bool {
 
 func TestWorkspaceWrite(t *testing.T) {
 	root, outside := t.TempDir(), t.TempDir()
-	s := &Sandbox{Root: root, Mode: WorkspaceWrite}
+	s := &Sandbox{Root: root}
 	if !tryWrite(t, s, WorkspaceWrite, filepath.Join(root, "in.txt")) {
 		t.Fatal("workspace-write 应能写工作区")
 	}
@@ -52,7 +52,7 @@ func TestWorkspaceWriteProtectsGit(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(root, ".git", "hooks"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	s := &Sandbox{Root: root, Mode: WorkspaceWrite}
+	s := &Sandbox{Root: root}
 	if tryWrite(t, s, WorkspaceWrite, filepath.Join(root, ".git", "hooks", "pre-commit")) {
 		t.Fatal("workspace-write 不应能写 .git/hooks")
 	}
@@ -63,7 +63,7 @@ func TestWorkspaceWriteProtectsGit(t *testing.T) {
 		t.Fatal("工作区其他位置仍应可写")
 	}
 	bare := t.TempDir()
-	if !tryWrite(t, &Sandbox{Root: bare, Mode: WorkspaceWrite}, WorkspaceWrite, filepath.Join(bare, "a.txt")) {
+	if !tryWrite(t, &Sandbox{Root: bare}, WorkspaceWrite, filepath.Join(bare, "a.txt")) {
 		t.Fatal("没有 .git 的工作区应可写")
 	}
 	if _, err := os.Stat(filepath.Join(bare, ".git")); !os.IsNotExist(err) {
@@ -76,7 +76,7 @@ func TestWorkspaceWriteProtectsGit(t *testing.T) {
 
 func TestReadOnly(t *testing.T) {
 	root := t.TempDir()
-	s := &Sandbox{Root: root, Mode: ReadOnly}
+	s := &Sandbox{Root: root}
 	if tryWrite(t, s, ReadOnly, filepath.Join(root, "ro.txt")) {
 		t.Fatal("read-only 不应能写工作区")
 	}
@@ -97,14 +97,14 @@ func TestReadOnly(t *testing.T) {
 
 func TestReset(t *testing.T) {
 	root := t.TempDir()
-	s := &Sandbox{Root: root, Mode: WorkspaceWrite}
+	s := &Sandbox{Root: root}
 	if !tryWrite(t, s, WorkspaceWrite, filepath.Join(root, "a.txt")) {
 		t.Fatal("workspace-write 应能写工作区")
 	}
 	if err := Reset(root, nil); err != nil {
 		t.Fatal(err)
 	}
-	if tryWrite(t, &Sandbox{Root: root, Mode: ReadOnly}, ReadOnly, filepath.Join(root, "b.txt")) {
+	if tryWrite(t, &Sandbox{Root: root}, ReadOnly, filepath.Join(root, "b.txt")) {
 		t.Fatal("read-only 不应能写")
 	}
 	// Reset 后能力 ACE 已撤销；再次 Apply 会重新授予

@@ -37,7 +37,6 @@ import (
 	"ybase/runtime/reqlog"
 	"ybase/runtime/session"
 	"ybase/runtime/store"
-	"ybase/runtime/store/sqlite"
 
 	// 插件登记（init 里 component.Register）；装配哪些由 profile 决定
 	_ "ybase/modules/collab/subagent"
@@ -341,7 +340,7 @@ func chat(o opts, a *app) error {
 			}
 		case <-c.cur.Done():
 			if err := c.cur.Err(); err != nil {
-				if errors.Is(err, sqlite.ErrConflict) || errors.Is(err, sqlite.ErrLeaseLost) { // session-host D4：另一进程已推进或接管该会话
+				if errors.Is(err, store.ErrConflict) || errors.Is(err, store.ErrLeaseLost) { // session-host D4：另一进程已推进或接管该会话
 					return fmt.Errorf("会话 %s 已被另一个进程写入，本进程停止写入（未提交的修改已丢弃）；请关闭其他进程后重开", c.cur.ID())
 				}
 				return err

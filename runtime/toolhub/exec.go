@@ -32,8 +32,6 @@ type Run struct {
 	results []chan Result
 	cancel  context.CancelFunc
 	i       int
-	stopped chan struct{}
-	once    sync.Once
 }
 
 // Next 按调用顺序取下一个结果；全部取完返回 false。
@@ -47,7 +45,7 @@ func (r *Run) Next() (Result, bool) {
 }
 
 // Stop 取消仍在执行的调用（Read 立即中止；Write / Dangerous 等 finish_grace）。
-func (r *Run) Stop() { r.once.Do(func() { close(r.stopped); r.cancel() }) }
+func (r *Run) Stop() { r.cancel() }
 
 // Execute 执行一批调用。hints 为内核校验失败的提示（按调用 id），这些调用直接回填错误、不执行。
 func (h *Hub) Execute(ctx context.Context, k *callctx.Ctx, calls []session.ToolCall, hints map[string]string) *Run {
@@ -58,7 +56,7 @@ func (h *Hub) Execute(ctx context.Context, k *callctx.Ctx, calls []session.ToolC
 // k 是本次调用的上下文（框架设计 04 §4.4），一路传到工具与层里。
 func (h *Hub) ExecuteIn(ctx context.Context, ts *Toolset, k *callctx.Ctx, calls []session.ToolCall, hints map[string]string) *Run {
 	ctx, cancel := context.WithCancel(ctx)
-	run := &Run{cancel: cancel, stopped: make(chan struct{})}
+	run := &Run{cancel: cancel}
 	for range calls {
 		run.results = append(run.results, make(chan Result, 1))
 	}
@@ -92,7 +90,7 @@ func (h *Hub) ExecuteIn(ctx context.Context, ts *Toolset, k *callctx.Ctx, calls 
 						rw.Unlock()
 					}
 				}()
-				ch <- h.one(ctx, run.stopped, ts, k, call, t)
+				ch <- h.one(ctx, ts, k, call, t)
 			}(call, t, ch, par)
 		}
 	}()
@@ -100,7 +98,7 @@ func (h *Hub) ExecuteIn(ctx context.Context, ts *Toolset, k *callctx.Ctx, calls 
 }
 
 // one 一次调用的完整栈。
-func (h *Hub) one(ctx context.Context, stopped <-chan struct{}, ts *Toolset, k *callctx.Ctx, call session.ToolCall, t *Tool) Result {
+func (h *Hub) one(ctx context.Context, ts *Toolset, k *callctx.Ctx, call session.ToolCall, t *Tool) Result {
 	sessionID := k.SessionID()
 	// 记录读写不随回合取消：取消时结果往往已经产生（Write 宽限期内完成、Read 返回取消结果），
 	// 用已取消的 ctx 落库会变成基础设施错误让会话退出，重启后还会被报成「结果未知」。
@@ -205,7 +203,6 @@ func (h *Hub) one(ctx context.Context, stopped <-chan struct{}, ts *Toolset, k *
 		}
 	}
 	res.Output = out
-	_ = stopped
 	return res
 }
 
@@ -361,8 +358,7 @@ func (h *Hub) executor(ctx context.Context, cx *Cx, args json.RawMessage) (Outpu
 	} else {
 		runCtx, cancel = context.WithTimeout(context.WithoutCancel(ctx), t.timeout(h.timeout))
 		stop := context.AfterFunc(ctx, func() {
-			timer := time.AfterFunc(DefaultFinishGrace, cancel)
-			_ = timer
+			time.AfterFunc(DefaultFinishGrace, cancel)
 			if t.Cancel != nil {
 				t.Cancel(context.Background(), cx)
 			}

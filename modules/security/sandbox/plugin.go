@@ -4,6 +4,8 @@ package sandbox
 // 登记“申请更宽沙箱须确认”的 Guard 层。会话沙箱档位来自 service:permission（toolhub.SandboxPolicy）。
 
 import (
+	"context"
+
 	"ybase/runtime/assemble"
 	"ybase/runtime/component"
 	"ybase/runtime/ext"
@@ -67,14 +69,24 @@ func (p *plug) Setup(cx *component.Registrar) error {
 }
 
 // Start 在后台预先为工作区授权（审查 P1-45）：失败只告警，第一次受限执行时会再试一次并报错。
-func (p *plug) Start(*component.Scope) error {
+// 关闭时等预授权跑完：它会在工作区里建 .ybase，关闭后还在写会和调用方删除工作区抢（测试临时目录删不掉）。
+func (p *plug) Start(sc *component.Scope) error {
 	if p.sb == nil || p.noPrepare || !platformSupported {
 		return nil
 	}
+	done := make(chan struct{})
 	go func() {
+		defer close(done)
 		if err := p.sb.Prepare(); err != nil && p.ui != nil {
 			p.ui.Warn("沙箱", "工作区预授权失败（第一次受限执行时会再试）："+err.Error())
 		}
 	}()
+	sc.OnClose(func(ctx context.Context) error {
+		select {
+		case <-done:
+		case <-ctx.Done():
+		}
+		return nil
+	})
 	return nil
 }

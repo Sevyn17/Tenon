@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"ybase/runtime/store"
 )
 
 // Export 把会话写成 JSONL。
@@ -20,10 +21,10 @@ func (db *DB) Export(ctx context.Context, sessionID string, w io.Writer) error {
 		UpdatedAt                                                                                     int64
 	}
 	if err := db.rq().QueryRowContext(ctx, `SELECT id, agent_id, agent_hash, creator, parent_id, origin, status, run_state, title, header, shell_hash,
-		fork_upto, log_len, updated_at FROM sessions WHERE tenant = ? AND id = ?`, Tenant, sessionID).
+		fork_upto, log_len, updated_at FROM sessions WHERE tenant = ? AND id = ?`, store.Tenant, sessionID).
 		Scan(&meta.ID, &meta.AgentID, &meta.AgentHash, &meta.Creator, &meta.ParentID, &meta.Origin, &meta.Status, &meta.RunState, &meta.Title,
 			&meta.Header, &meta.ShellHash, &meta.ForkUpto, &meta.LogLen, &meta.UpdatedAt); err != nil {
-		return ErrNotFound
+		return store.ErrNotFound
 	}
 	shellBody, _ := db.ShellBody(ctx, meta.ShellHash)
 	if err := emit("session", map[string]any{
@@ -36,7 +37,7 @@ func (db *DB) Export(ctx context.Context, sessionID string, w io.Writer) error {
 	}
 
 	q := func(kind, query string, scan func(*rowsScanner) (any, error)) error {
-		rows, err := db.rq().QueryContext(ctx, query, Tenant, sessionID)
+		rows, err := db.rq().QueryContext(ctx, query, store.Tenant, sessionID)
 		if err != nil {
 			return err
 		}
@@ -72,15 +73,15 @@ func (db *DB) Export(ctx context.Context, sessionID string, w io.Writer) error {
 		}); err != nil {
 		return err
 	}
-	if err := q("request", `SELECT request_id, shell_hash, prefix_base, prefix_end, compaction_view, suffix, final_hash, composition, created_at
+	if err := q("request", `SELECT request_id, shell_hash, prefix_base, prefix_end, compaction_view, final_hash, composition, created_at
 		FROM session_requests WHERE tenant = ? AND session_id = ? ORDER BY created_at`,
 		func(s *rowsScanner) (any, error) {
-			var id, sh, cv, sf, fh, comp string
+			var id, sh, cv, fh, comp string
 			var pb, pe int
 			var at int64
-			err := s.scan(&id, &sh, &pb, &pe, &cv, &sf, &fh, &comp, &at)
+			err := s.scan(&id, &sh, &pb, &pe, &cv, &fh, &comp, &at)
 			return map[string]any{"request_id": id, "shell_hash": sh, "prefix_base": pb, "prefix_end": pe,
-				"compaction_view": rawOrNil(cv), "suffix": rawOrNil(sf), "final_hash": fh, "composition": rawOrNil(comp), "created_at": at}, err
+				"compaction_view": rawOrNil(cv), "final_hash": fh, "composition": rawOrNil(comp), "created_at": at}, err
 		}); err != nil {
 		return err
 	}

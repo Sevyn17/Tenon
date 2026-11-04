@@ -262,26 +262,26 @@ func TestSessionRule(t *testing.T) {
 	}
 }
 
-func TestLayerConfirmAndApprovedHashLock(t *testing.T) {
+// 已批准（cx.Approved：toolhub 按挂起记录核对参数哈希后置位）的确认类调用直接执行；拒绝类不受批准影响。
+func TestLayerConfirmAndApproved(t *testing.T) {
 	ran := 0
 	next := func(context.Context, *toolhub.Cx, json.RawMessage) (toolhub.Output, error) {
 		ran++
 		return toolhub.Text("ok"), nil
 	}
-	approvedHash := toolhub.ArgsHash(json.RawMessage(`{"path":"a.txt"}`))
-	l := Layer(func(string) Policy { return Policy{Mode: Ask} },
-		func(_, _, h string) bool { return h == approvedHash })
+	l := Layer(func(string) Policy { return Policy{Mode: Ask} })
 	c := eff("write_file", toolhub.Write, toolhub.EffectWrite)
 
 	out, _ := l.Call(context.Background(), c, json.RawMessage(`{"path":"b.txt"}`), next)
 	if out.Kind != toolhub.Confirm || ran != 0 {
 		t.Fatalf("未批准应返回 Confirm 且不执行: %+v ran=%d", out, ran)
 	}
+	c.Approved = true
 	out, _ = l.Call(context.Background(), c, json.RawMessage(`{"path":"a.txt"}`), next)
 	if out.Kind != toolhub.Done || ran != 1 {
-		t.Fatalf("批准且参数一致应执行: %+v ran=%d", out, ran)
+		t.Fatalf("已批准应执行: %+v ran=%d", out, ran)
 	}
-	l2 := Layer(func(string) Policy { return Policy{Mode: ReadOnly} }, func(_, _, _ string) bool { return true })
+	l2 := Layer(func(string) Policy { return Policy{Mode: ReadOnly} })
 	out, _ = l2.Call(context.Background(), c, json.RawMessage(`{"path":"a.txt"}`), next)
 	if out.Status != session.ToolError || ran != 1 {
 		t.Fatalf("拒绝类不受批准影响: %+v", out)

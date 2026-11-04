@@ -9,17 +9,18 @@ import (
 	"database/sql"
 	"fmt"
 	"time"
+	"ybase/runtime/store"
 )
 
 // DeleteSession 删除会话及其全部数据。cleaners 为各插件登记的回调，按给定顺序调用。
-func (db *DB) DeleteSession(ctx context.Context, id string, cleaners []Cleaner) error {
+func (db *DB) DeleteSession(ctx context.Context, id string, cleaners []store.Cleaner) error {
 	res, err := db.q().ExecContext(ctx, `UPDATE sessions SET status = 'deleted', deleted_at = ? WHERE tenant = ? AND id = ?`,
-		time.Now().UnixMilli(), Tenant, id)
+		time.Now().UnixMilli(), store.Tenant, id)
 	if err != nil {
 		return err
 	}
 	if n, _ := res.RowsAffected(); n != 1 {
-		return ErrNotFound
+		return store.ErrNotFound
 	}
 	for i, c := range cleaners {
 		if err := c(ctx, id); err != nil {
@@ -29,7 +30,7 @@ func (db *DB) DeleteSession(ctx context.Context, id string, cleaners []Cleaner) 
 	return db.inTx(ctx, func(tx *sql.Tx) error {
 		for _, t := range []string{"session_entries", "session_entries_archive", "session_requests", "session_inbox",
 			"tool_results", "trace_spans", "blob_refs"} {
-			if _, err := tx.ExecContext(ctx, `DELETE FROM `+t+` WHERE tenant = ? AND session_id = ?`, Tenant, id); err != nil {
+			if _, err := tx.ExecContext(ctx, `DELETE FROM `+t+` WHERE tenant = ? AND session_id = ?`, store.Tenant, id); err != nil {
 				return err
 			}
 		}
@@ -39,11 +40,11 @@ func (db *DB) DeleteSession(ctx context.Context, id string, cleaners []Cleaner) 
 			`DELETE FROM session_outbox WHERE tenant = ? AND session_id = ?`,
 			`DELETE FROM trace_events WHERE tenant = ? AND session = ?`,
 		} {
-			if _, err := tx.ExecContext(ctx, q, Tenant, id); err != nil {
+			if _, err := tx.ExecContext(ctx, q, store.Tenant, id); err != nil {
 				return err
 			}
 		}
-		_, err := tx.ExecContext(ctx, `DELETE FROM sessions WHERE tenant = ? AND id = ?`, Tenant, id)
+		_, err := tx.ExecContext(ctx, `DELETE FROM sessions WHERE tenant = ? AND id = ?`, store.Tenant, id)
 		return err
 	})
 }

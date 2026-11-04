@@ -15,7 +15,7 @@ import (
 // Outbox 返回待外发的信封。
 func (db *DB) Outbox(ctx context.Context, limit int) ([]store.OutboxItem, error) {
 	q := `SELECT id, session_id, envelope, created_at FROM session_outbox WHERE tenant = ? AND sent = 0 AND dead = '' ORDER BY created_at, id`
-	args := []any{Tenant}
+	args := []any{store.Tenant}
 	if limit > 0 {
 		q += ` LIMIT ?`
 		args = append(args, limit)
@@ -40,7 +40,7 @@ func (db *DB) Outbox(ctx context.Context, limit int) ([]store.OutboxItem, error)
 
 // MarkOutbox 标记一条外发信封已派发。
 func (db *DB) MarkOutbox(ctx context.Context, id string) error {
-	_, err := db.q().ExecContext(ctx, `UPDATE session_outbox SET sent = 1, claimed_by = '', claim_until = 0 WHERE tenant = ? AND id = ?`, Tenant, id)
+	_, err := db.q().ExecContext(ctx, `UPDATE session_outbox SET sent = 1, claimed_by = '', claim_until = 0 WHERE tenant = ? AND id = ?`, store.Tenant, id)
 	return err
 }
 
@@ -56,7 +56,7 @@ func (db *DB) ClaimOutbox(ctx context.Context, holder string, lease time.Duratio
 			SELECT id FROM session_outbox WHERE tenant = ? AND sent = 0 AND dead = '' AND (claimed_by = '' OR claim_until <= ?)
 			ORDER BY created_at, id LIMIT ?)
 		RETURNING id, session_id, envelope, created_at, attempts`,
-		holder, now+lease.Milliseconds(), Tenant, Tenant, now, limit)
+		holder, now+lease.Milliseconds(), store.Tenant, store.Tenant, now, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -86,7 +86,7 @@ func (db *DB) ClaimOutbox(ctx context.Context, holder string, lease time.Duratio
 // ReleaseOutbox 交还一条认领（只有认领者本人能交还）。
 func (db *DB) ReleaseOutbox(ctx context.Context, id, holder string) error {
 	_, err := db.q().ExecContext(ctx, `UPDATE session_outbox SET claimed_by = '', claim_until = 0
-		WHERE tenant = ? AND id = ? AND claimed_by = ?`, Tenant, id, holder)
+		WHERE tenant = ? AND id = ? AND claimed_by = ?`, store.Tenant, id, holder)
 	return err
 }
 
@@ -96,6 +96,6 @@ func (db *DB) DeadOutbox(ctx context.Context, id, reason string) error {
 		reason = "dead"
 	}
 	_, err := db.q().ExecContext(ctx, `UPDATE session_outbox SET dead = ?, claimed_by = '', claim_until = 0
-		WHERE tenant = ? AND id = ?`, reason, Tenant, id)
+		WHERE tenant = ? AND id = ?`, reason, store.Tenant, id)
 	return err
 }

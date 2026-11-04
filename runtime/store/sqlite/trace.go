@@ -16,7 +16,7 @@ func (db *DB) RecordTrace(ctx context.Context, ev store.TraceEvent) error {
 		ev.At = time.Now().UnixMilli()
 	}
 	_, err := db.q().ExecContext(ctx, `INSERT INTO trace_events(tenant, trace, at, session, kind, detail) VALUES(?,?,?,?,?,?)`,
-		Tenant, ev.Trace, ev.At, ev.Session, ev.Kind, ev.Detail)
+		store.Tenant, ev.Trace, ev.At, ev.Session, ev.Kind, ev.Detail)
 	if err != nil {
 		return err
 	}
@@ -25,7 +25,7 @@ func (db *DB) RecordTrace(ctx context.Context, ev store.TraceEvent) error {
 
 // TraceEvents 按发生顺序列出某个 trace 的全部事件。
 func (db *DB) TraceEvents(ctx context.Context, trace string) ([]store.TraceEvent, error) {
-	rows, err := db.rq().QueryContext(ctx, `SELECT trace, at, session, kind, detail FROM trace_events WHERE tenant = ? AND trace = ? ORDER BY at, rowid`, Tenant, trace)
+	rows, err := db.rq().QueryContext(ctx, `SELECT trace, at, session, kind, detail FROM trace_events WHERE tenant = ? AND trace = ? ORDER BY at, rowid`, store.Tenant, trace)
 	if err != nil {
 		return nil, err
 	}
@@ -51,9 +51,9 @@ func (db *DB) Prune(ctx context.Context, before time.Time) (int, error) {
 			sql  string
 			args []any
 		}{
-			{`DELETE FROM session_pending WHERE tenant = ? AND (used = 1 OR (deadline > 0 AND deadline < ?)) AND created_at < ?`, []any{Tenant, cut, cut}},
-			{`DELETE FROM session_outbox WHERE tenant = ? AND (sent = 1 OR dead <> '') AND created_at < ?`, []any{Tenant, cut}},
-			{`DELETE FROM trace_events WHERE tenant = ? AND at < ?`, []any{Tenant, cut}},
+			{`DELETE FROM session_pending WHERE tenant = ? AND (used = 1 OR (deadline > 0 AND deadline < ?)) AND created_at < ?`, []any{store.Tenant, cut, cut}},
+			{`DELETE FROM session_outbox WHERE tenant = ? AND (sent = 1 OR dead <> '') AND created_at < ?`, []any{store.Tenant, cut}},
+			{`DELETE FROM trace_events WHERE tenant = ? AND at < ?`, []any{store.Tenant, cut}},
 		} {
 			res, err := tx.ExecContext(ctx, q.sql, q.args...)
 			if err != nil {

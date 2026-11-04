@@ -67,14 +67,13 @@ type Command struct {
 	Trust    string // trusted / untrusted
 	Source   string // user / agent / system …
 	Mode     session.SteerMode
-	CallID   string         // Confirm
-	Approve  bool           // Confirm
-	To       int            // Rewind
-	Upto     int            // Compact
-	Key      string         // SetExt
-	Value    any            // SetExt
-	MaxSteps *uint32        // SetConfig：单回合步数上限，0 = 不限
-	Env      *mail.Envelope // Deliver / 信封携带（内核字段已由投递方写入）
+	CallID   string  // Confirm
+	Approve  bool    // Confirm
+	To       int     // Rewind
+	Upto     int     // Compact
+	Key      string  // SetExt
+	Value    any     // SetExt
+	MaxSteps *uint32 // SetConfig：单回合步数上限，0 = 不限
 	done     chan error
 }
 
@@ -146,8 +145,6 @@ type Host struct {
 	TreePolicy string
 	// TreeRestarts restart 策略下的最大重跑次数（<=0 按 1）。
 	TreeRestarts int
-	// Guard 投递前守卫（08 8.1）：返回错误即拒绝投递并发布 guard.denied；nil = 不拦。
-	Guard func(*mail.Envelope) error
 	// Guards 组件登记的守卫规则（04 4.2、08 D4），装配期从 Assembly 取来。
 	Guards []component.GuardRule
 	// GC 可空：Maintain 每轮调用的额外清理（如回收没有引用的工件文件），返回回收条数

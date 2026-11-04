@@ -18,21 +18,12 @@ import (
 	"ybase/runtime/useconf"
 )
 
-// TrustLevel 受信等级（内置恒为 Trusted；为外部插件预留，02 §3）。
-type TrustLevel int
-
-const (
-	Trusted TrustLevel = iota
-	External
-)
-
 // Meta 插件元数据。Requires / Provides 用 "slot:<名>" / "service:<名>"。
 type Meta struct {
 	Name     string
 	Version  string
 	Requires []string
 	Provides []string
-	Trust    TrustLevel
 	// Config：配置结构体的零值指针（含 struct tag），用于 Schema 与解码；nil = 无配置。
 	Config any
 	// Default：profile 未写 enabled 时是否开启（plugin-switch-plan §2.1）。

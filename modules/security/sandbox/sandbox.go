@@ -46,7 +46,6 @@ func Wider(a, b Mode) bool { return toolhub.SandboxWider(a, b) }
 // Sandbox 一个工作区的沙箱。
 type Sandbox struct {
 	Root string // 工作区根（绝对路径）
-	Mode Mode   // 会话默认模式
 	// Protect 工作区内即使 workspace-write 也不可写的子目录（相对 Root），默认 DefaultProtect。
 	Protect []string
 	// TempDir 沙箱专用临时 / 缓存目录的上级；空 = %LOCALAPPDATA%\ybase\sbtmp（plugin-switch-plan §2.2）。

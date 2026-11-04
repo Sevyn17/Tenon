@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+	"ybase/runtime/store"
 )
 
 func TestToolResultsStateMachine(t *testing.T) {
@@ -17,23 +18,23 @@ func TestToolResultsStateMachine(t *testing.T) {
 	if err := db.PutToolStarted(ctx, "s1", "c1", "h1"); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.PutToolStarted(ctx, "s1", "c1", "h1"); !errors.Is(err, ErrStateMismatch) {
+	if err := db.PutToolStarted(ctx, "s1", "c1", "h1"); !errors.Is(err, store.ErrStateMismatch) {
 		t.Fatalf("重复 started 应拒绝: %v", err)
 	}
-	if err := db.FinishTool(ctx, "s1", "c1", ToolDelivered, "x"); !errors.Is(err, ErrStateMismatch) {
+	if err := db.FinishTool(ctx, "s1", "c1", store.ToolDelivered, "x"); !errors.Is(err, store.ErrStateMismatch) {
 		t.Fatalf("错误的期望状态应拒绝: %v", err)
 	}
-	if err := db.FinishTool(ctx, "s1", "c1", ToolStarted, `"ok"`); err != nil {
+	if err := db.FinishTool(ctx, "s1", "c1", store.ToolStarted, `"ok"`); err != nil {
 		t.Fatal(err)
 	}
 	r, _ := db.GetTool(ctx, "s1", "c1")
-	if r == nil || r.Status != ToolDone || r.Output != `"ok"` || r.ArgsHash != "h1" {
+	if r == nil || r.Status != store.ToolDone || r.Output != `"ok"` || r.ArgsHash != "h1" {
 		t.Fatalf("记录不符: %+v", r)
 	}
 
 	// 挂起：pending → delivered → done；主键带会话，不同会话同 call_id 互不影响。
 	dl := time.Now().Add(time.Hour)
-	if err := db.PutToolPending(ctx, ToolRecord{SessionID: "s1", CallID: "c2", Kind: "confirm", ArgsHash: "h2", Deadline: dl}); err != nil {
+	if err := db.PutToolPending(ctx, store.ToolRecord{SessionID: "s1", CallID: "c2", Kind: "confirm", ArgsHash: "h2", Deadline: dl}); err != nil {
 		t.Fatal(err)
 	}
 	if err := db.PutToolStarted(ctx, "s2", "c2", ""); err != nil {
@@ -46,10 +47,10 @@ func TestToolResultsStateMachine(t *testing.T) {
 	if err := db.Deliver(ctx, "s1", "c2", "", "approve"); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.Deliver(ctx, "s1", "c2", "", "approve"); !errors.Is(err, ErrStateMismatch) {
+	if err := db.Deliver(ctx, "s1", "c2", "", "approve"); !errors.Is(err, store.ErrStateMismatch) {
 		t.Fatalf("重复送达应拒绝: %v", err)
 	}
-	if err := db.FinishTool(ctx, "s1", "c2", ToolDelivered, `"done"`); err != nil {
+	if err := db.FinishTool(ctx, "s1", "c2", store.ToolDelivered, `"done"`); err != nil {
 		t.Fatal(err)
 	}
 
@@ -59,14 +60,14 @@ func TestToolResultsStateMachine(t *testing.T) {
 	}
 
 	// 清理不碰 pending。
-	_ = db.PutToolPending(ctx, ToolRecord{SessionID: "s1", CallID: "c4", Kind: "result"})
+	_ = db.PutToolPending(ctx, store.ToolRecord{SessionID: "s1", CallID: "c4", Kind: "result"})
 	if err := db.DeleteFinishedTools(ctx, "s1"); err != nil {
 		t.Fatal(err)
 	}
 	if r, _ := db.GetTool(ctx, "s1", "c1"); r != nil {
 		t.Fatalf("done 应被清理")
 	}
-	if r, _ := db.GetTool(ctx, "s1", "c4"); r == nil || r.Status != ToolPending {
+	if r, _ := db.GetTool(ctx, "s1", "c4"); r == nil || r.Status != store.ToolPending {
 		t.Fatalf("pending 不应被清理")
 	}
 }
@@ -115,7 +116,7 @@ func TestBlobsDedupVerifyGC(t *testing.T) {
 func TestDefinitionsVersioned(t *testing.T) {
 	db := openTest(t)
 	ctx := context.Background()
-	if _, _, err := db.GetDefinition(ctx, "agent", "a", 0); !errors.Is(err, ErrNotFound) {
+	if _, _, err := db.GetDefinition(ctx, "agent", "a", 0); !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("应 NotFound: %v", err)
 	}
 	v1, _, _ := db.PutDefinition(ctx, "agent", "a", "one")
@@ -135,25 +136,25 @@ func TestInboxIdempotentAcrossConsume(t *testing.T) {
 	db := openTest(t)
 	ctx := context.Background()
 	c := newCore()
-	if err := db.CreateSession(ctx, SessionMeta{ID: "s1"}, c.Snapshot().Header, nil); err != nil {
+	if err := db.CreateSession(ctx, store.SessionMeta{ID: "s1"}, c.Snapshot().Header, nil); err != nil {
 		t.Fatal(err)
 	}
-	ok, err := db.Admit(ctx, "s1", InboxItem{ItemID: "i1", Kind: InboxInput, Input: `[]`})
+	ok, err := db.Admit(ctx, "s1", store.InboxItem{ItemID: "i1", Kind: store.InboxInput, Input: `[]`})
 	if err != nil || !ok {
 		t.Fatalf("首次准入: %v %v", ok, err)
 	}
-	if ok, _ := db.Admit(ctx, "s1", InboxItem{ItemID: "i1", Kind: InboxInput, Input: `[]`}); ok {
+	if ok, _ := db.Admit(ctx, "s1", store.InboxItem{ItemID: "i1", Kind: store.InboxInput, Input: `[]`}); ok {
 		t.Fatal("待处理时重放应被拒")
 	}
-	_, _ = db.Admit(ctx, "s1", InboxItem{ItemID: "i2", Kind: InboxNote, Input: `[]`})
+	_, _ = db.Admit(ctx, "s1", store.InboxItem{ItemID: "i2", Kind: store.InboxNote, Input: `[]`})
 	items, _ := db.Inbox(ctx, "s1")
 	if len(items) != 2 || items[0].ItemID != "i1" {
 		t.Fatalf("顺序: %+v", items)
 	}
-	if err := db.Commit(ctx, Checkpoint{SessionID: "s1", Header: c.Snapshot().Header, ConsumeInbox: []string{"i1"}}); err != nil {
+	if err := db.Commit(ctx, store.Checkpoint{SessionID: "s1", Header: c.Snapshot().Header, ConsumeInbox: []string{"i1"}}); err != nil {
 		t.Fatal(err)
 	}
-	if ok, _ := db.Admit(ctx, "s1", InboxItem{ItemID: "i1", Kind: InboxInput, Input: `[]`}); ok {
+	if ok, _ := db.Admit(ctx, "s1", store.InboxItem{ItemID: "i1", Kind: store.InboxInput, Input: `[]`}); ok {
 		t.Fatal("已消费后重放仍应被拒（D6）")
 	}
 	items, _ = db.Inbox(ctx, "s1")

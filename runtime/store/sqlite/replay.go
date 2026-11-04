@@ -3,13 +3,14 @@ package sqlite
 // 事件回放与会话列表（应用接口层，docs/90 - 归档/10 - 框架模块/12 - 应用接口层.md §三、§四）。
 
 import (
-	"database/sql"
-	"errors"
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"sort"
 
 	"ybase/runtime/bus"
+	"ybase/runtime/store"
 )
 
 // OnCommit 设置提交成功后的持久事件回调（应用把它接到 bus.Publish，供 Follow 的实时部分）。
@@ -35,15 +36,15 @@ func (db *DB) notify(evs []bus.Envelope) {
 // Replay 实现 bus.Source：返回 seq > after 的条目追加与回退事件（按 seq 升序）及水位。
 func (db *DB) Replay(ctx context.Context, session string, after int64) ([]bus.Envelope, int64, error) {
 	var next int64
-	if err := db.rq().QueryRowContext(ctx, `SELECT next_sync_seq FROM sessions WHERE tenant = ? AND id = ?`, Tenant, session).Scan(&next); err != nil {
+	if err := db.rq().QueryRowContext(ctx, `SELECT next_sync_seq FROM sessions WHERE tenant = ? AND id = ?`, store.Tenant, session).Scan(&next); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, 0, ErrNotFound
+			return nil, 0, store.ErrNotFound
 		}
 		return nil, 0, err
 	}
 	var out []bus.Envelope
 	rows, err := db.rq().QueryContext(ctx, `SELECT idx, sync_seq, at, body FROM session_entries
-		WHERE tenant = ? AND session_id = ? AND sync_seq > ? ORDER BY sync_seq`, Tenant, session, after)
+		WHERE tenant = ? AND session_id = ? AND sync_seq > ? ORDER BY sync_seq`, store.Tenant, session, after)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -55,7 +56,7 @@ func (db *DB) Replay(ctx context.Context, session string, after int64) ([]bus.En
 			rows.Close()
 			return nil, 0, err
 		}
-		out = append(out, bus.Envelope{V: bus.Version, Seq: seq, At: at, Session: session, Kind: EventEntry,
+		out = append(out, bus.Envelope{V: bus.Version, Seq: seq, At: at, Session: session, Kind: store.EventEntry,
 			Data: map[string]any{"idx": idx, "entry": json.RawMessage(body)}})
 	}
 	rows.Close()
@@ -63,7 +64,7 @@ func (db *DB) Replay(ctx context.Context, session string, after int64) ([]bus.En
 		return nil, 0, err
 	}
 	rr, err := db.rq().QueryContext(ctx, `SELECT rewind_seq, MIN(idx), MAX(truncated_at) FROM session_entries_archive
-		WHERE tenant = ? AND session_id = ? AND rewind_seq > ? GROUP BY rewind_seq`, Tenant, session, after)
+		WHERE tenant = ? AND session_id = ? AND rewind_seq > ? GROUP BY rewind_seq`, store.Tenant, session, after)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -74,7 +75,7 @@ func (db *DB) Replay(ctx context.Context, session string, after int64) ([]bus.En
 			rr.Close()
 			return nil, 0, err
 		}
-		out = append(out, bus.Envelope{V: bus.Version, Seq: seq, At: at, Session: session, Kind: EventRewind,
+		out = append(out, bus.Envelope{V: bus.Version, Seq: seq, At: at, Session: session, Kind: store.EventRewind,
 			Data: map[string]any{"to": to}})
 	}
 	rr.Close()
@@ -87,13 +88,13 @@ func (db *DB) Replay(ctx context.Context, session string, after int64) ([]bus.En
 
 // ListSessions 按更新时间倒序列出未删除会话；before > 0 时只列 updated_at < before 的（分页游标）。
 // topOnly 只列顶层会话（不含子智能体 / 成员）。
-func (db *DB) ListSessions(ctx context.Context, before int64, limit int, topOnly bool) ([]SessionInfo, error) {
+func (db *DB) ListSessions(ctx context.Context, before int64, limit int, topOnly bool) ([]store.SessionInfo, error) {
 	if limit <= 0 || limit > 500 {
 		limit = 50
 	}
 	q := `SELECT id, title, preview, run_state, origin, parent_id, updated_at FROM sessions
 		WHERE tenant = ? AND status != 'deleted'`
-	args := []any{Tenant}
+	args := []any{store.Tenant}
 	if before > 0 {
 		q += ` AND updated_at < ?`
 		args = append(args, before)
@@ -108,9 +109,9 @@ func (db *DB) ListSessions(ctx context.Context, before int64, limit int, topOnly
 		return nil, err
 	}
 	defer rows.Close()
-	var out []SessionInfo
+	var out []store.SessionInfo
 	for rows.Next() {
-		var s SessionInfo
+		var s store.SessionInfo
 		if err := rows.Scan(&s.ID, &s.Title, &s.Preview, &s.RunState, &s.Origin, &s.ParentID, &s.UpdatedAt); err != nil {
 			return nil, err
 		}
