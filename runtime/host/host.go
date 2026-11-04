@@ -131,6 +131,7 @@ type Host struct {
 	// 同一存储上两个 Host 打开同一会话会互相抢租约，旧持有者的写入被存储拒绝（02 2.2 fencing）。
 	Holder string
 	// Limit 同时推理的会话数上限（0 = 不限）；超出上限的回合排队等待，不报错（02 2.4）。
+	// 装配时设置；第一个回合开始后再改不生效。
 	Limit int
 
 	// 人工确认（11 11.2 human: 地址）：内核签发 corr、发布 human.asked；
@@ -1316,7 +1317,7 @@ func (a *actor) acquireSlot(ctx context.Context) (func(), error) {
 		return func() {}, nil
 	}
 	h.mu.Lock()
-	if h.sem == nil || cap(h.sem) != h.Limit {
+	if h.sem == nil { // 首次使用时按 Limit 建，之后不换：换池会让新旧两池的持有者加起来超过上限（审查 P2）
 		h.sem = make(chan struct{}, h.Limit)
 	}
 	sem := h.sem

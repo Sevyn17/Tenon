@@ -99,6 +99,8 @@ type Sub struct {
 	// quit 注销时关闭（先于取 mu）：Follow 的后台回放阻塞送时据此让出锁。
 	quit     chan struct{}
 	quitOnce sync.Once
+	// stop 解除对 ctx 的监听（context.AfterFunc 返回值）；注销时调用，不留等 ctx 的协程。
+	stop func() bool
 }
 
 // C 事件通道；关闭后读 Err()。
@@ -167,10 +169,32 @@ func (b *Bus) drop(s *Sub, why error) {
 		s.quitOnce.Do(func() { close(s.quit) })
 	}
 	s.mu.Lock()
+	var stop func() bool
 	if !s.done {
 		s.done, s.err = true, why
 		close(s.ch)
+		stop, s.stop = s.stop, nil
 	}
+	s.mu.Unlock()
+	if stop != nil {
+		stop()
+	}
+}
+
+// watch ctx 结束时注销 s。用 AfterFunc 而不是起协程等 ctx：Close 之后协程会一直等到 ctx 结束
+// （2026-11-04 审查 P2 资源）。
+func (b *Bus) watch(ctx context.Context, s *Sub) {
+	if ctx == nil {
+		return
+	}
+	stop := context.AfterFunc(ctx, func() { b.drop(s, ErrClosed) })
+	s.mu.Lock()
+	if s.done {
+		s.mu.Unlock()
+		stop()
+		return
+	}
+	s.stop = stop
 	s.mu.Unlock()
 }
 
@@ -185,9 +209,7 @@ func (b *Bus) add(ctx context.Context, f Filter) *Sub {
 	}
 	b.subs[s] = struct{}{}
 	b.mu.Unlock()
-	if ctx != nil {
-		go func() { <-ctx.Done(); b.drop(s, ErrClosed) }()
-	}
+	b.watch(ctx, s)
 	return s
 }
 
@@ -223,9 +245,7 @@ func (b *Bus) Follow(ctx context.Context, src Source, f Filter, after int64) (*S
 	b.mu.Lock()
 	b.subs[s] = struct{}{}
 	b.mu.Unlock()
-	if ctx != nil {
-		go func() { <-ctx.Done(); b.drop(s, ErrClosed) }()
-	}
+	b.watch(ctx, s)
 
 	events, wm, err := src.Replay(ctx, f.Session, after)
 	if err != nil {

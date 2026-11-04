@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sort"
 	"sync"
 
 	"github.com/BurntSushi/toml"
@@ -106,6 +107,7 @@ type Sessions struct {
 
 	mu     sync.Mutex
 	state  map[string]*sessState
+	tick   uint64         // 最近使用计数（state 超过 MaxCached 时按它淘汰）
 	gen    map[Mode]int   // 档位定义变化次数（Notice 用）
 	items  []toolhub.Item // 权限项注册表（首个会话装配时登记，mode show / 档位标注用）
 	lookup func(tool string) []toolhub.Item
@@ -116,6 +118,27 @@ type sessState struct {
 	gen   int
 	rules []Rule
 	raw   []string
+	used  uint64
+}
+
+// MaxCached 内存里最多缓存多少个会话的权限状态。状态是会话头 Ext 的缓存（档位、会话规则都已持久化，
+// Load 能读回），超过上限按最近使用淘汰最旧的四分之一（2026-11-04 审查 P2：原先只增不减）。
+// 没有 Load 时状态只在内存里，不淘汰。
+var MaxCached = 4096
+
+// evict 超过上限时淘汰最近最少使用的会话。调用方持锁。
+func (s *Sessions) evict() {
+	if s.Load == nil || len(s.state) <= MaxCached {
+		return
+	}
+	ids := make([]string, 0, len(s.state))
+	for id := range s.state {
+		ids = append(ids, id)
+	}
+	sort.Slice(ids, func(i, j int) bool { return s.state[ids[i]].used < s.state[ids[j]].used })
+	for _, id := range ids[:len(ids)-MaxCached*3/4] {
+		delete(s.state, id)
+	}
 }
 
 // Top 顶层会话 id（子智能体 / 工作组成员 id 为 parent/...）。
@@ -139,6 +162,8 @@ func (s *Sessions) get(id string) *sessState {
 	id = Top(id)
 	s.mu.Lock()
 	if st := s.state[id]; st != nil {
+		s.tick++
+		st.used = s.tick
 		s.mu.Unlock()
 		return st
 	}
@@ -171,7 +196,10 @@ func (s *Sessions) get(id string) *sessState {
 		}
 	}
 	st.gen = s.gen[st.mode]
+	s.tick++
+	st.used = s.tick
 	s.state[id] = st
+	s.evict()
 	return st
 }
 
