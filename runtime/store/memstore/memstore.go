@@ -480,9 +480,6 @@ func (s *Store) GetRequest(ctx context.Context, sessionID, requestID string) (*s
 	return &out, nil
 }
 
-// ErrNoShell：外壳不存在（sqlite 对应 sql.ErrNoRows）。
-var ErrNoShell = errors.New("memstore: 外壳不存在")
-
 // ShellBody 按哈希读外壳原文。
 func (s *Store) ShellBody(ctx context.Context, hash string) ([]byte, error) {
 	if err := s.lock(); err != nil {
@@ -491,7 +488,7 @@ func (s *Store) ShellBody(ctx context.Context, hash string) ([]byte, error) {
 	defer s.mu.Unlock()
 	b, ok := s.shells[hash]
 	if !ok {
-		return nil, ErrNoShell
+		return nil, store.ErrNotFound
 	}
 	return append([]byte(nil), b...), nil
 }

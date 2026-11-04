@@ -12,6 +12,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/rand"
 	"sync"
@@ -189,7 +190,7 @@ func (h *Hub) schedule(ctx context.Context, r *Request) <-chan Event {
 		defer close(out)
 		plan, err := h.cat.Resolve(r.Req.Model)
 		if err != nil {
-			out <- Event{Failed: &Failure{Code: CodeNoAdapter, Message: err.Error()}}
+			out <- Event{Failed: &Failure{Code: catalogCode(err), Message: err.Error()}}
 			return
 		}
 		dctx, cancel := context.WithTimeout(ctx, h.pol.Deadline)
@@ -220,7 +221,7 @@ func (h *Hub) schedule(ctx context.Context, r *Request) <-chan Event {
 func (h *Hub) runStep(ctx context.Context, r *Request, si int, step PlanStep, out chan<- Event, emitted *bool) *Failure {
 	m, p, err := h.cat.Lookup(step.Model)
 	if err != nil {
-		return &Failure{Code: CodeNoAdapter, Message: err.Error()}
+		return &Failure{Code: catalogCode(err), Message: err.Error()}
 	}
 	key := m.Provider + "/" + step.Model
 	if h.isOpen(key) {
@@ -460,4 +461,13 @@ func newID() string {
 	var b [8]byte
 	_, _ = rand.Read(b[:])
 	return hex.EncodeToString(b[:])
+}
+
+// catalogCode 目录查找失败的失败码：没有这个模型 / 别名报 UNKNOWN_MODEL，其余（提供方未声明等）报 NO_ADAPTER。
+func catalogCode(err error) Code {
+	var u ErrUnknownAlias
+	if errors.As(err, &u) {
+		return CodeUnknownModel
+	}
+	return CodeNoAdapter
 }

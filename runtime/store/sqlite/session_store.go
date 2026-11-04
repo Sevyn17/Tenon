@@ -14,7 +14,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"ybase/runtime/bus"
@@ -54,7 +53,7 @@ func (db *DB) CreateSession(ctx context.Context, m store.SessionMeta, hdr sessio
 			title, header, shell_hash, session_key, meta, use_config, log_len, next_sync_seq, updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,1,?)`,
 			store.Tenant, m.ID, m.AgentID, m.AgentHash, m.Creator, m.ParentID, m.Origin, m.ForkUpto, m.Title, hb, shell.hash,
 			nullStr(m.SessionKey), jsonObj(m.Meta), jsonObj(m.UseConfig), now); err != nil {
-			if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			if isUniqueViolation(err) {
 				return fmt.Errorf("%w: 会话 %s 或会话键已存在", store.ErrConflict, m.ID)
 			}
 			return err
@@ -284,6 +283,9 @@ func (db *DB) GetRequest(ctx context.Context, sessionID, requestID string) (*sto
 func (db *DB) Shell(ctx context.Context, hash string) (*session.Config, error) {
 	var b string
 	if err := db.rq().QueryRowContext(ctx, `SELECT body FROM session_shells WHERE hash = ?`, hash).Scan(&b); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, store.ErrNotFound
+		}
 		return nil, err
 	}
 	var c session.Config
@@ -297,6 +299,9 @@ func (db *DB) Shell(ctx context.Context, hash string) (*session.Config, error) {
 func (db *DB) ShellBody(ctx context.Context, hash string) ([]byte, error) {
 	var b string
 	if err := db.rq().QueryRowContext(ctx, `SELECT body FROM session_shells WHERE hash = ?`, hash).Scan(&b); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, store.ErrNotFound
+		}
 		return nil, err
 	}
 	return []byte(b), nil

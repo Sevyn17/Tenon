@@ -17,6 +17,7 @@ type Code string
 
 const (
 	CodeNoAdapter       Code = "NO_ADAPTER"
+	CodeUnknownModel    Code = "UNKNOWN_MODEL" // 目录里没有这个模型或别名（原先归为 NO_ADAPTER）
 	CodeMissingCred     Code = "MISSING_CREDENTIAL"
 	CodeAuth            Code = "AUTH"
 	CodeInvalidRequest  Code = "INVALID_REQUEST"

@@ -137,8 +137,8 @@ func testRoundTrip(t *testing.T, db store.Store) {
 	if b, err := db.ShellBody(ctx, "x"); err != nil || string(b) != `{"a":1}` {
 		t.Fatalf("请求外壳: %s %v", b, err)
 	}
-	if _, err := db.ShellBody(ctx, "nope"); err == nil {
-		t.Fatal("缺失外壳应报错")
+	if _, err := db.ShellBody(ctx, "nope"); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("缺失外壳应报 store.ErrNotFound：%v", err)
 	}
 	h, err := store.ShellHash(l.Snapshot.Header.Config)
 	if err != nil {

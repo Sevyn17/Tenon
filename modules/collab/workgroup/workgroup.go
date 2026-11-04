@@ -387,6 +387,9 @@ type Task struct {
 // ErrConflict 条件写失败（修订号不符或状态不允许）。
 var ErrConflict = errors.New("workgroup: 任务已被改动")
 
+// ErrNoTask 看板上没有这个任务。
+var ErrNoTask = errors.New("workgroup: 没有任务")
+
 // Create 新建任务。
 func (g *Group) Create(ctx context.Context, team, subject, desc string) (Task, error) {
 	now := time.Now().UnixMilli()
@@ -425,7 +428,7 @@ func (g *Group) get(ctx context.Context, team string, id int) (Task, error) {
 		FROM p_workgroup_tasks WHERE team = ? AND id = ?`, team, id).
 		Scan(&t.ID, &t.Subject, &t.Description, &t.Owner, &t.Status, &t.Result, &t.Rev)
 	if err == sql.ErrNoRows {
-		return t, fmt.Errorf("没有任务 #%d", id)
+		return t, fmt.Errorf("%w #%d", ErrNoTask, id)
 	}
 	return t, err
 }
@@ -481,7 +484,7 @@ func (g *Group) boardTools() []*toolhub.Tool {
 	}
 	wrap := func(t Task, err error) (toolhub.Output, error) {
 		if err != nil {
-			if errors.Is(err, ErrConflict) || strings.HasPrefix(err.Error(), "没有任务") {
+			if errors.Is(err, ErrConflict) || errors.Is(err, ErrNoTask) {
 				return toolhub.Errorf("%v", err), nil
 			}
 			return toolhub.Output{}, err

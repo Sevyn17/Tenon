@@ -5,7 +5,9 @@ package sqlite
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"io"
 	"ybase/runtime/store"
 )
@@ -24,7 +26,10 @@ func (db *DB) Export(ctx context.Context, sessionID string, w io.Writer) error {
 		fork_upto, log_len, updated_at FROM sessions WHERE tenant = ? AND id = ?`, store.Tenant, sessionID).
 		Scan(&meta.ID, &meta.AgentID, &meta.AgentHash, &meta.Creator, &meta.ParentID, &meta.Origin, &meta.Status, &meta.RunState, &meta.Title,
 			&meta.Header, &meta.ShellHash, &meta.ForkUpto, &meta.LogLen, &meta.UpdatedAt); err != nil {
-		return store.ErrNotFound
+		if errors.Is(err, sql.ErrNoRows) {
+			return store.ErrNotFound
+		}
+		return err
 	}
 	shellBody, _ := db.ShellBody(ctx, meta.ShellHash)
 	if err := emit("session", map[string]any{
