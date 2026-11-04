@@ -326,7 +326,7 @@ func (r *Runner) Layers() []toolhub.Layer {
 			Call: func(ctx context.Context, cx *toolhub.Cx, args json.RawMessage, next toolhub.Next) (toolhub.Output, error) {
 				for _, res := range r.Fire(ctx, Input{SessionID: cx.SessionID, Event: PreToolUse, ToolName: cx.Tool.Spec.Name, CallID: cx.CallID, ToolInput: args}) {
 					if res.Block {
-						return toolhub.Errorf("被用户钩子阻止：%s", res.Reason), nil
+						return toolhub.Failf("被用户钩子阻止：%s", res.Reason), nil
 					}
 				}
 				return next(ctx, cx, args)

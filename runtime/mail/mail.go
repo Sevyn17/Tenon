@@ -202,10 +202,10 @@ func Render(envs []Envelope) string {
 	return b.String()
 }
 
-// EscapeAttr 转义 XML 属性值（" & < >）。
+// attrEsc 属性值转义（" & < >）。
 var attrEsc = strings.NewReplacer("&", "&amp;", `"`, "&quot;", "<", "&lt;", ">", "&gt;")
 
-// EscapeText 转义正文里的标签起始符，防止伪造 <msg> 等合并标签。
+// textEsc 正文转义：标签起始符，防止伪造 <msg> 等合并标签。
 var textEsc = strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;")
 
 // EscapeAttr 转义属性值。

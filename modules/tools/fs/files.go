@@ -33,20 +33,20 @@ func WriteFile(root string, tr ...*Tracker) *toolhub.Tool {
 		Call: func(_ context.Context, cx *toolhub.Cx, raw json.RawMessage) (toolhub.Output, error) {
 			var a struct{ Path, Content string }
 			if err := json.Unmarshal(raw, &a); err != nil {
-				return toolhub.Errorf("参数不合法：%v", err), nil
+				return toolhub.Failf("参数不合法：%v", err), nil
 			}
 			p, err := resolve(root, a.Path)
 			if err != nil {
-				return toolhub.Errorf("%v", err), nil
+				return toolhub.Failf("%v", err), nil
 			}
 			if st, err := os.Stat(p); err == nil && st.IsDir() {
-				return toolhub.Errorf("%s 是目录", a.Path), nil
+				return toolhub.Failf("%s 是目录", a.Path), nil
 			}
 			if err := track.Check(cx, p, a.Path); err != nil {
-				return toolhub.Errorf("%v", err), nil
+				return toolhub.Failf("%v", err), nil
 			}
 			if err := writeAtomic(p, []byte(a.Content)); err != nil {
-				return toolhub.Errorf("写入失败：%v", err), nil
+				return toolhub.Failf("写入失败：%v", err), nil
 			}
 			track.Note(cx, p)
 			return toolhub.Text(fmt.Sprintf("已写入 %s（%d 字节）", a.Path, len(a.Content))), nil

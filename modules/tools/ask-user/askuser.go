@@ -61,7 +61,7 @@ func AskUserIn(ask SessionAsker) *toolhub.Tool {
 			return string(b), nil
 		}()
 		if err != nil {
-			return toolhub.Errorf("%v", err), nil
+			return toolhub.Failf("%v", err), nil
 		}
 		return toolhub.Text(s), nil
 	}

@@ -116,7 +116,7 @@ func Layer(mode func(sessionID string) Mode, approve ...toolhub.SandboxApprover)
 			}
 			req, err := Requested(args)
 			if err != nil {
-				return toolhub.Errorf("参数不合法：%v", err), nil
+				return toolhub.Failf("参数不合法：%v", err), nil
 			}
 			cur := mode(cx.SessionID)
 			if req != "" && Wider(req, cur) && !cx.Approved {

@@ -1,7 +1,8 @@
 package agent
 
 // 本轮的工具授权范围（信封 caps，框架设计 08 8.x / 13 13.3）：
-// 会话可能由别的会话或组件触发，触发链上每一跳的 caps 取交集；交集为空表示不限。
+// 会话可能由别的会话或组件触发，触发链上每一跳的 caps 取交集；nil 表示不限，空集表示一个都不许
+// （与 host.intersectCaps 一致）。
 // 这里用一层 Guard 在工具执行前再拦一次：模型请求了不在范围里的工具时返回错误结果，
 // 不交给执行器（权限判定仍由权限插件的 Authorizes 层负责，见 toolhub.Validate）。
 
@@ -22,7 +23,7 @@ func (a *Agent) InstallCapsGuard() {
 		Guard: true,
 		Call: func(ctx context.Context, cx *toolhub.Cx, args json.RawMessage, next toolhub.Next) (toolhub.Output, error) {
 			if name := cx.Tool.Spec.Name; !a.caps.allows(name) {
-				return toolhub.Errorf("工具 %s 不在本轮授权范围（caps）", name), nil
+				return toolhub.Failf("工具 %s 不在本轮授权范围（caps）", name), nil
 			}
 			return next(ctx, cx, args)
 		},

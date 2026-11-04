@@ -118,16 +118,16 @@ func (g *Group) spawnTool() *toolhub.Tool {
 		Call: func(ctx context.Context, cx *toolhub.Cx, raw json.RawMessage) (toolhub.Output, error) {
 			var a struct{ Name, Task string }
 			if err := json.Unmarshal(raw, &a); err != nil || strings.TrimSpace(a.Task) == "" || !nameRe.MatchString(a.Name) {
-				return toolhub.Errorf("需要合法的 name（小写字母数字和连字符）与非空 task"), nil
+				return toolhub.Failf("需要合法的 name（小写字母数字和连字符）与非空 task"), nil
 			}
 			leader, self := team(cx.SessionID)
 			if self != "lead" {
-				return toolhub.Errorf("只有领导会话能派成员"), nil
+				return toolhub.Failf("只有领导会话能派成员"), nil
 			}
 			id := MemberID(leader, a.Name)
 			cx.ChildSessionID = id
 			if err := g.start(leader, id, a.Name, a.Task, cx.Ctx.Untrusted()); err != nil {
-				return toolhub.Errorf("%v", err), nil
+				return toolhub.Failf("%v", err), nil
 			}
 			return toolhub.Text(fmt.Sprintf("已派成员 %s（会话 %s），完成后结果会作为新消息送达。", a.Name, id)), nil
 		},
@@ -296,11 +296,11 @@ func (g *Group) stopTool() *toolhub.Tool {
 		Call: func(ctx context.Context, cx *toolhub.Cx, raw json.RawMessage) (toolhub.Output, error) {
 			var a struct{ Name string }
 			if err := json.Unmarshal(raw, &a); err != nil || !nameRe.MatchString(a.Name) {
-				return toolhub.Errorf("需要合法的 name"), nil
+				return toolhub.Failf("需要合法的 name"), nil
 			}
 			leader, self := team(cx.SessionID)
 			if self != "lead" {
-				return toolhub.Errorf("只有领导会话能中止成员"), nil
+				return toolhub.Failf("只有领导会话能中止成员"), nil
 			}
 			id := MemberID(leader, a.Name)
 			g.mu.Lock()
@@ -311,7 +311,7 @@ func (g *Group) stopTool() *toolhub.Tool {
 				return toolhub.Text("成员 " + a.Name + " 当前没有在工作"), nil
 			}
 			if err := hd.Do(host.Command{Kind: host.Cancel}); err != nil {
-				return toolhub.Errorf("中止失败：%v", err), nil
+				return toolhub.Failf("中止失败：%v", err), nil
 			}
 			return toolhub.Text("已中止成员 " + a.Name + " 的当前任务；它的中断结果会作为一条消息送回"), nil
 		},
@@ -328,21 +328,21 @@ func (g *Group) sendTool() *toolhub.Tool {
 		Call: func(ctx context.Context, cx *toolhub.Cx, raw json.RawMessage) (toolhub.Output, error) {
 			var a struct{ To, Message string }
 			if err := json.Unmarshal(raw, &a); err != nil || strings.TrimSpace(a.Message) == "" {
-				return toolhub.Errorf("需要 to 与非空 message"), nil
+				return toolhub.Failf("需要 to 与非空 message"), nil
 			}
 			leader, self := team(cx.SessionID)
 			if a.To == self {
-				return toolhub.Errorf("不能发给自己"), nil
+				return toolhub.Failf("不能发给自己"), nil
 			}
 			text := fmt.Sprintf("[来自 %s] %s", self, a.Message)
 			if a.To == "lead" {
 				if err := g.deliver(ctx, leader, "member:"+self, text, cx.Ctx.Untrusted()); err != nil {
-					return toolhub.Errorf("发送失败：%v", err), nil
+					return toolhub.Failf("发送失败：%v", err), nil
 				}
 				return toolhub.Text("已发送给 lead"), nil
 			}
 			if !nameRe.MatchString(a.To) {
-				return toolhub.Errorf("成员名不合法：%s", a.To), nil
+				return toolhub.Failf("成员名不合法：%s", a.To), nil
 			}
 			id := MemberID(leader, a.To)
 			ok, err := g.Sessions.Exists(ctx, id)
@@ -350,7 +350,7 @@ func (g *Group) sendTool() *toolhub.Tool {
 				return toolhub.Output{}, err
 			}
 			if !ok {
-				return toolhub.Errorf("没有成员 %s（先用 team_spawn 派出）", a.To), nil
+				return toolhub.Failf("没有成员 %s（先用 team_spawn 派出）", a.To), nil
 			}
 			g.mu.Lock()
 			busy := g.running[id]
@@ -360,13 +360,13 @@ func (g *Group) sendTool() *toolhub.Tool {
 				if ok {
 					if err := hd.Do(host.Command{Kind: host.Send, ItemID: host.NewItemID(), Text: text, Source: "member:" + self,
 						Trust: host.TrustOf(cx.Ctx.Untrusted())}); err != nil {
-						return toolhub.Errorf("发送失败：%v", err), nil
+						return toolhub.Failf("发送失败：%v", err), nil
 					}
 					return toolhub.Text("已发送给 " + a.To + "（它正在工作，处理完当前任务后会看到）"), nil
 				}
 			}
 			if err := g.start(leader, id, a.To, text, cx.Ctx.Untrusted()); err != nil { // 空闲成员：开新回合，完成后结果回报领导
-				return toolhub.Errorf("%v", err), nil
+				return toolhub.Failf("%v", err), nil
 			}
 			return toolhub.Text("已发送给 " + a.To), nil
 		},
@@ -485,7 +485,7 @@ func (g *Group) boardTools() []*toolhub.Tool {
 	wrap := func(t Task, err error) (toolhub.Output, error) {
 		if err != nil {
 			if errors.Is(err, ErrConflict) || errors.Is(err, ErrNoTask) {
-				return toolhub.Errorf("%v", err), nil
+				return toolhub.Failf("%v", err), nil
 			}
 			return toolhub.Output{}, err
 		}
@@ -500,7 +500,7 @@ func (g *Group) boardTools() []*toolhub.Tool {
 			Call: func(ctx context.Context, cx *toolhub.Cx, raw json.RawMessage) (toolhub.Output, error) {
 				var a struct{ Subject, Description string }
 				if err := json.Unmarshal(raw, &a); err != nil || strings.TrimSpace(a.Subject) == "" {
-					return toolhub.Errorf("subject 不能为空"), nil
+					return toolhub.Failf("subject 不能为空"), nil
 				}
 				leader, _ := team(cx.SessionID)
 				return wrap(g.Create(ctx, leader, a.Subject, a.Description))
@@ -526,7 +526,7 @@ func (g *Group) boardTools() []*toolhub.Tool {
 			Call: func(ctx context.Context, cx *toolhub.Cx, raw json.RawMessage) (toolhub.Output, error) {
 				var a struct{ ID int }
 				if err := json.Unmarshal(raw, &a); err != nil {
-					return toolhub.Errorf("需要 id"), nil
+					return toolhub.Failf("需要 id"), nil
 				}
 				leader, self := team(cx.SessionID)
 				return wrap(g.Claim(ctx, leader, a.ID, self))
@@ -541,7 +541,7 @@ func (g *Group) boardTools() []*toolhub.Tool {
 					Result string
 				}
 				if err := json.Unmarshal(raw, &a); err != nil {
-					return toolhub.Errorf("需要 id"), nil
+					return toolhub.Failf("需要 id"), nil
 				}
 				leader, self := team(cx.SessionID)
 				return wrap(g.Complete(ctx, leader, a.ID, self, a.Result))

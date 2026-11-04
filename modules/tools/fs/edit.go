@@ -55,18 +55,18 @@ func Edit(root string, tr ...*Tracker) *toolhub.Tool {
 		Call: func(_ context.Context, cx *toolhub.Cx, raw json.RawMessage) (toolhub.Output, error) {
 			var a editArgs
 			if err := json.Unmarshal(raw, &a); err != nil {
-				return toolhub.Errorf("参数不合法：%v", err), nil
+				return toolhub.Failf("参数不合法：%v", err), nil
 			}
 			p, err := resolve(root, a.Path)
 			if err != nil {
-				return toolhub.Errorf("%v", err), nil
+				return toolhub.Failf("%v", err), nil
 			}
 			if err := track.Check(cx, p, a.Path); err != nil {
-				return toolhub.Errorf("%v", err), nil
+				return toolhub.Failf("%v", err), nil
 			}
 			msg, err := applyEdits(p, a.Path, a.Edits)
 			if err != nil {
-				return toolhub.Errorf("%v", err), nil
+				return toolhub.Failf("%v", err), nil
 			}
 			track.Note(cx, p) // 自己写的结果算读过：连续 edit 不必每次重读
 			return toolhub.Text(msg), nil

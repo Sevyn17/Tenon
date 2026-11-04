@@ -487,7 +487,6 @@ func (a *Assembly) Value(key string) (any, bool) {
 // Order 装配顺序。
 func (a *Assembly) Order() []string { return append([]string(nil), a.order...) }
 
-// Start 按装配顺序启动插件，各自在 root 下开插件作用域。失败时已启动的倒序关闭。
 // AgentSchemas 各组件登记的使用配置原型，按组件名排序（建会话时算 use_config 用）。
 func (a *Assembly) AgentSchemas() []useconf.Schema {
 	out := make([]useconf.Schema, 0, len(a.agentSchemas))
@@ -518,6 +517,7 @@ func (a *Assembly) Definitions(app agentdef.Source) (agentdef.Source, error) {
 	return agentdef.WithTemplates(app, a.templates)
 }
 
+// Start 按装配顺序启动插件，各自在 root 下开插件作用域。失败时已启动的倒序关闭。
 func (a *Assembly) Start(root *Scope) error {
 	for _, n := range a.order {
 		sc := root.Child("plugin:" + n)

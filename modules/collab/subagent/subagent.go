@@ -34,7 +34,7 @@ func Tool(h *host.Host, f host.Factory) *toolhub.Tool {
 		Call: func(ctx context.Context, cx *toolhub.Cx, raw json.RawMessage) (toolhub.Output, error) {
 			var a struct{ Task, Session string }
 			if err := json.Unmarshal(raw, &a); err != nil || strings.TrimSpace(a.Task) == "" {
-				return toolhub.Errorf("task 不能为空"), nil
+				return toolhub.Failf("task 不能为空"), nil
 			}
 			id := a.Session
 			if id == "" {
@@ -50,7 +50,7 @@ func Tool(h *host.Host, f host.Factory) *toolhub.Tool {
 				if ctx.Err() != nil {
 					return toolhub.Output{}, ctx.Err()
 				}
-				return toolhub.Errorf("子智能体 %s 失败：%v", id, err), nil
+				return toolhub.Failf("子智能体 %s 失败：%v", id, err), nil
 			}
 			return toolhub.Text(fmt.Sprintf("[子会话 %s]\n%s", id, out)), nil
 		},

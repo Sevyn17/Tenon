@@ -398,15 +398,15 @@ func (c *Client) callTool(ctx context.Context, raw string, args json.RawMessage,
 	res, err := c.invoke(cctx, "tools/call", map[string]any{"name": raw, "arguments": args}, readOnly)
 	if err != nil {
 		if errors.Is(err, errDead) && !errors.Is(err, errUnsent) && ctx.Err() == nil && !readOnly {
-			return toolhub.Errorf("MCP 服务 %s 在调用 %s 时断开，服务端可能已经执行，结果未知。请先核对状态再决定是否重试。", c.Server.Name, raw)
+			return toolhub.Failf("MCP 服务 %s 在调用 %s 时断开，服务端可能已经执行，结果未知。请先核对状态再决定是否重试。", c.Server.Name, raw)
 		}
 		if ctx.Err() != nil {
 			return toolhub.Output{Kind: toolhub.Done, Content: session.Content{session.NewTextPart("调用已取消")}, Status: session.ToolTurnCancelled}
 		}
 		if cctx.Err() != nil {
-			return toolhub.Errorf("MCP 服务 %s 调用 %s 超时（%s）", c.Server.Name, raw, c.Server.timeout())
+			return toolhub.Failf("MCP 服务 %s 调用 %s 超时（%s）", c.Server.Name, raw, c.Server.timeout())
 		}
-		return toolhub.Errorf("MCP 服务 %s 调用 %s 失败：%v", c.Server.Name, raw, err)
+		return toolhub.Failf("MCP 服务 %s 调用 %s 失败：%v", c.Server.Name, raw, err)
 	}
 	return renderResult(res)
 }
@@ -430,7 +430,7 @@ func renderResult(res json.RawMessage) toolhub.Output {
 		IsError           bool            `json:"isError"`
 	}
 	if err := json.Unmarshal(res, &r); err != nil {
-		return toolhub.Errorf("MCP 结果不合法：%v", err)
+		return toolhub.Failf("MCP 结果不合法：%v", err)
 	}
 	var parts []string
 	for _, c := range r.Content {
@@ -459,7 +459,7 @@ func renderResult(res json.RawMessage) toolhub.Output {
 		if text == "" {
 			text = "MCP 工具报错（无详情）"
 		}
-		return toolhub.Errorf("%s", text)
+		return toolhub.Failf("%s", text)
 	}
 	return toolhub.Text(text)
 }

@@ -104,8 +104,8 @@ func Text(s string) Output {
 	return Output{Kind: Done, Content: session.Content{session.NewTextPart(s)}, Status: session.ToolOK}
 }
 
-// Errorf 构造错误结果（回给模型，不中止回合）。
-func Errorf(format string, a ...any) Output {
+// Failf 构造失败的工具结果（回给模型，不中止回合）。返回的是 Output 不是 error：原名 Errorf 容易误读（审查 P2 命名）。
+func Failf(format string, a ...any) Output {
 	return Output{Kind: Done, Content: session.Content{session.NewTextPart(fmt.Sprintf(format, a...))}, Status: session.ToolError}
 }
 

@@ -54,11 +54,11 @@ func ReadFile(root string, tr ...*Tracker) *toolhub.Tool {
 			Offset, Limit int
 		}
 		if err := json.Unmarshal(raw, &a); err != nil {
-			return toolhub.Errorf("参数不合法：%v", err), nil
+			return toolhub.Failf("参数不合法：%v", err), nil
 		}
 		p, err := resolve(root, a.Path)
 		if err != nil {
-			return toolhub.Errorf("%v", err), nil
+			return toolhub.Failf("%v", err), nil
 		}
 		var s string
 		if st, serr := os.Stat(p); serr == nil && st.Size() > ReadStreamAbove {
@@ -70,7 +70,7 @@ func ReadFile(root string, tr ...*Tracker) *toolhub.Tool {
 			}
 		}
 		if err != nil {
-			return toolhub.Errorf("%v", err), nil
+			return toolhub.Failf("%v", err), nil
 		}
 		track.Note(cx, p)
 		return toolhub.Text(s), nil

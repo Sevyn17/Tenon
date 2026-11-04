@@ -211,7 +211,7 @@ func WriteGuard() toolhub.Layer {
 		Timeout: 2 * time.Second,
 		Call: func(ctx context.Context, cx *toolhub.Cx, args json.RawMessage, next toolhub.Next) (toolhub.Output, error) {
 			if t := cx.Tool; t != nil && t.Attrs[toolhub.AttrWorkspace] == true && HasPlaceholder(args) {
-				return toolhub.Errorf("参数里含脱敏占位符 %s：它不是文件的真实内容，不能写回。请改写不含密钥的部分，或让用户手动处理含密钥的行", Placeholder), nil
+				return toolhub.Failf("参数里含脱敏占位符 %s：它不是文件的真实内容，不能写回。请改写不含密钥的部分，或让用户手动处理含密钥的行", Placeholder), nil
 			}
 			return next(ctx, cx, args)
 		},

@@ -110,7 +110,7 @@ func TestGuardShortCircuitWriteTool(t *testing.T) {
 	h.Register(&Tool{Spec: spec("w"), Risk: Write,
 		Call: func(context.Context, *Cx, json.RawMessage) (Output, error) { return Text("ran"), nil }})
 	h.AddLayer(Layer{Name: "deny", Guard: true, Call: func(ctx context.Context, cx *Cx, a json.RawMessage, next Next) (Output, error) {
-		return Errorf("不行"), nil
+		return Failf("不行"), nil
 	}})
 	rs := drain(h.Execute(context.Background(), kctx("s"), []session.ToolCall{call("c1", "w", `{}`)}, nil))
 	if len(rs) != 1 || rs[0].Err != nil || rs[0].Output.Status != session.ToolError {

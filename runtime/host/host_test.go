@@ -188,7 +188,7 @@ func TestBeforeTurnDenyAndRecord(t *testing.T) {
 		if strings.Contains(in[0].Text, "拒") {
 			return in, Deny, nil
 		}
-		return in, RecordD, nil
+		return in, RecordOnly, nil
 	}
 	hd, _ := r.h.Open(context.Background(), "s1")
 	_ = hd.Do(Command{Kind: Send, Text: "拒绝我"})

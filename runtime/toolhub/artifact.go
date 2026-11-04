@@ -92,12 +92,12 @@ func (h *Hub) readArtifactTool() *Tool {
 				Offset, Limit int
 			}
 			if err := json.Unmarshal(raw, &a); err != nil {
-				return Errorf("参数：%v", err), nil
+				return Failf("参数：%v", err), nil
 			}
 			hash := strings.TrimPrefix(a.Ref, ArtifactPrefix)
 			b, err := h.art.Get(hash)
 			if err != nil {
-				return Errorf("工件 %s 不可读：%v", a.Ref, err), nil
+				return Failf("工件 %s 不可读：%v", a.Ref, err), nil
 			}
 			ls := strings.Split(string(b), "\n")
 			if a.Offset < 1 {
@@ -107,7 +107,7 @@ func (h *Hub) readArtifactTool() *Tool {
 				a.Limit = h.thresholds.PageLines
 			}
 			if a.Offset > len(ls) {
-				return Errorf("offset %d 超出总行数 %d", a.Offset, len(ls)), nil
+				return Failf("offset %d 超出总行数 %d", a.Offset, len(ls)), nil
 			}
 			end := a.Offset - 1 + a.Limit
 			if end > len(ls) {

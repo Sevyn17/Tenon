@@ -385,10 +385,10 @@ func (c *Core) applyConfigPatch(p ConfigPatch) error {
 	return nil
 }
 
-// validateUpto 校验压缩边界：不拆开调用与结果（R14），且不越过当前末尾、不回退。
 // CanCompact upto 是否是合法的压缩边界（压缩插件选切点用）。
 func (c *Core) CanCompact(upto int) bool { return c.validateUpto(upto) == nil }
 
+// validateUpto 校验压缩边界：不拆开调用与结果（R14），且不越过当前末尾、不回退。
 func (c *Core) validateUpto(upto int) error {
 	if upto < c.hdr.CompactionBase || upto > c.absLen() {
 		return ErrBadRewind
@@ -846,8 +846,6 @@ func (c *Core) ModelFailed(requestID string, needID uint64, reason EndReason) ([
 	return nil, c.endTurn(reason, c.takePendingInputs()), nil // 暂存插话交还宿主（审查 P1-19）
 }
 
-// validateCalls 校验模型请求的工具调用（S3）：工具名、参数 JSON、单步调用数。
-// 返回 callID → 错误提示；allInvalid 报告是否全部无效（T13 立即回填路径）。
 // InvalidArgsKey 不合法参数 JSON 规整后保存原始文本的键（见 normalizeCalls）。
 const InvalidArgsKey = "_invalid_args"
 
@@ -936,6 +934,8 @@ func invalidArgs(a json.RawMessage) bool {
 	return ok
 }
 
+// validateCalls 校验模型请求的工具调用（S3）：工具名、参数 JSON、单步调用数。
+// 返回 callID → 错误提示；allInvalid 报告是否全部无效（T13 立即回填路径）。
 func (c *Core) validateCalls(calls []ToolCall) (map[string]string, bool) {
 	hints := map[string]string{}
 	known := map[string]bool{}

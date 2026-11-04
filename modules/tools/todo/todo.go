@@ -76,7 +76,7 @@ func TodoWriteIn(onChange func(sessionID string, ts []Todo)) *toolhub.Tool {
 			return fmt.Sprintf("Updated todo list: %d pending, %d in progress, %d completed.", p, i, c), nil
 		}()
 		if err != nil {
-			return toolhub.Errorf("%v", err), nil
+			return toolhub.Failf("%v", err), nil
 		}
 		return toolhub.Text(s), nil
 	}

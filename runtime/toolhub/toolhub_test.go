@@ -182,7 +182,7 @@ func TestParallelOrderAndExclusive(t *testing.T) {
 		enter()
 		defer atomic.AddInt32(&inflight, -1)
 		if n := atomic.LoadInt32(&inflight); n != 1 {
-			return Errorf("写期间有 %d 个并发", n), nil
+			return Failf("写期间有 %d 个并发", n), nil
 		}
 		time.Sleep(20 * time.Millisecond)
 		mu.Lock()
@@ -374,7 +374,7 @@ func TestCancelSemantics(t *testing.T) {
 	_ = h.Register(&Tool{Spec: spec("r"), Call: func(ctx context.Context, _ *Cx, _ json.RawMessage) (Output, error) {
 		select {
 		case <-ctx.Done():
-			return Errorf("中止"), nil
+			return Failf("中止"), nil
 		case <-time.After(2 * time.Second):
 			return Text("完成"), nil
 		}
@@ -383,7 +383,7 @@ func TestCancelSemantics(t *testing.T) {
 		Call: func(ctx context.Context, _ *Cx, _ json.RawMessage) (Output, error) {
 			select {
 			case <-ctx.Done():
-				return Errorf("写被中止"), nil
+				return Failf("写被中止"), nil
 			case <-time.After(150 * time.Millisecond):
 				return Text("写完"), nil
 			}

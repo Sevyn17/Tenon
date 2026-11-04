@@ -81,9 +81,9 @@ type Command struct {
 type Decision int
 
 const (
-	Allow   Decision = iota
-	Deny             // 不开回合，输入交还
-	RecordD          // 只记录，不开回合（转人工）
+	Allow      Decision = iota
+	Deny                // 不开回合，输入交还
+	RecordOnly          // 只记录，不开回合（转人工）
 )
 
 // Origin 会话来源（plugin-manager L2）。
@@ -939,7 +939,7 @@ func (a *actor) drainInbox(ctx context.Context) (stop bool, err error) {
 				a.processing = nil
 				a.turnQueued = nil
 				continue
-			case RecordD:
+			case RecordOnly:
 				if _, err := a.ag.Core.Record(content, m); err != nil {
 					return false, err
 				}

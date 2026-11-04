@@ -62,13 +62,13 @@ func Tool() *toolhub.Tool {
 				Timeout int
 			}
 			if err := json.Unmarshal(raw, &a); err != nil {
-				return toolhub.Errorf("参数不合法：%v", err), nil
+				return toolhub.Failf("参数不合法：%v", err), nil
 			}
 			if strings.TrimSpace(a.Code) == "" {
-				return toolhub.Errorf("code 不能为空"), nil
+				return toolhub.Failf("code 不能为空"), nil
 			}
 			if len(a.Code) > MaxCodeLength {
-				return toolhub.Errorf("code 超过 %d 字节", MaxCodeLength), nil
+				return toolhub.Failf("code 超过 %d 字节", MaxCodeLength), nil
 			}
 			d := DefaultTime
 			if a.Timeout > 0 {
@@ -78,18 +78,18 @@ func Tool() *toolhub.Tool {
 				d = MaxTime
 			}
 			if cx.Hub == nil {
-				return toolhub.Errorf("内部错误：本次调用没有工具管理器"), nil
+				return toolhub.Failf("内部错误：本次调用没有工具管理器"), nil
 			}
 			out, err := Run(ctx, cx.Hub, cx, a.Code, d)
 			if err != nil {
-				return toolhub.Errorf("%s", out+err.Error()), nil
+				return toolhub.Failf("%s", out+err.Error()), nil
 			}
 			return toolhub.Text(out), nil
 		},
 	}
 }
 
-// 错误种类（DSH ptc-runtime 的分类）。
+// 错误种类（沿用 DSH 的分类）。
 var (
 	ErrTimeout = errors.New("[timeout] 程序超时")
 	ErrAbort   = errors.New("[abort] 回合已取消")

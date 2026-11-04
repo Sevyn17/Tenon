@@ -239,7 +239,7 @@ func (s *Shell) callShell(ctx context.Context, cx *toolhub.Cx, raw json.RawMessa
 		Background bool   `json:"background"`
 	}
 	if err := json.Unmarshal(raw, &a); err != nil || a.Command == "" {
-		return toolhub.Errorf("参数不合法：需要 command"), nil
+		return toolhub.Failf("参数不合法：需要 command"), nil
 	}
 	if a.Background {
 		return s.startJob(a.Command, cx, raw)
@@ -254,11 +254,11 @@ func (s *Shell) callShell(ctx context.Context, cx *toolhub.Cx, raw json.RawMessa
 	cmd := s.command(rctx, a.Command, buf)
 	cleanup, err := s.confine(cmd, cx, raw)
 	if err != nil {
-		return toolhub.Errorf("%v（命令未执行）", err), nil
+		return toolhub.Failf("%v（命令未执行）", err), nil
 	}
 	if err := cmd.Start(); err != nil {
 		cleanup()
-		return toolhub.Errorf("无法执行命令：%v", err), nil
+		return toolhub.Failf("无法执行命令：%v", err), nil
 	}
 	cleanup()
 	code, err := exitCode(cmd.Wait())
@@ -274,7 +274,7 @@ func (s *Shell) callShell(ctx context.Context, cx *toolhub.Cx, raw json.RawMessa
 	case ctx.Err() != nil:
 		return failText(text + "\n[已取消，进程树已终止]"), nil
 	case err != nil:
-		return toolhub.Errorf("无法执行命令：%v", err), nil
+		return toolhub.Failf("无法执行命令：%v", err), nil
 	}
 	text += fmt.Sprintf("\n[退出码 %d]", code)
 	if code != 0 {
@@ -388,13 +388,13 @@ func (s *Shell) startJob(command string, cx *toolhub.Cx, raw json.RawMessage) (t
 	cleanup, err := s.confine(cmd, cx, raw)
 	if err != nil {
 		cancel()
-		return toolhub.Errorf("%v（命令未执行）", err), nil
+		return toolhub.Failf("%v（命令未执行）", err), nil
 	}
 	err = cmd.Start()
 	cleanup()
 	if err != nil {
 		cancel()
-		return toolhub.Errorf("无法启动命令：%v", err), nil
+		return toolhub.Failf("无法启动命令：%v", err), nil
 	}
 	s.mu.Lock()
 	s.seq++
@@ -443,11 +443,11 @@ func (s *Shell) callOutput(ctx context.Context, cx *toolhub.Cx, raw json.RawMess
 		Timeout int    `json:"timeout"`
 	}
 	if err := json.Unmarshal(raw, &a); err != nil {
-		return toolhub.Errorf("参数不合法：%v", err), nil
+		return toolhub.Failf("参数不合法：%v", err), nil
 	}
 	j, ok := s.lookup(a.ID, sessionOf(cx))
 	if !ok {
-		return toolhub.Errorf("job %s 不存在（进程重启后后台任务已丢失；已结束的 job 读完输出后即清理）", a.ID), nil
+		return toolhub.Failf("job %s 不存在（进程重启后后台任务已丢失；已结束的 job 读完输出后即清理）", a.ID), nil
 	}
 	if a.Wait {
 		to := JobWait
@@ -494,11 +494,11 @@ func (s *Shell) callKill(_ context.Context, cx *toolhub.Cx, raw json.RawMessage)
 		ID string `json:"id"`
 	}
 	if err := json.Unmarshal(raw, &a); err != nil {
-		return toolhub.Errorf("参数不合法：%v", err), nil
+		return toolhub.Failf("参数不合法：%v", err), nil
 	}
 	j, ok := s.lookup(a.ID, sessionOf(cx))
 	if !ok {
-		return toolhub.Errorf("job %s 不存在", a.ID), nil
+		return toolhub.Failf("job %s 不存在", a.ID), nil
 	}
 	select {
 	case <-j.done:
@@ -510,7 +510,7 @@ func (s *Shell) callKill(_ context.Context, cx *toolhub.Cx, raw json.RawMessage)
 	select {
 	case <-j.done:
 	case <-time.After(5 * time.Second):
-		return toolhub.Errorf("已发送终止信号，%s 5 秒内未退出", j.id), nil
+		return toolhub.Failf("已发送终止信号，%s 5 秒内未退出", j.id), nil
 	}
 	s.forget(j)
 	return toolhub.Text(fmt.Sprintf("已终止 %s", j.id)), nil

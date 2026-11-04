@@ -23,7 +23,7 @@ func setup(t *testing.T) (*toolhub.Hub, *toolhub.Toolset, *[]string) {
 			var a struct{ Text string }
 			_ = json.Unmarshal(args, &a)
 			if a.Text == "bad" {
-				return toolhub.Errorf("坏输入"), nil
+				return toolhub.Failf("坏输入"), nil
 			}
 			return toolhub.Text("echo:" + a.Text), nil
 		},

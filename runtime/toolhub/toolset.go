@@ -140,7 +140,7 @@ func (h *Hub) searchTool() *Tool {
 			_ = json.Unmarshal(raw, &a)
 			ts := cx.Toolset
 			if ts == nil {
-				return Errorf("本会话没有延迟加载的工具"), nil
+				return Failf("本会话没有延迟加载的工具"), nil
 			}
 			q := strings.ToLower(strings.TrimSpace(a.Query))
 			names := map[string]bool{}

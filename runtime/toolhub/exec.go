@@ -67,7 +67,7 @@ func (h *Hub) ExecuteIn(ctx context.Context, ts *Toolset, k *callctx.Ctx, calls 
 		for i, call := range calls {
 			ch := run.results[i]
 			if hint, ok := hints[call.ID]; ok {
-				ch <- Result{Call: call, Output: Errorf("%s", hint)}
+				ch <- Result{Call: call, Output: Failf("%s", hint)}
 				continue
 			}
 			t, ok := h.tools[call.Name]
@@ -117,7 +117,7 @@ func (h *Hub) one(ctx context.Context, ts *Toolset, k *callctx.Ctx, call session
 		}
 	}()
 	if t == nil || (ts != nil && !ts.isAvailable(call.Name)) {
-		res.Output = Errorf("工具 %s 不存在", call.Name)
+		res.Output = Failf("工具 %s 不存在", call.Name)
 		return res
 	}
 	ev.Risk = t.Risk.String()
@@ -154,7 +154,7 @@ func (h *Hub) one(ctx context.Context, ts *Toolset, k *callctx.Ctx, call session
 				if rec.Decision != "approve" || rec.ArgsHash != ArgsHash(call.Args) {
 					out := denied(rec.Decision)
 					if rec.Decision == "approve" { // 批准过，但参数哈希对不上（如旧版本写的记录）：不是用户拒绝
-						out = Errorf("这次调用的批准记录与当前参数不一致（可能由旧版本写入），未执行；如仍需要，请重新发起同一调用，会再次请求确认")
+						out = Failf("这次调用的批准记录与当前参数不一致（可能由旧版本写入），未执行；如仍需要，请重新发起同一调用，会再次请求确认")
 					}
 					res.Output, res.Err = h.finish(sctx, sessionID, call.ID, "delivered", out)
 					ev.Guard = "denied"
@@ -166,7 +166,7 @@ func (h *Hub) one(ctx context.Context, ts *Toolset, k *callctx.Ctx, call session
 	}
 	// —— 入口：Schema 校验（最小：必须是 JSON 对象，required 字段存在）——
 	if msg := checkArgs(t.Spec.Schema, call.Args); msg != "" {
-		res.Output = Errorf("工具 %s 参数不合法：%s", call.Name, msg)
+		res.Output = Failf("工具 %s 参数不合法：%s", call.Name, msg)
 		return res
 	}
 
@@ -211,7 +211,7 @@ func (h *Hub) one(ctx context.Context, ts *Toolset, k *callctx.Ctx, call session
 // sctx 是不随回合取消的存储 ctx（见 one）。
 func (h *Hub) confirm(ctx, sctx context.Context, cx *Cx, call session.ToolCall, reason string) (Output, error) {
 	if h.await == nil || h.store == nil {
-		return Errorf("需要人工确认，但当前没有可应答者：%s", reason), nil
+		return Failf("需要人工确认，但当前没有可应答者：%s", reason), nil
 	}
 	deadline := time.Now().Add(h.deadline)
 	if err := h.store.PutPending(sctx, cx.SessionID, cx.CallID, ArgsHash(call.Args), reason, deadline); err != nil {
@@ -226,7 +226,7 @@ func (h *Hub) confirm(ctx, sctx context.Context, cx *Cx, call session.ToolCall, 
 		return Output{Kind: Done, Content: session.Content{session.NewTextPart("回合已取消，确认未完成")}, Status: session.ToolTurnCancelled}, nil
 	case err != nil && (errors.Is(err, context.DeadlineExceeded) || errors.Is(actx.Err(), context.DeadlineExceeded)): // 截止
 		cx.finished = true
-		return h.finish(sctx, cx.SessionID, cx.CallID, "pending", Errorf("用户未在截止时间前回应确认：%s", reason))
+		return h.finish(sctx, cx.SessionID, cx.CallID, "pending", Failf("用户未在截止时间前回应确认：%s", reason))
 	case err != nil: // 应答者失败（含进程被杀）：记录保持 pending，恢复后重问
 		return Output{}, err
 	case !ok:
@@ -240,7 +240,7 @@ func (h *Hub) confirm(ctx, sctx context.Context, cx *Cx, call session.ToolCall, 
 	}
 	if out.Kind == Confirm { // 批准后 Guard 仍要求确认：按拒绝结清，不循环
 		cx.finished = true
-		return h.finish(sctx, cx.SessionID, cx.CallID, "delivered", Errorf("批准后仍未通过权限检查：%s", out.Reason))
+		return h.finish(sctx, cx.SessionID, cx.CallID, "delivered", Failf("批准后仍未通过权限检查：%s", out.Reason))
 	}
 	return out, nil
 }
@@ -255,7 +255,7 @@ func (h *Hub) finish(ctx context.Context, sid, cid, from string, out Output) (Ou
 }
 
 func denied(decision string) Output {
-	return Errorf("用户拒绝了这次调用（%s）", decision)
+	return Failf("用户拒绝了这次调用（%s）", decision)
 }
 
 // chain 构造第 i 层起的调用链；最内层是执行器。
@@ -291,7 +291,7 @@ func (h *Hub) chain(i int, call session.ToolCall) Next {
 		out, err := runLayer(ctx, l, cx, args, watched)
 		if err != nil {
 			if l.Guard || !l.FailOpen {
-				return Errorf("调用被 %s 拒绝：%v", l.Name, err), nil // Guard FailClosed
+				return Failf("调用被 %s 拒绝：%v", l.Name, err), nil // Guard FailClosed
 			}
 			innerMu.Lock()
 			done, o, e := innerDone, innerOut, innerErr
@@ -302,7 +302,7 @@ func (h *Hub) chain(i int, call session.ToolCall) Next {
 			return inner(ctx, cx, args) // Transform FailOpen：跳过本层
 		}
 		if out.Kind == Confirm && !l.Guard && !innerConfirm {
-			return Errorf("层 %s 不允许返回 Confirm（只能由 Guard 返回）", l.Name), nil
+			return Failf("层 %s 不允许返回 Confirm（只能由 Guard 返回）", l.Name), nil
 		}
 		return out, nil
 	}
@@ -368,7 +368,7 @@ func (h *Hub) executor(ctx context.Context, cx *Cx, args json.RawMessage) (Outpu
 	defer cancel()
 	out, err := safeCall(runCtx, t, cx, args)
 	if err != nil {
-		return Errorf("%v", err), nil
+		return Failf("%v", err), nil
 	}
 	if ctx.Err() != nil && t.Risk == Read && out.Kind == Done && runCtx.Err() != nil {
 		out.Status = session.ToolTurnCancelled

@@ -1,4 +1,4 @@
-// Package runtime 按登记的会话贡献构造会话 agent（thin-kernel-plan S2）。
+// Package assemble 按登记的会话贡献构造会话 agent（thin-kernel-plan S2）。
 //
 // 会话构造（建 hub、登记工具、叠层、拼系统块）原来写在 cmd/ybase 的 mk() 里；
 // 现在由这里统一完成，工具、层、系统块都以“每会话贡献函数”登记，

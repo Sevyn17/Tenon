@@ -414,7 +414,7 @@ func Layer(policy func(sessionID string) Policy) toolhub.Layer {
 			case Allow:
 				return next(ctx, cx, args)
 			case Deny:
-				return toolhub.Errorf("权限拒绝：%s", d.Reason), nil
+				return toolhub.Failf("权限拒绝：%s", d.Reason), nil
 			default:
 				// 拒绝类在上面已判；这里只有确认类，批准记录可免确认（参数必须一致）。
 				if cx.Approved {

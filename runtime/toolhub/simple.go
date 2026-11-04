@@ -16,7 +16,7 @@ func Simple(name, desc, schema string, call func(context.Context, json.RawMessag
 		Call: func(ctx context.Context, _ *Cx, raw json.RawMessage) (Output, error) {
 			s, err := call(ctx, raw)
 			if err != nil {
-				return Errorf("%v", err), nil
+				return Failf("%v", err), nil
 			}
 			return Text(s), nil
 		},
