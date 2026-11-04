@@ -147,12 +147,24 @@ func (w *Web) client(origin *url.URL) *http.Client {
 			if len(via) > WebMaxRedirects {
 				return fmt.Errorf("重定向超过 %d 次", WebMaxRedirects)
 			}
-			if req.URL.Scheme != origin.Scheme || req.URL.Host != origin.Host {
+			if !redirectAllowed(origin, req.URL) {
 				return fmt.Errorf("跨源重定向被拒绝：%s", req.URL.Redacted())
 			}
 			return nil
 		},
 	}
+}
+
+// redirectAllowed 重定向目标是否同源；另外放行同主机的 http → https 升级（缺省端口），
+// 很多站点把 http 统一跳到 https（2026-11-04 审查 P2 工具体验：原先这也按跨源拒绝）。降级不放。
+func redirectAllowed(origin, to *url.URL) bool {
+	if to.Scheme == origin.Scheme && to.Host == origin.Host {
+		return true
+	}
+	if origin.Scheme != "http" || to.Scheme != "https" || !strings.EqualFold(origin.Hostname(), to.Hostname()) {
+		return false
+	}
+	return (origin.Port() == "" || origin.Port() == "80") && (to.Port() == "" || to.Port() == "443")
 }
 
 func checkURL(raw string) (*url.URL, error) {
@@ -231,6 +243,14 @@ func (w *Web) fetch(ctx context.Context, raw, format string) (string, error) {
 		return "", errors.New("响应看起来是二进制内容，已拒绝")
 	}
 	text := strings.ToValidUTF8(string(body), "\uFFFD")
+	// 4xx / 5xx 按工具错误返回（2026-11-04 审查 P2 工具体验：原先按成功返回，模型把错误页当正文）。
+	if resp.StatusCode >= 400 {
+		head := []rune(strings.TrimSpace(text))
+		if len(head) > 300 {
+			head = append(head[:300], '…')
+		}
+		return "", fmt.Errorf("HTTP %d（%s）：%s", resp.StatusCode, resp.Request.URL.Redacted(), string(head))
+	}
 	isHTML := strings.Contains(ct, "html") || ct == "" && strings.Contains(strings.ToLower(text[:min(len(text), 512)]), "<html")
 	if isHTML && format != "html" {
 		text = htmlToText(text, format != "text")
