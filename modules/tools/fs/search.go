@@ -28,6 +28,11 @@ const (
 	GrepLimit      = 100
 	GlobLimit      = 200
 	searchMaxBytes = 50 << 10
+	// ReadStreamAbove 超过这个大小的文件 read_file 按行流式读（只留需要的行），不整读进内存（审查 P1-42：
+	// 原先几 GB 的日志会整份读入）。
+	ReadStreamAbove = 8 << 20
+	// GrepMaxFile grep 跳过超过这个大小的文件（多为日志、数据导出），结果里注明跳过了几个。
+	GrepMaxFile = 16 << 20
 )
 
 // skipDirs 无论 .gitignore 如何都跳过的目录。
@@ -52,6 +57,9 @@ func ReadFile(root string) *toolhub.Tool {
 			p, err := resolve(root, a.Path)
 			if err != nil {
 				return "", err
+			}
+			if st, err := os.Stat(p); err == nil && st.Size() > ReadStreamAbove {
+				return readLarge(a.Path, p, a.Offset, a.Limit) // 大文件流式读，不整读进内存（审查 P1-42）
 			}
 			b, err := os.ReadFile(p)
 			if err != nil {
@@ -97,6 +105,69 @@ func readRange(display string, b []byte, offset, limit int) (string, error) {
 		sb.WriteString(lines[i])
 		sb.WriteByte('\n')
 		last = i + 1
+	}
+	out := sb.String()
+	if last < total {
+		out += fmt.Sprintf("\n[已显示第 %d–%d 行（共 %d 行），用 offset=%d 继续]", offset, last, total, last+1)
+	}
+	return out, nil
+}
+
+// readLarge 流式读大文件：只保留 [offset, offset+limit) 的行，其余行只计数（内存 O(输出)）。
+func readLarge(display, path string, offset, limit int) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	br := bufio.NewReaderSize(f, 64<<10)
+	if head, _ := br.Peek(8000); isBinary(head) {
+		return "", fmt.Errorf("%s 是二进制文件，不能按文本读取", display)
+	}
+	if offset < 1 {
+		offset = 1
+	}
+	end := -1 // 不含
+	if limit > 0 {
+		end = offset - 1 + limit
+	}
+	if end < 0 || end-(offset-1) > ReadMaxLines {
+		end = offset - 1 + ReadMaxLines
+	}
+	var sb strings.Builder
+	total, last, full := 0, offset-1, false
+	for {
+		line, err := br.ReadString('\n')
+		if line == "" && err != nil {
+			break
+		}
+		total++
+		i := total - 1
+		if total == 1 {
+			line = strings.TrimPrefix(line, "\xEF\xBB\xBF")
+		}
+		if !full && i >= offset-1 && i < end {
+			l := strings.TrimSuffix(strings.TrimSuffix(line, "\n"), "\r") // 与 readRange 一致：只去一个 \r\n
+			if sb.Len()+len(l)+1 > ReadMaxBytes {
+				if i == offset-1 {
+					return "", fmt.Errorf("第 %d 行长 %d 字节，超过 %dKB 上限；请用 shell 截取", i+1, len(l), ReadMaxBytes>>10)
+				}
+				full = true
+			} else {
+				sb.WriteString(l)
+				sb.WriteByte('\n')
+				last = i + 1
+			}
+		}
+		if err != nil {
+			break
+		}
+	}
+	if total == 0 {
+		return "（空文件）", nil
+	}
+	if offset > total {
+		return "", fmt.Errorf("offset %d 超出文件末尾（共 %d 行）", offset, total)
 	}
 	out := sb.String()
 	if last < total {
@@ -353,7 +424,12 @@ func grep(ctx context.Context, root, pattern, p, glob string, icase, literal boo
 	var sb strings.Builder
 	matches, files := 0, 0
 	full := false
+	skippedBig := 0
 	scan := func(abs, rel string) bool {
+		if st, err := os.Stat(abs); err == nil && st.Size() > GrepMaxFile {
+			skippedBig++
+			return true
+		}
 		b, err := os.ReadFile(abs)
 		if err != nil || isBinary(b) {
 			return true
@@ -416,14 +492,18 @@ func grep(ctx context.Context, root, pattern, p, glob string, icase, literal boo
 		rel, _ := filepath.Rel(root, start)
 		scan(start, filepath.ToSlash(rel))
 	}
+	big := ""
+	if skippedBig > 0 {
+		big = fmt.Sprintf("（跳过了 %d 个超过 %dMB 的文件；需要时用 shell 搜）", skippedBig, GrepMaxFile>>20)
+	}
 	if matches == 0 {
-		return "没有匹配", nil
+		return "没有匹配" + big, nil
 	}
 	out := sb.String()
 	if full {
 		out += fmt.Sprintf("\n[结果不完整：已达 %d 条或 %dKB 上限，请缩小 path / glob 或细化 pattern]", limit, searchMaxBytes>>10)
 	} else {
-		out += fmt.Sprintf("\n[%d 条匹配，%d 个文件]", matches, files)
+		out += fmt.Sprintf("\n[%d 条匹配，%d 个文件]", matches, files) + big
 	}
 	return out, nil
 }

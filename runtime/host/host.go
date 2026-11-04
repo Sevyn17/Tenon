@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"math"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -290,6 +291,7 @@ func (h *Host) open(ctx context.Context, id, def string, f Factory, pre func(*ag
 	}
 	a := &actor{h: h, id: id, ag: ag, in: make(chan Command, h.queue()), exit: make(chan struct{}),
 		waiters: map[string]chan bool{}}
+	a.mailDirty.Store(true) // 打开时可能有积压信件：第一次步边界读一次
 	ag.Between = a.between
 	if ag.Hub != nil {
 		a.wireConfirm()
@@ -422,8 +424,11 @@ type actor struct {
 	turnQueued map[string]bool
 	// turnCaps 是本轮的工具授权范围（信封 caps 交集）：turn 开始时设给 agent，结束时清空。
 	turnCaps []string
-	exitErr  error
-	once     sync.Once
+	// mailDirty 自上次在需求边界读信箱后，是否有新信件落进本会话信箱（审查 P1-36：原先每次调模型前都查一次信箱，
+	// 绝大多数步没有新信）。经本宿主写信箱的路径（投递、Send / Note、交还插话）都会置位；打开时置位以读到积压。
+	mailDirty atomic.Bool
+	exitErr   error
+	once      sync.Once
 }
 
 // enqueue 外部命令入口：Cancel / Confirm 立即生效；其余排队。
@@ -458,6 +463,7 @@ func (a *actor) enqueue(c Command) error {
 		return nil
 	case Deliver:
 		// 信封已由 Host.Deliver 落 inbox；这里只叫醒 actor（队列满时留给 actor 自己 drainInbox）。
+		a.mailDirty.Store(true)
 		reply(c, nil)
 		select {
 		case a.in <- c:
@@ -478,6 +484,7 @@ func (a *actor) enqueue(c Command) error {
 		if err != nil {
 			return err
 		}
+		a.mailDirty.Store(true)
 		reply(c, nil) // 先落 inbox 再确认（D2）
 		if !fresh {
 			return nil // 重放：首次准入胜出，不再触发（D6）
@@ -1173,12 +1180,15 @@ func (a *actor) between(need *session.Need) (*session.Need, error) {
 	// 投递方只把信封写进 inbox，投递命令可能因 actor 正忙没进队列，这里在步边界兜底。
 	// 只在调模型前插入：NeedTools 时本步调用的结果还没写，插进去会拆开调用与结果（R14）。
 	if need.Kind == session.NeedModel {
-		if items, err := a.h.DB.Inbox(context.Background(), a.id); err == nil && len(items) > 0 {
-			if _, err := a.applyNotices(context.Background(), items); err != nil {
-				return need, err
-			}
-			if err := a.insertInput(context.Background()); err != nil {
-				return need, err
+		// 只在有新信时读信箱，读一次给 notice 与插入共用（审查 P1-36）。
+		if a.mailDirty.Swap(false) {
+			if items, err := a.h.DB.Inbox(context.Background(), a.id); err == nil && len(items) > 0 {
+				if _, err := a.applyNotices(context.Background(), items); err != nil {
+					return need, err
+				}
+				if err := a.insertFrom(context.Background(), items); err != nil {
+					return need, err
+				}
 			}
 		}
 	}
@@ -1332,6 +1342,12 @@ func (a *actor) insertInput(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	return a.insertFrom(ctx, items)
+}
+
+// insertFrom 同 insertInput，用调用方已读到的信箱项（步边界读一次，不再重读）。
+// 已被 applyNotices 消费的 notice 不是 input，collectInboxBatch 不会取它们。
+func (a *actor) insertFrom(ctx context.Context, items []store.InboxItem) error {
 	batch := collectInboxBatch(items, a.mergeSkip(a.processing, a.turnQueued))
 	if batch == nil {
 		return nil
@@ -1386,6 +1402,7 @@ func (a *actor) handBack(ctx context.Context) {
 			Kind: store.InboxNote, Input: string(body), Trust: trust}); err != nil {
 			continue
 		}
+		a.mailDirty.Store(true)
 		a.h.publish(a.id, "turn.unconsumed", map[string]any{"content": pi.Content})
 	}
 }

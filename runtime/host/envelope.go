@@ -291,6 +291,7 @@ func (h *Host) deliverSession(ctx context.Context, env mail.Envelope) error {
 		return nil
 	}
 	if a, ok := h.getActor(id); ok {
+		a.mailDirty.Store(true) // 回合中的步边界据此去读信箱（P1-36）
 		select {
 		case a.in <- Command{Kind: Deliver}:
 		default: // 队列满：actor 处理完手上命令后会自己 drainInbox
