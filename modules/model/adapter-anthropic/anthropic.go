@@ -157,7 +157,7 @@ func anthropicBody(r *modelhub.Request, ep modelhub.Endpoint) map[string]any {
 			if id == "" {
 				id = m.ToolCallID
 			}
-			push("user", anBlock{Type: "tool_result", ToolUseID: id, Content: t})
+			push("user", anBlock{Type: "tool_result", ToolUseID: id, Content: t, IsError: m.IsError})
 		default:
 			push("user", anBlock{Type: "text", Text: t})
 		}
@@ -194,6 +194,9 @@ func anthropicBody(r *modelhub.Request, ep modelhub.Endpoint) map[string]any {
 		}
 	}
 	maxTok := uint64(DefaultAnthropicMaxTokens)
+	if ep.MaxOutput > 0 { // 模型目录给了输出上限就用它（审查 P2：原先写死 8192）
+		maxTok = uint64(ep.MaxOutput)
+	}
 	if req.Params.MaxTokens != nil {
 		maxTok = *req.Params.MaxTokens
 	}

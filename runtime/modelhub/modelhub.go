@@ -77,7 +77,9 @@ type Endpoint struct {
 	BaseURL  string
 	APIKey   string
 	Model    string // 厂商模型名
-	Compat   Compat
+	// MaxOutput 模型目录里的输出上限（0 = 未知，适配器用自己的缺省；2026-11-04 审查 P2：Anthropic 原先写死 8192）。
+	MaxOutput int
+	Compat    Compat
 }
 
 // Compat 兼容标志（数据，不为每个厂商分叉适配器，D2）。

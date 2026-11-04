@@ -239,7 +239,7 @@ func (h *Hub) runStep(ctx context.Context, r *Request, si int, step PlanStep, ou
 	if name == "" {
 		name = step.Model
 	}
-	ep := Endpoint{Provider: m.Provider, BaseURL: p.BaseURL, APIKey: apiKey, Model: name, Compat: p.Compat}
+	ep := Endpoint{Provider: m.Provider, BaseURL: p.BaseURL, APIKey: apiKey, Model: name, MaxOutput: m.MaxOutput, Compat: p.Compat}
 	retries := step.Retries
 	if retries <= 0 {
 		retries = p.Retry.Max

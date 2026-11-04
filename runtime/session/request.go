@@ -31,6 +31,8 @@ type Message struct {
 	Content    Content
 	ToolCalls  []ToolCall // assistant：携带 wire_id 回传厂商
 	ToolCallID string     // tool：对应的调用内核 id
+	// IsError tool：工具结果是失败（Anthropic 的 tool_result.is_error；2026-11-04 审查 P2 工具体验）。
+	IsError bool `json:",omitempty"`
 	// Reasoning assistant 的思考块（只读原样回传；适配器只回传同协议带签名的，03 #9）。
 	Reasoning []ReasoningBlock `json:",omitempty"`
 }
@@ -144,7 +146,8 @@ func entryToMessage(e *Entry, abs int) (Message, error) {
 		return Message{Role: "assistant", Content: e.Item.Assistant.Content, ToolCalls: e.Item.Assistant.ToolCalls,
 			Reasoning: e.Item.Assistant.Reasoning}, nil
 	case KindToolResult:
-		return Message{Role: "tool", Content: e.Item.ToolResult.Output, ToolCallID: e.Item.ToolResult.CallID}, nil
+		return Message{Role: "tool", Content: e.Item.ToolResult.Output, ToolCallID: e.Item.ToolResult.CallID,
+			IsError: e.Item.ToolResult.Status.State == ToolError.State}, nil
 	case KindSnapshot, KindStatus:
 		// 注入条目作为 user 消息参与请求；位置就是条目写入的位置（回合首次在用户消息后，
 		// 途中在工具结果后），连续同角色消息由适配器合并。

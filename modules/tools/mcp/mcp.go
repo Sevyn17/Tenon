@@ -356,7 +356,7 @@ func (c *Client) Tools(remote []RemoteTool) []*toolhub.Tool {
 		}
 		desc := rt.Description
 		if len(desc) > DescMax {
-			desc = desc[:DescMax] + "…"
+			desc = clipUTF8(desc, DescMax) + "…" // 按 UTF-8 边界截，不切坏多字节字符（审查 P2）
 		}
 		desc = fmt.Sprintf("[MCP 服务 %s 提供] %s", c.Server.Name, desc)
 		risk, effect := toolhub.Write, toolhub.EffectExternal
@@ -527,4 +527,15 @@ func (s *Source) Close() {
 	for _, c := range s.Clients {
 		c.Close()
 	}
+}
+
+// clipUTF8 截到不超过 n 字节，退到 UTF-8 字符边界。
+func clipUTF8(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	for n > 0 && s[n]&0xC0 == 0x80 {
+		n--
+	}
+	return s[:n]
 }

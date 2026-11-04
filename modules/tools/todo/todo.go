@@ -57,8 +57,8 @@ func TodoWriteIn(onChange func(sessionID string, ts []Todo)) *toolhub.Tool {
 		`{"type":"object","properties":{"todos":{"type":"array","description":"完整列表（替换旧列表）","items":{"type":"object","properties":{"content":{"type":"string"},"status":{"type":"string","enum":["pending","in_progress","completed"]}},"required":["content","status"]}}},"required":["todos"]}`,
 		nil)
 	t.Call = func(_ context.Context, cx *toolhub.Cx, raw json.RawMessage) (toolhub.Output, error) {
+		var a struct{ Todos []Todo }
 		s, err := func() (string, error) {
-			var a struct{ Todos []Todo }
 			if err := json.Unmarshal(raw, &a); err != nil {
 				return "", err
 			}
@@ -78,7 +78,9 @@ func TodoWriteIn(onChange func(sessionID string, ts []Todo)) *toolhub.Tool {
 		if err != nil {
 			return toolhub.Failf("%v", err), nil
 		}
-		return toolhub.Text(s), nil
+		out := toolhub.Text(s)
+		out.Data = map[string]any{"todos": a.Todos} // 结构化列表，界面直接渲染（审查 P2 工具体验）
+		return out, nil
 	}
 	t.Parallel = &no
 	t.WithEffect(toolhub.EffectInteract)
