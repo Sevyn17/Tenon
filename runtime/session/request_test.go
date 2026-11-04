@@ -28,19 +28,19 @@ func randomTurn(t *testing.T, h *harness, r *rand.Rand, n int) {
 	t.Helper()
 	switch r.Intn(3) {
 	case 0:
-		if _, err := h.core.Record(txt(fmt.Sprintf("note-%d", n)), nil); err != nil {
+		if err := h.core.Record(txt(fmt.Sprintf("note-%d", n)), nil); err != nil {
 			t.Fatalf("record: %v", err)
 		}
 	case 1:
-		_, need, err := h.core.Input(txt(fmt.Sprintf("q-%d", n)), nil)
+		need, err := h.core.Input(txt(fmt.Sprintf("q-%d", n)), nil)
 		if err != nil {
 			t.Fatalf("input: %v", err)
 		}
-		if _, _, err := h.core.ModelDone(need.Model.RequestID, need.ID, AssistantItem{Content: txt(fmt.Sprintf("a-%d", n))}, StopReason{V: "EndTurn"}); err != nil {
+		if _, err := h.core.ModelDone(need.Model.RequestID, need.ID, AssistantItem{Content: txt(fmt.Sprintf("a-%d", n))}, StopReason{V: "EndTurn"}); err != nil {
 			t.Fatalf("model done: %v", err)
 		}
 	default:
-		_, need, err := h.core.Input(txt(fmt.Sprintf("q-%d", n)), nil)
+		need, err := h.core.Input(txt(fmt.Sprintf("q-%d", n)), nil)
 		if err != nil {
 			t.Fatalf("input: %v", err)
 		}
@@ -49,13 +49,13 @@ func randomTurn(t *testing.T, h *harness, r *rand.Rand, n int) {
 		for i := range calls {
 			calls[i] = ToolCall{Name: "echo", Args: json.RawMessage(fmt.Sprintf(`{"i":%d}`, i))}
 		}
-		_, need, err = h.core.ModelDone(need.Model.RequestID, need.ID, AssistantItem{ToolCalls: calls}, StopReason{V: "ToolUse"})
+		need, err = h.core.ModelDone(need.Model.RequestID, need.ID, AssistantItem{ToolCalls: calls}, StopReason{V: "ToolUse"})
 		if err != nil {
 			t.Fatalf("model done tools: %v", err)
 		}
 		for need.Kind == NeedTools {
 			c := need.Tools.Calls[0]
-			_, need, err = h.core.SubmitResult(c.ID, txt("r-"+c.ID), ToolOK)
+			need, err = h.core.SubmitResult(c.ID, txt("r-"+c.ID), ToolOK)
 			if err != nil {
 				t.Fatalf("submit: %v", err)
 			}
@@ -63,7 +63,7 @@ func randomTurn(t *testing.T, h *harness, r *rand.Rand, n int) {
 		if need.Kind != NeedModel {
 			t.Fatalf("工具结果到齐后应进入下一步: %+v", need)
 		}
-		if _, _, err := h.core.ModelDone(need.Model.RequestID, need.ID, AssistantItem{Content: txt(fmt.Sprintf("a-%d", n))}, StopReason{V: "EndTurn"}); err != nil {
+		if _, err := h.core.ModelDone(need.Model.RequestID, need.ID, AssistantItem{Content: txt(fmt.Sprintf("a-%d", n))}, StopReason{V: "EndTurn"}); err != nil {
 			t.Fatalf("model done final: %v", err)
 		}
 	}
@@ -87,7 +87,7 @@ func TestBuildWithCompactionMatchesCompact(t *testing.T) {
 			if err != nil {
 				t.Fatalf("seed %d: BuildWithCompaction(%d): %v", seed, upto, err)
 			}
-			if _, err := h.core.Compact(summary, upto, nil); err != nil {
+			if err := h.core.Compact(summary, upto, nil); err != nil {
 				continue // upto 落在调用与结果之间等非法位置，内核拒绝即可
 			}
 			actual, err := BuildRequest(h.core.Context())
@@ -110,11 +110,11 @@ func TestBuildWithCompactionMatchesCompact(t *testing.T) {
 func TestCompactKeepsTail(t *testing.T) {
 	h := newHarness(t, 8)
 	for _, s := range []string{"a", "b", "c", "d", "e"} {
-		if _, err := h.core.Record(txt(s), nil); err != nil {
+		if err := h.core.Record(txt(s), nil); err != nil {
 			t.Fatalf("record: %v", err)
 		}
 	}
-	if _, err := h.core.Compact(txt("sum"), 3, nil); err != nil {
+	if err := h.core.Compact(txt("sum"), 3, nil); err != nil {
 		t.Fatalf("compact: %v", err)
 	}
 	req, err := BuildRequest(h.core.Context())
@@ -153,7 +153,7 @@ func TestBuildBranchPrefix(t *testing.T) {
 
 func TestRequestHashDeterministic(t *testing.T) {
 	h := newHarness(t, 8)
-	if _, err := h.core.Record(txt("a"), nil); err != nil {
+	if err := h.core.Record(txt("a"), nil); err != nil {
 		t.Fatal(err)
 	}
 	r1, _ := BuildRequest(h.core.Context())
@@ -176,7 +176,7 @@ func TestAddToolsAppendOnlyDedup(t *testing.T) {
 	h := newHarness(t, 8)
 	n0 := len(h.core.hdr.Config.Tools)
 	add := []ToolSpec{{Name: "echo"}, {Name: "grep"}, {Name: "grep"}}
-	if _, _, err := h.core.SetConfig(ConfigPatch{AddTools: add}); err != nil {
+	if _, err := h.core.SetConfig(ConfigPatch{AddTools: add}); err != nil {
 		t.Fatalf("SetConfig: %v", err)
 	}
 	got := h.core.hdr.Config.Tools

@@ -43,7 +43,7 @@ func (h *Host) Fork(ctx context.Context, src, dst string, upto int, origin strin
 	}
 	if upto >= 0 && upto < l.Snapshot.Header.LogLen {
 		// 分叉点 = 某回合首条 User 的下标：Rewind(upto) 校验它是回合起点、截到 [0, upto) 并处理压缩边界。
-		if _, err := core.Rewind(upto); err != nil {
+		if err := core.Rewind(upto); err != nil {
 			return Handle{}, fmt.Errorf("host: 分叉点 %d 不是回合起点: %w", upto, err)
 		}
 	}

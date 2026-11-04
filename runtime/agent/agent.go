@@ -118,7 +118,7 @@ var errCrash = errors.New("agent: 注入的崩溃")
 
 // Send 开启一个回合并跑到结束。
 func (a *Agent) Send(ctx context.Context, text string) (session.EndReason, error) {
-	_, need, err := a.Core.Input(session.Content{session.NewTextPart(text)}, map[string]any{session.MetaSource: "user"})
+	need, err := a.Core.Input(session.Content{session.NewTextPart(text)}, map[string]any{session.MetaSource: "user"})
 	if err != nil {
 		return session.EndReason{}, err
 	}
@@ -145,7 +145,7 @@ func (a *Agent) drive(ctx context.Context, need *session.Need) (session.EndReaso
 
 		case session.NeedModel:
 			if ctx.Err() != nil { // 已取消（如排队等并发槽位时）：不再调模型，按取消结束回合
-				_, need, err = a.Core.Cancel()
+				need, err = a.Core.Cancel()
 				break
 			}
 			a.endStep("ok")
@@ -157,7 +157,7 @@ func (a *Agent) drive(ctx context.Context, need *session.Need) (session.EndReaso
 				return session.EndReason{}, err
 			}
 			if ctx.Err() != nil {
-				_, need, err = a.Core.Cancel()
+				need, err = a.Core.Cancel()
 				break
 			}
 			if a.Hub == nil {
@@ -247,7 +247,7 @@ func (a *Agent) buildRequest(ctx context.Context, force bool) (session.Request, 
 		case view == nil:
 			sp.End("skip")
 		default:
-			if _, err := a.Core.Compact(view.Summary, view.Upto, meta); err != nil {
+			if err := a.Core.Compact(view.Summary, view.Upto, meta); err != nil {
 				sp.Set("error", err.Error()).End("error")
 				break
 			}
@@ -316,13 +316,13 @@ func (a *Agent) sendModel(ctx context.Context, need *session.Need, req session.R
 	id, nid := need.Model.RequestID, need.ID
 	switch {
 	case err == nil:
-		_, n, e := a.Core.ModelDone(id, nid, reply, stop)
+		n, e := a.Core.ModelDone(id, nid, reply, stop)
 		return n, e
 	case ctx.Err() != nil:
-		_, n, e := a.Core.ModelInterrupted(id, nid, reply, session.CancelledReason())
+		n, e := a.Core.ModelInterrupted(id, nid, reply, session.CancelledReason())
 		return n, e
 	default:
-		_, n, e := a.Core.ModelFailed(id, nid, session.FailedReason(err.Error()))
+		n, e := a.Core.ModelFailed(id, nid, session.FailedReason(err.Error()))
 		return n, e
 	}
 }

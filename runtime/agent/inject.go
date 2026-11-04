@@ -14,7 +14,7 @@ func (a *Agent) injectStatuses(reset bool) (bool, error) {
 	}
 	ws := inject.Plan(inject.Collect(a.Ctx, a.Statuses), a.Core.Context().Items, reset)
 	for _, w := range ws {
-		if _, err := a.Core.Inject(w.Kind, w.Text, w.Meta); err != nil {
+		if err := a.Core.Inject(w.Kind, w.Text, w.Meta); err != nil {
 			return false, err
 		}
 	}

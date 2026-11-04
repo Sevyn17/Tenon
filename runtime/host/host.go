@@ -807,7 +807,7 @@ func (a *actor) idle(ctx context.Context, c Command) (bool, error) {
 			a.h.publish(a.id, "session.resumed", nil)
 			return false, nil
 		}
-		_, need, err := core.Resume()
+		need, err := core.Resume()
 		if err != nil {
 			return false, err
 		}
@@ -822,7 +822,7 @@ func (a *actor) idle(ctx context.Context, c Command) (bool, error) {
 	case Steer:
 		return false, session.ErrNotWaiting
 	case Record:
-		if _, err := core.Record(text(c.Text), meta(c)); err != nil {
+		if err := core.Record(text(c.Text), meta(c)); err != nil {
 			return false, err
 		}
 		return false, a.ag.Commit(ctx)
@@ -832,17 +832,17 @@ func (a *actor) idle(ctx context.Context, c Command) (bool, error) {
 		}
 		return false, a.ag.Commit(ctx)
 	case SetConfig:
-		if _, _, err := core.SetConfig(session.ConfigPatch{MaxSteps: c.MaxSteps}); err != nil {
+		if _, err := core.SetConfig(session.ConfigPatch{MaxSteps: c.MaxSteps}); err != nil {
 			return false, err
 		}
 		return false, a.ag.Commit(ctx)
 	case Compact:
-		if _, err := core.Compact(text(c.Text), c.Upto, map[string]any{"source": "user"}); err != nil {
+		if err := core.Compact(text(c.Text), c.Upto, map[string]any{"source": "user"}); err != nil {
 			return false, err
 		}
 		return false, a.ag.Commit(ctx)
 	case Rewind:
-		if _, err := core.Rewind(c.To); err != nil {
+		if err := core.Rewind(c.To); err != nil {
 			return false, err
 		}
 		if err := a.ag.Commit(ctx); err != nil {
@@ -940,7 +940,7 @@ func (a *actor) drainInbox(ctx context.Context) (stop bool, err error) {
 				a.turnQueued = nil
 				continue
 			case RecordOnly:
-				if _, err := a.ag.Core.Record(content, m); err != nil {
+				if err := a.ag.Core.Record(content, m); err != nil {
 					return false, err
 				}
 				if err := a.ag.Commit(ctx, consume...); err != nil {
@@ -1124,7 +1124,7 @@ func (a *actor) turnFailed(ctx context.Context, err error) bool {
 	a.h.publish(a.id, "turn.failed", map[string]any{"error": err.Error()})
 	// 失败的一轮不留在等待态：先收尾成 Idle（未完成的工具按 Abort 语义处理）。
 	if a.ag.Core.Status() != session.StatusIdle {
-		_, _, _ = a.ag.Core.Abort(session.FailedReason("TURN_FAILED"))
+		_, _ = a.ag.Core.Abort(session.FailedReason("TURN_FAILED"))
 	}
 	if cerr := a.ag.CommitRun(ctx, "idle"); cerr != nil {
 		a.exitErr = cerr
@@ -1199,7 +1199,7 @@ func (a *actor) between(need *session.Need) (*session.Need, error) {
 		}
 		switch c.Kind {
 		case Steer:
-			_, n, err := a.ag.Core.Steer(text(c.Text), meta(c), steerMode(c.Mode))
+			n, err := a.ag.Core.Steer(text(c.Text), meta(c), steerMode(c.Mode))
 			reply(c, err)
 			if err == nil && n != nil {
 				need = n // WaitingTools 改向：未执行调用补 Redirected，直接进入下一步
@@ -1218,7 +1218,7 @@ func (a *actor) between(need *session.Need) (*session.Need, error) {
 				reply(c, a.insertInput(context.Background()))
 			}
 		case SetConfig: // 内核暂存到下一个步边界，随下次 checkpoint 落库
-			_, _, err := a.ag.Core.SetConfig(session.ConfigPatch{MaxSteps: c.MaxSteps})
+			_, err := a.ag.Core.SetConfig(session.ConfigPatch{MaxSteps: c.MaxSteps})
 			reply(c, err)
 		case SetExt: // 只改头部 Ext，随下次 checkpoint 落库；不必等回合结束
 			reply(c, a.ag.Core.SetExt(c.Key, c.Value))
@@ -1373,7 +1373,7 @@ func (a *actor) insertFrom(ctx context.Context, items []store.InboxItem) error {
 		o.Untrusted = true
 		a.ag.SetTurnOrigin(o)
 	}
-	if _, err := a.ag.Core.MidInput(content, m); err != nil {
+	if err := a.ag.Core.MidInput(content, m); err != nil {
 		if errors.Is(err, session.ErrNotWaiting) {
 			return nil // 回合刚好结束：inbox 留给下一回合
 		}

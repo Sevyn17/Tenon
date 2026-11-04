@@ -41,13 +41,13 @@ func TestSessionRoundTripAndRestore(t *testing.T) {
 	if err := db.CreateSession(ctx, store.SessionMeta{ID: "s1"}, c.Snapshot().Header, nil); err != nil {
 		t.Fatalf("Create: %v", err)
 	}
-	_, n1, _ := c.Input(txt("你好"), nil)
+	n1, _ := c.Input(txt("你好"), nil)
 	n := commitAll(t, db, "s1", c, 0, func(cp *store.Checkpoint) {
 		cp.Request = &store.RequestRecord{RequestID: n1.Model.RequestID, ShellHash: "x", PrefixEnd: 1, FinalHash: "f",
 			Composition: json.RawMessage(`{"system":3}`)}
 		cp.Spans = []store.Span{{ID: "sp1", Kind: "step", Start: time.Now()}}
 	})
-	_, _, _ = c.ModelDone(n1.Model.RequestID, n1.ID, session.AssistantItem{Content: txt("嗨")}, session.StopReason{})
+	_, _ = c.ModelDone(n1.Model.RequestID, n1.ID, session.AssistantItem{Content: txt("嗨")}, session.StopReason{})
 	commitAll(t, db, "s1", c, n, nil)
 
 	l, err := db.Load(ctx, "s1", nil)
@@ -97,7 +97,7 @@ func TestTruncateArchivesAndSyncSeqMonotonic(t *testing.T) {
 	c.Record(txt("a"), nil)
 	c.Record(txt("b"), nil)
 	n := commitAll(t, db, "s", c, 0, nil)
-	if _, err := c.Rewind(1); err != nil {
+	if err := c.Rewind(1); err != nil {
 		t.Fatalf("Rewind: %v", err)
 	}
 	c.Record(txt("c"), nil)

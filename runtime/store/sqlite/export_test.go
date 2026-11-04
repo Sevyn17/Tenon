@@ -19,12 +19,12 @@ func TestExportJSONL(t *testing.T) {
 	if err := db.CreateSession(ctx, store.SessionMeta{ID: "s1"}, c.Snapshot().Header, nil); err != nil {
 		t.Fatal(err)
 	}
-	_, n1, _ := c.Input(txt("你好"), nil)
+	n1, _ := c.Input(txt("你好"), nil)
 	n := commitAll(t, db, "s1", c, 0, func(cp *store.Checkpoint) {
 		cp.Request = &store.RequestRecord{RequestID: n1.Model.RequestID, ShellHash: "x", PrefixEnd: 1, FinalHash: "f"}
 		cp.Spans = []store.Span{{ID: "sp1", Kind: "step", Start: time.Now()}}
 	})
-	_, _, _ = c.ModelDone(n1.Model.RequestID, n1.ID, session.AssistantItem{Content: txt("嗨")}, session.StopReason{})
+	_, _ = c.ModelDone(n1.Model.RequestID, n1.ID, session.AssistantItem{Content: txt("嗨")}, session.StopReason{})
 	commitAll(t, db, "s1", c, n, nil)
 
 	var buf bytes.Buffer

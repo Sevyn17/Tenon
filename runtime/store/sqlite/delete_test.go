@@ -14,7 +14,7 @@ func TestDeleteSessionCallsCleanersAndTombstoneOnFailure(t *testing.T) {
 	if err := db.CreateSession(ctx, store.SessionMeta{ID: "s1"}, c.Snapshot().Header, nil); err != nil {
 		t.Fatal(err)
 	}
-	_, _, _ = c.Input(txt("hi"), nil)
+	_, _ = c.Input(txt("hi"), nil)
 	commitAll(t, db, "s1", c, 0, nil)
 
 	boom := errors.New("boom")

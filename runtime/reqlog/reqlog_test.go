@@ -22,7 +22,7 @@ func fixture(t *testing.T) (*session.Core, session.Context) {
 		Policy: session.DefaultPolicy(),
 	})
 	for _, s := range []string{"a", "b", "c"} {
-		if _, err := c.Record(txt(s), nil); err != nil {
+		if err := c.Record(txt(s), nil); err != nil {
 			t.Fatal(err)
 		}
 	}

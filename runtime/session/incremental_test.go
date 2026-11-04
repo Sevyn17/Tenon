@@ -11,20 +11,20 @@ func buildToolTurns(t *testing.T, n int) *Core {
 	t.Helper()
 	h := newHarness(t, 8)
 	for i := 0; i < n; i++ {
-		_, nd, err := h.core.Input(txt("问"), nil)
+		nd, err := h.core.Input(txt("问"), nil)
 		if err != nil {
 			t.Fatal(err)
 		}
 		calls := []ToolCall{{Name: "echo", WireID: "call_0", Args: json.RawMessage(`{}`)}} // 每轮都从 call_0 起编
-		_, nd, err = h.core.ModelDone(nd.Model.RequestID, nd.ID, AssistantItem{ToolCalls: calls}, StopReason{})
+		nd, err = h.core.ModelDone(nd.Model.RequestID, nd.ID, AssistantItem{ToolCalls: calls}, StopReason{})
 		if err != nil {
 			t.Fatal(err)
 		}
-		_, nd, err = h.core.SubmitResult(nd.Tools.Calls[0].ID, txt("结果"), ToolOK)
+		nd, err = h.core.SubmitResult(nd.Tools.Calls[0].ID, txt("结果"), ToolOK)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, _, err = h.core.ModelDone(nd.Model.RequestID, nd.ID, AssistantItem{Content: txt("好")}, StopReason{}); err != nil {
+		if _, err = h.core.ModelDone(nd.Model.RequestID, nd.ID, AssistantItem{Content: txt("好")}, StopReason{}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -60,14 +60,14 @@ func TestWireIDCacheTracksAppendAndRewind(t *testing.T) {
 			}
 		}
 	}
-	if _, err := c.Rewind(0); err != nil {
+	if err := c.Rewind(0); err != nil {
 		t.Fatal(err)
 	}
 	if u := c.usedWireIDs(); len(u) != 0 {
 		t.Fatalf("Rewind(0) 后不应还有已用 id：%v", u)
 	}
-	_, nd, _ := c.Input(txt("再问"), nil)
-	_, _, err := c.ModelDone(nd.Model.RequestID, nd.ID, AssistantItem{ToolCalls: []ToolCall{{Name: "echo", WireID: "call_0", Args: json.RawMessage(`{}`)}}}, StopReason{})
+	nd, _ := c.Input(txt("再问"), nil)
+	_, err := c.ModelDone(nd.Model.RequestID, nd.ID, AssistantItem{ToolCalls: []ToolCall{{Name: "echo", WireID: "call_0", Args: json.RawMessage(`{}`)}}}, StopReason{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,11 +83,11 @@ func TestSnapshotNotOverwrittenAfterRewind(t *testing.T) {
 	c := buildToolTurns(t, 2)
 	snap := c.Snapshot()
 	before := append([]*Entry(nil), snap.Entries...)
-	if _, err := c.Rewind(4); err != nil {
+	if err := c.Rewind(4); err != nil {
 		t.Fatal(err)
 	}
-	_, nd, _ := c.Input(txt("新问题"), nil)
-	if _, _, err := c.ModelDone(nd.Model.RequestID, nd.ID, AssistantItem{Content: txt("新答")}, StopReason{}); err != nil {
+	nd, _ := c.Input(txt("新问题"), nil)
+	if _, err := c.ModelDone(nd.Model.RequestID, nd.ID, AssistantItem{Content: txt("新答")}, StopReason{}); err != nil {
 		t.Fatal(err)
 	}
 	for i := range before {

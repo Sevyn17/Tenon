@@ -16,9 +16,9 @@ func TestReplayAndList(t *testing.T) {
 	if err := db.CreateSession(ctx, store.SessionMeta{ID: "s1", Title: "一"}, c.Snapshot().Header, nil); err != nil {
 		t.Fatal(err)
 	}
-	_, n1, _ := c.Input(txt("你好"), nil)
+	n1, _ := c.Input(txt("你好"), nil)
 	n := commitAll(t, db, "s1", c, 0, nil)
-	_, _, _ = c.ModelDone(n1.Model.RequestID, n1.ID, session.AssistantItem{Content: txt("嗨")}, session.StopReason{})
+	_, _ = c.ModelDone(n1.Model.RequestID, n1.ID, session.AssistantItem{Content: txt("嗨")}, session.StopReason{})
 	n = commitAll(t, db, "s1", c, n, nil)
 
 	evs, wm, err := db.Replay(ctx, "s1", 0)
@@ -54,7 +54,7 @@ func TestReplayAndList(t *testing.T) {
 	// 提交后通知：条目事件与回放一致
 	var got []bus.Envelope
 	db.OnCommit(func(e bus.Envelope) { got = append(got, e) })
-	_, _, _ = c.Input(txt("再来"), nil)
+	_, _ = c.Input(txt("再来"), nil)
 	s = c.Snapshot()
 	if err := db.Commit(ctx, store.Checkpoint{SessionID: "s1", ExpectLogLen: 2, AppendFrom: 2,
 		Append: s.Entries[2-s.Base:], Header: s.Header, RunState: "running"}); err != nil {

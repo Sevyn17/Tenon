@@ -15,7 +15,7 @@ import (
 
 // SendContent 用给定内容与 meta 开回合；consume 为本回合消费的 inbox 项，随回合开始的 checkpoint 同事务删除（H7）。
 func (a *Agent) SendContent(ctx context.Context, c session.Content, meta map[string]any, consume []string) (session.EndReason, error) {
-	_, need, err := a.Core.Input(c, meta)
+	need, err := a.Core.Input(c, meta)
 	if err != nil {
 		return session.EndReason{}, err
 	}
@@ -41,7 +41,7 @@ func (a *Agent) Retry(ctx context.Context) (session.EndReason, error) {
 	if a.Core.Status() != session.StatusIdle {
 		return session.DoneReason(), nil
 	}
-	_, need, err := a.Core.Resume()
+	need, err := a.Core.Resume()
 	if errors.Is(err, session.ErrNoTurn) || errors.Is(err, session.ErrBadResume) || (err == nil && need == nil) {
 		return session.DoneReason(), nil // 没有可续跑的回合：视为没有重跑内容
 	}

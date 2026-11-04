@@ -6,14 +6,14 @@ import "testing"
 func TestRestoreWindowWithTwoCompactions(t *testing.T) {
 	h := newHarness(t, 8)
 	for _, s := range []string{"a", "b", "c"} {
-		if _, err := h.core.Record(txt(s), nil); err != nil {
+		if err := h.core.Record(txt(s), nil); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if _, err := h.core.Compact(txt("s1"), 2, nil); err != nil {
+	if err := h.core.Compact(txt("s1"), 2, nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := h.core.Compact(txt("s2"), 3, nil); err != nil {
+	if err := h.core.Compact(txt("s2"), 3, nil); err != nil {
 		t.Fatal(err)
 	}
 	snap := h.core.Snapshot()
@@ -29,9 +29,9 @@ func TestRestoreWindowWithTwoCompactions(t *testing.T) {
 func TestRestoreRejectsCompactionRegression(t *testing.T) {
 	h := newHarness(t, 8)
 	for _, s := range []string{"a", "b", "c"} {
-		_, _ = h.core.Record(txt(s), nil)
+		_ = h.core.Record(txt(s), nil)
 	}
-	_, _ = h.core.Compact(txt("s1"), 3, nil)
+	_ = h.core.Compact(txt("s1"), 3, nil)
 	snap := h.core.Snapshot()
 	snap.Entries[3].Item.Compaction.Upto = 3
 	bad := *snap.Entries[3]

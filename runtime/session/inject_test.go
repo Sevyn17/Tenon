@@ -20,11 +20,11 @@ func joinText(c Content) string {
 
 func TestInjectAppendsEntryAndRendersAsUserMessage(t *testing.T) {
 	h := newHarness(t, 8)
-	if _, _, err := h.core.Input(txt("你好"), map[string]any{MetaSource: "user"}); err != nil {
+	if _, err := h.core.Input(txt("你好"), map[string]any{MetaSource: "user"}); err != nil {
 		t.Fatalf("Input: %v", err)
 	}
 	status := "<status-update>\n<item source=\"todo\" key=\"todo\">任务 1</item>\n</status-update>"
-	if _, err := h.core.Inject(KindStatus, status, map[string]any{
+	if err := h.core.Inject(KindStatus, status, map[string]any{
 		"status":   map[string]string{"todo": "h1"},
 		MetaSource: "kernel",
 		MetaTrust:  "trusted",
@@ -32,7 +32,7 @@ func TestInjectAppendsEntryAndRendersAsUserMessage(t *testing.T) {
 		t.Fatalf("Inject status: %v", err)
 	}
 	snap := "<context source=\"instructions\" key=\"agents_md\">AGENTS 基线</context>"
-	if _, err := h.core.Inject(KindSnapshot, snap, nil); err != nil {
+	if err := h.core.Inject(KindSnapshot, snap, nil); err != nil {
 		t.Fatalf("Inject snapshot: %v", err)
 	}
 	ctx := h.core.Context()
@@ -61,10 +61,10 @@ func TestInjectAppendsEntryAndRendersAsUserMessage(t *testing.T) {
 
 func TestInjectRejectsUnknownKind(t *testing.T) {
 	h := newHarness(t, 8)
-	if _, err := h.core.Inject("profile", "x", nil); !errors.Is(err, ErrState) {
+	if err := h.core.Inject("profile", "x", nil); !errors.Is(err, ErrState) {
 		t.Fatalf("未知注入种类应报 ErrState：%v", err)
 	}
-	if _, err := h.core.Inject(KindStatus, "   ", nil); err != nil {
+	if err := h.core.Inject(KindStatus, "   ", nil); err != nil {
 		t.Fatalf("空体应静默跳过：%v", err)
 	}
 }
@@ -72,7 +72,7 @@ func TestInjectRejectsUnknownKind(t *testing.T) {
 func TestInjectRestoreRoundTrip(t *testing.T) {
 	h := newHarness(t, 8)
 	status := "<status-update><item key=\"todo\">任务</item></status-update>"
-	if _, err := h.core.Inject(KindStatus, status, map[string]any{
+	if err := h.core.Inject(KindStatus, status, map[string]any{
 		"status": map[string]string{"todo": "h1"},
 	}); err != nil {
 		t.Fatalf("Inject: %v", err)

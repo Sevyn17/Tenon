@@ -17,11 +17,11 @@ func turns(t *testing.T, n int) *session.Core {
 	c := session.New(&session.Config{Model: "m", System: []session.SystemBlock{{Text: "sys"}}, Policy: session.DefaultPolicy()})
 	long := strings.Repeat("内容", 200)
 	for i := 0; i < n; i++ {
-		_, need, err := c.Input(txt("问"+long), map[string]any{session.MetaSource: "user"})
+		need, err := c.Input(txt("问"+long), map[string]any{session.MetaSource: "user"})
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, _, err := c.ModelDone(need.Model.RequestID, need.ID, session.AssistantItem{Content: txt("答" + long)}, session.StopReason{V: "EndTurn"}); err != nil {
+		if _, err := c.ModelDone(need.Model.RequestID, need.ID, session.AssistantItem{Content: txt("答" + long)}, session.StopReason{V: "EndTurn"}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -80,7 +80,7 @@ func TestPlanThresholdAndCompact(t *testing.T) {
 	if !strings.HasPrefix(v.Summary[0].Text, "<compacted-summary>") || meta[session.MetaSource] != "compact-basic" {
 		t.Fatalf("摘要或 meta 不符: %+v %v", v, meta)
 	}
-	if _, err := core.Compact(v.Summary, v.Upto, meta); err != nil {
+	if err := core.Compact(v.Summary, v.Upto, meta); err != nil {
 		t.Fatal(err)
 	}
 	req, err := session.BuildRequest(core.Context())
@@ -91,7 +91,7 @@ func TestPlanThresholdAndCompact(t *testing.T) {
 	if CutPoint(core, 1) != -1 {
 		t.Fatal("压缩条目之后无新内容时应无切点")
 	}
-	_, need, _ := core.Input(txt("新问题"), map[string]any{session.MetaSource: "user"})
+	need, _ := core.Input(txt("新问题"), map[string]any{session.MetaSource: "user"})
 	core.ModelDone(need.Model.RequestID, need.ID, session.AssistantItem{Content: txt("新回答")}, session.StopReason{V: "EndTurn"})
 	if u := CutPoint(core, 1); u <= v.Upto {
 		t.Fatalf("二次切点应在压缩条目之后: %d <= %d", u, v.Upto)

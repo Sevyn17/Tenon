@@ -5,7 +5,7 @@ package session
 // 约定：
 //   - 全部命令要么完整生效、要么返回 error 且状态不变（S1）；
 //   - Need 是内核对宿主的请求：Model（调模型）/ Tools（执行工具）/ Done（回合结束）；
-//   - Change 告诉宿主发生了什么持久化可见的变更（先落库再发布由宿主保证，M6 R2）；
+//   - 命令不返回变更列表：宿主按快照与已提交的 log_len 算出要落库的条目（2026-11-04 审查 P2：原先的 []Change 包外全丢弃）；
 //   - 头部不存已收到的工具结果（R32）：结果条目按调用顺序落日志，
 //     内核只接受「队首调用」的结果——乱序回传由宿主经 ToolResultStore 重排后再提交；
 //   - 校验失败的调用不进执行队列：全无效时立即按序回填错误结果（T13），
@@ -65,23 +65,6 @@ type DoneNeed struct {
 	Reason     EndReason
 	Turn       uint32
 	Unconsumed []PendingInput // T8：待处理插话原样交还
-}
-
-// ChangeKind：持久化可见的变更种类。
-type ChangeKind uint8
-
-const (
-	ChangeAppended ChangeKind = iota + 1
-	ChangeTruncated
-	ChangeConfig
-)
-
-// Change：变更通知（宿主据此发布事件 / 同步镜像）。
-type Change struct {
-	Kind    ChangeKind
-	From    int // Truncated：截断起点（完整日志下标）
-	To      int // Appended：最后一条新条目的完整日志下标
-	Entries int // Appended：追加条数
 }
 
 // Core：一个已加载会话的内核实例。
@@ -302,54 +285,47 @@ func (c *Core) endTurn(reason EndReason, unconsumed []PendingInput) *Need {
 }
 
 // flushCancelled 把未回传调用补成 Cancelled 条目（T7 / T17 / T18）。
-func (c *Core) flushCancelled(st ToolStatus) []Change {
-	var ch []Change
+func (c *Core) flushCancelled(st ToolStatus) {
 	for _, call := range c.hdr.PendingCalls {
 		c.appendEntry(c.hdr.Turn.Turn, nil, Item{Kind: KindToolResult, ToolResult: &ToolResultItem{
 			CallID: call.ID, Status: st,
 		}})
-		ch = append(ch, Change{Kind: ChangeAppended, To: c.absLen() - 1, Entries: 1})
 	}
 	c.hdr.PendingCalls = nil
-	return ch
 }
 
 // stepBoundary 步边界（T20）：应用暂存配置 → 写暂存压缩条目 → 按到达顺序追加暂存插话
 // → 进入下一步（Need::Model）或结束（MaxSteps，T19）。
-func (c *Core) stepBoundary() ([]Change, *Need, error) {
-	var ch []Change
-	for range c.hdr.PendingConfig {
-		if err := c.applyConfigPatch(c.hdr.PendingConfig[len(ch)]); err != nil {
-			return nil, nil, err
+func (c *Core) stepBoundary() (*Need, error) {
+	for _, p := range c.hdr.PendingConfig {
+		if err := c.applyConfigPatch(p); err != nil {
+			return nil, err
 		}
-		ch = append(ch, Change{Kind: ChangeConfig})
 	}
 	c.hdr.PendingConfig = nil
 
 	if pc := c.hdr.PendingCompact; pc != nil {
 		if err := c.validateUpto(pc.Upto); err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		c.appendEntry(c.hdr.Turn.Turn, pc.Meta, Item{Kind: KindCompaction,
 			Compaction: &CompactionItem{Upto: pc.Upto, Summary: pc.Summary}})
 		c.hdr.CompactionBase = pc.Upto
-		ch = append(ch, Change{Kind: ChangeAppended, To: c.absLen() - 1, Entries: 1})
 		c.hdr.PendingCompact = nil
 	}
 
 	for _, pi := range c.hdr.PendingInputs {
 		c.appendEntry(c.hdr.Turn.Turn, pi.Meta, Item{Kind: KindUser, User: &UserItem{Content: pi.Content}})
-		ch = append(ch, Change{Kind: ChangeAppended, To: c.absLen() - 1, Entries: 1})
 	}
 	c.hdr.PendingInputs = nil
 	c.hdr.Redirected = false
 
 	// T19：进入下一步时步数达到 max_steps → Done(MaxSteps)。0 表示不限（缺省；交互使用由人中断）。
 	if c.hdr.Config != nil && c.hdr.Config.Policy.MaxSteps > 0 && c.hdr.Turn.Step >= c.hdr.Config.Policy.MaxSteps {
-		return ch, c.endTurn(MaxStepsReason(), nil), nil
+		return c.endTurn(MaxStepsReason(), nil), nil
 	}
 	c.hdr.Turn.Step++
-	return ch, c.newModelNeed(c.hdr.Turn.Turn, c.hdr.Turn.Step), nil
+	return c.newModelNeed(c.hdr.Turn.Turn, c.hdr.Turn.Step), nil
 }
 
 func (c *Core) applyConfigPatch(p ConfigPatch) error {
@@ -418,26 +394,7 @@ func (c *Core) validateUpto(upto int) error {
 // —— 命令：Idle 专属（T1 / T2 / T3 / T4）——//
 
 // Input 开启回合（T1）：追加 User 条目 → run_state running 由宿主写 → 发出 Need::Model。
-func (c *Core) Input(content Content, meta map[string]any) ([]Change, *Need, error) {
-	if err := c.checkReadOnly(); err != nil {
-		return nil, nil, err
-	}
-	if c.hdr.Status != StatusIdle {
-		return nil, nil, ErrNotIdle
-	}
-	if err := c.checkMetaSize(meta); err != nil {
-		return nil, nil, err
-	}
-	turn := c.newTurnNum()
-	c.appendEntry(turn, meta, Item{Kind: KindUser, User: &UserItem{Content: content}})
-	ch := []Change{{Kind: ChangeAppended, To: c.absLen() - 1, Entries: 1}}
-	c.hdr.Turn = &TurnInfo{Turn: turn, Start: c.absLen() - 1, Step: 1}
-	need := c.newModelNeed(turn, 1)
-	return ch, need, nil
-}
-
-// Record 只记录（T2）：追加 User 条目、占新回合序号（零步回合），不发出需求。
-func (c *Core) Record(content Content, meta map[string]any) ([]Change, error) {
+func (c *Core) Input(content Content, meta map[string]any) (*Need, error) {
 	if err := c.checkReadOnly(); err != nil {
 		return nil, err
 	}
@@ -447,26 +404,44 @@ func (c *Core) Record(content Content, meta map[string]any) ([]Change, error) {
 	if err := c.checkMetaSize(meta); err != nil {
 		return nil, err
 	}
+	turn := c.newTurnNum()
+	c.appendEntry(turn, meta, Item{Kind: KindUser, User: &UserItem{Content: content}})
+	c.hdr.Turn = &TurnInfo{Turn: turn, Start: c.absLen() - 1, Step: 1}
+	need := c.newModelNeed(turn, 1)
+	return need, nil
+}
+
+// Record 只记录（T2）：追加 User 条目、占新回合序号（零步回合），不发出需求。
+func (c *Core) Record(content Content, meta map[string]any) error {
+	if err := c.checkReadOnly(); err != nil {
+		return err
+	}
+	if c.hdr.Status != StatusIdle {
+		return ErrNotIdle
+	}
+	if err := c.checkMetaSize(meta); err != nil {
+		return err
+	}
 	turn := c.newTurnNum() // T2：record 占新回合序号（零步回合）
 	c.appendEntry(turn, meta, Item{Kind: KindUser, User: &UserItem{Content: content}})
-	return []Change{{Kind: ChangeAppended, To: c.absLen() - 1, Entries: 1}}, nil
+	return nil
 }
 
 // Resume 恢复回合（T1 resume 变体：失败重试 / 步数上限后继续）。
 // 末尾必须是 User / ToolResult 条目；无 Assistant 条目的回合沿用原序号。
-func (c *Core) Resume() ([]Change, *Need, error) {
+func (c *Core) Resume() (*Need, error) {
 	if err := c.checkReadOnly(); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	if c.hdr.Status != StatusIdle {
-		return nil, nil, ErrNotIdle
+		return nil, ErrNotIdle
 	}
 	if len(c.items) == 0 {
-		return nil, nil, ErrNoTurn
+		return nil, ErrNoTurn
 	}
 	last := c.items[len(c.items)-1]
 	if k := last.Item.Kind; k != KindUser && k != KindToolResult {
-		return nil, nil, ErrBadResume
+		return nil, ErrBadResume
 	}
 	turn := c.resumeTurnNum()
 	start := c.absLen()
@@ -479,26 +454,26 @@ func (c *Core) Resume() ([]Change, *Need, error) {
 		}
 	}
 	c.hdr.Turn = &TurnInfo{Turn: turn, Start: start, Step: 1}
-	return nil, c.newModelNeed(turn, 1), nil
+	return c.newModelNeed(turn, 1), nil
 }
 
 // Rewind 截断（T4）：to 是某回合首条 User 条目的下标，截到 [0, to)——这一回合及之后的全部去掉。
 // to == base（0 或压缩点）、to == 日志长度（不截）也合法。截掉压缩条目时起点退回上一次压缩。
-func (c *Core) Rewind(to int) ([]Change, error) {
+func (c *Core) Rewind(to int) error {
 	if err := c.checkReadOnly(); err != nil {
-		return nil, err
+		return err
 	}
 	if c.hdr.Status != StatusIdle {
-		return nil, ErrNotIdle
+		return ErrNotIdle
 	}
 	if to < c.base || to > c.absLen() {
-		return nil, ErrBadRewind
+		return ErrBadRewind
 	}
 	if to > c.base && to < c.absLen() {
 		off := to - c.base
 		if c.items[off].Item.Kind != KindUser || // 回合起点 = 该回合的首条 User 条目
 			c.items[off-1].Turn == c.items[off].Turn {
-			return nil, ErrBadRewind
+			return ErrBadRewind
 		}
 	}
 	// 截掉压缩条目 → 退回 [base, to) 内最后一次压缩。判断看压缩条目本身的位置，不看它的 upto：
@@ -520,7 +495,7 @@ func (c *Core) Rewind(to int) ([]Change, error) {
 			}
 		}
 		if !found && c.base != 0 {
-			return nil, ErrBadRewind // 更早的压缩点不在加载窗口内，宿主需从 0 重读
+			return ErrBadRewind // 更早的压缩点不在加载窗口内，宿主需从 0 重读
 		}
 		c.hdr.CompactionBase = prev
 	}
@@ -532,25 +507,25 @@ func (c *Core) Rewind(to int) ([]Change, error) {
 	if c.hdr.LogLen == 0 {
 		c.hdr.LastEntryID = ""
 	}
-	return []Change{{Kind: ChangeTruncated, From: to}}, nil
+	return nil
 }
 
 // —— 命令：任意状态 ——//
 
 // SetConfig 配置修改（T5）：Idle 立即生效，等待态暂存到步边界。
 // R23 字段白名单（外部只能改 model / params / max_steps）由宿主强制。
-func (c *Core) SetConfig(patch ConfigPatch) ([]Change, *Need, error) {
+func (c *Core) SetConfig(patch ConfigPatch) (*Need, error) {
 	if err := c.checkReadOnly(); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	if c.hdr.Status == StatusIdle {
 		if err := c.applyConfigPatch(patch); err != nil {
-			return nil, nil, err
+			return nil, err
 		}
-		return []Change{{Kind: ChangeConfig}}, nil, nil
+		return nil, nil
 	}
 	c.hdr.PendingConfig = append(c.hdr.PendingConfig, patch)
-	return nil, nil, nil
+	return nil, nil
 }
 
 // SetExt 写扩展（任何状态立即生效；停顿点之外修改到下一次 checkpoint 落库——宿主职责）。
@@ -580,60 +555,60 @@ func (c *Core) SetExt(k string, v any) error {
 }
 
 // Compact 压缩（T3 / T5）：Idle 直接追加压缩条目；等待态暂存到步边界。
-func (c *Core) Compact(summary Content, upto int, meta map[string]any) ([]Change, error) {
+func (c *Core) Compact(summary Content, upto int, meta map[string]any) error {
 	if err := c.checkReadOnly(); err != nil {
-		return nil, err
+		return err
 	}
 	if err := c.checkMetaSize(meta); err != nil {
-		return nil, err
+		return err
 	}
 	if err := c.validateUpto(upto); err != nil {
-		return nil, err
+		return err
 	}
 	if c.hdr.Status == StatusIdle {
 		c.appendEntry(c.lastTurn(), meta, Item{Kind: KindCompaction, Compaction: &CompactionItem{Upto: upto, Summary: summary}})
 		c.hdr.CompactionBase = upto
-		return []Change{{Kind: ChangeAppended, To: c.absLen() - 1, Entries: 1}}, nil
+		return nil
 	}
 	c.hdr.PendingCompact = &PendingCompact{Summary: summary, Upto: upto, Meta: meta}
-	return nil, nil
+	return nil
 }
 
 // Inject 追加一条上下文注入条目（框架设计 12.5）：kind 为 snapshot / status；
 // text 是内核渲染好的注入文本，meta 记录已发哈希（条目只读、随检查点持久化）。
 // 注入只追加条目、不改回合状态：可在 WaitingModel / WaitingTools 下调用。
-func (c *Core) Inject(kind string, text string, meta map[string]any) ([]Change, error) {
+func (c *Core) Inject(kind string, text string, meta map[string]any) error {
 	if err := c.checkReadOnly(); err != nil {
-		return nil, err
+		return err
 	}
 	if kind != KindSnapshot && kind != KindStatus {
-		return nil, fmt.Errorf("%w: 注入种类 %q", ErrState, kind)
+		return fmt.Errorf("%w: 注入种类 %q", ErrState, kind)
 	}
 	if strings.TrimSpace(text) == "" {
-		return nil, nil
+		return nil
 	}
 	if c.hdr.Status == StatusWaitingTools {
-		return nil, ErrToolsOpen // 注入要等本步结果到齐（步边界之后）
+		return ErrToolsOpen // 注入要等本步结果到齐（步边界之后）
 	}
 	if err := c.checkMetaSize(meta); err != nil {
-		return nil, err
+		return err
 	}
 	c.appendEntry(c.lastTurn(), meta, Item{Kind: kind, Injection: &InjectionItem{Text: text}})
-	return []Change{{Kind: ChangeAppended, To: c.absLen() - 1, Entries: 1}}, nil
+	return nil
 }
 
 // —— 命令：等待态专属（T5 / T6 / T7 / T17 / T18）——//
 
 // Steer 插话（等待态）：Append 暂存到步边界；Redirect 标记改向（T6 / T7）。
-func (c *Core) Steer(content Content, meta map[string]any, mode SteerMode) ([]Change, *Need, error) {
+func (c *Core) Steer(content Content, meta map[string]any, mode SteerMode) (*Need, error) {
 	if err := c.checkReadOnly(); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	if c.hdr.Status == StatusIdle {
-		return nil, nil, ErrNotWaiting
+		return nil, ErrNotWaiting
 	}
 	if err := c.checkMetaSize(meta); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	// 复制后再写：meta 写入后只读，不能改调用方传进来的 map（审查 P1-21）。
 	cp := make(map[string]any, len(meta)+1)
@@ -645,64 +620,63 @@ func (c *Core) Steer(content Content, meta map[string]any, mode SteerMode) ([]Ch
 
 	if mode == SteerAppend {
 		c.hdr.PendingInputs = append(c.hdr.PendingInputs, PendingInput{Content: content, Meta: meta, Mode: mode})
-		return nil, nil, nil
+		return nil, nil
 	}
 	// Redirect
 	if c.hdr.Status == StatusWaitingModel {
 		c.hdr.Redirected = true // T6：回复到达后有效调用补 Cancelled(Redirected)
 		c.hdr.PendingInputs = append(c.hdr.PendingInputs, PendingInput{Content: content, Meta: meta, Mode: mode})
-		return nil, nil, nil
+		return nil, nil
 	}
 	// T7：WaitingTools —— 未回传调用立即补 Cancelled(Redirected)，立即进入步边界。
-	ch := c.flushCancelled(ToolRedirected)
+	c.flushCancelled(ToolRedirected)
 	c.hdr.PendingInputs = append(c.hdr.PendingInputs, PendingInput{Content: content, Meta: meta, Mode: mode})
-	ch2, need, err := c.stepBoundary()
-	return append(ch, ch2...), need, err
+	need, err := c.stepBoundary()
+	return need, err
 }
 
 // MidInput 在回合进行中立即追加一条用户输入条目（09 9.4：运行中到达的消息在下一次调模型前插入）。
 // 与 Steer(Append) 不同，它不等步边界，直接进入下一次请求的历史；回合结束前仍属本回合。
-func (c *Core) MidInput(content Content, meta map[string]any) ([]Change, error) {
+func (c *Core) MidInput(content Content, meta map[string]any) error {
 	if err := c.checkReadOnly(); err != nil {
-		return nil, err
+		return err
 	}
 	if c.hdr.Status == StatusIdle {
-		return nil, ErrNotWaiting
+		return ErrNotWaiting
 	}
 	if c.hdr.Status == StatusWaitingTools {
-		return nil, ErrToolsOpen // 插在调用与结果之间会让下一次请求非法：等步边界
+		return ErrToolsOpen // 插在调用与结果之间会让下一次请求非法：等步边界
 	}
 	if err := c.checkMetaSize(meta); err != nil {
-		return nil, err
+		return err
 	}
 	if meta == nil {
 		meta = map[string]any{}
 	}
 	if c.hdr.Turn == nil {
-		return nil, ErrNotWaiting
+		return ErrNotWaiting
 	}
 	c.appendEntry(c.hdr.Turn.Turn, meta, Item{Kind: KindUser, User: &UserItem{Content: content}})
-	return []Change{{Kind: ChangeAppended, To: c.absLen() - 1, Entries: 1}}, nil
+	return nil
 }
 
 // Cancel 取消（T17）：先 flush 暂存项；未回传调用补 Cancelled(TurnCancelled)；Done(Cancelled)。
-func (c *Core) Cancel() ([]Change, *Need, error) {
+func (c *Core) Cancel() (*Need, error) {
 	return c.Abort(CancelledReason())
 }
 
 // Abort 直接结束回合（T18）：宿主在恢复循环等场景使用。
-func (c *Core) Abort(reason EndReason) ([]Change, *Need, error) {
+func (c *Core) Abort(reason EndReason) (*Need, error) {
 	if err := c.checkReadOnly(); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	if c.hdr.Status == StatusIdle {
-		return nil, nil, ErrNotWaiting
+		return nil, ErrNotWaiting
 	}
-	var ch []Change
 	if c.hdr.Status == StatusWaitingTools {
-		ch = c.flushCancelled(ToolTurnCancelled)
+		c.flushCancelled(ToolTurnCancelled)
 	}
-	return ch, c.endTurn(reason, c.takePendingInputs()), nil
+	return c.endTurn(reason, c.takePendingInputs()), nil
 }
 
 // takePendingInputs 取出暂存插话（提前结束时交还给调用方）。
@@ -717,15 +691,15 @@ func (c *Core) takePendingInputs() []PendingInput {
 
 // SubmitResult 提交工具结果：只接受队首调用（乱序由宿主重排后提交）；
 // 结果大小超限替换为错误结果（S4）；写完最后一条进入步边界（T16 / T20）。
-func (c *Core) SubmitResult(callID string, out Content, st ToolStatus) ([]Change, *Need, error) {
+func (c *Core) SubmitResult(callID string, out Content, st ToolStatus) (*Need, error) {
 	if err := c.checkReadOnly(); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	if c.hdr.Status != StatusWaitingTools {
-		return nil, nil, ErrNotWaiting
+		return nil, ErrNotWaiting
 	}
 	if len(c.hdr.PendingCalls) == 0 || c.hdr.PendingCalls[0].ID != callID {
-		return nil, nil, errUnknownCall("call " + callID + " 不是队首调用或已回传")
+		return nil, errUnknownCall("call " + callID + " 不是队首调用或已回传")
 	}
 	// S4：结果超限替换为错误结果回给模型（不静默截断）。
 	if c.hdr.Config != nil && c.hdr.Config.Policy.MaxResultBytes > 0 && contentSize(out) > c.hdr.Config.Policy.MaxResultBytes {
@@ -734,26 +708,25 @@ func (c *Core) SubmitResult(callID string, out Content, st ToolStatus) ([]Change
 	c.appendEntry(c.hdr.Turn.Turn, nil, Item{Kind: KindToolResult, ToolResult: &ToolResultItem{
 		CallID: callID, Output: out, Status: st,
 	}})
-	ch := []Change{{Kind: ChangeAppended, To: c.absLen() - 1, Entries: 1}}
 	c.hdr.PendingCalls = c.hdr.PendingCalls[1:]
 	if len(c.hdr.PendingCalls) > 0 { // T15：部分结果
-		return ch, c.emitNeed(&Need{Kind: NeedTools, Tools: &ToolsNeed{
+		return c.emitNeed(&Need{Kind: NeedTools, Tools: &ToolsNeed{
 			Turn: c.hdr.Turn.Turn, Calls: append([]ToolCall(nil), c.hdr.PendingCalls...)}}), nil
 	}
 	// T16 / T20：全部到齐 → 步边界。
-	ch2, need, err := c.stepBoundary()
-	return append(ch, ch2...), need, err
+	need, err := c.stepBoundary()
+	return need, err
 }
 
 // —— 模型事实（T8–T14）——//
 
 // ModelDone 模型回复到达（WaitingModel）。requestID / needID 不符 → Stale（S2 / S7）。
-func (c *Core) ModelDone(requestID string, needID uint64, reply AssistantItem, stop StopReason) ([]Change, *Need, error) {
+func (c *Core) ModelDone(requestID string, needID uint64, reply AssistantItem, stop StopReason) (*Need, error) {
 	if err := c.checkReadOnly(); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	if err := c.checkModelFact(requestID, needID); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	// 为调用分配内核 id（S6），wire_id 存厂商原始 id；不合法的参数 JSON 先规整（见 normalizeCalls）。
@@ -764,31 +737,29 @@ func (c *Core) ModelDone(requestID string, needID uint64, reply AssistantItem, s
 
 	if empty { // T8：空回复不写条目；待处理插话原样交还
 		unconsumed := append([]PendingInput(nil), c.hdr.PendingInputs...)
-		return nil, c.endTurn(FailedReason("empty response"), unconsumed), nil
+		return c.endTurn(FailedReason("empty response"), unconsumed), nil
 	}
 
 	// 追加 Assistant 条目（调用即使被改向也原样记录，R14 由 Cancelled 结果闭合）。
 	c.appendEntry(c.hdr.Turn.Turn, nil, Item{Kind: KindAssistant, Assistant: &reply})
-	ch := []Change{{Kind: ChangeAppended, To: c.absLen() - 1, Entries: 1}}
 
 	if redirected && len(reply.ToolCalls) > 0 { // T11：有效调用补 Cancelled(Redirected) → 步边界
 		for _, call := range reply.ToolCalls {
 			c.appendEntry(c.hdr.Turn.Turn, nil, Item{Kind: KindToolResult, ToolResult: &ToolResultItem{
 				CallID: call.ID, Status: ToolRedirected}})
-			ch = append(ch, Change{Kind: ChangeAppended, To: c.absLen() - 1, Entries: 1})
 		}
 		c.hdr.PendingCalls = nil
-		ch2, need, err := c.stepBoundary()
-		return append(ch, ch2...), need, err
+		need, err := c.stepBoundary()
+		return need, err
 	}
 
 	if len(reply.ToolCalls) == 0 {
 		if len(c.hdr.PendingInputs) > 0 { // T10：有待处理插话 → 步边界（追加插话）后下一步
-			ch2, need, err := c.stepBoundary()
-			return append(ch, ch2...), need, err
+			need, err := c.stepBoundary()
+			return need, err
 		}
 		_ = stop // 截断与否由宿主展示；回合正常完成
-		return ch, c.endTurn(DoneReason(), nil), nil
+		return c.endTurn(DoneReason(), nil), nil
 	}
 
 	// T12 / T13：校验调用（S3）。
@@ -800,50 +771,46 @@ func (c *Core) ModelDone(requestID string, needID uint64, reply AssistantItem, s
 			c.appendEntry(c.hdr.Turn.Turn, nil, Item{Kind: KindToolResult, ToolResult: &ToolResultItem{
 				CallID: call.ID, Status: ToolError,
 				Output: Content{NewTextPart(hints[call.ID])}}})
-			ch = append(ch, Change{Kind: ChangeAppended, To: c.absLen() - 1, Entries: 1})
 		}
 		c.hdr.PendingCalls = nil
-		ch2, need, err := c.stepBoundary()
-		return append(ch, ch2...), need, err
+		need, err := c.stepBoundary()
+		return need, err
 	}
 	// T12：有效调用 → Need::Tools（校验失败的由执行侧按 Hints 短路回填，保 R14 顺序）。
-	return ch, c.emitNeed(&Need{Kind: NeedTools, Tools: &ToolsNeed{
+	return c.emitNeed(&Need{Kind: NeedTools, Tools: &ToolsNeed{
 		Turn: c.hdr.Turn.Turn, Calls: append([]ToolCall(nil), c.hdr.PendingCalls...), Hints: hints}}), nil
 }
 
 // ModelInterrupted 模型流被中断（T14）：正文非空写 interrupted 条目（调用补 Cancelled
 // 保 R14），以调用方给定的原因结束回合。
-func (c *Core) ModelInterrupted(requestID string, needID uint64, reply AssistantItem, reason EndReason) ([]Change, *Need, error) {
+func (c *Core) ModelInterrupted(requestID string, needID uint64, reply AssistantItem, reason EndReason) (*Need, error) {
 	if err := c.checkReadOnly(); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	if err := c.checkModelFact(requestID, needID); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	var ch []Change
 	if len(reply.Content) > 0 || len(reply.ToolCalls) > 0 {
 		c.normalizeCalls(reply.ToolCalls) // 中断时参数常是半截 JSON
 		reply.Interrupted = true
 		c.appendEntry(c.hdr.Turn.Turn, nil, Item{Kind: KindAssistant, Assistant: &reply})
-		ch = append(ch, Change{Kind: ChangeAppended, To: c.absLen() - 1, Entries: 1})
 		for _, call := range reply.ToolCalls { // 被中断的调用不执行，补 Cancelled 闭合 R14
 			c.appendEntry(c.hdr.Turn.Turn, nil, Item{Kind: KindToolResult, ToolResult: &ToolResultItem{
 				CallID: call.ID, Status: ToolTurnCancelled}})
-			ch = append(ch, Change{Kind: ChangeAppended, To: c.absLen() - 1, Entries: 1})
 		}
 	}
-	return ch, c.endTurn(reason, c.takePendingInputs()), nil // 暂存插话交还宿主（审查 P1-19）
+	return c.endTurn(reason, c.takePendingInputs()), nil // 暂存插话交还宿主（审查 P1-19）
 }
 
 // ModelFailed 模型调用失败（T14）：不写条目，以 Failed 结束。
-func (c *Core) ModelFailed(requestID string, needID uint64, reason EndReason) ([]Change, *Need, error) {
+func (c *Core) ModelFailed(requestID string, needID uint64, reason EndReason) (*Need, error) {
 	if err := c.checkReadOnly(); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	if err := c.checkModelFact(requestID, needID); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	return nil, c.endTurn(reason, c.takePendingInputs()), nil // 暂存插话交还宿主（审查 P1-19）
+	return c.endTurn(reason, c.takePendingInputs()), nil // 暂存插话交还宿主（审查 P1-19）
 }
 
 // InvalidArgsKey 不合法参数 JSON 规整后保存原始文本的键（见 normalizeCalls）。

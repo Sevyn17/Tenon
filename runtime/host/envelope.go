@@ -515,7 +515,7 @@ func (a *actor) applyNotices(ctx context.Context, items []store.InboxItem) (bool
 		m[session.MetaTrust] = "untrusted"
 	}
 	a.processing = inboxSet(consume)
-	if _, err := a.ag.Core.Inject(session.KindStatus, text, m); err != nil {
+	if err := a.ag.Core.Inject(session.KindStatus, text, m); err != nil {
 		a.processing = nil
 		return false, err
 	}

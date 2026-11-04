@@ -12,9 +12,9 @@ import (
 func TestInvalidToolArgsNormalized(t *testing.T) {
 	h := newHarness(t, 8)
 	c := h.core
-	_, n1, _ := c.Input(txt("开始"), nil)
+	n1, _ := c.Input(txt("开始"), nil)
 	calls := []ToolCall{{Name: "echo", Args: json.RawMessage(`{"a":`)}}
-	_, n2, err := c.ModelDone(n1.Model.RequestID, n1.ID, AssistantItem{ToolCalls: calls}, StopReason{V: "ToolUse"})
+	n2, err := c.ModelDone(n1.Model.RequestID, n1.ID, AssistantItem{ToolCalls: calls}, StopReason{V: "ToolUse"})
 	if err != nil {
 		t.Fatalf("ModelDone: %v", err)
 	}
@@ -50,9 +50,9 @@ func TestInvalidToolArgsNormalized(t *testing.T) {
 func TestInvalidToolArgsNormalizedOnInterrupt(t *testing.T) {
 	h := newHarness(t, 8)
 	c := h.core
-	_, n1, _ := c.Input(txt("开始"), nil)
+	n1, _ := c.Input(txt("开始"), nil)
 	calls := []ToolCall{{Name: "echo", Args: json.RawMessage(`{"path":"a`)}}
-	if _, _, err := c.ModelInterrupted(n1.Model.RequestID, n1.ID, AssistantItem{ToolCalls: calls}, CancelledReason()); err != nil {
+	if _, err := c.ModelInterrupted(n1.Model.RequestID, n1.ID, AssistantItem{ToolCalls: calls}, CancelledReason()); err != nil {
 		t.Fatalf("ModelInterrupted: %v", err)
 	}
 	for i, e := range c.items {
@@ -69,18 +69,18 @@ func TestInvalidToolArgsNormalizedOnInterrupt(t *testing.T) {
 func TestDuplicateWireIDsReplaced(t *testing.T) {
 	h := newHarness(t, 8)
 	c := h.core
-	_, n1, _ := c.Input(txt("开始"), nil)
+	n1, _ := c.Input(txt("开始"), nil)
 	calls := []ToolCall{{Name: "echo", WireID: "call_0", Args: json.RawMessage(`{}`)}, {Name: "echo", WireID: "call_0", Args: json.RawMessage(`{}`)}}
-	_, n2, err := c.ModelDone(n1.Model.RequestID, n1.ID, AssistantItem{ToolCalls: calls}, StopReason{V: "ToolUse"})
+	n2, err := c.ModelDone(n1.Model.RequestID, n1.ID, AssistantItem{ToolCalls: calls}, StopReason{V: "ToolUse"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	var n3 *Need
 	for _, tc := range n2.Tools.Calls {
-		_, n3, _ = c.SubmitResult(tc.ID, txt("r"), ToolOK)
+		n3, _ = c.SubmitResult(tc.ID, txt("r"), ToolOK)
 	}
 	// 下一步厂商又从 call_0 起编：也要换掉。
-	_, _, err = c.ModelDone(n3.Model.RequestID, n3.ID, AssistantItem{ToolCalls: []ToolCall{{Name: "echo", WireID: "call_0", Args: json.RawMessage(`{}`)}}}, StopReason{V: "ToolUse"})
+	_, err = c.ModelDone(n3.Model.RequestID, n3.ID, AssistantItem{ToolCalls: []ToolCall{{Name: "echo", WireID: "call_0", Args: json.RawMessage(`{}`)}}}, StopReason{V: "ToolUse"})
 	if err != nil {
 		t.Fatal(err)
 	}

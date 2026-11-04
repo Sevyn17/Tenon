@@ -12,12 +12,12 @@ func lastN(h *harness, n int) []*Entry { return h.core.items[len(h.core.items)-n
 // ① WaitingModel 已改向，回复的调用全部无效：调用补 Redirected（不是校验错误），进入下一步。
 func TestRedirect_AllInvalidCalls(t *testing.T) {
 	h := newHarness(t, 8)
-	_, n1, _ := h.core.Input(txt("问"), nil)
-	if _, _, err := h.core.Steer(txt("改向"), nil, SteerRedirect); err != nil {
+	n1, _ := h.core.Input(txt("问"), nil)
+	if _, err := h.core.Steer(txt("改向"), nil, SteerRedirect); err != nil {
 		t.Fatal(err)
 	}
 	calls := []ToolCall{{Name: "nope", Args: json.RawMessage(`{}`)}}
-	_, need, err := h.core.ModelDone(n1.Model.RequestID, n1.ID, AssistantItem{ToolCalls: calls}, StopReason{})
+	need, err := h.core.ModelDone(n1.Model.RequestID, n1.ID, AssistantItem{ToolCalls: calls}, StopReason{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -36,9 +36,9 @@ func TestRedirect_AllInvalidCalls(t *testing.T) {
 // ② WaitingModel 已改向，回复无调用：正文保留，改向输入追加，进入下一步（不是 Done）。
 func TestRedirect_NoCalls(t *testing.T) {
 	h := newHarness(t, 8)
-	_, n1, _ := h.core.Input(txt("问"), nil)
-	_, _, _ = h.core.Steer(txt("改向"), nil, SteerRedirect)
-	_, need, err := h.core.ModelDone(n1.Model.RequestID, n1.ID, AssistantItem{Content: txt("半截答")}, StopReason{})
+	n1, _ := h.core.Input(txt("问"), nil)
+	_, _ = h.core.Steer(txt("改向"), nil, SteerRedirect)
+	need, err := h.core.ModelDone(n1.Model.RequestID, n1.ID, AssistantItem{Content: txt("半截答")}, StopReason{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,12 +54,12 @@ func TestRedirect_NoCalls(t *testing.T) {
 // ③ 改向前后各有一条 Append 插话：三条按到达顺序在边界追加。
 func TestRedirect_WithAppendSteers(t *testing.T) {
 	h := newHarness(t, 8)
-	_, n1, _ := h.core.Input(txt("问"), nil)
-	_, _, _ = h.core.Steer(txt("a"), nil, SteerAppend)
-	_, _, _ = h.core.Steer(txt("r"), nil, SteerRedirect)
-	_, _, _ = h.core.Steer(txt("b"), nil, SteerAppend)
+	n1, _ := h.core.Input(txt("问"), nil)
+	_, _ = h.core.Steer(txt("a"), nil, SteerAppend)
+	_, _ = h.core.Steer(txt("r"), nil, SteerRedirect)
+	_, _ = h.core.Steer(txt("b"), nil, SteerAppend)
 	calls := []ToolCall{{Name: "echo", Args: json.RawMessage(`{}`)}}
-	_, need, err := h.core.ModelDone(n1.Model.RequestID, n1.ID, AssistantItem{ToolCalls: calls}, StopReason{})
+	need, err := h.core.ModelDone(n1.Model.RequestID, n1.ID, AssistantItem{ToolCalls: calls}, StopReason{})
 	if err != nil || need.Kind != NeedModel {
 		t.Fatalf("应进入下一步: %v %+v", err, need)
 	}
@@ -74,13 +74,13 @@ func TestRedirect_WithAppendSteers(t *testing.T) {
 // ④ WaitingTools 部分结果已到再改向：已到结果保留，剩余调用补 Redirected，立即下一步。
 func TestRedirect_PartialResults(t *testing.T) {
 	h := newHarness(t, 8)
-	_, n1, _ := h.core.Input(txt("问"), nil)
+	n1, _ := h.core.Input(txt("问"), nil)
 	calls := []ToolCall{{Name: "echo", Args: json.RawMessage(`{"a":1}`)}, {Name: "echo", Args: json.RawMessage(`{"b":2}`)}}
-	_, n2, _ := h.core.ModelDone(n1.Model.RequestID, n1.ID, AssistantItem{ToolCalls: calls}, StopReason{})
-	if _, _, err := h.core.SubmitResult(n2.Tools.Calls[0].ID, txt("r1"), ToolOK); err != nil {
+	n2, _ := h.core.ModelDone(n1.Model.RequestID, n1.ID, AssistantItem{ToolCalls: calls}, StopReason{})
+	if _, err := h.core.SubmitResult(n2.Tools.Calls[0].ID, txt("r1"), ToolOK); err != nil {
 		t.Fatal(err)
 	}
-	_, need, err := h.core.Steer(txt("别查了"), nil, SteerRedirect)
+	need, err := h.core.Steer(txt("别查了"), nil, SteerRedirect)
 	if err != nil || need == nil || need.Kind != NeedModel {
 		t.Fatalf("T7 应立即进入下一步: %v %+v", err, need)
 	}
@@ -88,7 +88,7 @@ func TestRedirect_PartialResults(t *testing.T) {
 	if es[0].Item.ToolResult.Status != ToolOK || es[1].Item.ToolResult.Status != ToolRedirected || es[2].Item.Kind != KindUser {
 		t.Fatalf("应为 OK → Redirected → 改向输入: %+v %+v %+v", es[0].Item, es[1].Item, es[2].Item)
 	}
-	if _, _, err := h.core.SubmitResult(n2.Tools.Calls[1].ID, txt("迟到"), ToolOK); err == nil {
+	if _, err := h.core.SubmitResult(n2.Tools.Calls[1].ID, txt("迟到"), ToolOK); err == nil {
 		t.Fatalf("改向后迟到的结果应拒收")
 	}
 }
@@ -96,9 +96,9 @@ func TestRedirect_PartialResults(t *testing.T) {
 // ⑤a 改向后紧接取消：改向输入不丢，作为未消费插话交还（T17 先 flush 暂存项）。
 func TestRedirect_ThenCancel(t *testing.T) {
 	h := newHarness(t, 8)
-	_, _, _ = h.core.Input(txt("问"), nil)
-	_, _, _ = h.core.Steer(txt("改向"), nil, SteerRedirect)
-	_, need, err := h.core.Cancel()
+	_, _ = h.core.Input(txt("问"), nil)
+	_, _ = h.core.Steer(txt("改向"), nil, SteerRedirect)
+	need, err := h.core.Cancel()
 	if err != nil || need.Kind != NeedDone || need.Done.Reason.Kind != EndCancelled {
 		t.Fatalf("应 Done(Cancelled): %v %+v", err, need)
 	}
@@ -113,8 +113,8 @@ func TestRedirect_ThenCancel(t *testing.T) {
 // ⑤b 改向标记随快照恢复：恢复后回复到达仍按改向处理。
 func TestRedirect_SurvivesRestore(t *testing.T) {
 	h := newHarness(t, 8)
-	_, n1, _ := h.core.Input(txt("问"), nil)
-	_, _, _ = h.core.Steer(txt("改向"), nil, SteerRedirect)
+	n1, _ := h.core.Input(txt("问"), nil)
+	_, _ = h.core.Steer(txt("改向"), nil, SteerRedirect)
 
 	snap := h.core.Snapshot()
 	b, _ := json.Marshal(snap)
@@ -130,7 +130,7 @@ func TestRedirect_SurvivesRestore(t *testing.T) {
 		t.Fatalf("改向标记与暂存插话应随头部恢复")
 	}
 	calls := []ToolCall{{Name: "echo", Args: json.RawMessage(`{}`)}}
-	_, need, err := c2.ModelDone(n1.Model.RequestID, n1.ID, AssistantItem{ToolCalls: calls}, StopReason{})
+	need, err := c2.ModelDone(n1.Model.RequestID, n1.ID, AssistantItem{ToolCalls: calls}, StopReason{})
 	if err != nil || need.Kind != NeedModel {
 		t.Fatalf("恢复后应按改向处理: %v %+v", err, need)
 	}

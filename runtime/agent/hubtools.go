@@ -97,7 +97,7 @@ func (a *Agent) runToolsHub(ctx context.Context, tn *session.ToolsNeed) (*sessio
 	}
 	if a.Toolset != nil {
 		if add := a.Toolset.TakePending(); len(add) > 0 {
-			if _, _, err := a.Core.SetConfig(session.ConfigPatch{AddTools: add}); err != nil {
+			if _, err := a.Core.SetConfig(session.ConfigPatch{AddTools: add}); err != nil {
 				return nil, err
 			}
 		}
@@ -109,7 +109,7 @@ func (a *Agent) runToolsHub(ctx context.Context, tn *session.ToolsNeed) (*sessio
 			st = session.ToolOK
 		}
 		var err error
-		if _, need, err = a.Core.SubmitResult(res.Call.ID, res.Output.Content, st); err != nil {
+		if need, err = a.Core.SubmitResult(res.Call.ID, res.Output.Content, st); err != nil {
 			return nil, err
 		}
 	}

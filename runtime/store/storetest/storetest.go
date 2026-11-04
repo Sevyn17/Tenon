@@ -104,14 +104,14 @@ func testRoundTrip(t *testing.T, db store.Store) {
 	if ok, _ := db.Exists(ctx, "none"); ok {
 		t.Fatal("不存在的会话 Exists 应为 false")
 	}
-	_, n1, _ := c.Input(txt("你好"), nil)
+	n1, _ := c.Input(txt("你好"), nil)
 	n := commitAll(t, db, "s1", c, 0, func(cp *store.Checkpoint) {
 		cp.Request = &store.RequestRecord{RequestID: n1.Model.RequestID, ShellHash: "x", ShellBody: []byte(`{"a":1}`),
 			PrefixEnd: 1, FinalHash: "f", Composition: json.RawMessage(`{"system":3}`)}
 		cp.Spans = []store.Span{{ID: "sp1", Kind: "step", Start: time.Now()}}
 		cp.Preview = "你好"
 	})
-	_, _, _ = c.ModelDone(n1.Model.RequestID, n1.ID, session.AssistantItem{Content: txt("嗨")}, session.StopReason{})
+	_, _ = c.ModelDone(n1.Model.RequestID, n1.ID, session.AssistantItem{Content: txt("嗨")}, session.StopReason{})
 	commitAll(t, db, "s1", c, n, nil)
 
 	l, err := db.Load(ctx, "s1", nil)
@@ -217,7 +217,7 @@ func testTruncate(t *testing.T, db store.Store) {
 	c.Record(txt("a"), nil)
 	c.Record(txt("b"), nil)
 	n := commitAll(t, db, "s", c, 0, nil)
-	if _, err := c.Rewind(1); err != nil {
+	if err := c.Rewind(1); err != nil {
 		t.Fatalf("Rewind: %v", err)
 	}
 	c.Record(txt("c"), nil)
@@ -259,9 +259,9 @@ func testReplayAndList(t *testing.T, db store.Store) {
 	ctx := context.Background()
 	c := newCore()
 	create(t, db, store.SessionMeta{ID: "s1", Title: "一"}, c)
-	_, n1, _ := c.Input(txt("你好"), nil)
+	n1, _ := c.Input(txt("你好"), nil)
 	n := commitAll(t, db, "s1", c, 0, nil)
-	_, _, _ = c.ModelDone(n1.Model.RequestID, n1.ID, session.AssistantItem{Content: txt("嗨")}, session.StopReason{})
+	_, _ = c.ModelDone(n1.Model.RequestID, n1.ID, session.AssistantItem{Content: txt("嗨")}, session.StopReason{})
 	n = commitAll(t, db, "s1", c, n, nil)
 	evs, wm, err := db.Replay(ctx, "s1", 0)
 	if err != nil {
@@ -278,7 +278,7 @@ func testReplayAndList(t *testing.T, db store.Store) {
 	}
 	var got []bus.Envelope
 	db.OnCommit(func(e bus.Envelope) { got = append(got, e) })
-	_, _, _ = c.Input(txt("再来"), nil)
+	_, _ = c.Input(txt("再来"), nil)
 	commitAll(t, db, "s1", c, n, nil)
 	if len(got) == 0 || got[0].Kind != store.EventEntry || got[0].Seq != 3 || got[0].Session != "s1" || got[0].V != bus.Version {
 		t.Fatalf("提交通知 %+v", got)
@@ -546,7 +546,7 @@ func testDelete(t *testing.T, db store.Store) {
 	ctx := context.Background()
 	c := newCore()
 	create(t, db, store.SessionMeta{ID: "s1"}, c)
-	_, _, _ = c.Input(txt("hi"), nil)
+	_, _ = c.Input(txt("hi"), nil)
 	commitAll(t, db, "s1", c, 0, nil)
 	_, _ = db.Admit(ctx, "s1", store.InboxItem{ItemID: "i1", Kind: store.InboxInput, Input: `[]`})
 	_ = db.PutToolStarted(ctx, "s1", "c1", "")
@@ -730,12 +730,12 @@ func testExport(t *testing.T, db store.Store) {
 	ctx := context.Background()
 	c := newCore()
 	create(t, db, store.SessionMeta{ID: "s1"}, c)
-	_, n1, _ := c.Input(txt("你好"), nil)
+	n1, _ := c.Input(txt("你好"), nil)
 	n := commitAll(t, db, "s1", c, 0, func(cp *store.Checkpoint) {
 		cp.Request = &store.RequestRecord{RequestID: n1.Model.RequestID, ShellHash: "x", PrefixEnd: 1, FinalHash: "f"}
 		cp.Spans = []store.Span{{ID: "sp1", Kind: "step", Start: time.Now()}}
 	})
-	_, _, _ = c.ModelDone(n1.Model.RequestID, n1.ID, session.AssistantItem{Content: txt("嗨")}, session.StopReason{})
+	_, _ = c.ModelDone(n1.Model.RequestID, n1.ID, session.AssistantItem{Content: txt("嗨")}, session.StopReason{})
 	commitAll(t, db, "s1", c, n, nil)
 	_ = db.FinishTool(ctx, "s1", "c1", "", `"r"`)
 	var buf bytes.Buffer
@@ -786,7 +786,7 @@ func testLeaseFencing(t *testing.T, db store.Store) {
 	}
 	// 新纪元写入成功（接管者推进日志）；释放后不能再用。
 	c2 := newCore()
-	_, _, _ = c2.Input(txt("接管者写入"), nil)
+	_, _ = c2.Input(txt("接管者写入"), nil)
 	s2 := c2.Snapshot()
 	if err := db.Commit(ctx, store.Checkpoint{SessionID: id, ExpectLogLen: 0, Epoch: epoch2, Header: s2.Header,
 		Append: s2.Entries, AppendFrom: 0}); err != nil {
