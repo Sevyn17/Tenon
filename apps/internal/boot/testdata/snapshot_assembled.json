@@ -307,6 +307,10 @@
                 "session": {
                   "type": "string",
                   "description": "可选：续用的子会话 id"
+                },
+                "agent": {
+                  "type": "string",
+                  "description": "可选：子智能体用的定义名；只能选本会话定义 [use.subagent] agents 里列出的，缺省为通用子智能体"
                 }
               },
               "required": [
@@ -770,6 +774,10 @@
                 "session": {
                   "type": "string",
                   "description": "可选：续用的子会话 id"
+                },
+                "agent": {
+                  "type": "string",
+                  "description": "可选：子智能体用的定义名；只能选本会话定义 [use.subagent] agents 里列出的，缺省为通用子智能体"
                 }
               },
               "required": [
@@ -1255,6 +1263,10 @@
                 "session": {
                   "type": "string",
                   "description": "可选：续用的子会话 id"
+                },
+                "agent": {
+                  "type": "string",
+                  "description": "可选：子智能体用的定义名；只能选本会话定义 [use.subagent] agents 里列出的，缺省为通用子智能体"
                 }
               },
               "required": [
@@ -1696,6 +1708,10 @@
                 "session": {
                   "type": "string",
                   "description": "可选：续用的子会话 id"
+                },
+                "agent": {
+                  "type": "string",
+                  "description": "可选：子智能体用的定义名；只能选本会话定义 [use.subagent] agents 里列出的，缺省为通用子智能体"
                 }
               },
               "required": [
@@ -2154,6 +2170,10 @@
                 "session": {
                   "type": "string",
                   "description": "可选：续用的子会话 id"
+                },
+                "agent": {
+                  "type": "string",
+                  "description": "可选：子智能体用的定义名；只能选本会话定义 [use.subagent] agents 里列出的，缺省为通用子智能体"
                 }
               },
               "required": [
@@ -2638,6 +2658,10 @@
                 "session": {
                   "type": "string",
                   "description": "可选：续用的子会话 id"
+                },
+                "agent": {
+                  "type": "string",
+                  "description": "可选：子智能体用的定义名；只能选本会话定义 [use.subagent] agents 里列出的，缺省为通用子智能体"
                 }
               },
               "required": [

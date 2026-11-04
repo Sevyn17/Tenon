@@ -28,13 +28,14 @@ func Tool(h *host.Host, f host.Factory) *toolhub.Tool {
 			Description: "把一个独立、边界清楚的子任务委派给子智能体（全新上下文，同样的工具）。task 要自包含：子智能体看不到当前对话。" +
 				"返回子智能体的最终回答与子会话 id；传 session 可继续同一个子会话追问。",
 			Schema: json.RawMessage(`{"type":"object","properties":{"task":{"type":"string","description":"自包含的任务说明"},` +
-				`"session":{"type":"string","description":"可选：续用的子会话 id"}},"required":["task"]}`)},
+				`"session":{"type":"string","description":"可选：续用的子会话 id"},` +
+				`"agent":{"type":"string","description":"可选：子智能体用的定义名；只能选本会话定义 [use.subagent] agents 里列出的，缺省为通用子智能体"}},"required":["task"]}`)},
 		Risk:     toolhub.Write,
 		Parallel: &yes,
 		Timeout:  SubagentTimeout,
 		Items:    []string{ItemSpawn},
 		Call: func(ctx context.Context, cx *toolhub.Cx, raw json.RawMessage) (toolhub.Output, error) {
-			var a struct{ Task, Session string }
+			var a struct{ Task, Session, Agent string }
 			if err := json.Unmarshal(raw, &a); err != nil || strings.TrimSpace(a.Task) == "" {
 				return toolhub.Failf("task 不能为空"), nil
 			}
@@ -46,10 +47,14 @@ func Tool(h *host.Host, f host.Factory) *toolhub.Tool {
 				}
 				id = cx.SessionID + "/sub-" + cid
 			}
+			def, err := pickDefinition(cx, strings.TrimSpace(a.Agent))
+			if err != nil {
+				return toolhub.Failf("%v", err), nil
+			}
 			cx.ChildSessionID = id
 			unlock := locks.lock(id)
 			defer unlock()
-			out, err := h.Spawn(ctx, cx.SessionID, id, Definition, f, a.Task)
+			out, err := h.Spawn(ctx, cx.SessionID, id, def, f, a.Task)
 			if err != nil {
 				if ctx.Err() != nil {
 					return toolhub.Output{}, ctx.Err()
@@ -94,4 +99,35 @@ func (c *childLocks) lock(id string) func() {
 		}
 		c.mu.Unlock()
 	}
+}
+
+// UseConfig 定义里的 [use.subagent]：本智能体派子智能体时可选的定义（2026-11-04 审查 P2：原先只能用内置的通用定义）。
+// 子会话仍不越过父会话（父定义的 tools 白名单与 [use.permission] 上限都叠加到子会话上，见 assemble.ParentLimits）。
+//
+//	[use.subagent]
+//	agents = ["reviewer", "researcher"]
+type UseConfig struct {
+	Agents []string `toml:"agents" limit:"intersect" description:"subagent 工具的 agent 参数可选的定义名；不写 = 只能用通用子智能体"`
+}
+
+// pickDefinition 本次委派用的定义：没给 = 内置通用定义；给了必须在 [use.subagent] agents 里。
+func pickDefinition(cx *toolhub.Cx, name string) (string, error) {
+	if name == "" || name == Definition {
+		return Definition, nil
+	}
+	var u UseConfig
+	if cx.Ctx != nil {
+		if err := cx.Ctx.Config("subagent", &u); err != nil {
+			return "", err
+		}
+	}
+	for _, a := range u.Agents {
+		if a == name {
+			return name, nil
+		}
+	}
+	if len(u.Agents) == 0 {
+		return "", fmt.Errorf("本会话的定义没有列出可委派的智能体（[use.subagent] agents），agent 只能留空")
+	}
+	return "", fmt.Errorf("智能体 %s 不在可委派列表里（%s）", name, strings.Join(u.Agents, "、"))
 }

@@ -50,6 +50,9 @@ func (*plug) Setup(cx *component.Registrar) error {
 		return err
 	}
 	cx.Template(src)
+	if err := cx.AgentConfig(&UseConfig{}); err != nil {
+		return err
+	}
 	t := Tool(h, h.ChildFactory()).WithItems(ItemSpawn)
 	for _, it := range Items() {
 		cx.Register(assemble.PointPermItems, it.ID, it)
