@@ -31,7 +31,7 @@ func TestReadRange(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(out, "line3\nline4\n") || !strings.Contains(out, "offset=5") {
+	if !strings.HasPrefix(out, "3\tline3\n4\tline4\n") || !strings.Contains(out, "offset=5") {
 		t.Fatalf("行范围错: %q", out)
 	}
 	if _, err := readRange("f", []byte("a\n"), 5, 0); err == nil {
@@ -41,7 +41,7 @@ func TestReadRange(t *testing.T) {
 		t.Fatal("二进制应报错")
 	}
 	out, _ = readRange("f", []byte("a\nb\n"), 0, 0)
-	if out != "a\nb\n" {
+	if out != "1\ta\n2\tb\n" {
 		t.Fatalf("全量读错: %q", out)
 	}
 }
@@ -91,7 +91,7 @@ func TestGrepRespectsIgnore(t *testing.T) {
 			t.Errorf("缺少 %s: %s", want, out)
 		}
 	}
-	for _, bad := range []string{"gen.go", "build/", "x.log", "node_modules", "bin.dat"} {
+	for _, bad := range []string{"gen.go", "build/", "x.log", "node_modules/", "bin.dat"} {
 		if strings.Contains(out, bad) {
 			t.Errorf("不应含 %s: %s", bad, out)
 		}
@@ -116,7 +116,7 @@ func TestGrepRespectsIgnore(t *testing.T) {
 		t.Fatalf("literal 错: %s", out)
 	}
 	out, _ = grep(context.Background(), root, "F.o", "", "", false, true, 0, 0)
-	if out != "没有匹配" {
+	if !strings.HasPrefix(out, "没有匹配") || strings.Contains(out, "a.go") {
 		t.Fatalf("literal 不应按正则: %s", out)
 	}
 	if _, err := grep(context.Background(), root, "x", "..", "", false, false, 0, 0); err == nil {
@@ -132,9 +132,13 @@ func TestGlobFiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	lines := strings.Split(strings.TrimSpace(out), "\n")
+	list, note, _ := strings.Cut(out, "\n\n") // 文件列表之后空一行是提示（跳过的依赖目录等）
+	lines := strings.Split(strings.TrimSpace(list), "\n")
 	if len(lines) != 2 || lines[0] != "sub/b.go" || lines[1] != "a.go" {
 		t.Fatalf("glob 结果或排序错: %q", out)
+	}
+	if !strings.Contains(note, "node_modules") {
+		t.Fatalf("应提示跳过了 node_modules: %q", out)
 	}
 	out, _ = globFiles(context.Background(), root, "*.go", "sub", 0)
 	if strings.TrimSpace(out) != "sub/b.go" {

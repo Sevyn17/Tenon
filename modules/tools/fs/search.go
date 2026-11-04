@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	"ybase/runtime/toolhub"
@@ -118,8 +119,7 @@ func readRange(display string, b []byte, offset, limit int) (string, error) {
 			}
 			break
 		}
-		sb.WriteString(lines[i])
-		sb.WriteByte('\n')
+		writeNumbered(&sb, i+1, lines[i])
 		last = i + 1
 	}
 	out := sb.String()
@@ -127,6 +127,15 @@ func readRange(display string, b []byte, offset, limit int) (string, error) {
 		out += fmt.Sprintf("\n[已显示第 %d–%d 行（共 %d 行），用 offset=%d 继续]", offset, last, total, last+1)
 	}
 	return out, nil
+}
+
+// writeNumbered 输出带行号的一行（`行号<Tab>内容`，与 grep 的行号一致）：模型据此给 edit 定位、
+// 按 offset 续读（2026-11-04 审查 P2 工具体验：原先 read_file 不带行号）。
+func writeNumbered(sb *strings.Builder, n int, line string) {
+	sb.WriteString(strconv.Itoa(n))
+	sb.WriteByte('\t')
+	sb.WriteString(line)
+	sb.WriteByte('\n')
 }
 
 // readLarge 流式读大文件：只保留 [offset, offset+limit) 的行，其余行只计数（内存 O(输出)）。
@@ -170,8 +179,7 @@ func readLarge(display, path string, offset, limit int) (string, error) {
 				}
 				full = true
 			} else {
-				sb.WriteString(l)
-				sb.WriteByte('\n')
+				writeNumbered(&sb, i+1, l)
 				last = i + 1
 			}
 		}
@@ -297,7 +305,10 @@ func matchSegs(ps, ns []string) bool {
 }
 
 // walk 遍历 dir（绝对路径）下的普通文件，跳过忽略项与符号链接；fn 返回 false 停止。
-func walk(ctx context.Context, root, dir string, fn func(abs, rel string, info fs.FileInfo) bool) error {
+// 返回因 skipDirs 跳过的 vendor / node_modules 目录（相对路径；.git 不报），调用方据此提示
+// （2026-11-04 审查 P2 工具体验：原先静默跳过，模型以为依赖里没有这段代码）。
+func walk(ctx context.Context, root, dir string, fn func(abs, rel string, info fs.FileInfo) bool) ([]string, error) {
+	var skipped []string
 	var rules []ignoreRule
 	// 加载 root 到 dir 沿途各级 .gitignore。
 	relDir, _ := filepath.Rel(root, dir)
@@ -342,7 +353,13 @@ func walk(ctx context.Context, root, dir string, fn func(abs, rel string, info f
 				continue
 			}
 			if e.IsDir() {
-				if skipDirs[name] || ignored(rules, r, true) {
+				if skipDirs[name] {
+					if name != ".git" {
+						skipped = append(skipped, r)
+					}
+					continue
+				}
+				if ignored(rules, r, true) {
 					continue
 				}
 				sub := rules
@@ -369,9 +386,25 @@ func walk(ctx context.Context, root, dir string, fn func(abs, rel string, info f
 	}
 	err := visit(dir, relDir, rules)
 	if errors.Is(err, stop) {
-		return nil
+		err = nil
 	}
-	return err
+	return skipped, err
+}
+
+// skippedNote 跳过目录的提示（没有跳过返回空）；最多列 3 个。
+func skippedNote(dirs []string) string {
+	if len(dirs) == 0 {
+		return ""
+	}
+	show := dirs
+	if len(show) > 3 {
+		show = show[:3]
+	}
+	s := strings.Join(show, "、")
+	if len(dirs) > 3 {
+		s += fmt.Sprintf(" 等 %d 个", len(dirs))
+	}
+	return fmt.Sprintf("（未搜索依赖目录 %s；要搜请把 path 指向其中）", s)
 }
 
 // ---------- grep ----------
@@ -495,8 +528,9 @@ func grep(ctx context.Context, root, pattern, p, glob string, icase, literal boo
 		}
 		return true
 	}
+	var skippedDirs []string
 	if st.IsDir() {
-		if err := walk(ctx, root, start, func(abs, rel string, _ fs.FileInfo) bool {
+		if skippedDirs, err = walk(ctx, root, start, func(abs, rel string, _ fs.FileInfo) bool {
 			if glob != "" && !matchGlob(glob, rel, start, root) {
 				return true
 			}
@@ -508,9 +542,9 @@ func grep(ctx context.Context, root, pattern, p, glob string, icase, literal boo
 		rel, _ := filepath.Rel(root, start)
 		scan(start, filepath.ToSlash(rel))
 	}
-	big := ""
+	big := skippedNote(skippedDirs)
 	if skippedBig > 0 {
-		big = fmt.Sprintf("（跳过了 %d 个超过 %dMB 的文件；需要时用 shell 搜）", skippedBig, GrepMaxFile>>20)
+		big += fmt.Sprintf("（跳过了 %d 个超过 %dMB 的文件；需要时用 shell 搜）", skippedBig, GrepMaxFile>>20)
 	}
 	if matches == 0 {
 		return "没有匹配" + big, nil
@@ -587,16 +621,18 @@ func globFiles(ctx context.Context, root, pattern, p string, limit int) (string,
 		mt  int64
 	}
 	var hits []hit
-	if err := walk(ctx, root, start, func(_, rel string, info fs.FileInfo) bool {
+	skippedDirs, err := walk(ctx, root, start, func(_, rel string, info fs.FileInfo) bool {
 		if matchGlob(pattern, rel, start, root) {
 			hits = append(hits, hit{rel, info.ModTime().UnixNano()})
 		}
 		return true
-	}); err != nil {
+	})
+	if err != nil {
 		return "", err
 	}
+	note := skippedNote(skippedDirs)
 	if len(hits) == 0 {
-		return "没有匹配的文件", nil
+		return "没有匹配的文件" + note, nil
 	}
 	sort.Slice(hits, func(i, j int) bool {
 		if hits[i].mt != hits[j].mt {
@@ -614,6 +650,9 @@ func globFiles(ctx context.Context, root, pattern, p string, limit int) (string,
 	}
 	if n > limit {
 		fmt.Fprintf(&sb, "\n[共 %d 个，已显示最新的 %d 个；请细化模式]", n, limit)
+	}
+	if note != "" {
+		sb.WriteString("\n" + note)
 	}
 	return sb.String(), nil
 }

@@ -27,8 +27,9 @@ import (
 const editSchema = `{"type":"object","properties":{
 "path":{"type":"string","description":"文件路径（相对工作目录）"},
 "edits":{"type":"array","description":"一处或多处替换。每处 old_text 在原文件中必须唯一、互不重叠；相邻改动合并成一处。","items":{"type":"object","properties":{
-"old_text":{"type":"string","description":"要替换的原文（精确匹配；尽量短但要唯一）。为空表示新建文件"},
-"new_text":{"type":"string","description":"替换后的文本"}},"required":["old_text","new_text"]}}},
+"old_text":{"type":"string","description":"要替换的原文（精确匹配；尽量短但要唯一）。为空表示新建文件。不要带 read_file 输出里的行号前缀"},
+"new_text":{"type":"string","description":"替换后的文本"},
+"replace_all":{"type":"boolean","description":"替换 old_text 的全部出现（不要求唯一，只做精确匹配）；缺省 false"}},"required":["old_text","new_text"]}}},
 "required":["path","edits"]}`
 
 type editArgs struct {
@@ -39,7 +40,11 @@ type editArgs struct {
 type editItem struct {
 	Old string `json:"old_text"`
 	New string `json:"new_text"`
+	All bool   `json:"replace_all"`
 }
+
+// EditSnippetLines 结果里每处改动回显的最多行数（改动后的文本，带行号）。
+const EditSnippetLines = 12
 
 // Edit 构造 edit 工具。
 // tr 可选：编辑已存在的文件前做读后写检查（审查 P1-43）。
@@ -113,6 +118,22 @@ func applyEdits(p, display string, edits []editItem) (string, error) {
 	for i, e := range edits {
 		old := strings.ReplaceAll(e.Old, "\r\n", "\n")
 		nw := strings.ReplaceAll(e.New, "\r\n", "\n")
+		if e.All {
+			n := 0
+			for off := 0; ; {
+				j := strings.Index(content[off:], old)
+				if j < 0 {
+					break
+				}
+				reps = append(reps, rep{off + j, off + j + len(old), nw, i, false})
+				off += j + len(old)
+				n++
+			}
+			if n == 0 {
+				return "", fmt.Errorf("第 %d 处编辑：找不到 old_text（replace_all 只做精确匹配）", i+1)
+			}
+			continue
+		}
 		s, en, fuzzy, err := locate(content, old)
 		if err != nil {
 			return "", fmt.Errorf("第 %d 处编辑：%v", i+1, err)
@@ -127,9 +148,12 @@ func applyEdits(p, display string, edits []editItem) (string, error) {
 	}
 	var out strings.Builder
 	var notes []string
-	prev := 0
+	type span struct{ from, n int } // 改动后文件里的起始行（1 起）与行数，回显片段用
+	var spans []span
+	prev, newLine := 0, 1 // newLine：改动后文件里当前写到的行号，逐段累加（replace_all 时不必每处从头数）
 	for _, r := range reps {
 		out.WriteString(content[prev:r.start])
+		newLine += strings.Count(content[prev:r.start], "\n")
 		out.WriteString(r.text)
 		prev = r.end
 		line := strings.Count(content[:r.start], "\n") + 1
@@ -138,6 +162,7 @@ func applyEdits(p, display string, edits []editItem) (string, error) {
 			n += "（规范化匹配：忽略了行尾空白 / Unicode 标点差异）"
 		}
 		notes = append(notes, n)
+		spans = append(spans, span{newLine, max(countLines(r.text), 1)})
 	}
 	out.WriteString(content[prev:])
 	res := out.String()
@@ -154,8 +179,31 @@ func applyEdits(p, display string, edits []editItem) (string, error) {
 	if err := writeAtomic(p, data); err != nil {
 		return "", err
 	}
-	sort.Strings(notes)
-	return fmt.Sprintf("已编辑 %s（%d 处）\n%s", display, len(edits), strings.Join(notes, "\n")), nil
+	// notes 已按位置排好（reps 按 start 排序）；原先 sort.Strings 按字典序排，"第 10 处"排在"第 2 处"前面。
+	var b strings.Builder
+	fmt.Fprintf(&b, "已编辑 %s（%d 处）\n%s", display, len(reps), strings.Join(notes, "\n"))
+	// 回显改动后的片段（带行号），模型不必再 read_file 一次确认（2026-11-04 审查 P2 工具体验）。
+	lines := strings.Split(strings.TrimSuffix(res, "\n"), "\n")
+	if crlf {
+		lines = strings.Split(strings.TrimSuffix(strings.ReplaceAll(res, "\r\n", "\n"), "\n"), "\n")
+	}
+	shown := 0
+	for _, s := range spans {
+		if shown >= 3*EditSnippetLines {
+			b.WriteString("\n…（其余改动未显示）")
+			break
+		}
+		end := min(s.from-1+s.n, len(lines), s.from-1+EditSnippetLines)
+		b.WriteString("\n---\n")
+		for i := s.from - 1; i < end; i++ {
+			fmt.Fprintf(&b, "%d\t%s\n", i+1, lines[i]) // 与 read_file 同格式
+			shown++
+		}
+		if s.n > EditSnippetLines {
+			fmt.Fprintf(&b, "…（本处共 %d 行，只显示前 %d 行）\n", s.n, EditSnippetLines)
+		}
+	}
+	return strings.TrimSuffix(b.String(), "\n"), nil
 }
 
 // locate 返回 old 在 content 中的唯一位置 [start,end)。

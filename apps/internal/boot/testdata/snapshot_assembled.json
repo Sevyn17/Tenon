@@ -150,11 +150,15 @@
                     "properties": {
                       "old_text": {
                         "type": "string",
-                        "description": "要替换的原文（精确匹配；尽量短但要唯一）。为空表示新建文件"
+                        "description": "要替换的原文（精确匹配；尽量短但要唯一）。为空表示新建文件。不要带 read_file 输出里的行号前缀"
                       },
                       "new_text": {
                         "type": "string",
                         "description": "替换后的文本"
+                      },
+                      "replace_all": {
+                        "type": "boolean",
+                        "description": "替换 old_text 的全部出现（不要求唯一，只做精确匹配）；缺省 false"
                       }
                     },
                     "required": [
@@ -609,11 +613,15 @@
                     "properties": {
                       "old_text": {
                         "type": "string",
-                        "description": "要替换的原文（精确匹配；尽量短但要唯一）。为空表示新建文件"
+                        "description": "要替换的原文（精确匹配；尽量短但要唯一）。为空表示新建文件。不要带 read_file 输出里的行号前缀"
                       },
                       "new_text": {
                         "type": "string",
                         "description": "替换后的文本"
+                      },
+                      "replace_all": {
+                        "type": "boolean",
+                        "description": "替换 old_text 的全部出现（不要求唯一，只做精确匹配）；缺省 false"
                       }
                     },
                     "required": [
@@ -1090,11 +1098,15 @@
                     "properties": {
                       "old_text": {
                         "type": "string",
-                        "description": "要替换的原文（精确匹配；尽量短但要唯一）。为空表示新建文件"
+                        "description": "要替换的原文（精确匹配；尽量短但要唯一）。为空表示新建文件。不要带 read_file 输出里的行号前缀"
                       },
                       "new_text": {
                         "type": "string",
                         "description": "替换后的文本"
+                      },
+                      "replace_all": {
+                        "type": "boolean",
+                        "description": "替换 old_text 的全部出现（不要求唯一，只做精确匹配）；缺省 false"
                       }
                     },
                     "required": [
@@ -1527,11 +1539,15 @@
                     "properties": {
                       "old_text": {
                         "type": "string",
-                        "description": "要替换的原文（精确匹配；尽量短但要唯一）。为空表示新建文件"
+                        "description": "要替换的原文（精确匹配；尽量短但要唯一）。为空表示新建文件。不要带 read_file 输出里的行号前缀"
                       },
                       "new_text": {
                         "type": "string",
                         "description": "替换后的文本"
+                      },
+                      "replace_all": {
+                        "type": "boolean",
+                        "description": "替换 old_text 的全部出现（不要求唯一，只做精确匹配）；缺省 false"
                       }
                     },
                     "required": [
@@ -1981,11 +1997,15 @@
                     "properties": {
                       "old_text": {
                         "type": "string",
-                        "description": "要替换的原文（精确匹配；尽量短但要唯一）。为空表示新建文件"
+                        "description": "要替换的原文（精确匹配；尽量短但要唯一）。为空表示新建文件。不要带 read_file 输出里的行号前缀"
                       },
                       "new_text": {
                         "type": "string",
                         "description": "替换后的文本"
+                      },
+                      "replace_all": {
+                        "type": "boolean",
+                        "description": "替换 old_text 的全部出现（不要求唯一，只做精确匹配）；缺省 false"
                       }
                     },
                     "required": [
@@ -2461,11 +2481,15 @@
                     "properties": {
                       "old_text": {
                         "type": "string",
-                        "description": "要替换的原文（精确匹配；尽量短但要唯一）。为空表示新建文件"
+                        "description": "要替换的原文（精确匹配；尽量短但要唯一）。为空表示新建文件。不要带 read_file 输出里的行号前缀"
                       },
                       "new_text": {
                         "type": "string",
                         "description": "替换后的文本"
+                      },
+                      "replace_all": {
+                        "type": "boolean",
+                        "description": "替换 old_text 的全部出现（不要求唯一，只做精确匹配）；缺省 false"
                       }
                     },
                     "required": [
@@ -2898,11 +2922,15 @@
                     "properties": {
                       "old_text": {
                         "type": "string",
-                        "description": "要替换的原文（精确匹配；尽量短但要唯一）。为空表示新建文件"
+                        "description": "要替换的原文（精确匹配；尽量短但要唯一）。为空表示新建文件。不要带 read_file 输出里的行号前缀"
                       },
                       "new_text": {
                         "type": "string",
                         "description": "替换后的文本"
+                      },
+                      "replace_all": {
+                        "type": "boolean",
+                        "description": "替换 old_text 的全部出现（不要求唯一，只做精确匹配）；缺省 false"
                       }
                     },
                     "required": [
@@ -3278,11 +3306,15 @@
                     "properties": {
                       "old_text": {
                         "type": "string",
-                        "description": "要替换的原文（精确匹配；尽量短但要唯一）。为空表示新建文件"
+                        "description": "要替换的原文（精确匹配；尽量短但要唯一）。为空表示新建文件。不要带 read_file 输出里的行号前缀"
                       },
                       "new_text": {
                         "type": "string",
                         "description": "替换后的文本"
+                      },
+                      "replace_all": {
+                        "type": "boolean",
+                        "description": "替换 old_text 的全部出现（不要求唯一，只做精确匹配）；缺省 false"
                       }
                     },
                     "required": [
