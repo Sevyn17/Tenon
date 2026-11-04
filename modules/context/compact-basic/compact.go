@@ -48,7 +48,9 @@ type Compactor struct {
 	Model     string // 摘要所用模型（记入 meta）
 	Summarize Summarizer
 	Before    []BeforeCompact
-	Redact    func(string) string // 可空；摘要落库前脱敏
+	// befores 可空：运行时读 before_compact 点位上的登记（组件 Setup 时接好，见 plugin.go）。
+	befores func() []BeforeCompact
+	Redact  func(string) string // 可空；摘要落库前脱敏
 }
 
 // Threshold floor(min(W×0.8, W−O−B))；Window 未知返回 0。
@@ -163,7 +165,7 @@ func (c *Compactor) At(ctx context.Context, sessionID string, core *session.Core
 	if !core.CanCompact(upto) {
 		return nil, nil, fmt.Errorf("compact: upto=%d 不是合法边界", upto)
 	}
-	for _, b := range c.Before {
+	for _, b := range c.allBefore() {
 		if err := b(ctx, sessionID, upto); err != nil {
 			return nil, nil, fmt.Errorf("%w: %v", ErrDenied, err)
 		}
@@ -226,4 +228,12 @@ func HubSummarizer(h *modelhub.Hub, alias string) Summarizer {
 		}
 		return sb.String(), nil
 	}
+}
+
+// allBefore 显式设置的 Before 加上点位上登记的。
+func (c *Compactor) allBefore() []BeforeCompact {
+	if c.befores == nil {
+		return c.Before
+	}
+	return append(append([]BeforeCompact(nil), c.Before...), c.befores()...)
 }

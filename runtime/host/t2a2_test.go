@@ -147,3 +147,36 @@ func TestRunningTurnDoesNotSleep(t *testing.T) {
 	// 回合结束后再过一会儿会正常休眠。
 	waitFor(t, func() bool { return status(t, r, "s1") == store.StatusSleeping })
 }
+
+// 只有背景（context）信件的会话照常休眠；兜底扫描不因背景信件唤醒它（2026-11-04 审查 P1-16：
+// 原先信箱非空就不睡，背景信件把会话钉在内存里，还会唤醒休眠会话）。
+func TestContextOnlyInboxSleepsAndStaysAsleep(t *testing.T) {
+	m := &scriptedModel{}
+	r := newT2Rig(t, filepath.Join(t.TempDir(), "s.db"), m, 0, nil)
+	r.h.SleepAfter = 50 * time.Millisecond
+	hd := mustOpen(t, r.h, "s1")
+	body, _ := json.Marshal(session.Content{session.NewTextPart("背景")})
+	if _, err := r.db.Admit(context.Background(), "s1", store.InboxItem{
+		ItemID: "ctx-1", Kind: store.InboxContext, Input: string(body), Trust: "trusted",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := hd.Wait(); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, func() bool { return status(t, r, "s1") == store.StatusSleeping })
+	waitFor(t, func() bool {
+		_, ok := r.h.Get("s1")
+		return !ok
+	})
+	n, err := r.h.ScanOnce(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Fatalf("只有背景信件不应唤醒，got %d", n)
+	}
+	if c := m.getCalls(); c != 0 {
+		t.Fatalf("背景信件不应开回合，calls=%d", c)
+	}
+}

@@ -5,6 +5,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"time"
 
 	"ybase/runtime/mail"
@@ -41,8 +42,12 @@ func (a *Agent) Retry(ctx context.Context) (session.EndReason, error) {
 		return session.DoneReason(), nil
 	}
 	_, need, err := a.Core.Resume()
-	if err != nil || need == nil {
+	if errors.Is(err, session.ErrNoTurn) || errors.Is(err, session.ErrBadResume) || (err == nil && need == nil) {
 		return session.DoneReason(), nil // 没有可续跑的回合：视为没有重跑内容
+	}
+	if err != nil {
+		// 只读、损坏等其他错误向上报：所属树的重启策略要分清"无可重跑"和"会话坏了"（审查 P1-22）。
+		return session.EndReason{}, err
 	}
 	return a.drive(ctx, need)
 }
@@ -201,4 +206,11 @@ func (a *Agent) TakeTraceEvents() []store.TraceEvent {
 	out := a.traceEvents
 	a.traceEvents = nil
 	return out
+}
+
+// TakeUnconsumed 取走上一回合结束时没进模型的插话（取消、中断、失败时内核原样交还，T17 / 审查 P1-19）。
+func (a *Agent) TakeUnconsumed() []session.PendingInput {
+	u := a.unconsumed
+	a.unconsumed = nil
+	return u
 }

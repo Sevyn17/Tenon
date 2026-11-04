@@ -125,7 +125,9 @@ type Agent struct {
 	// Between 可空：每个需求执行前调用（会话宿主在这里应用回合中途的命令），返回替换后的需求。
 	Between func(need *session.Need) (*session.Need, error)
 
-	consume []string // 随下一次 checkpoint 删除的 inbox 项（session-host H7：core.Input 成功后同事务删除）
+	// unconsumed 回合结束时内核交还的暂存插话（DoneNeed.Unconsumed），宿主用 TakeUnconsumed 取走后回投。
+	unconsumed []session.PendingInput
+	consume    []string // 随下一次 checkpoint 删除的 inbox 项（session-host H7：core.Input 成功后同事务删除）
 
 	// crashAt 故障注入（测试）：在指定 checkpoint 点提交后返回 errCrash，模拟进程被杀。
 	crashAt string
@@ -153,6 +155,7 @@ func (a *Agent) drive(ctx context.Context, need *session.Need) (session.EndReaso
 		}
 		switch need.Kind {
 		case session.NeedDone:
+			a.unconsumed = append(a.unconsumed, need.Done.Unconsumed...)
 			a.endStep("ok")
 			if err := a.point(ctx, "turn_end", "idle", nil); err != nil {
 				return session.EndReason{}, err

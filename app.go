@@ -3,18 +3,17 @@ package ybase
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
-	"github.com/google/uuid"
-
 	"ybase/appapi"
 	"ybase/runtime/agent"
+	"ybase/runtime/agentdef"
 	"ybase/runtime/assemble"
 	"ybase/runtime/component"
-	"ybase/runtime/host"
+	"ybase/runtime/mail"
 	"ybase/runtime/session"
-	"ybase/runtime/store"
 )
 
 // Meta 会话业务 meta（写进会话行，组件经 *Ctx 读）。
@@ -29,7 +28,7 @@ type Reply struct {
 }
 
 // Start 启动后台工作：打开存储、跑 ready 点位、接上应用接口层。
-func (a *App) Start(ctx context.Context) error {
+func (a *App) Start(ctx context.Context) (err error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if a.closed {
@@ -40,17 +39,26 @@ func (a *App) Start(ctx context.Context) error {
 	}
 	scope := component.NewRoot("ybase")
 	if err := a.asm.Start(scope); err != nil {
+		_ = scope.Close(ctx)
 		return fmt.Errorf("ybase: 启动组件: %w", err)
 	}
+	bgCtx, cancel := context.WithCancel(context.Background())
+	// 中途失败整体回滚：停后台协程、关组件作用域，再 Start 从头来（审查 P1-23：原先留着已启动的
+	// 作用域和后台协程，再次 Start 会让组件启动两次）。
+	defer func() {
+		if err != nil {
+			cancel()
+			_ = scope.Close(context.WithoutCancel(ctx))
+			a.scope, a.sleepStop = nil, nil
+		}
+	}()
 	a.scope = scope
 	db := a.handle.DB()
 	if db == nil {
-		_ = scope.Close(ctx)
 		return fmt.Errorf("%w: 存储没有打开", ErrInvalid)
 	}
 	a.host.DB = db
 	a.host.SleepAfter = a.sleepAfter
-	bgCtx, cancel := context.WithCancel(context.Background())
 	a.sleepStop = cancel
 	if a.sleepAfter > 0 { // 休眠会话的兜底扫描（02 2.2）
 		go a.host.ScanLoop(bgCtx, a.sleepAfter)
@@ -139,10 +147,13 @@ func (a *App) Close(ctx context.Context) error {
 	return nil
 }
 
+// LocalUser 没有 WithUser 时的发送者（单机应用的本机用户）：信封 from 必须有 id，会话创建者记它。
+const LocalUser = "local"
+
 // Ask 新开一个会话跑一轮：建会话（绑定义、写 meta）→ 投递用户消息 → 等回合结束 → 取最后一段助手文本。
 func (a *App) Ask(ctx context.Context, agentName, text string, meta Meta) (*Reply, error) {
 	a.mu.Lock()
-	started, closed, rb := a.started, a.closed, a.builder
+	started, closed := a.started, a.closed
 	a.mu.Unlock()
 	if !started || closed {
 		return nil, ErrNotStarted
@@ -153,38 +164,37 @@ func (a *App) Ask(ctx context.Context, agentName, text string, meta Meta) (*Repl
 	if strings.TrimSpace(text) == "" {
 		return nil, fmt.Errorf("%w: 消息为空", ErrInvalid)
 	}
-	u, err := uuid.NewV7()
-	if err != nil {
-		return nil, fmt.Errorf("ybase: 生成会话 id: %w", err)
+	// 走信封投递（审查 P1-24）：from = human:<用户>，经会话打开守卫、投递守卫与联系名单，
+	// 和 CLI / 服务端 / 其他会话发来的信同一条路；会话只构造一次。
+	user := userFrom(ctx)
+	if user == "" {
+		user = LocalUser
 	}
-	id := u.String()
-	ag, cfg, err := rb.Build(id, agentName, false)
-	if err != nil {
-		return nil, err
-	}
-	sm := store.SessionMeta{ID: id, Creator: userFrom(ctx)}
-	if ag.Def != nil {
-		sm.AgentID, sm.AgentHash = ag.Def.ID, ag.Def.Version
-	}
+	var raw json.RawMessage
 	if len(meta) > 0 {
-		raw, err := json.Marshal(meta)
+		b, err := json.Marshal(meta)
 		if err != nil {
 			return nil, fmt.Errorf("%w: meta: %v", ErrInvalid, err)
 		}
-		sm.Meta = raw
+		raw = b
 	}
-	if _, err := ag.OpenAs(ctx, cfg, sm); err != nil {
-		return nil, err
-	}
-	hd, err := a.host.Open(ctx, id)
+	id, err := a.host.DeliverAgent(ctx, mail.Envelope{
+		From: mail.Address{Kind: mail.AddrHuman, ID: user},
+		To:   mail.Address{Kind: mail.AddrAgent, ID: agentName},
+		Kind: mail.KindRequest, Origin: mail.OriginHuman, Body: text,
+	}, raw)
 	if err != nil {
+		if errors.Is(err, agentdef.ErrNotFound) {
+			return nil, fmt.Errorf("%w: 定义 %s", ErrNotFound, agentName)
+		}
 		return nil, err
 	}
-	if err := hd.Do(host.Command{
-		Kind: host.Send, ItemID: host.NewItemID(), Text: text,
-		Trust: "trusted", Source: "user",
-	}); err != nil {
-		return nil, err
+	hd, ok := a.host.Get(id)
+	if !ok {
+		var err error
+		if hd, err = a.host.Open(ctx, id); err != nil {
+			return nil, err
+		}
 	}
 	if err := hd.Wait(); err != nil {
 		return nil, err

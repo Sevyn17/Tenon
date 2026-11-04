@@ -323,6 +323,13 @@ func (cx *Registrar) Register(point, name string, impl any) {
 	cx.asm.points = append(cx.asm.points, Registration{Plugin: cx.plugin, Point: point, Name: name})
 }
 
+// PointItems 返回一个读取 point 上全部登记的函数：装配结束后调用才完整（别的组件可能排在本组件之后 Setup）。
+// 开位的组件用它在运行时取登记项，不必让应用在装配后再接线（2026-11-04 审查 P1-25）。
+func (cx *Registrar) PointItems(point string) func() []Item {
+	asm := cx.asm
+	return func() []Item { return asm.items[point] }
+}
+
 // Item 通用点位上的一条登记。
 type Item struct {
 	Plugin string

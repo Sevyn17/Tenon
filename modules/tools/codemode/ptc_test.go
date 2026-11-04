@@ -38,7 +38,12 @@ func setup(t *testing.T) (*toolhub.Hub, *toolhub.Toolset, *[]string) {
 
 func call(t *testing.T, hub *toolhub.Hub, ts *toolhub.Toolset, code string) toolhub.Output {
 	t.Helper()
-	args, _ := json.Marshal(map[string]any{"code": code, "timeout": 2})
+	return callTimeout(t, hub, ts, code, 2)
+}
+
+func callTimeout(t *testing.T, hub *toolhub.Hub, ts *toolhub.Toolset, code string, sec int) toolhub.Output {
+	t.Helper()
+	args, _ := json.Marshal(map[string]any{"code": code, "timeout": sec})
 	run := hub.ExecuteIn(context.Background(), ts, kctx("s1"), []session.ToolCall{{ID: "c1", Name: Name, Args: args}}, nil)
 	res, _ := run.Next()
 	if res.Err != nil {
@@ -124,8 +129,9 @@ func TestResourceLimits(t *testing.T) {
 	maxHeap = 64 << 20 // 测试里调小，避免真分配 512 MiB
 	defer func() { maxHeap = old }()
 	start = time.Now()
-	out = call(t, hub, ts, `var a = []; for (;;) a.push(new Array(1e6).fill(1))`)
-	if !strings.Contains(text(out), "[memory-limit]") || time.Since(start) > 15*time.Second {
+	// 程序超时放宽到 30 秒：全量测试并行时机器很忙，2 秒内可能还没长到上限，测到的就成了超时而不是内存上限。
+	out = callTimeout(t, hub, ts, `var a = []; for (;;) a.push(new Array(1e6).fill(1))`, 30)
+	if !strings.Contains(text(out), "[memory-limit]") || time.Since(start) > 30*time.Second {
 		t.Fatalf("大量分配应报内存超限: %q after %v", text(out), time.Since(start))
 	}
 }

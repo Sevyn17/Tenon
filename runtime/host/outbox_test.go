@@ -203,3 +203,25 @@ func TestMaintainPrunesOldRows(t *testing.T) {
 		t.Fatalf("未派发的外发不应清：%+v", items)
 	}
 }
+
+// 不带会话键的 agent: 投递重投（发件箱至少一次：投递成功、标记前崩溃）只建一个会话，
+// 信件也只进一次（2026-11-04 审查 P1-17：原先每次随机会话 id，重投就多建一个会话）。
+func TestAgentDeliverRetryCreatesOneSession(t *testing.T) {
+	ctx := context.Background()
+	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{})
+	env := mail.Envelope{From: mail.Address{Kind: mail.AddrComponent, ID: "test"},
+		To: mail.Address{Kind: mail.AddrAgent, ID: "worker"}, Body: "任务"}
+	if err := env.Normalize(); err != nil {
+		t.Fatal(err)
+	}
+	before, _ := r.db.ListSessions(ctx, 0, 100, false)
+	for i := 0; i < 2; i++ {
+		if err := r.h.Deliver(ctx, env); err != nil {
+			t.Fatalf("第 %d 次投递: %v", i+1, err)
+		}
+	}
+	after, _ := r.db.ListSessions(ctx, 0, 100, false)
+	if got := len(after) - len(before); got != 1 {
+		t.Fatalf("同一封信重投应只建 1 个会话，建了 %d 个", got)
+	}
+}

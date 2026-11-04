@@ -1,7 +1,7 @@
 package compactbasic
 
 // 插件登记：compact-basic（标准模块）。提供 service:compactor（*Compactor，实现 agent.Compactor 与 runtime.Redactable），
-// 开位 before_compact（乙类）：应用装配后把登记项交给 Compactor.Before。
+// 开位 before_compact（乙类）：压缩时读点位上的登记，应用不必再接线（审查 P1-25：原先靠应用调 Wire，SDK 没调）。
 
 import (
 	"ybase/runtime/assemble"
@@ -21,24 +21,6 @@ type Config struct {
 
 // SetRedact 装脱敏函数（runtime.Redactable）。
 func (c *Compactor) SetRedact(f func(string) string) { c.Redact = f }
-
-// Wire 把装配里 before_compact 的登记项接到压缩器上（应用在 Assemble 之后调用一次）。
-func Wire(asm *component.Assembly) *Compactor {
-	v, ok := asm.Value(assemble.ServiceCompactor)
-	if !ok {
-		return nil
-	}
-	c, _ := v.(*Compactor)
-	if c == nil {
-		return nil
-	}
-	for _, it := range asm.Items(PointBeforeCompact) {
-		if b, ok := it.Impl.(BeforeCompact); ok {
-			c.Before = append(c.Before, b)
-		}
-	}
-	return c
-}
 
 type compactPlugin struct{}
 
@@ -76,6 +58,16 @@ func (compactPlugin) Setup(cx *component.Registrar) error {
 				c.MaxOutput = md.MaxOutput
 			}
 		}
+	}
+	items := cx.PointItems(PointBeforeCompact)
+	c.befores = func() []BeforeCompact {
+		var out []BeforeCompact
+		for _, it := range items() {
+			if b, ok := it.Impl.(BeforeCompact); ok {
+				out = append(out, b)
+			}
+		}
+		return out
 	}
 	return cx.Provide("compactor", c)
 }

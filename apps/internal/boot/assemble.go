@@ -88,6 +88,8 @@ func AssembleInstances(p *component.Profile, overrides map[string]map[string]any
 	if v, ok := asm.Value(assemble.ServiceModelhub); ok {
 		rt.Models, _ = v.(*assemble.Models)
 	}
-	rt.Compact = compact.Wire(asm)
+	if v, ok := asm.Value(assemble.ServiceCompactor); ok {
+		rt.Compact, _ = v.(*compact.Compactor)
+	}
 	return rt, nil
 }

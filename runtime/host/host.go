@@ -393,11 +393,13 @@ type actor struct {
 	epoch  int64  // 写租约纪元（02 2.2）
 	holder string // 租约持有者
 
-	mu      sync.Mutex
-	queued  []Command // 回合中收到、待需求边界 / 回合后处理的命令
-	cancel  context.CancelFunc
-	inTurn  bool
-	waiters map[string]chan bool // 等确认的调用
+	mu     sync.Mutex
+	queued []Command // 回合中收到、待需求边界 / 回合后处理的命令（回合结束后由 flushQueued 同步执行）
+	// barriers 回合中到达的 Wait：信箱处理完再回复。只在 actor 协程里读写。
+	barriers []Command
+	cancel   context.CancelFunc
+	inTurn   bool
+	waiters  map[string]chan bool // 等确认的调用
 	// processing 是 drainInbox 当前回合正在消费的 inbox 项（T2a-1：回合中插入不重复取同一条）。
 	processing map[string]bool
 	// turnQueued 是回合开始时就已在信箱里的项：它们属于本回合或更早，不中途插入，留给下一回合（13 13.3 分轮）。
@@ -509,7 +511,7 @@ func (a *actor) run() {
 			}
 		}
 	}
-	if err := a.drainInbox(ctx); err != nil {
+	if stop, err := a.drainInbox(ctx); err != nil || stop {
 		a.exitErr = err
 		return
 	}
@@ -544,8 +546,10 @@ func (a *actor) run() {
 		if stop {
 			return
 		}
-		if err := a.drainInbox(ctx); err != nil {
-			reply(c, err)
+		if stop, err := a.drainInbox(ctx); err != nil || stop {
+			if c.Kind == "barrier" {
+				reply(c, err)
+			}
 			a.exitErr = err
 			return
 		}
@@ -569,7 +573,7 @@ func (a *actor) sleep(ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	if len(items) > 0 {
+	if wakeable(items) { // 只剩背景信件不妨碍休眠：它们留在信箱，下一封 wake 唤醒时一起处理
 		return false, nil
 	}
 	// 队列里可能有刚到的 Idle 命令：放回去继续处理，不睡。
@@ -608,8 +612,8 @@ func (h *Host) ScanOnce(ctx context.Context) (int, error) {
 	woke := 0
 	for _, id := range ids {
 		items, err := h.DB.Inbox(ctx, id)
-		if err != nil || len(items) == 0 {
-			continue // 已关闭 / 被删 / 没有信件：跳过
+		if err != nil || !wakeable(items) {
+			continue // 已关闭 / 被删 / 没有要处理的信件（只有背景信件不唤醒）：跳过
 		}
 		if _, err := h.Open(ctx, id); err != nil {
 			continue // 已被别的节点接管或已关闭：跳过
@@ -811,31 +815,44 @@ func (a *actor) idle(ctx context.Context, c Command) (bool, error) {
 
 // drainInbox 处理 inbox：通知进状态更新，wake/context 按权限主体合并成一条用户消息后开回合
 // （13 13.3）；只有背景/通知时不开回合，等下一次 wake。旧格式 note 仍拼在输入前（H7 / H10）。
-func (a *actor) drainInbox(ctx context.Context) error {
-	// 预算挂起：信箱保留、不开新回合（02 2.2：补足预算或显式 Resume 后从检查点继续）。
-	if st, err := a.h.DB.SessionStatus(ctx, a.id); err == nil && st == store.StatusSuspended {
-		return nil
-	}
+//
+// 返回 stop=true 表示回合间处理的暂存命令要求 actor 退出（Close / Drain）。每个回合结束后先处理回合中
+// 暂存的 Idle 命令，再取下一批：信箱积压时 Suspend / Close 不必等信箱清空（2026-11-04 审查 P1-15）。
+func (a *actor) drainInbox(ctx context.Context) (stop bool, err error) {
+	defer func() {
+		if !stop && err == nil {
+			a.replyBarriers(nil)
+		}
+	}()
 	for {
+		// 先处理上一回合（含 Recover / Resume 开的回合）暂存的 Idle 命令，再取下一批。
+		if stop, err := a.flushQueued(ctx); stop || err != nil {
+			return stop, err
+		}
+		// 预算挂起：信箱保留、不开新回合（02 2.2：补足预算或显式 Resume 后从检查点继续）。
+		// 每轮都查：回合间处理的 Suspend 要在下一批之前生效。
+		if st, err := a.h.DB.SessionStatus(ctx, a.id); err == nil && st == store.StatusSuspended {
+			return false, nil
+		}
 		items, err := a.h.DB.Inbox(ctx, a.id)
 		if err != nil {
-			return err
+			return false, err
 		}
 		if len(items) == 0 {
-			return nil
+			return false, nil
 		}
 		// 回合开始时已在信箱里的项（快照）：中途插入不取它们，留给下一回合（13 13.3 分轮）。
 		turnStart := inboxSet(itemIDs(items))
 		// 通知类信封先应用（12：notice 进下一次状态更新），并确认消费。
 		if done, err := a.applyNotices(ctx, items); err != nil {
-			return err
+			return false, err
 		} else if done {
 			a.turnQueued = nil
 			continue
 		}
 		batch := collectInboxBatch(items, a.processing)
 		if batch == nil {
-			return nil
+			return false, nil
 		}
 		content, env, untrusted := renderBatch(batch)
 		consume := make([]string, len(batch))
@@ -865,17 +882,17 @@ func (a *actor) drainInbox(ctx context.Context) error {
 			case Deny:
 				a.h.publish(a.id, "turn_denied", map[string]any{"unconsumed": content})
 				if err := a.ag.Commit(ctx, consume...); err != nil {
-					return err
+					return false, err
 				}
 				a.processing = nil
 				a.turnQueued = nil
 				continue
 			case RecordD:
 				if _, err := a.ag.Core.Record(content, m); err != nil {
-					return err
+					return false, err
 				}
 				if err := a.ag.Commit(ctx, consume...); err != nil {
-					return err
+					return false, err
 				}
 				a.processing = nil
 				a.turnQueued = nil
@@ -892,13 +909,54 @@ func (a *actor) drainInbox(ctx context.Context) error {
 		}
 		if terr != nil {
 			if a.turnFailed(ctx, terr) {
-				return terr
+				return true, terr
 			}
 		}
 		a.processing = nil
 		a.turnQueued = nil
 		a.turnCaps = nil
 	}
+}
+
+// flushQueued 处理回合中暂存的 Idle 命令（between 收下、回合内不能执行的），按到达顺序，在 actor 里同步执行。
+// barrier（Wait）留到信箱处理完再回复。返回 stop=true 表示其中有命令要求 actor 退出。
+func (a *actor) flushQueued(ctx context.Context) (bool, error) {
+	a.mu.Lock()
+	q := a.queued
+	a.queued = nil
+	a.mu.Unlock()
+	// 回合最后一步之后才到的命令没经过 between，还在队列里：一并按到达顺序取出（不阻塞）。
+	for more := true; more; {
+		select {
+		case c := <-a.in:
+			q = append(q, c)
+		default:
+			more = false
+		}
+	}
+	for i, c := range q {
+		if c.Kind == "barrier" {
+			a.barriers = append(a.barriers, c)
+			continue
+		}
+		stop, err := a.idle(ctx, c)
+		reply(c, err)
+		if stop {
+			a.mu.Lock() // 退出：剩下的命令放回暂存，exit 关闭时调用方按 ErrClosed 收到
+			a.queued = append(q[i+1:len(q):len(q)], a.queued...)
+			a.mu.Unlock()
+			return true, err
+		}
+	}
+	return false, nil
+}
+
+// replyBarriers 回复等待信箱处理完的 Wait。
+func (a *actor) replyBarriers(err error) {
+	for _, c := range a.barriers {
+		reply(c, err)
+	}
+	a.barriers = nil
 }
 
 // mergeSkip 合并两个跳过集合（proc 与 turnQueued）。
@@ -979,6 +1037,7 @@ func (a *actor) turn(ctx context.Context, f func(context.Context) (session.EndRe
 		return end, err
 	}
 	sp.Set("end", end.String()).End(end.String())
+	a.handBack(ctx)
 	if end.Kind == session.EndCancelled {
 		a.h.publish(a.id, "turn.interrupted", nil)
 	}
@@ -1109,39 +1168,10 @@ func (a *actor) between(need *session.Need) (*session.Need, error) {
 		case SetExt: // 只改头部 Ext，随下次 checkpoint 落库；不必等回合结束
 			reply(c, a.ag.Core.SetExt(c.Key, c.Value))
 		default:
-			// Idle 类命令：回合结束后由主循环处理（放回队尾会打乱顺序，所以存到 queued）
+			// Idle 类命令：本回合结束后由 drainInbox 的 flushQueued 按到达顺序同步执行（P1-15）
 			a.mu.Lock()
 			a.queued = append(a.queued, c)
 			a.mu.Unlock()
-			go a.requeue()
-		}
-	}
-}
-
-// requeue 回合结束后把暂存的 Idle 命令放回队列。
-func (a *actor) requeue() {
-	for {
-		a.mu.Lock()
-		busy := a.inTurn
-		q := a.queued
-		if !busy {
-			a.queued = nil
-		}
-		a.mu.Unlock()
-		if !busy {
-			for _, c := range q {
-				select {
-				case a.in <- c:
-				case <-a.exit:
-					return
-				}
-			}
-			return
-		}
-		select {
-		case <-a.exit:
-			return
-		case <-timeAfter():
 		}
 	}
 }
@@ -1225,9 +1255,6 @@ func steerMode(m session.SteerMode) session.SteerMode {
 	return m
 }
 
-// timeAfter requeue 的轮询间隔。
-func timeAfter() <-chan time.Time { return time.After(20 * time.Millisecond) }
-
 // acquireSlot 取一个并发推理许可（Host.Limit 控制）；超出上限时排队等待，不报错（02 2.4）。
 func (a *actor) acquireSlot(ctx context.Context) (func(), error) {
 	h := a.h
@@ -1296,4 +1323,22 @@ func (a *actor) insertInput(ctx context.Context) error {
 	}
 	a.ag.Consume(ids...)
 	return nil
+}
+
+// handBack 把回合结束时没进模型的插话写回信箱（审查 P1-19：原先取消、中断、失败时直接丢掉）。
+// 写成补报（note）：拼在下一条输入前、不单独开回合——模型持续失败时不会因回投而反复重跑；
+// 同时发 turn.unconsumed 事件，界面可以把文本放回输入框。
+func (a *actor) handBack(ctx context.Context) {
+	for _, pi := range a.ag.TakeUnconsumed() {
+		body, _ := json.Marshal(pi.Content)
+		trust := "trusted"
+		if v, _ := pi.Meta[session.MetaTrust].(string); v == "untrusted" {
+			trust = v
+		}
+		if _, err := a.h.DB.Admit(context.WithoutCancel(ctx), a.id, store.InboxItem{ItemID: NewItemID(),
+			Kind: store.InboxNote, Input: string(body), Trust: trust}); err != nil {
+			continue
+		}
+		a.h.publish(a.id, "turn.unconsumed", map[string]any{"content": pi.Content})
+	}
 }

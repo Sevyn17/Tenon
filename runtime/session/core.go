@@ -623,9 +623,12 @@ func (c *Core) Steer(content Content, meta map[string]any, mode SteerMode) ([]Ch
 	if err := c.checkMetaSize(meta); err != nil {
 		return nil, nil, err
 	}
-	if meta == nil {
-		meta = map[string]any{}
+	// 复制后再写：meta 写入后只读，不能改调用方传进来的 map（审查 P1-21）。
+	cp := make(map[string]any, len(meta)+1)
+	for k, v := range meta {
+		cp[k] = v
 	}
+	meta = cp
 	meta[MetaSteer] = string(mode)
 
 	if mode == SteerAppend {
@@ -840,7 +843,7 @@ func (c *Core) ModelInterrupted(requestID string, needID uint64, reply Assistant
 			ch = append(ch, Change{Kind: ChangeAppended, To: c.absLen() - 1, Entries: 1})
 		}
 	}
-	return ch, c.endTurn(reason, nil), nil
+	return ch, c.endTurn(reason, c.takePendingInputs()), nil // 暂存插话交还宿主（审查 P1-19）
 }
 
 // ModelFailed 模型调用失败（T14）：不写条目，以 Failed / Denied 结束。
@@ -854,7 +857,7 @@ func (c *Core) ModelFailed(requestID string, needID uint64, reason EndReason) ([
 	if requestID != c.hdr.PendingModelRequestID || needID != c.hdr.NextNeedID {
 		return nil, nil, errStale("模型结果与当前需求不匹配")
 	}
-	return nil, c.endTurn(reason, nil), nil
+	return nil, c.endTurn(reason, c.takePendingInputs()), nil // 暂存插话交还宿主（审查 P1-19）
 }
 
 // validateCalls 校验模型请求的工具调用（S3）：工具名、参数 JSON、单步调用数。
@@ -920,7 +923,10 @@ func (c *Core) validateCalls(calls []ToolCall) (map[string]string, bool) {
 			known[t.Name] = true
 		}
 	}
-	limit := int(c.hdr.Config.Policy.MaxToolCallsPerStep)
+	limit := 0
+	if c.hdr.Config != nil { // Config 为 nil 时按缺省上限（审查 P1-20：原先这里 nil 指针 panic，违反 R7）
+		limit = int(c.hdr.Config.Policy.MaxToolCallsPerStep)
+	}
 	if limit <= 0 {
 		limit = 16
 	}

@@ -2,9 +2,12 @@ package host
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -14,6 +17,12 @@ import (
 	"ybase/runtime/session"
 	"ybase/runtime/store"
 )
+
+// agentSessionID 不带会话键的 agent: 投递所建会话的 id：由（定义, 创建者, 信封 id）确定，重投得到同一个 id（P1-17）。
+func agentSessionID(def, creator, envID string) string {
+	sum := sha256.Sum256([]byte(def + "\x00" + creator + "\x00" + envID))
+	return "ag-" + hex.EncodeToString(sum[:16])
+}
 
 // ErrSessionNotFound 会话地址只投不建（13 13.3：查不到就拒绝，不自动新建）。
 var ErrSessionNotFound = errors.New("host: 会话不存在")
@@ -78,8 +87,33 @@ func (h *Host) deliver(ctx context.Context, env mail.Envelope) error {
 	}
 }
 
+// DeliverAgent 入口投递给 agent:<定义名>，返回信封落进的会话 id；bizMeta 非空时写进新建会话的业务 meta。
+// 与 Deliver 同一套入口规则与守卫（会话打开守卫、投递守卫、联系名单）。SDK 的 Ask 走这里
+// （2026-11-04 审查 P1-24：原先 Ask 自己建会话、直接 Send，绕开了守卫，每次还构造两次会话）。
+func (h *Host) DeliverAgent(ctx context.Context, env mail.Envelope, bizMeta json.RawMessage) (string, error) {
+	env.Hop, env.Trace, env.Caps = 0, "", nil
+	if env.From.Kind == mail.AddrComponent && env.Origin != mail.OriginExternal {
+		env.Origin = mail.OriginAgent
+	}
+	if env.To.Kind != mail.AddrAgent {
+		return "", fmt.Errorf("%w：DeliverAgent 只投 agent: 地址，得 %s", mail.ErrInvalid, env.To)
+	}
+	if err := env.Normalize(); err != nil {
+		return "", err
+	}
+	env.Trace = mail.NewID()
+	env.Hop++
+	return h.deliverAgentID(ctx, env, bizMeta)
+}
+
 // deliverAgent 投给 agent:<定义名>：带 key 时按（定义, 创建者, key）查或建会话（B19）。
 func (h *Host) deliverAgent(ctx context.Context, env mail.Envelope) error {
+	_, err := h.deliverAgentID(ctx, env, nil)
+	return err
+}
+
+// deliverAgentID 同 deliverAgent，返回落进的会话 id；bizMeta 只在新建会话时写入。
+func (h *Host) deliverAgentID(ctx context.Context, env mail.Envelope, bizMeta json.RawMessage) (string, error) {
 	creator := ""
 	if env.From.Kind == mail.AddrHuman {
 		creator = env.From.ID
@@ -88,34 +122,49 @@ func (h *Host) deliverAgent(ctx context.Context, env mail.Envelope) error {
 		id, err := h.DB.FindSessionByKey(ctx, env.To.ID, creator, env.Key)
 		if err == nil {
 			env.To = mail.Address{Kind: mail.AddrSession, ID: id}
-			return h.deliverSession(ctx, env)
+			return id, h.deliverSession(ctx, env)
 		}
 		if !errors.Is(err, store.ErrNotFound) {
-			return err
+			return "", err
 		}
 	}
 	// 新建会话前守卫（08 8.1）：可联系名单、所属树深度等由组件规则表达。
 	if v, why := h.evalGuard(component.GuardRequest{Point: component.GuardSessionOpen, Envelope: &env, Agent: env.To.ID}); v == component.Deny {
 		h.recordTrace(env.Trace, "", "guard_denied", why)
 		h.publish("", "guard.denied", map[string]any{"from": env.From.String(), "to": env.To.String(), "agent": env.To.ID, "reason": why})
-		return fmt.Errorf("%w: %s", ErrNotAllowed, why)
+		return "", fmt.Errorf("%w: %s", ErrNotAllowed, why)
 	}
 	// 联系名单与投递守卫在建会话之前就过一遍（C7）：新会话的创建者就是本信的发送者，
 	// 按它算一遍 deliverSession 会做的检查——被拒的信不该留下一个已经打开的空会话。
 	id := "ag-" + NewItemID()
-	meta := store.SessionMeta{ID: id, AgentID: env.To.ID, Creator: creator, SessionKey: env.Key, Origin: "agent"}
+	if env.Key == "" {
+		// 不带会话键：会话 id 由（定义, 创建者, 信封 id）确定。发件箱是至少一次投递，重试拿到同一个 id，
+		// 已建好的会话直接投（inbox 按信封 id 幂等），不再重复建会话（2026-11-04 审查 P1-17）。
+		id = agentSessionID(env.To.ID, creator, env.ID)
+		noEntries := math.MaxInt // 只读会话行，不读条目
+		if l, err := h.DB.Load(ctx, id, &noEntries); err == nil {
+			if l.Meta.AgentID != env.To.ID {
+				return "", fmt.Errorf("host: 会话 %s 已存在且不是 %s 的会话", id, env.To.ID)
+			}
+			env.To = mail.Address{Kind: mail.AddrSession, ID: id}
+			return id, h.deliverSession(ctx, env)
+		} else if !errors.Is(err, store.ErrNotFound) {
+			return "", err
+		}
+	}
+	meta := store.SessionMeta{ID: id, AgentID: env.To.ID, Creator: creator, SessionKey: env.Key, Origin: "agent", Meta: bizMeta}
 	probe := env
 	probe.To = mail.Address{Kind: mail.AddrSession, ID: id}
 	verdict, reason := h.evalGuard(component.GuardRequest{Point: component.GuardDeliver, Envelope: &probe})
 	if verdict == component.Deny {
 		h.recordTrace(env.Trace, "", "guard_denied", reason)
 		h.publish("", "guard.denied", map[string]any{"from": env.From.String(), "to": env.To.String(), "reason": reason})
-		return fmt.Errorf("%w: %s", ErrNotAllowed, reason)
+		return "", fmt.Errorf("%w: %s", ErrNotAllowed, reason)
 	}
 	if err := guardContact(probe, meta, verdict == component.Allow); err != nil {
 		h.recordTrace(env.Trace, "", "guard_denied", err.Error())
 		h.publish("", "guard.denied", map[string]any{"from": env.From.String(), "to": env.To.String(), "reason": err.Error()})
-		return err
+		return "", err
 	}
 	pre := func(ag *agent.Agent, cfg *session.Config) error {
 		if ag.Def != nil {
@@ -129,13 +178,18 @@ func (h *Host) deliverAgent(ctx context.Context, env mail.Envelope) error {
 		if env.Key != "" && errors.Is(err, store.ErrConflict) {
 			if sid, ferr := h.DB.FindSessionByKey(ctx, env.To.ID, creator, env.Key); ferr == nil {
 				env.To = mail.Address{Kind: mail.AddrSession, ID: sid}
-				return h.deliverSession(ctx, env)
+				return sid, h.deliverSession(ctx, env)
 			}
 		}
-		return err
+		// 同一封信并发重投：另一路已建好确定 id 的会话，转投过去。
+		if env.Key == "" && errors.Is(err, store.ErrConflict) {
+			env.To = mail.Address{Kind: mail.AddrSession, ID: id}
+			return id, h.deliverSession(ctx, env)
+		}
+		return "", err
 	}
 	env.To = mail.Address{Kind: mail.AddrSession, ID: id}
-	return h.deliverSession(ctx, env)
+	return id, h.deliverSession(ctx, env)
 }
 
 // DeliverText 是投递一条用户文本的便捷入口（等价于 from=human 的 wake 请求）。
@@ -232,7 +286,11 @@ func (h *Host) deliverSession(ctx context.Context, env mail.Envelope) error {
 		"mode": string(env.Mode), "trace": env.Trace})
 	h.recordTrace(env.Trace, id, "envelope", fmt.Sprintf("%s -> %s (%s/%s)", env.From, env.To, env.Kind, env.Mode))
 	// 未打开的会话（休眠或从没在本节点开过）：Open 抢租约、恢复，drainInbox 会取信。
+	// context 信件不开回合（13 13.3），不为它唤醒会话：留在信箱，等下一封 wake 一起进模型（审查 P1-16）。
 	if _, open := h.Get(id); !open {
+		if !wakeKind(kind) {
+			return nil
+		}
 		if _, err := h.Open(ctx, id); err != nil {
 			return err
 		}
@@ -331,6 +389,21 @@ func itemSubject(it store.InboxItem) string {
 		return e.Subject()
 	}
 	return ""
+}
+
+// wakeKind 这类信件是否需要会话醒着处理：input 开回合、notice 进状态更新；
+// context（背景）与旧格式 note（补报）只跟随下一条 input，单独存在时不唤醒、不阻止休眠。
+func wakeKind(kind string) bool { return kind == store.InboxInput || kind == store.InboxNotice }
+
+// wakeable 信箱里是否有需要会话醒着处理的信件（休眠、扫描唤醒、投递唤醒共用，审查 P1-16：
+// 原先只要信箱非空就不睡，只有背景信件的会话永远常驻内存；背景信件还会唤醒休眠会话）。
+func wakeable(items []store.InboxItem) bool {
+	for _, it := range items {
+		if wakeKind(it.Kind) {
+			return true
+		}
+	}
+	return false
 }
 
 // collectInboxBatch 从 inbox 里取一批要合并成一条消息的项（13 13.3 合并规则）：

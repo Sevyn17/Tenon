@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"path/filepath"
 	"strings"
@@ -11,6 +12,7 @@ import (
 
 	"ybase/runtime/session"
 	"ybase/runtime/store"
+	"ybase/runtime/toolhub"
 )
 
 // failModel 可配置前 N 次调用失败（fail < 0 表示一直失败），用于所属树策略测试。
@@ -194,4 +196,105 @@ func TestSuspendRunsInActor(t *testing.T) {
 	if st, _ := r.db.SessionStatus(ctx, "s1"); st != store.StatusSuspended {
 		t.Fatalf("状态 = %q，期望 suspended", st)
 	}
+}
+
+// 信箱积压时回合中到达的 Suspend 在本回合结束后立即生效，不等信箱清空（审查 P1-15：原先 Suspend
+// 只在 drainInbox 返回后才执行，积压的消息会一条条开回合，预算挂起照样超支）。
+func TestSuspendDuringBacklog(t *testing.T) {
+	ctx := context.Background()
+	m := &scriptedModel{start: make(chan int, 8), gate: make(chan struct{})}
+	r := newT2Rig(t, filepath.Join(t.TempDir(), "s.db"), m, 0, nil)
+	hd := mustOpen(t, r.h, "s1")
+	if err := hd.Do(Command{Kind: Send, Text: "一"}); err != nil {
+		t.Fatal(err)
+	}
+	waitStarted(t, m.start, "第一回合开始")
+	for _, s := range []string{"二", "三", "四"} { // 积压：回合进行中排进信箱
+		if err := hd.Do(Command{Kind: Send, Text: s}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	done := make(chan error, 1)
+	go func() { done <- r.h.Suspend(ctx, "s1", "budget") }()
+	time.Sleep(50 * time.Millisecond) // 让 Suspend 先进队列
+	close(m.gate)
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("挂起: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Suspend 没有在本回合结束后执行")
+	}
+	m.mu.Lock()
+	calls := m.calls
+	m.mu.Unlock()
+	if calls > 2 { // 第一回合 1 次；中途插入可能把积压并进同一回合多调一次，但不能再开新回合
+		t.Fatalf("挂起前不应再开新回合，模型被调用 %d 次", calls)
+	}
+	if st, _ := r.db.SessionStatus(ctx, "s1"); st != store.StatusSuspended {
+		t.Fatalf("状态 = %q，期望 suspended", st)
+	}
+}
+
+// 回合失败时，回合中插入、还没进模型的插话写回信箱（审查 P1-19：原先丢掉）。
+// 第一次调模型要工具，工具阻塞期间插话；插话在下一次调模型前进内核暂存，第二次调模型失败。
+func TestFailedTurnHandsBackInterjection(t *testing.T) {
+	ctx := context.Background()
+	m := &gatedFailModel{}
+	gate, inTool := make(chan struct{}), make(chan struct{}, 1)
+	r := newT2Rig(t, filepath.Join(t.TempDir(), "s.db"), m, 0, func(context.Context, json.RawMessage) (toolhub.Output, error) {
+		inTool <- struct{}{}
+		<-gate
+		return toolhub.Text("echoed"), nil
+	})
+	hd := mustOpen(t, r.h, "s1")
+	if err := hd.Do(Command{Kind: Send, Text: "一"}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-inTool:
+	case <-time.After(5 * time.Second):
+		t.Fatal("工具没有开始")
+	}
+	steered := make(chan error, 1)
+	go func() { steered <- hd.Do(Command{Kind: Steer, Text: "别忘了这个"}) }()
+	time.Sleep(50 * time.Millisecond) // 让插话先进队列，工具结束后的边界取到它
+	close(gate)
+	if err := <-steered; err != nil {
+		t.Fatal(err)
+	}
+	_ = hd.Wait()
+	if m.calls() != 2 {
+		t.Fatalf("应调两次模型，得 %d", m.calls())
+	}
+	items, err := r.db.Inbox(ctx, "s1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, it := range items {
+		if it.Kind == store.InboxNote && strings.Contains(it.Input, "别忘了这个") {
+			return
+		}
+	}
+	t.Fatalf("插话应写回信箱：%+v", items)
+}
+
+// gatedFailModel 第一次调用要一次 echo 工具，之后一律失败。
+type gatedFailModel struct {
+	mu sync.Mutex
+	n  int
+}
+
+func (m *gatedFailModel) calls() int { m.mu.Lock(); defer m.mu.Unlock(); return m.n }
+
+func (m *gatedFailModel) Stream(ctx context.Context, req session.Request, onText func(string)) (session.AssistantItem, session.StopReason, error) {
+	m.mu.Lock()
+	m.n++
+	n := m.n
+	m.mu.Unlock()
+	if n == 1 {
+		return session.AssistantItem{ToolCalls: []session.ToolCall{{Name: "echo", Args: json.RawMessage(`{}`)}}}, session.StopReason{V: "tool_calls"}, nil
+	}
+	return session.AssistantItem{}, session.StopReason{}, errors.New("模型坏了")
 }

@@ -118,10 +118,15 @@ type InboxStore interface {
 	InInbox(ctx context.Context, sessionID, itemID string) (bool, error)
 }
 
-// LeaseStore 会话写租约（02 2.2：租约带纪元，同一时刻只有一个节点持有）。
+// LeaseStore 会话写租约（02 2.2：租约带纪元）。
 //
 // 语义：host 打开会话时抢租约，租约纪元加一；这一轮的所有写入（Commit、检查点、
 // 工具结果、信箱确认）都必须带这个纪元，存储只接受与当前纪元相符的写入。
+//
+// 抢占是"后打开者胜 + 纪元 fencing"：AcquireLease 不看现有持有者、没有到期时间，旧持有者在下一次
+// 带纪元的写入时才得到 ErrLeaseLost。fencing 保证正确，但两个进程同时打开同一会话会互相抢、
+// 白跑模型调用。v1 只支持单进程独占一个库（docs/03 约束清单）；多节点前要加到期时间，
+// 让 Acquire 只抢已释放或已过期的租约、RenewLease 续期（2026-11-04 审查 P1-18）。
 type LeaseStore interface {
 	// AcquireLease 抢租约：holder 成为持有者并返回新纪元（从 1 起）。会话不存在返回 ErrNotFound。
 	AcquireLease(ctx context.Context, sessionID, holder string) (epoch int64, err error)

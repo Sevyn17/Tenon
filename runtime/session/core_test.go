@@ -626,3 +626,57 @@ func TestBuildRequests(t *testing.T) {
 		t.Fatalf("BuildBranch: %v %d", err, len(req3.Messages))
 	}
 }
+
+// 失败 / 中断结束回合时，暂存插话原样交还（T17；审查 P1-19：原先只有取消路径交还）。
+func TestFailedAndInterruptedHandBackPendingInputs(t *testing.T) {
+	for _, fail := range []bool{true, false} {
+		h := newHarness(t, 8)
+		_, n, err := h.core.Input(txt("问"), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, _, err := h.core.Steer(txt("插话"), nil, SteerAppend); err != nil { // 暂存到步边界（MidInput 直接进历史，不算暂存）
+			t.Fatal(err)
+		}
+		var need *Need
+		if fail {
+			_, need, err = h.core.ModelFailed(n.Model.RequestID, n.ID, FailedReason("x"))
+		} else {
+			_, need, err = h.core.ModelInterrupted(n.Model.RequestID, n.ID, AssistantItem{}, CancelledReason())
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		if need.Kind != NeedDone || len(need.Done.Unconsumed) != 1 {
+			t.Fatalf("fail=%v：插话应交还，得 %+v", fail, need.Done)
+		}
+	}
+}
+
+// Config 为 nil 的内核收到工具调用不 panic（审查 P1-20，R7）。
+func TestNilConfigToolCallNoPanic(t *testing.T) {
+	c := New(nil)
+	_, n, err := c.Input(txt("问"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	calls := []ToolCall{{Name: "echo", Args: []byte(`{}`)}}
+	if _, _, err := c.ModelDone(n.Model.RequestID, n.ID, AssistantItem{ToolCalls: calls}, StopReason{}); err != nil {
+		t.Fatalf("ModelDone: %v", err)
+	}
+}
+
+// Steer 不改调用方传入的 meta（审查 P1-21）。
+func TestSteerDoesNotMutateCallerMeta(t *testing.T) {
+	h := newHarness(t, 8)
+	if _, _, err := h.core.Input(txt("问"), nil); err != nil {
+		t.Fatal(err)
+	}
+	m := map[string]any{MetaSource: "user"}
+	if _, _, err := h.core.Steer(txt("插话"), m, SteerAppend); err != nil {
+		t.Fatal(err)
+	}
+	if len(m) != 1 {
+		t.Fatalf("调用方 meta 被改：%v", m)
+	}
+}
