@@ -42,7 +42,7 @@ func TestSpanHierarchy(t *testing.T) {
 	if err := hd.Wait(); err != nil {
 		t.Fatal(err)
 	}
-	rows, err := db.SQL().QueryContext(ctx, `SELECT span_id, parent_span, kind FROM trace_spans WHERE session_id = ?`, "s")
+	rows, err := db.DB().QueryContext(ctx, `SELECT span_id, parent_span, kind FROM trace_spans WHERE session_id = ?`, "s")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -32,9 +32,9 @@ func TestDeleteSessionCallsCleanersAndTombstoneOnFailure(t *testing.T) {
 		t.Fatalf("回调未调用: %v", called)
 	}
 	var n int
-	db.SQL().QueryRow(`SELECT COUNT(*) FROM session_entries WHERE session_id='s1'`).Scan(&n)
+	db.DB().QueryRow(`SELECT COUNT(*) FROM session_entries WHERE session_id='s1'`).Scan(&n)
 	var m int
-	db.SQL().QueryRow(`SELECT COUNT(*) FROM sessions WHERE id='s1'`).Scan(&m)
+	db.DB().QueryRow(`SELECT COUNT(*) FROM sessions WHERE id='s1'`).Scan(&m)
 	if n != 0 || m != 0 {
 		t.Fatalf("核心表未清理: entries=%d sessions=%d", n, m)
 	}

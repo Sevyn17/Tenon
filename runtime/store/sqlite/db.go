@@ -204,8 +204,15 @@ func (db *DB) Close() error {
 	return db.sql.Close()
 }
 
-// SQL 暴露底层连接（插件 Db 服务、测试用）。
-func (db *DB) SQL() *sql.DB { return db.sql }
+// DB 底层连接（store.SQL；组件自有表、测试用）。
+func (db *DB) DB() *sql.DB { return db.sql }
+
+// Dialect 方言名（store.SQL）。
+func (db *DB) Dialect() string { return "sqlite" }
+
+// *DB 自带 SQL 出口（store.SQL）：SDK 的 WithStore(sqlite) 据此装上要建表的组件（2026-11-04 审查 P2：
+// 原先出口只在 SQLOut 包装里，ybase.New 断言不到，workgroup 被悄悄去掉）。
+var _ store.SQL = (*DB)(nil)
 
 // Migrate 执行某 owner 的迁移（插件自有表 p_<名>_* 经此登记，乙类点位）。
 func (db *DB) Migrate(ctx context.Context, owner string, ms []Migration) error {
@@ -218,17 +225,6 @@ func (db *DB) Migrate(ctx context.Context, owner string, ms []Migration) error {
 
 // Migration 插件迁移（与 store.Migration 同一类型）。
 type Migration = store.Migration
-
-// SQLOut SQL 出口（store.SQL，框架设计 05 §5.7）。
-func (db *DB) SQLOut() store.SQL { return sqlOut{db} }
-
-type sqlOut struct{ db *DB }
-
-func (o sqlOut) DB() *sql.DB     { return o.db.sql }
-func (o sqlOut) Dialect() string { return "sqlite" }
-func (o sqlOut) Migrate(ctx context.Context, owner string, ms []store.Migration) error {
-	return o.db.Migrate(ctx, owner, ms)
-}
 
 func (db *DB) migrate(ctx context.Context, owner string, ms []migration) error {
 	if _, err := db.sql.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS schema_versions(owner TEXT NOT NULL PRIMARY KEY, version INTEGER NOT NULL)`); err != nil {

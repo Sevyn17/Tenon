@@ -68,7 +68,7 @@ func TestSessionRoundTripAndRestore(t *testing.T) {
 		t.Fatalf("请求记录: %+v %v", r, err)
 	}
 	var sum string
-	db.SQL().QueryRow(`SELECT summary FROM session_entries WHERE idx = 1`).Scan(&sum)
+	db.DB().QueryRow(`SELECT summary FROM session_entries WHERE idx = 1`).Scan(&sum)
 	if sum != "嗨" {
 		t.Fatalf("summary = %q", sum)
 	}
@@ -108,16 +108,16 @@ func TestTruncateArchivesAndSyncSeqMonotonic(t *testing.T) {
 		t.Fatalf("Commit: %v", err)
 	}
 	var arch int
-	db.SQL().QueryRow(`SELECT count(*) FROM session_entries_archive WHERE session_id='s'`).Scan(&arch)
+	db.DB().QueryRow(`SELECT count(*) FROM session_entries_archive WHERE session_id='s'`).Scan(&arch)
 	if arch != 1 {
 		t.Fatalf("归档条数 %d", arch)
 	}
 	var seqB, seqC int
-	db.SQL().QueryRow(`SELECT sync_seq FROM session_entries_archive`).Scan(&seqB)
-	db.SQL().QueryRow(`SELECT sync_seq FROM session_entries WHERE idx = 1`).Scan(&seqC)
+	db.DB().QueryRow(`SELECT sync_seq FROM session_entries_archive`).Scan(&seqB)
+	db.DB().QueryRow(`SELECT sync_seq FROM session_entries WHERE idx = 1`).Scan(&seqC)
 	_ = seqB
 	var oldMax int
-	db.SQL().QueryRow(`SELECT max(sync_seq) FROM session_entries WHERE idx = 0`).Scan(&oldMax)
+	db.DB().QueryRow(`SELECT max(sync_seq) FROM session_entries WHERE idx = 0`).Scan(&oldMax)
 	if seqC <= 2 { // a=1, b=2，截断占 3，c=4
 		t.Fatalf("撤销后 sync_seq 复用: %d", seqC)
 	}

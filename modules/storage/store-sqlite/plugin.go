@@ -59,7 +59,7 @@ func (o sqlOut) DB() *sql.DB {
 	if db == nil {
 		return nil
 	}
-	return db.SQL()
+	return db.DB()
 }
 
 func (o sqlOut) Dialect() string { return "sqlite" }

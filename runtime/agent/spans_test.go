@@ -16,7 +16,7 @@ func TestSpansCommittedWithCheckpoint(t *testing.T) {
 		t.Fatalf("回合结束后不应有未提交 span: %d", len(a.buf.spans))
 	}
 	counts := map[string]int{}
-	rows, err := db.SQL().Query(`SELECT kind FROM trace_spans WHERE session_id = 's1'`)
+	rows, err := db.DB().Query(`SELECT kind FROM trace_spans WHERE session_id = 's1'`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -30,7 +30,7 @@ func TestSpansCommittedWithCheckpoint(t *testing.T) {
 		t.Fatalf("span 计数不符: %v", counts)
 	}
 	var ttft int
-	_ = db.SQL().QueryRow(`SELECT count(*) FROM trace_spans WHERE kind='attempt' AND attrs LIKE '%ttft_ms%'`).Scan(&ttft)
+	_ = db.DB().QueryRow(`SELECT count(*) FROM trace_spans WHERE kind='attempt' AND attrs LIKE '%ttft_ms%'`).Scan(&ttft)
 	if ttft == 0 {
 		t.Fatal("attempt span 应记首字延迟")
 	}

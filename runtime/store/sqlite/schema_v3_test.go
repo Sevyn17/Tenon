@@ -47,7 +47,7 @@ func TestUpgradeV2WithData(t *testing.T) {
 	var ver int
 	var hash, creator, meta, use string
 	var key sql.NullString
-	if err := db.SQL().QueryRow(`SELECT agent_version, agent_hash, creator, session_key, meta, use_config FROM sessions WHERE id='old'`).
+	if err := db.DB().QueryRow(`SELECT agent_version, agent_hash, creator, session_key, meta, use_config FROM sessions WHERE id='old'`).
 		Scan(&ver, &hash, &creator, &key, &meta, &use); err != nil {
 		t.Fatal(err)
 	}
@@ -122,7 +122,7 @@ func TestDefinitionHash(t *testing.T) {
 		t.Fatal(err)
 	}
 	var h string
-	db.SQL().QueryRow(`SELECT hash FROM definitions WHERE id='a'`).Scan(&h)
+	db.DB().QueryRow(`SELECT hash FROM definitions WHERE id='a'`).Scan(&h)
 	if len(h) != 64 {
 		t.Fatalf("hash = %q", h)
 	}

@@ -87,7 +87,7 @@ func rig(t *testing.T) (*Group, *host.Host, *sqlite.DB, *echoModel) {
 		}
 	}
 	h.New = mk(true)
-	g, err = New(context.Background(), h, db.SQLOut(), db, mk(false))
+	g, err = New(context.Background(), h, db, db, mk(false))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -227,7 +227,7 @@ func TestRecoverRedelivers(t *testing.T) {
 		{"L/m-a", "a", "item-a", "done", "[成员 a 完成]\nre:旧结果"},
 		{"L/m-b", "b", "item-b", "running", ""},
 	} {
-		if _, err := db.SQL().Exec(`INSERT INTO p_workgroup_runs(member, leader, name, item_id, state, msg, updated_at) VALUES(?, 'L', ?, ?, ?, ?, ?)`,
+		if _, err := db.DB().Exec(`INSERT INTO p_workgroup_runs(member, leader, name, item_id, state, msg, updated_at) VALUES(?, 'L', ?, ?, ?, ?, ?)`,
 			r[0], r[1], r[2], r[3], r[4], now); err != nil {
 			t.Fatal(err)
 		}

@@ -24,11 +24,11 @@ func TestOpenMigratesAndIsIdempotent(t *testing.T) {
 		t.Fatalf("Open: %v", err)
 	}
 	var v int
-	if err := db.SQL().QueryRow(`SELECT version FROM schema_versions WHERE owner='core'`).Scan(&v); err != nil || v != len(coreMigrations) {
+	if err := db.DB().QueryRow(`SELECT version FROM schema_versions WHERE owner='core'`).Scan(&v); err != nil || v != len(coreMigrations) {
 		t.Fatalf("core 版本 = %d, %v", v, err)
 	}
 	var mode string
-	if err := db.SQL().QueryRow(`PRAGMA journal_mode`).Scan(&mode); err != nil || mode != "wal" {
+	if err := db.DB().QueryRow(`PRAGMA journal_mode`).Scan(&mode); err != nil || mode != "wal" {
 		t.Fatalf("journal_mode = %q, %v", mode, err)
 	}
 	db.Close()
@@ -41,7 +41,7 @@ func TestOpenMigratesAndIsIdempotent(t *testing.T) {
 	for _, tbl := range []string{"sessions", "session_shells", "session_entries", "session_entries_archive",
 		"session_requests", "session_inbox", "tool_results", "trace_spans", "blobs", "blob_refs", "definitions"} {
 		var n int
-		if err := db2.SQL().QueryRow(`SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?`, tbl).Scan(&n); err != nil || n != 1 {
+		if err := db2.DB().QueryRow(`SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?`, tbl).Scan(&n); err != nil || n != 1 {
 			t.Fatalf("缺表 %s", tbl)
 		}
 	}
@@ -61,7 +61,7 @@ func TestPluginMigration(t *testing.T) {
 	if err := db.Migrate(ctx, "demo", ms); err != nil {
 		t.Fatalf("v2: %v", err)
 	}
-	if _, err := db.SQL().Exec(`INSERT INTO p_demo_x(tenant,k,v) VALUES('local','a','b')`); err != nil {
+	if _, err := db.DB().Exec(`INSERT INTO p_demo_x(tenant,k,v) VALUES('local','a','b')`); err != nil {
 		t.Fatalf("v2 列不存在: %v", err)
 	}
 }

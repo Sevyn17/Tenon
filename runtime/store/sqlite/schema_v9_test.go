@@ -18,14 +18,14 @@ func TestV9DropsRedundantIndexes(t *testing.T) {
 	defer db.Close()
 	for _, name := range []string{"session_pending_s", "tool_results_deadline", "trace_events_t", "session_entries_turn", "sessions_list"} {
 		var n int
-		if err := db.SQL().QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = ?`, name).Scan(&n); err != nil {
+		if err := db.DB().QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = ?`, name).Scan(&n); err != nil {
 			t.Fatal(err)
 		}
 		if n != 0 {
 			t.Errorf("索引 %s 应已删除", name)
 		}
 	}
-	rows, err := db.SQL().Query(`EXPLAIN QUERY PLAN SELECT id FROM sessions WHERE tenant = 'local' AND status != 'deleted'
+	rows, err := db.DB().Query(`EXPLAIN QUERY PLAN SELECT id FROM sessions WHERE tenant = 'local' AND status != 'deleted'
 		ORDER BY updated_at DESC LIMIT 50`)
 	if err != nil {
 		t.Fatal(err)

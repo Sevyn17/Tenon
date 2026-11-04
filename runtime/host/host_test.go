@@ -281,7 +281,7 @@ func TestForkAndSide(t *testing.T) {
 	}
 	var origin, parent string
 	var upto int
-	r.db.SQL().QueryRow(`SELECT origin, parent_id, fork_upto FROM sessions WHERE id='f1'`).Scan(&origin, &parent, &upto)
+	r.db.DB().QueryRow(`SELECT origin, parent_id, fork_upto FROM sessions WHERE id='f1'`).Scan(&origin, &parent, &upto)
 	if origin != "fork" || parent != "src" || upto != 2 {
 		t.Fatalf("会话元数据: %s %s %d", origin, parent, upto)
 	}
