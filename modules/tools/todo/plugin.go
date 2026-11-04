@@ -24,13 +24,13 @@ func (*plug) Setup(cx *component.Registrar) error {
 		return err
 	}
 	marks := map[string]string{"pending": "☐", "in_progress": "▶", "completed": "☑"}
-	todo := TodoWrite(func(ts []Todo) {
+	todo := TodoWriteIn(func(sid string, ts []Todo) {
 		var b strings.Builder
 		b.WriteString("\n📋 计划\n")
 		for _, t := range ts {
 			b.WriteString("  " + marks[t.Status] + " " + t.Content + "\n")
 		}
-		ui.Print(b.String())
+		assemble.PrintIn(ui, sid, b.String()) // 带会话 id（审查 P1-28）
 	})
 	cx.Register(assemble.PointSessionTools, "todo", assemble.ToolsEntry{Order: 20,
 		Tools: func() []*toolhub.Tool { return []*toolhub.Tool{todo} }})

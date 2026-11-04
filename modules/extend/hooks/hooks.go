@@ -11,14 +11,14 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"regexp"
-	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/BurntSushi/toml"
 
+	"ybase/modules/internal/proc"
 	"ybase/runtime/session"
 	"ybase/runtime/toolhub"
 )
@@ -171,6 +171,8 @@ type Runner struct {
 	// Confine 把钩子命令放进沙箱（可空 = 不加沙箱）；返回的 cleanup 在 Start 之后调用。
 	Confine func(cmd *exec.Cmd, mode toolhub.SandboxMode) (func(), error)
 	argv    func(string) []string
+	// stops 进行中的 stop 钩子（异步执行，Wait 等它们结束）。
+	stops sync.WaitGroup
 }
 
 // New 构造。
@@ -178,31 +180,7 @@ func New(cfg Config, cwd string, warn func(string)) *Runner {
 	return &Runner{Cfg: cfg, Cwd: cwd, Warn: warn, argv: defaultArgv()}
 }
 
-// psExitPre / psExitPost 让 PowerShell 的退出码等于最后一条命令的结果（与 shell 插件同一份写法）：
-// 不加时原生程序的任何非零退出码都被报成 1，`python guard.py` 退出 2 也不会阻止工具——
-// 守卫钩子在 Windows 上静默失效（2026-11-04 审查 P0-15）。
-const (
-	psExitPre  = "$global:LASTEXITCODE = 0\n"
-	psExitPost = "\nif (-not $?) { if ($LASTEXITCODE) { exit $LASTEXITCODE }; exit 1 }"
-)
-
-func defaultArgv() func(string) []string {
-	if runtime.GOOS == "windows" {
-		bin := "powershell"
-		// 商店版 pwsh（WindowsApps 下）跑在包容器里，看不到调用方的目录，见 shell.packagedApp。
-		if p, err := exec.LookPath("pwsh"); err == nil && !strings.Contains(strings.ToLower(filepath.ToSlash(p)), "/windowsapps/") {
-			bin = p
-		}
-		return func(c string) []string {
-			return []string{bin, "-NoProfile", "-NonInteractive", "-Command", psExitPre + c + psExitPost}
-		}
-	}
-	bin := "sh"
-	if p, err := exec.LookPath("bash"); err == nil {
-		bin = p
-	}
-	return func(c string) []string { return []string{bin, "-c", c} }
-}
+func defaultArgv() func(string) []string { return proc.ShellArgv(false) }
 
 // Empty 没有任何钩子。
 func (r *Runner) Empty() bool { return r == nil || len(r.Cfg.Hook) == 0 }
@@ -247,6 +225,7 @@ func (r *Runner) run(ctx context.Context, h *Hook, in Input) Result {
 	defer cancel()
 	a := r.argv(h.Command)
 	cmd := exec.CommandContext(ctx, a[0], a[1:]...)
+	proc.SetTree(cmd) // 超时杀整个进程树，不留孙进程（审查 P1-29）
 	cmd.Dir = r.Cwd
 	cmd.Stdin = bytes.NewReader(body)
 	env := os.Environ()
@@ -382,8 +361,18 @@ func (r *Runner) AfterTurn(id string, end session.EndReason) {
 	if !r.has(Stop) {
 		return
 	}
-	r.Fire(context.Background(), Input{SessionID: id, Event: Stop, EndReason: end.String()})
+	// 异步执行：stop 只是通知，同步跑会卡住会话 actor（每个钩子最长 60 s，排在回合提交之前；审查 P1-30）。
+	// 每个钩子仍有自己的超时（Hook.timeout）；进程退出前由 Wait 等完。
+	in := Input{SessionID: id, Event: Stop, EndReason: end.String()}
+	r.stops.Add(1)
+	go func() {
+		defer r.stops.Done()
+		r.Fire(context.Background(), in)
+	}()
 }
+
+// Wait 等进行中的 stop 钩子结束（组件关闭时调用）。
+func (r *Runner) Wait() { r.stops.Wait() }
 
 // total 层超时 = 该事件全部钩子超时之和 + 余量（层超时不得早于钩子自身超时）。
 func (r *Runner) total(event string) time.Duration {

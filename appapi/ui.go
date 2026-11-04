@@ -23,8 +23,11 @@ type UI struct {
 func NewUI(b *bus.Bus) *UI { return &UI{b: b, pending: map[string]chan string{}} }
 
 // Print 插件输出 → notice。
-func (u *UI) Print(text string) {
-	u.b.Publish(bus.Envelope{Kind: EventNotice, Data: map[string]any{"text": text}})
+func (u *UI) Print(text string) { u.PrintIn("", text) }
+
+// PrintIn 带会话的输出（assemble.SessionUI）：事件带 session，界面按会话路由。
+func (u *UI) PrintIn(sessionID, text string) {
+	u.b.Publish(bus.Envelope{Session: sessionID, Kind: EventNotice, Data: map[string]any{"text": text}})
 }
 
 // Warn 插件告警 → notice（带来源前缀）。
@@ -34,6 +37,11 @@ func (u *UI) Warn(source, msg string) {
 
 // Ask 发 ask 事件并等回答（ctx 结束返回 ctx.Err()）。
 func (u *UI) Ask(ctx context.Context, question string, options []string) (string, error) {
+	return u.AskIn(ctx, "", question, options)
+}
+
+// AskIn 带会话的提问（assemble.SessionUI，审查 P1-28）：ask 事件带 session，多会话界面知道是哪个会话在问。
+func (u *UI) AskIn(ctx context.Context, sessionID, question string, options []string) (string, error) {
 	id := host.NewItemID()
 	ch := make(chan string, 1)
 	u.mu.Lock()
@@ -47,7 +55,7 @@ func (u *UI) Ask(ctx context.Context, question string, options []string) (string
 	if options == nil {
 		options = []string{}
 	}
-	u.b.Publish(bus.Envelope{Kind: EventAsk, Data: map[string]any{"ask_id": id, "question": question, "options": options}})
+	u.b.Publish(bus.Envelope{Session: sessionID, Kind: EventAsk, Data: map[string]any{"ask_id": id, "question": question, "options": options, "session": sessionID}})
 	select {
 	case a := <-ch:
 		return a, nil

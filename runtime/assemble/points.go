@@ -85,6 +85,31 @@ type UI interface {
 	Ask(ctx context.Context, question string, options []string) (string, error) // 向用户提问
 }
 
+// SessionUI 可选：带会话 id 的交互面。多会话界面（桌面、网页服务）据此把提问与输出路由到对应会话
+// （2026-11-04 审查 P1-28：原先 UI 不带会话 id，子智能体 / 成员的 ask_user 分不清是谁在问）。
+// 终端界面只有一个会话，不必实现；组件经 AskIn / PrintIn 调用，未实现时退回 UI 的同名方法。
+type SessionUI interface {
+	PrintIn(sessionID, text string)
+	AskIn(ctx context.Context, sessionID, question string, options []string) (string, error)
+}
+
+// AskIn 带会话 id 向人提问（ui 实现 SessionUI 时用它，否则退回 Ask）。
+func AskIn(ui UI, ctx context.Context, sessionID, question string, options []string) (string, error) {
+	if s, ok := ui.(SessionUI); ok {
+		return s.AskIn(ctx, sessionID, question, options)
+	}
+	return ui.Ask(ctx, question, options)
+}
+
+// PrintIn 带会话 id 输出（ui 实现 SessionUI 时用它，否则退回 Print）。
+func PrintIn(ui UI, sessionID, text string) {
+	if s, ok := ui.(SessionUI); ok {
+		s.PrintIn(sessionID, text)
+		return
+	}
+	ui.Print(text)
+}
+
 // Collected 装配结果里的会话贡献。
 type Collected struct {
 	Tools     []ToolSet

@@ -42,11 +42,22 @@ func checkTodos(todos []Todo) (p, i, c int, err error) {
 
 // TodoWrite 整表替换的计划工具。列表的唯一事实是最后一次调用的参数（在日志里），onChange 只服务 UI。
 func TodoWrite(onChange func([]Todo)) *toolhub.Tool {
+	var f func(string, []Todo)
+	if onChange != nil {
+		f = func(_ string, ts []Todo) { onChange(ts) }
+	}
+	return TodoWriteIn(f)
+}
+
+// TodoWriteIn 同 TodoWrite，onChange 带发起调用的会话 id（多会话界面据此路由，审查 P1-28）。
+func TodoWriteIn(onChange func(sessionID string, ts []Todo)) *toolhub.Tool {
 	no := false
 	t := toolhub.Simple("todo_write",
 		"记录并更新任务计划。每次调用替换整个列表；status 为 pending / in_progress / completed。多步任务开始前先列计划，每完成一步立即更新。",
 		`{"type":"object","properties":{"todos":{"type":"array","description":"完整列表（替换旧列表）","items":{"type":"object","properties":{"content":{"type":"string"},"status":{"type":"string","enum":["pending","in_progress","completed"]}},"required":["content","status"]}}},"required":["todos"]}`,
-		func(_ context.Context, raw json.RawMessage) (string, error) {
+		nil)
+	t.Call = func(_ context.Context, cx *toolhub.Cx, raw json.RawMessage) (toolhub.Output, error) {
+		s, err := func() (string, error) {
 			var a struct{ Todos []Todo }
 			if err := json.Unmarshal(raw, &a); err != nil {
 				return "", err
@@ -56,10 +67,19 @@ func TodoWrite(onChange func([]Todo)) *toolhub.Tool {
 				return "", err
 			}
 			if onChange != nil {
-				onChange(a.Todos)
+				sid := ""
+				if cx != nil {
+					sid = cx.SessionID
+				}
+				onChange(sid, a.Todos)
 			}
 			return fmt.Sprintf("Updated todo list: %d pending, %d in progress, %d completed.", p, i, c), nil
-		})
+		}()
+		if err != nil {
+			return toolhub.Errorf("%v", err), nil
+		}
+		return toolhub.Text(s), nil
+	}
 	t.Parallel = &no
 	t.WithEffect(toolhub.EffectInteract)
 	// 只改自己的计划列表，不碰外部资源：显式声明无需授权（§9.3）。

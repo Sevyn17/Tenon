@@ -69,6 +69,8 @@ func TestDependencyRule(t *testing.T) {
 			switch {
 			case assembler(to):
 				t.Errorf("%s 不得 import SDK / 测试套件 / 应用 %q", from, to)
+			case strings.HasPrefix(to, "modules/internal/") && isModule(from):
+				// modules/internal/*：标准模块共用的辅助包（进程启动、命令拆分），不算模块之间互相 import（05 3.2）
 			case isModule(to) && isModule(from):
 				t.Errorf("标准模块 %s 不得 import 标准模块 %s", from, to)
 			case isModule(to):

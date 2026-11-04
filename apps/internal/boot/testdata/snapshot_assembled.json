@@ -351,6 +351,22 @@
             }
           },
           {
+            "Name": "team_stop",
+            "Description": "中止一个正在工作的成员的当前任务（会话保留，之后可用 team_send 让它继续）。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "成员名"
+                }
+              },
+              "required": [
+                "name"
+              ]
+            }
+          },
+          {
             "Name": "task_create",
             "Description": "在工作组看板上新建任务（pending、无负责人）。",
             "Schema": {
@@ -790,6 +806,22 @@
               "required": [
                 "to",
                 "message"
+              ]
+            }
+          },
+          {
+            "Name": "team_stop",
+            "Description": "中止一个正在工作的成员的当前任务（会话保留，之后可用 team_send 让它继续）。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "成员名"
+                }
+              },
+              "required": [
+                "name"
               ]
             }
           },
@@ -1259,6 +1291,22 @@
             }
           },
           {
+            "Name": "team_stop",
+            "Description": "中止一个正在工作的成员的当前任务（会话保留，之后可用 team_send 让它继续）。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "成员名"
+                }
+              },
+              "required": [
+                "name"
+              ]
+            }
+          },
+          {
             "Name": "task_create",
             "Description": "在工作组看板上新建任务（pending、无负责人）。",
             "Schema": {
@@ -1676,6 +1724,22 @@
               "required": [
                 "to",
                 "message"
+              ]
+            }
+          },
+          {
+            "Name": "team_stop",
+            "Description": "中止一个正在工作的成员的当前任务（会话保留，之后可用 team_send 让它继续）。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "成员名"
+                }
+              },
+              "required": [
+                "name"
               ]
             }
           },
@@ -2114,6 +2178,22 @@
               "required": [
                 "to",
                 "message"
+              ]
+            }
+          },
+          {
+            "Name": "team_stop",
+            "Description": "中止一个正在工作的成员的当前任务（会话保留，之后可用 team_send 让它继续）。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "成员名"
+                }
+              },
+              "required": [
+                "name"
               ]
             }
           },
@@ -2578,6 +2658,22 @@
               "required": [
                 "to",
                 "message"
+              ]
+            }
+          },
+          {
+            "Name": "team_stop",
+            "Description": "中止一个正在工作的成员的当前任务（会话保留，之后可用 team_send 让它继续）。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "成员名"
+                }
+              },
+              "required": [
+                "name"
               ]
             }
           },

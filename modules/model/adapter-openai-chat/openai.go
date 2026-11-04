@@ -72,7 +72,7 @@ func (a OpenAIChat) run(ctx context.Context, r *modelhub.Request, ep modelhub.En
 		b, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
 		return modelhub.Event{Failed: modelhub.HTTPFailure(resp.StatusCode, resp.Header, b)}
 	}
-	return parseOpenAI(ctx, resp.Body, ep.Model, out)
+	return parseOpenAI(ctx, resp.Body, ep.Model, ep.Compat.ReasoningField, out)
 }
 
 type oaFunc struct {
@@ -167,6 +167,12 @@ func openAIBody(r *modelhub.Request, ep modelhub.Endpoint) map[string]any {
 		}
 		b[f] = *req.Params.MaxTokens
 	}
+	if tc := chatToolChoice(req.Params.ToolChoice); tc != nil && len(req.Tools) > 0 {
+		b["tool_choice"] = tc // 审查 P1-32：原先三家适配器都没映射
+	}
+	if req.Params.Reasoning != nil && *req.Params.Reasoning != "" {
+		b["reasoning_effort"] = *req.Params.Reasoning
+	}
 	if ep.Compat.PromptCacheKey && r.SessionKey != "" {
 		b["prompt_cache_key"] = r.SessionKey // D5：会话缓存亲和
 	}
@@ -174,6 +180,37 @@ func openAIBody(r *modelhub.Request, ep modelhub.Endpoint) map[string]any {
 		b[p.Name] = p.Value
 	}
 	return b
+}
+
+// chatToolChoice 映射 tool_choice：auto / none / required，或指定一个函数。空 = 不设（厂商缺省 auto）。
+func chatToolChoice(tc *session.ToolChoice) any {
+	if tc == nil {
+		return nil
+	}
+	switch tc.Mode {
+	case "auto", "none", "required":
+		return tc.Mode
+	case "tool":
+		if tc.Name != "" {
+			return map[string]any{"type": "function", "function": map[string]any{"name": tc.Name}}
+		}
+	}
+	return nil
+}
+
+// reasoningText 取一个推理增量：Compat.ReasoningField 指定字段时只认它；未指定时优先 reasoning_content，
+// 没有再取 reasoning。两个字段都发的厂商不再把同一段推理拼两遍（审查 P1-32）。
+func reasoningText(field, content, alt string) string {
+	switch field {
+	case "reasoning_content":
+		return content
+	case "reasoning":
+		return alt
+	}
+	if content != "" {
+		return content
+	}
+	return alt
 }
 
 type oaChunk struct {
@@ -209,7 +246,7 @@ type oaAcc struct {
 	args     strings.Builder
 }
 
-func parseOpenAI(ctx context.Context, r io.Reader, model string, out chan<- modelhub.Event) modelhub.Event {
+func parseOpenAI(ctx context.Context, r io.Reader, model, reasoningField string, out chan<- modelhub.Event) modelhub.Event {
 	var (
 		text, reasoning strings.Builder
 		calls           = map[int]*oaAcc{}
@@ -280,7 +317,7 @@ func parseOpenAI(ctx context.Context, r io.Reader, model string, out chan<- mode
 				text.WriteString(d.Content)
 				out <- modelhub.Event{TextDelta: d.Content}
 			}
-			if rd := d.ReasoningContent + d.Reasoning; rd != "" {
+			if rd := reasoningText(reasoningField, d.ReasoningContent, d.Reasoning); rd != "" {
 				reasoning.WriteString(rd)
 				out <- modelhub.Event{ReasoningDelta: rd}
 			}

@@ -25,6 +25,16 @@ func get(sc *assemble.SessionCx, root string, trusted bool) *Instructions {
 	}
 	in := NewInstructions(root)
 	in.Untrusted = !trusted
+	if a := sc.Agent; a != nil {
+		in.History = func() (int, []*session.Entry) {
+			snap := a.Committed()
+			off := snap.Header.CompactionBase - snap.Base
+			if off < 0 || off > len(snap.Entries) {
+				off = 0
+			}
+			return snap.Header.CompactionBase, snap.Entries[off:]
+		}
+	}
 	sc.Values[valueKey] = in
 	return in
 }

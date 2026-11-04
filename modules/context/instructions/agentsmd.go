@@ -32,10 +32,70 @@ type Instructions struct {
 	MaxBytes  int
 	MaxFile   int
 
+	// History 可空：会话已提交历史（压缩点 + 可见窗口里的条目）。嵌套指令追加在工具结果里，
+	// "已装载"按它推导：会话恢复后不重复追加，压缩掉的指令下次进入该目录时重新追加（审查 P1-26）。
+	History func() (compactionBase int, window []*session.Entry)
+
 	mu     sync.Mutex
 	loaded map[string]bool // 已装载文件（绝对路径）
 	bodies map[string]bool // 已装载内容（去首尾空白），重复跳过
+	nested map[string]bool // 其中经嵌套发现追加进工具结果的文件（可随压缩失效）
+	synced bool            // 已按历史同步过
+	syncAt int             // 上次同步时的压缩点
 	used   int
+}
+
+// nestedMark 嵌套指令在工具结果里的标记（Layer 追加的块头）。
+const nestedMark = "<project-instructions>"
+
+// sync 按已提交历史重算嵌套部分的已装载集合：首次调用（含会话恢复）或压缩点变化时。调用方持锁。
+func (in *Instructions) sync() {
+	if in.History == nil {
+		return
+	}
+	base, window := in.History()
+	if in.synced && base == in.syncAt {
+		return
+	}
+	in.synced, in.syncAt = true, base
+	seen := map[string]bool{}
+	for _, e := range window {
+		if e == nil || e.Item.ToolResult == nil {
+			continue
+		}
+		for _, part := range e.Item.ToolResult.Output {
+			if !strings.Contains(part.Text, nestedMark) {
+				continue
+			}
+			for _, line := range strings.Split(part.Text, "\n") {
+				if label, ok := strings.CutPrefix(line, "# 来自 "); ok {
+					f := filepath.FromSlash(strings.TrimSpace(label))
+					if !filepath.IsAbs(f) {
+						f = filepath.Join(in.Workdir, f)
+					}
+					seen[filepath.Clean(f)] = true
+				}
+			}
+		}
+	}
+	for f := range in.nested { // 压缩掉的：不再算已装载
+		if !seen[f] {
+			delete(in.nested, f)
+			delete(in.loaded, f)
+			if b, err := os.ReadFile(f); err == nil {
+				delete(in.bodies, strings.TrimSpace(string(b)))
+			}
+		}
+	}
+	for f := range seen { // 历史里已有的（会话恢复）：算已装载
+		if in.loaded[f] {
+			continue
+		}
+		in.loaded[f], in.nested[f] = true, true
+		if b, err := os.ReadFile(f); err == nil {
+			in.bodies[strings.TrimSpace(string(b))] = true
+		}
+	}
 }
 
 // NewInstructions 以工作目录构造；Home 取 $YBASE_HOME 或 ~/.ybase。
@@ -53,6 +113,9 @@ func NewInstructions(workdir string) *Instructions {
 func (in *Instructions) init() {
 	if in.loaded == nil {
 		in.loaded, in.bodies = map[string]bool{}, map[string]bool{}
+	}
+	if in.nested == nil {
+		in.nested = map[string]bool{}
 	}
 	if in.MaxBytes <= 0 {
 		in.MaxBytes = AgentsMaxBytes
@@ -229,6 +292,7 @@ func (in *Instructions) Discover(target string) string {
 	in.mu.Lock()
 	defer in.mu.Unlock()
 	in.init()
+	in.sync()
 	ds := chain(in.Workdir, dir)
 	if len(ds) <= 1 {
 		return ""
@@ -236,6 +300,11 @@ func (in *Instructions) Discover(target string) string {
 	var files []string
 	for _, d := range ds[1:] {
 		files = append(files, dirFiles(d)...)
+	}
+	for _, f := range files {
+		if !in.loaded[filepath.Clean(f)] {
+			in.nested[filepath.Clean(f)] = true
+		}
 	}
 	return in.render(files)
 }

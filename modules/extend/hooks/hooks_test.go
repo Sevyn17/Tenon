@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"ybase/runtime/session"
 	"ybase/runtime/toolhub"
@@ -48,6 +49,8 @@ func runFake(mode string) {
 		os.Stdout.WriteString(`{"decision":"block"}`)
 	case "context":
 		os.Stdout.WriteString(`{"additionalContext":"lint 通过"}`)
+	case "slow":
+		time.Sleep(2 * time.Second)
 	case "fail":
 		os.Stderr.WriteString("boom")
 		os.Exit(3)
@@ -189,6 +192,7 @@ func TestStopFires(t *testing.T) {
 		t.Fatal("只有 stop 钩子时不应加工具层")
 	}
 	r.AfterTurn("s9", session.DoneReason())
+	r.Wait()
 	b, _ := os.ReadFile(log)
 	if !strings.Contains(string(b), `"end_reason":"Done"`) || !strings.Contains(string(b), `"session_id":"s9"`) {
 		t.Fatalf("stop 钩子输入不对: %s", b)
@@ -231,5 +235,19 @@ func TestThirdPartyHookEnvScrubbed(t *testing.T) {
 	r, _ = runner(t, Hook{Event: PreToolUse, Command: "envkey"})
 	if _, ran := call(t, r.Layers(), "shell", ok); ran {
 		t.Fatal("用户级钩子应看到完整环境（测试自检）")
+	}
+}
+
+// stop 钩子异步执行，不卡回合（审查 P1-30：原先同步跑在会话 actor 里，每个最长 60 s）。
+func TestStopHookAsync(t *testing.T) {
+	r, _ := runner(t, Hook{Event: Stop, Command: "slow"})
+	start := time.Now()
+	r.AfterTurn("s1", session.DoneReason())
+	if d := time.Since(start); d > time.Second {
+		t.Fatalf("AfterTurn 应立即返回，用了 %v", d)
+	}
+	r.Wait()
+	if d := time.Since(start); d < 2*time.Second {
+		t.Fatalf("Wait 应等到钩子结束，只等了 %v", d)
 	}
 }

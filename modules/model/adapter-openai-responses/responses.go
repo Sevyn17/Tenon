@@ -169,6 +169,17 @@ func responsesBody(r *modelhub.Request, ep modelhub.Endpoint) map[string]any {
 	if req.Params.Reasoning != nil && *req.Params.Reasoning != "" {
 		b["reasoning"] = map[string]any{"effort": *req.Params.Reasoning, "summary": "auto"}
 	}
+	// tool_choice（审查 P1-32：原先三家适配器都没映射）：auto / none / required，或指定一个函数。
+	if tc := req.Params.ToolChoice; tc != nil && len(req.Tools) > 0 {
+		switch tc.Mode {
+		case "auto", "none", "required":
+			b["tool_choice"] = tc.Mode
+		case "tool":
+			if tc.Name != "" {
+				b["tool_choice"] = map[string]any{"type": "function", "name": tc.Name}
+			}
+		}
+	}
 	if ep.Compat.PromptCacheKey && r.SessionKey != "" {
 		b["prompt_cache_key"] = r.SessionKey
 	}

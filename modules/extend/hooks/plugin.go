@@ -5,6 +5,7 @@ package hooks
 // 前置钩子是 Guard（排在权限之后：被拒的调用不触发钩子），后置钩子是 Transform（只处理执行成功的结果）。
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -21,7 +22,7 @@ type PluginConfig struct {
 	ProjectHooks bool `cfg:"project_hooks" title:"加载项目级钩子" description:"加载 <dir>/.ybase/hooks.toml（会执行仓库里写的命令）"`
 }
 
-type plug struct{}
+type plug struct{ r *Runner }
 
 func init() { component.Register("hooks", func() component.Component { return &plug{} }) }
 
@@ -30,7 +31,7 @@ func (*plug) Meta() component.Meta {
 		Requires: []string{assemble.ServiceWorkdir, assemble.ServiceUI, "?" + assemble.ServiceTrust, "?service:sandbox", "?" + pkgs.Service}}
 }
 
-func (*plug) Setup(cx *component.Registrar) error {
+func (p *plug) Setup(cx *component.Registrar) error {
 	cfg, _ := cx.Config().(*PluginConfig)
 	if cfg == nil {
 		cfg = &PluginConfig{}
@@ -84,6 +85,7 @@ func (*plug) Setup(cx *component.Registrar) error {
 		cs = append(cs, c)
 	}
 	r := New(Merge(cs...), root, func(s string) { ui.Warn("钩子", s) })
+	p.r = r
 	// 钩子命令放进沙箱（缺省 workspace-write，按条可改）；无沙箱插件时照常执行。
 	if sb, ok, err := component.UseOptional[toolhub.Confiner](cx, "service:sandbox"); err != nil {
 		return err
@@ -107,4 +109,13 @@ func (*plug) Setup(cx *component.Registrar) error {
 	return nil
 }
 
-func (*plug) Start(*component.Scope) error { return nil }
+// Start 关闭时等异步的 stop 钩子跑完（审查 P1-30）。
+func (p *plug) Start(sc *component.Scope) error {
+	sc.OnClose(func(context.Context) error {
+		if p.r != nil {
+			p.r.Wait()
+		}
+		return nil
+	})
+	return nil
+}

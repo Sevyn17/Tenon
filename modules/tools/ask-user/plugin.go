@@ -3,6 +3,8 @@ package askuser
 // 插件登记：ask-user（标准模块，缺省开）。ask_user 工具经 service:ui 向人提问。
 
 import (
+	"context"
+
 	"ybase/runtime/assemble"
 	"ybase/runtime/component"
 	"ybase/runtime/toolhub"
@@ -21,7 +23,9 @@ func (*plug) Setup(cx *component.Registrar) error {
 	if err != nil {
 		return err
 	}
-	ask := AskUser(ui.Ask)
+	ask := AskUserIn(func(ctx context.Context, sid, q string, o []string) (string, error) {
+		return assemble.AskIn(ui, ctx, sid, q, o) // 带会话 id（审查 P1-28）
+	})
 	cx.Register(assemble.PointSessionTools, "ask-user", assemble.ToolsEntry{Order: 21,
 		Tools: func() []*toolhub.Tool { return []*toolhub.Tool{ask} }})
 	return nil

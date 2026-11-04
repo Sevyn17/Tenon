@@ -101,6 +101,7 @@ type anBlock struct {
 	IsError      bool            `json:"is_error,omitempty"`
 	Thinking     *string         `json:"thinking,omitempty"` // 指针：thinking 块即使为空串也要带上该字段
 	Signature    string          `json:"signature,omitempty"`
+	Data         string          `json:"data,omitempty"` // redacted_thinking
 	CacheControl *anCache        `json:"cache_control,omitempty"`
 }
 
@@ -117,6 +118,8 @@ type anMsg struct {
 type anthropicOpaque struct {
 	Protocol  string `json:"protocol"`
 	Signature string `json:"signature,omitempty"`
+	// Redacted redacted_thinking 块的加密内容：原样回传（审查 P1-31：原先整块丢掉，工具回合里思考块不完整）。
+	Redacted string `json:"redacted,omitempty"`
 }
 
 func anthropicBody(r *modelhub.Request, ep modelhub.Endpoint) map[string]any {
@@ -153,6 +156,10 @@ func anthropicBody(r *modelhub.Request, ep modelhub.Endpoint) map[string]any {
 				var op anthropicOpaque
 				if b, err := json.Marshal(rb.Opaque); err == nil {
 					_ = json.Unmarshal(b, &op)
+				}
+				if op.Protocol == "anthropic-messages" && op.Redacted != "" {
+					bs = append(bs, anBlock{Type: "redacted_thinking", Data: op.Redacted})
+					continue
 				}
 				if op.Protocol != "anthropic-messages" || rb.Text == nil {
 					continue // 只回传同协议的思考（回放状态只在同一适配器内流动）
@@ -216,10 +223,52 @@ func anthropicBody(r *modelhub.Request, ep modelhub.Endpoint) map[string]any {
 	if req.Params.Temperature != nil {
 		b["temperature"] = *req.Params.Temperature
 	}
+	// tool_choice 与推理参数（审查 P1-32：原先三家适配器都没映射 ToolChoice，Reasoning 只有 responses 实现）。
+	if tc := req.Params.ToolChoice; tc != nil && len(req.Tools) > 0 {
+		switch tc.Mode {
+		case "none":
+			b["tool_choice"] = map[string]any{"type": "none"}
+		case "required":
+			b["tool_choice"] = map[string]any{"type": "any"}
+		case "tool":
+			b["tool_choice"] = map[string]any{"type": "tool", "name": tc.Name}
+		case "auto":
+			b["tool_choice"] = map[string]any{"type": "auto"}
+		}
+	}
+	if budget := anthropicThinkingBudget(req.Params.Reasoning, maxTok); budget > 0 {
+		b["thinking"] = map[string]any{"type": "enabled", "budget_tokens": budget}
+	}
 	for _, p := range req.Params.Extra {
 		b[p.Name] = p.Value
 	}
 	return b
+}
+
+// anthropicThinkingBudget 把推理档位（low / medium / high）换成 thinking.budget_tokens；
+// 预算必须小于 max_tokens、且不少于 1024（厂商下限），放不下时不开思考。
+func anthropicThinkingBudget(effort *string, maxTok uint64) uint64 {
+	if effort == nil {
+		return 0
+	}
+	var budget uint64
+	switch *effort {
+	case "low":
+		budget = 1024
+	case "medium":
+		budget = 4096
+	case "high":
+		budget = 16384
+	default:
+		return 0
+	}
+	if budget >= maxTok {
+		budget = maxTok / 2
+	}
+	if budget < 1024 {
+		return 0
+	}
+	return budget
 }
 
 // —— 响应 ——//
@@ -234,6 +283,7 @@ type anEvent struct {
 		Type string `json:"type"`
 		ID   string `json:"id"`
 		Name string `json:"name"`
+		Data string `json:"data"` // redacted_thinking
 	} `json:"content_block"`
 	Delta *struct {
 		Type        string `json:"type"`
@@ -261,6 +311,7 @@ type anAcc struct {
 	kind, id, name string
 	buf            strings.Builder
 	sig            string
+	data           string // redacted_thinking 的加密内容
 }
 
 func parseAnthropic(ctx context.Context, r io.Reader, model string, out chan<- modelhub.Event) modelhub.Event {
@@ -283,6 +334,11 @@ func parseAnthropic(ctx context.Context, r io.Reader, model string, out chan<- m
 				s := b.buf.String()
 				it.Reasoning = append(it.Reasoning, session.ReasoningBlock{Text: &s,
 					Opaque: anthropicOpaque{Protocol: "anthropic-messages", Signature: b.sig}})
+			case "redacted_thinking":
+				if b.data != "" {
+					it.Reasoning = append(it.Reasoning, session.ReasoningBlock{
+						Opaque: anthropicOpaque{Protocol: "anthropic-messages", Redacted: b.data}})
+				}
 			case "tool_use":
 				args := b.buf.String()
 				if strings.TrimSpace(args) == "" {
@@ -325,7 +381,7 @@ func parseAnthropic(ctx context.Context, r io.Reader, model string, out chan<- m
 			}
 		case "content_block_start":
 			if ev.ContentBlock != nil {
-				blocks[ev.Index] = &anAcc{kind: ev.ContentBlock.Type, id: ev.ContentBlock.ID, name: ev.ContentBlock.Name}
+				blocks[ev.Index] = &anAcc{kind: ev.ContentBlock.Type, id: ev.ContentBlock.ID, name: ev.ContentBlock.Name, data: ev.ContentBlock.Data}
 				order = append(order, ev.Index)
 			}
 		case "content_block_delta":

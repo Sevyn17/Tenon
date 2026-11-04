@@ -13,6 +13,8 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
+	"ybase/modules/internal/proc"
 )
 
 // StderrTail stdio 服务 stderr 保留的尾部字节数（诊断用）。
@@ -85,6 +87,7 @@ func newStdio(s Server) (transport, error) {
 	cmd := exec.Command(s.Command, s.Args...)
 	cmd.Env = scrubEnvWith(os.Environ(), s.Env, s.expand)
 	cmd.Dir = s.Cwd
+	proc.Group(cmd) // 关闭时杀整个进程树：npx → cmd → node 这类服务只杀主进程会留下持有管道的子进程（审查 P1-29）
 	t := &stdioTransport{cmd: cmd, wait: map[int64]chan message{}, stderr: &tail{}, done: make(chan struct{})}
 	cmd.Stderr = t.stderr
 	in, err := cmd.StdinPipe()
@@ -215,11 +218,17 @@ func (t *stdioTransport) notify(ctx context.Context, method string, params any) 
 func (t *stdioTransport) close() error {
 	_ = t.stdin.Close()
 	if t.cmd.Process != nil {
-		_ = t.cmd.Process.Kill()
+		_ = proc.Kill(t.cmd)
 	}
-	<-t.done
+	select { // 子进程仍持有 stdout 时读协程等不到 EOF：最多等 CloseWait，不让进程退出卡在这里
+	case <-t.done:
+	case <-time.After(CloseWait):
+	}
 	return nil
 }
+
+// CloseWait 关闭 stdio 服务时等读协程结束的上限。
+var CloseWait = 5 * time.Second
 
 // —— Streamable HTTP ——
 

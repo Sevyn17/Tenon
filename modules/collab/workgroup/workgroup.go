@@ -98,7 +98,7 @@ func obj(props string, req ...string) json.RawMessage {
 
 // LeaderTools 领导会话的工具：team_spawn、team_send、看板。
 func (g *Group) LeaderTools() []*toolhub.Tool {
-	return append([]*toolhub.Tool{g.spawnTool(), g.sendTool()}, g.boardTools()...)
+	return append([]*toolhub.Tool{g.spawnTool(), g.sendTool(), g.stopTool()}, g.boardTools()...)
 }
 
 // MemberTools 成员会话的工具：team_send（发给领导或其他成员）、看板。
@@ -185,7 +185,7 @@ func (g *Group) start(leader, id, name, task string, untrusted bool) error {
 			WHERE member = ? AND item_id = ?`, msg, time.Now().UnixMilli(), id, item); err != nil {
 			return
 		}
-		g.settle(bg, id, leader, name, item, msg, tainted)
+		g.settleRetry(bg, id, leader, name, item, msg, tainted)
 	}()
 	return nil
 }
@@ -199,6 +199,31 @@ func (g *Group) settle(ctx context.Context, member, leader, name, item, msg stri
 	_, err := g.SQL.DB().ExecContext(ctx, `DELETE FROM p_workgroup_runs WHERE member = ? AND item_id = ?`, member, item)
 	return err
 }
+
+// settleRetry 投递成员结果，失败后台退避重试，直到成功或进程退出（审查 P1-27：原先失败只留账、
+// 要等下次重启 Recover 才补投，长驻进程里领导一直收不到）。账一直留着，退出后由 Recover 接手。
+func (g *Group) settleRetry(ctx context.Context, member, leader, name, item, msg string, untrusted bool) {
+	wait := settleBackoff
+	for {
+		if err := g.settle(ctx, member, leader, name, item, msg, untrusted); err == nil {
+			return
+		}
+		select {
+		case <-g.ctx.Done():
+			return
+		case <-time.After(wait):
+		}
+		if wait < settleMaxBackoff {
+			wait *= 2
+		}
+	}
+}
+
+// 结果投递重试的退避（测试可调小）。
+var (
+	settleBackoff    = time.Second
+	settleMaxBackoff = time.Minute
+)
 
 // Recover 补投上次进程未投递的成员结果：已完成的投结果；进程退出时仍在跑的，告知领导它被中断。
 // 启动时调用一次（在开始派新成员之前）。返回补投条数。
@@ -257,6 +282,40 @@ func (g *Group) deliverID(ctx context.Context, to, from, item, text string, untr
 		}
 	}
 	return hd.Do(host.Command{Kind: host.Send, ItemID: item, Text: text, Source: from, Trust: host.TrustOf(untrusted)})
+}
+
+// stopTool team_stop：领导中止一个正在工作的成员的当前回合（审查 P1-27：原先只能等 MemberTimeout）。
+// 成员会话保留，之后可以再 team_send 让它继续。权限项沿用 team.send（同属组内协作，比发消息更温和）。
+func (g *Group) stopTool() *toolhub.Tool {
+	return &toolhub.Tool{
+		Spec: session.ToolSpec{Name: "team_stop",
+			Description: "中止一个正在工作的成员的当前任务（会话保留，之后可用 team_send 让它继续）。",
+			Schema:      obj(`"name":{"type":"string","description":"成员名"}`, "name")},
+		Risk: toolhub.Write, Attrs: map[string]any{toolhub.AttrEffect: toolhub.EffectCollab},
+		Items: []string{ItemSend},
+		Call: func(ctx context.Context, cx *toolhub.Cx, raw json.RawMessage) (toolhub.Output, error) {
+			var a struct{ Name string }
+			if err := json.Unmarshal(raw, &a); err != nil || !nameRe.MatchString(a.Name) {
+				return toolhub.Errorf("需要合法的 name"), nil
+			}
+			leader, self := team(cx.SessionID)
+			if self != "lead" {
+				return toolhub.Errorf("只有领导会话能中止成员"), nil
+			}
+			id := MemberID(leader, a.Name)
+			g.mu.Lock()
+			busy := g.running[id]
+			g.mu.Unlock()
+			hd, open := g.Host.Get(id)
+			if !busy || !open {
+				return toolhub.Text("成员 " + a.Name + " 当前没有在工作"), nil
+			}
+			if err := hd.Do(host.Command{Kind: host.Cancel}); err != nil {
+				return toolhub.Errorf("中止失败：%v", err), nil
+			}
+			return toolhub.Text("已中止成员 " + a.Name + " 的当前任务；它的中断结果会作为一条消息送回"), nil
+		},
+	}
 }
 
 func (g *Group) sendTool() *toolhub.Tool {
