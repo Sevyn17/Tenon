@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"ybase/runtime/host"
@@ -19,7 +20,9 @@ const SubagentTimeout = 30 * time.Minute
 // 子会话 id = <父 id>/sub-<调用 id 末 8 位（uuid v7 末段随机）>；传 session 续用已有子会话（必须是本会话的子智能体）。
 // f 构造子会话的 agent（不含 subagent 工具 → 深度 1）。
 func Tool(h *host.Host, f host.Factory) *toolhub.Tool {
-	no := false
+	// 一批里的多个委派并行跑（2026-11-04 审查 P2 工具体验：原先串行）；续用同一子会话的调用按 id 串行，见 childLocks。
+	yes := true
+	var locks childLocks
 	return &toolhub.Tool{
 		Spec: session.ToolSpec{Name: "subagent",
 			Description: "把一个独立、边界清楚的子任务委派给子智能体（全新上下文，同样的工具）。task 要自包含：子智能体看不到当前对话。" +
@@ -27,7 +30,7 @@ func Tool(h *host.Host, f host.Factory) *toolhub.Tool {
 			Schema: json.RawMessage(`{"type":"object","properties":{"task":{"type":"string","description":"自包含的任务说明"},` +
 				`"session":{"type":"string","description":"可选：续用的子会话 id"}},"required":["task"]}`)},
 		Risk:     toolhub.Write,
-		Parallel: &no,
+		Parallel: &yes,
 		Timeout:  SubagentTimeout,
 		Attrs:    map[string]any{toolhub.AttrEffect: toolhub.EffectSpawn},
 		Items:    []string{ItemSpawn},
@@ -45,6 +48,8 @@ func Tool(h *host.Host, f host.Factory) *toolhub.Tool {
 				id = cx.SessionID + "/sub-" + cid
 			}
 			cx.ChildSessionID = id
+			unlock := locks.lock(id)
+			defer unlock()
 			out, err := h.Spawn(ctx, cx.SessionID, id, Definition, f, a.Task)
 			if err != nil {
 				if ctx.Err() != nil {
@@ -54,5 +59,40 @@ func Tool(h *host.Host, f host.Factory) *toolhub.Tool {
 			}
 			return toolhub.Text(fmt.Sprintf("[子会话 %s]\n%s", id, out)), nil
 		},
+	}
+}
+
+// childLocks 按子会话 id 串行：两次调用续用同一个子会话时，第二次等第一次的回合结束再投递，
+// 不往同一个子会话同时投两条任务（各自 Wait 会等到对方的回合）。
+type childLocks struct {
+	mu sync.Mutex
+	m  map[string]*childLock
+}
+
+type childLock struct {
+	mu   sync.Mutex
+	refs int
+}
+
+func (c *childLocks) lock(id string) func() {
+	c.mu.Lock()
+	if c.m == nil {
+		c.m = map[string]*childLock{}
+	}
+	l := c.m[id]
+	if l == nil {
+		l = &childLock{}
+		c.m[id] = l
+	}
+	l.refs++
+	c.mu.Unlock()
+	l.mu.Lock()
+	return func() {
+		l.mu.Unlock()
+		c.mu.Lock()
+		if l.refs--; l.refs == 0 {
+			delete(c.m, id)
+		}
+		c.mu.Unlock()
 	}
 }
