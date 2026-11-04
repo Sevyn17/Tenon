@@ -497,27 +497,47 @@ type Source struct {
 	Warnings []string
 }
 
-// Open 连接配置里的全部服务并拉工具；失败的服务只告警。
+// Open 连接配置里的全部服务并拉工具；失败的服务只告警。各服务并行连接，结果按配置顺序合并
+// （2026-11-04 审查 P2 工具体验：原先串行，一个慢服务拖住全部启动）。
 func Open(ctx context.Context, cfg Config) *Source {
-	s := &Source{}
-	for _, sv := range cfg.Server {
+	type result struct {
+		c    *Client
+		ts   []*toolhub.Tool
+		warn string
+	}
+	res := make([]result, len(cfg.Server))
+	var wg sync.WaitGroup
+	for i, sv := range cfg.Server {
 		if cfg.Confine != nil && sv.Command != "" {
 			conf, orig := cfg.Confine, sv
 			sv.confine = func(cmd *exec.Cmd) (func(), error) { return conf(cmd, orig) }
 		}
-		c, err := Connect(ctx, sv)
-		if err != nil {
-			s.Warnings = append(s.Warnings, err.Error())
+		wg.Add(1)
+		go func(i int, sv Server) {
+			defer wg.Done()
+			c, err := Connect(ctx, sv)
+			if err != nil {
+				res[i].warn = err.Error()
+				return
+			}
+			ts, err := c.ListTools(ctx)
+			if err != nil {
+				res[i].warn = fmt.Sprintf("mcp: %s tools/list 失败：%v", sv.Name, err)
+				c.Close()
+				return
+			}
+			res[i] = result{c: c, ts: c.Tools(ts)}
+		}(i, sv)
+	}
+	wg.Wait()
+	s := &Source{}
+	for _, r := range res {
+		if r.warn != "" {
+			s.Warnings = append(s.Warnings, r.warn)
 			continue
 		}
-		ts, err := c.ListTools(ctx)
-		if err != nil {
-			s.Warnings = append(s.Warnings, fmt.Sprintf("mcp: %s tools/list 失败：%v", sv.Name, err))
-			c.Close()
-			continue
-		}
-		s.Clients = append(s.Clients, c)
-		s.Tools = append(s.Tools, c.Tools(ts)...)
+		s.Clients = append(s.Clients, r.c)
+		s.Tools = append(s.Tools, r.ts...)
 	}
 	return s
 }
