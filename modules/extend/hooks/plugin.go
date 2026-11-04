@@ -6,10 +6,8 @@ package hooks
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 
 	"ybase/runtime/assemble"
 	"ybase/runtime/component"
@@ -71,16 +69,9 @@ func (p *plug) Setup(cx *component.Registrar) error {
 	}
 	for _, k := range ps {
 		var c Config
-		for _, h := range k.Hook {
-			hk := Hook{Event: h.Event, Matcher: h.Matcher, Command: pkgs.Expand(h.Command, k.Dir), Timeout: h.Timeout, Sandbox: h.Sandbox, scrub: true}
-			if h.Matcher != "" {
-				re, err := regexp.Compile("^(?:" + h.Matcher + ")$")
-				if err != nil {
-					return fmt.Errorf("hooks: 插件包 %s：matcher：%w", k.File, err)
-				}
-				hk.re = re
-			}
-			c.Hook = append(c.Hook, hk)
+		for _, h := range packageHooks(k) { // 段已由本组件解码校验，matcher 已编译
+			h.Command, h.scrub = pkgs.Expand(h.Command, k.Dir), true
+			c.Hook = append(c.Hook, h)
 		}
 		cs = append(cs, c)
 	}

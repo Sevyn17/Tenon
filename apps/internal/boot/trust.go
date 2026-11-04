@@ -129,11 +129,10 @@ func PackageNotices(p *component.Profile, ps []*pkgs.Package) []string {
 	var out []string
 	for _, k := range ps {
 		var miss []string
-		if len(k.Server) > 0 && !on["mcp"] {
-			miss = append(miss, "MCP 服务需开 mcp")
-		}
-		if len(k.Hook) > 0 && !on["hooks"] {
-			miss = append(miss, "钩子需开 hooks")
+		for _, key := range k.SectionKeys() { // 组件登记的清单段（审查 P1-56）：负责的组件没开时提示
+			if sec, ok := pkgs.SectionOf(key); ok && sec.Owner != "" && !on[sec.Owner] {
+				miss = append(miss, sec.Label+"需开 "+sec.Owner)
+			}
 		}
 		if k.SkillsDir != "" && !on["skills"] {
 			miss = append(miss, "技能需开 skills")

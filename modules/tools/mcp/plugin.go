@@ -135,7 +135,7 @@ func (p *plug) addPackages(cx *component.Registrar) error {
 		seen[s.Name] = true
 	}
 	for _, k := range ps {
-		for _, s := range k.Server {
+		for _, s := range packageServers(k) {
 			if seen[s.Name] {
 				return fmt.Errorf("mcp: 插件包 %s 的服务名 %q 与已有服务重复", k.File, s.Name)
 			}

@@ -86,30 +86,38 @@ func LoadConfig(path string) (Config, error) {
 	if _, err := toml.DecodeFile(path, &c); err != nil {
 		return c, fmt.Errorf("mcp: 配置 %s：%w", path, err)
 	}
+	if err := checkServers(c.Server); err != nil {
+		return c, fmt.Errorf("mcp: %w", err)
+	}
+	return c, nil
+}
+
+// checkServers 校验一组服务配置（mcp.toml 与插件包的 [[server]] 共用）。
+func checkServers(ss []Server) error {
 	seen := map[string]bool{}
-	for _, s := range c.Server {
+	for _, s := range ss {
 		if !serverNameRe.MatchString(s.Name) {
-			return c, fmt.Errorf("mcp: 服务名 %q 不合法（[A-Za-z0-9_-]{1,32}）", s.Name)
+			return fmt.Errorf("服务名 %q 不合法（[A-Za-z0-9_-]{1,32}）", s.Name)
 		}
 		if seen[s.Name] {
-			return c, fmt.Errorf("mcp: 服务名 %q 重复", s.Name)
+			return fmt.Errorf("服务名 %q 重复", s.Name)
 		}
 		seen[s.Name] = true
 		if (s.Command == "") == (s.URL == "") {
-			return c, fmt.Errorf("mcp: 服务 %s 须且只能配置 command 或 url 之一", s.Name)
+			return fmt.Errorf("服务 %s 须且只能配置 command 或 url 之一", s.Name)
 		}
 		switch s.Trust {
 		case "", TrustAsk, TrustReadonly, TrustTrusted:
 		default:
-			return c, fmt.Errorf("mcp: 服务 %s 的 trust %q 不合法（ask / readonly / trusted）", s.Name, s.Trust)
+			return fmt.Errorf("服务 %s 的 trust %q 不合法（ask / readonly / trusted）", s.Name, s.Trust)
 		}
 		if s.Sandbox != "" {
 			if _, err := toolhub.ParseSandboxMode(s.Sandbox); err != nil {
-				return c, fmt.Errorf("mcp: 服务 %s：%w", s.Name, err)
+				return fmt.Errorf("服务 %s：%w", s.Name, err)
 			}
 		}
 	}
-	return c, nil
+	return nil
 }
 
 func (s Server) timeout() time.Duration {

@@ -1,10 +1,14 @@
 package pkgs
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/BurntSushi/toml"
 
 	"ybase/runtime/component"
 )
@@ -19,6 +23,25 @@ func (nopPlugin) Start(sc *component.Scope) error     { return nil }
 
 func init() {
 	component.Register("pkgs-test-target", func() component.Component { return nopPlugin{} })
+	// 测试用清单段：真实的段（mcp 的 [[server]]、hooks 的 [[hook]]）由各组件登记，本包不认识它们（审查 P1-56）。
+	RegisterSection(Section{Key: "widget", Owner: "pkgs-test-target", Label: "部件",
+		Decode: func(_ string, md toml.MetaData, prim toml.Primitive) (any, error) {
+			var ws []widget
+			if err := md.PrimitiveDecode(prim, &ws); err != nil {
+				return nil, err
+			}
+			for _, w := range ws {
+				if w.Name == "" {
+					return nil, errors.New("部件缺 name")
+				}
+			}
+			return ws, nil
+		},
+		Summary: func(v any) string { ws, _ := v.([]widget); return fmt.Sprintf("部件 %d 个", len(ws)) }})
+}
+
+type widget struct {
+	Name string `toml:"name"`
 }
 
 type testCfg struct {
@@ -60,16 +83,8 @@ description = "演示"
 skills = "skills"
 prompt = ["a.md", "sub/b.md"]
 
-[[server]]
-name = "fs"
-command = "${YBASE_PLUGIN_DIR}/bin/fs"
-trust = "readonly"
-sandbox = "workspace-write"
-
-[[hook]]
-event = "pre_tool_use"
-matcher = "shell"
-command = "echo hi"
+[[widget]]
+name = "w1"
 
 [config.pkgs-test-target]
 x = 1
@@ -78,7 +93,8 @@ x = 1
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p.SkillsDir != filepath.Join(dir, "skills") || len(p.Prompts) != 2 || len(p.Server) != 1 || len(p.Hook) != 1 {
+	ws, ok := SectionValue[[]widget](p, "widget")
+	if p.SkillsDir != filepath.Join(dir, "skills") || len(p.Prompts) != 2 || !ok || len(ws) != 1 || ws[0].Name != "w1" {
 		t.Fatalf("解析结果不对：%+v", p)
 	}
 	txt, err := p.PromptText()
@@ -90,7 +106,7 @@ x = 1
 		t.Fatalf("Profile 不对：%+v", q)
 	}
 	c := p.Contents()
-	for _, w := range []string{"fs", "钩子 1", "技能", "提示词 2"} {
+	for _, w := range []string{"部件 1 个", "技能", "提示词 2"} {
 		if !strings.Contains(c, w) {
 			t.Fatalf("Contents %q 缺 %q", c, w)
 		}
@@ -108,10 +124,9 @@ func TestParseErrors(t *testing.T) {
 		"escape":   {"name = \"escape\"\nprompt = [\"../x.md\"]", "跳出了包目录"},
 		"absolute": {"name = \"absolute\"\nskills = \"C:/x\"", "skills"},
 		"missing":  {"name = \"missing\"\nprompt = [\"none.md\"]", "不存在"},
-		"both":     {"name = \"both\"\n[[server]]\nname = \"a\"\ncommand = \"x\"\nurl = \"http://x\"", "command 或 url"},
-		"trust":    {"name = \"trust\"\n[[server]]\nname = \"a\"\ncommand = \"x\"\ntrust = \"all\"", "trust"},
-		"event":    {"name = \"event\"\n[[hook]]\nevent = \"nope\"\ncommand = \"x\"", "不支持"},
-		"matcher":  {"name = \"matcher\"\n[[hook]]\nevent = \"stop\"\ncommand = \"x\"\nmatcher = \"(\"", "matcher"},
+		"section":  {"name = \"section\"\n[[widget]]\nname = \"\"", "部件缺 name"},
+		"sectypo":  {"name = \"sectypo\"\n[[widget]]\nname = \"w\"\nnmae = \"x\"", "未知字段"},
+		"nosec":    {"name = \"nosec\"\n[[server]]\nname = \"a\"\ncommand = \"x\"", "没有组件处理这一段"},
 		"noplugin": {"name = \"noplugin\"\n[config.no-such-plugin]\nx = 1", "没有这个插件"},
 		"Bad_Name": {`name = "Bad_Name"`, "不合法"},
 	}
@@ -158,16 +173,6 @@ func TestLoadTrust(t *testing.T) {
 	}
 	if ps[2].Scope != ScopeProject || ps[2].Version != "2" || !strings.Contains(strings.Join(notes, "\n"), "覆盖用户级") {
 		t.Fatalf("项目级应覆盖用户级：%+v %v", ps[2], notes)
-	}
-}
-
-func TestLoadDupServer(t *testing.T) {
-	home := t.TempDir()
-	m := "name = \"%s\"\n[[server]]\nname = \"fs\"\ncommand = \"x\""
-	mk(t, filepath.Join(home, "plugins"), "a", strings.Replace(m, "%s", "a", 1))
-	mk(t, filepath.Join(home, "plugins"), "b", strings.Replace(m, "%s", "b", 1))
-	if _, _, err := Load(home, t.TempDir(), true); err == nil || !strings.Contains(err.Error(), "重复") {
-		t.Fatalf("应报 MCP 服务重名：%v", err)
 	}
 }
 

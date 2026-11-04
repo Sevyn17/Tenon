@@ -10,7 +10,6 @@ package anthropic
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -41,54 +40,21 @@ func (Anthropic) Protocol() string { return "anthropic-messages" }
 
 // Stream 单次流式调用。
 func (a Anthropic) Stream(ctx context.Context, r *modelhub.Request, ep modelhub.Endpoint) <-chan modelhub.Event {
-	out := make(chan modelhub.Event, 32)
-	go func() {
-		defer close(out)
-		out <- a.run(ctx, r, ep, out)
-	}()
-	return out
-}
-
-func (a Anthropic) run(ctx context.Context, r *modelhub.Request, ep modelhub.Endpoint, out chan<- modelhub.Event) modelhub.Event {
-	body, err := json.Marshal(anthropicBody(r, ep))
-	if err != nil {
-		return modelhub.Event{Failed: &modelhub.Failure{Code: modelhub.CodeInvalidRequest, Message: err.Error()}}
-	}
-	base := ep.BaseURL
-	if base == "" {
-		base = "https://api.anthropic.com/v1"
-	}
-	hreq, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(base, "/")+"/messages", bytes.NewReader(body))
-	if err != nil {
-		return modelhub.Event{Failed: &modelhub.Failure{Code: modelhub.CodeInvalidRequest, Message: err.Error()}}
-	}
-	hreq.Header.Set("Content-Type", "application/json")
-	hreq.Header.Set("Accept", "text/event-stream")
-	hreq.Header.Set("anthropic-version", AnthropicVersion)
-	if ep.APIKey != "" {
-		hreq.Header.Set("x-api-key", ep.APIKey)
-	}
-	hc := a.HTTP
-	if hc == nil {
-		hc = http.DefaultClient
-	}
-	resp, err := hc.Do(hreq)
-	if err != nil {
-		if ctx.Err() != nil {
-			return modelhub.Event{Failed: &modelhub.Failure{Code: modelhub.CodeAborted, Message: err.Error()}}
+	return modelhub.RunStream(func(out chan<- modelhub.Event) modelhub.Event {
+		body, f := modelhub.PostSSE(ctx, modelhub.SSERequest{Client: a.HTTP, BaseURL: ep.BaseURL,
+			Default: "https://api.anthropic.com/v1", Path: "/messages", Body: anthropicBody(r, ep),
+			Header: map[string]string{"anthropic-version": AnthropicVersion, "x-api-key": ep.APIKey}},
+			func(status int, f *modelhub.Failure) {
+				if status == 529 { // overloaded
+					f.Code = modelhub.CodeServer
+				}
+			})
+		if f != nil {
+			return modelhub.Event{Failed: f}
 		}
-		return modelhub.Event{Failed: &modelhub.Failure{Code: modelhub.CodeTransport, Message: err.Error()}}
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
-		f := modelhub.HTTPFailure(resp.StatusCode, resp.Header, b)
-		if resp.StatusCode == 529 { // overloaded
-			f.Code = modelhub.CodeServer
-		}
-		return modelhub.Event{Failed: f}
-	}
-	return parseAnthropic(ctx, resp.Body, ep.Model, out)
+		defer body.Close()
+		return parseAnthropic(ctx, body, ep.Model, out)
+	})
 }
 
 // —— 请求 ——//

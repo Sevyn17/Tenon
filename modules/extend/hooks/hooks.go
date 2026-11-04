@@ -85,30 +85,38 @@ func LoadConfig(path string) (Config, error) {
 	if err := toml.Unmarshal(b, &c); err != nil {
 		return c, fmt.Errorf("hooks: %s: %w", path, err)
 	}
-	for i := range c.Hook {
-		h := &c.Hook[i]
+	if err := checkHooks(c.Hook); err != nil {
+		return c, fmt.Errorf("hooks: %s: %w", path, err)
+	}
+	return c, nil
+}
+
+// checkHooks 校验钩子并编译 matcher（配置文件与插件包的 [[hook]] 段共用）。
+func checkHooks(hs []Hook) error {
+	for i := range hs {
+		h := &hs[i]
 		switch h.Event {
 		case PreToolUse, PostToolUse, Stop:
 		default:
-			return c, fmt.Errorf("hooks: %s: 第 %d 条 event %q 不支持（pre_tool_use / post_tool_use / stop）", path, i+1, h.Event)
+			return fmt.Errorf("第 %d 条 event %q 不支持（pre_tool_use / post_tool_use / stop）", i+1, h.Event)
 		}
 		if strings.TrimSpace(h.Command) == "" {
-			return c, fmt.Errorf("hooks: %s: 第 %d 条缺 command", path, i+1)
+			return fmt.Errorf("第 %d 条缺 command", i+1)
 		}
 		if h.Sandbox != "" {
 			if _, err := toolhub.ParseSandboxMode(h.Sandbox); err != nil {
-				return c, fmt.Errorf("hooks: %s: 第 %d 条 sandbox：%w", path, i+1, err)
+				return fmt.Errorf("第 %d 条 sandbox：%w", i+1, err)
 			}
 		}
 		if h.Matcher != "" {
 			re, err := regexp.Compile("^(?:" + h.Matcher + ")$")
 			if err != nil {
-				return c, fmt.Errorf("hooks: %s: 第 %d 条 matcher：%w", path, i+1, err)
+				return fmt.Errorf("第 %d 条 matcher：%w", i+1, err)
 			}
 			h.re = re
 		}
 	}
-	return c, nil
+	return nil
 }
 
 // Merge 合并多份配置（按顺序执行）。

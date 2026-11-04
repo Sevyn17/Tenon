@@ -7,7 +7,6 @@ package openaichat
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -30,49 +29,20 @@ func (OpenAIChat) Protocol() string { return "openai-chat" }
 
 // Stream 单次流式调用。
 func (a OpenAIChat) Stream(ctx context.Context, r *modelhub.Request, ep modelhub.Endpoint) <-chan modelhub.Event {
-	out := make(chan modelhub.Event, 32)
-	go func() {
-		defer close(out)
-		out <- a.run(ctx, r, ep, out)
-	}()
-	return out
-}
-
-func (a OpenAIChat) run(ctx context.Context, r *modelhub.Request, ep modelhub.Endpoint, out chan<- modelhub.Event) modelhub.Event {
-	body, err := json.Marshal(openAIBody(r, ep))
-	if err != nil {
-		return modelhub.Event{Failed: &modelhub.Failure{Code: modelhub.CodeInvalidRequest, Message: err.Error()}}
-	}
-	base := ep.BaseURL
-	if base == "" {
-		base = "https://api.openai.com/v1"
-	}
-	hreq, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(base, "/")+"/chat/completions", bytes.NewReader(body))
-	if err != nil {
-		return modelhub.Event{Failed: &modelhub.Failure{Code: modelhub.CodeInvalidRequest, Message: err.Error()}}
-	}
-	hreq.Header.Set("Content-Type", "application/json")
-	hreq.Header.Set("Accept", "text/event-stream")
+	auth := ""
 	if ep.APIKey != "" {
-		hreq.Header.Set("Authorization", "Bearer "+ep.APIKey)
+		auth = "Bearer " + ep.APIKey
 	}
-	hc := a.HTTP
-	if hc == nil {
-		hc = http.DefaultClient
-	}
-	resp, err := hc.Do(hreq)
-	if err != nil {
-		if ctx.Err() != nil {
-			return modelhub.Event{Failed: &modelhub.Failure{Code: modelhub.CodeAborted, Message: err.Error()}}
+	return modelhub.RunStream(func(out chan<- modelhub.Event) modelhub.Event {
+		body, f := modelhub.PostSSE(ctx, modelhub.SSERequest{Client: a.HTTP, BaseURL: ep.BaseURL,
+			Default: "https://api.openai.com/v1", Path: "/chat/completions", Body: openAIBody(r, ep),
+			Header: map[string]string{"Authorization": auth}}, nil)
+		if f != nil {
+			return modelhub.Event{Failed: f}
 		}
-		return modelhub.Event{Failed: &modelhub.Failure{Code: modelhub.CodeTransport, Message: err.Error()}}
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
-		return modelhub.Event{Failed: modelhub.HTTPFailure(resp.StatusCode, resp.Header, b)}
-	}
-	return parseOpenAI(ctx, resp.Body, ep.Model, ep.Compat.ReasoningField, out)
+		defer body.Close()
+		return parseOpenAI(ctx, body, ep.Model, ep.Compat.ReasoningField, out)
+	})
 }
 
 type oaFunc struct {

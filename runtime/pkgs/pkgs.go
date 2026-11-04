@@ -4,7 +4,8 @@
 // 不引入新协议：包里的内容交给对应的内置插件（mcp / hooks / skills / prompt）按原有规则生效，
 // 缺省配置作为一层 profile（内置 < 插件包 < 用户 profile < 项目 profile < -profile）。
 //
-// 本包只负责发现、解析、校验清单，不认识任何具体插件；把内容接到哪个插件由应用（apps/internal/boot）决定。
+// 本包只负责发现、解析、校验清单的通用部分；交给组件的段（mcp 的 [[server]]、hooks 的 [[hook]]）由那个组件
+// 登记解码与校验（RegisterSection，审查 P1-56），本包不认识段的形状。
 package pkgs
 
 import (
@@ -20,7 +21,6 @@ import (
 
 	"ybase/runtime/component"
 	"ybase/runtime/ext"
-	"ybase/runtime/toolhub"
 )
 
 // ManifestName 清单文件名。
@@ -36,33 +36,7 @@ const (
 	ScopeProject = "project"
 )
 
-var (
-	nameRe   = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
-	serverRe = regexp.MustCompile(`^[A-Za-z0-9_-]{1,32}$`)
-)
-
-// Server 一个 MCP 服务，字段与 mcp 插件的 [[server]] 相同。
-type Server struct {
-	Name    string            `toml:"name" json:"name,omitempty"`
-	Command string            `toml:"command" json:"command,omitempty"`
-	Args    []string          `toml:"args" json:"args,omitempty"`
-	Env     map[string]string `toml:"env" json:"env,omitempty"`
-	Cwd     string            `toml:"cwd" json:"cwd,omitempty"`
-	URL     string            `toml:"url" json:"url,omitempty"`
-	Headers map[string]string `toml:"headers" json:"headers,omitempty"`
-	Timeout int               `toml:"timeout" json:"timeout,omitempty"`
-	Trust   string            `toml:"trust" json:"trust,omitempty"`
-	Sandbox string            `toml:"sandbox" json:"sandbox,omitempty"`
-}
-
-// Hook 一条钩子，字段与 hooks 插件的 [[hook]] 相同。
-type Hook struct {
-	Event   string `toml:"event" json:"event,omitempty"`
-	Matcher string `toml:"matcher" json:"matcher,omitempty"`
-	Command string `toml:"command" json:"command,omitempty"`
-	Timeout int    `toml:"timeout" json:"timeout,omitempty"`
-	Sandbox string `toml:"sandbox" json:"sandbox,omitempty"`
-}
+var nameRe = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
 
 // Manifest ybase-plugin.toml 的内容。
 type Manifest struct {
@@ -71,8 +45,6 @@ type Manifest struct {
 	Description string   `toml:"description"`
 	Skills      string   `toml:"skills"` // 技能目录（相对包目录），格式同 ~/.ybase/skills
 	Prompt      []string `toml:"prompt"` // 提示词片段文件（相对包目录），按顺序拼成一个系统块
-	Server      []Server `toml:"server"`
-	Hook        []Hook   `toml:"hook"`
 	// Config 内置插件的缺省配置：[config.<插件名>] 键 = 值。不能开关插件。
 	Config map[string]map[string]any `toml:"config"`
 }
@@ -85,6 +57,8 @@ type Package struct {
 	Scope     string   // user / project
 	SkillsDir string   // 空 = 无
 	Prompts   []string // 提示词片段文件
+	// Sections 组件登记的段解码后的值（段名 → 值，见 RegisterSection / SectionValue）。
+	Sections map[string]any
 }
 
 // Parse 读并校验一个包目录。错误信息带清单路径。
@@ -107,6 +81,9 @@ func Parse(dir, scope string) (*Package, error) {
 		for _, k := range und {
 			if len(k) > 0 && k[0] == "config" {
 				continue
+			}
+			if len(k) > 0 && !builtinKeys[k[0]] {
+				continue // 组件段与未知顶层键交给 decodeSections（报"没有组件处理这一段"）
 			}
 			ks = append(ks, k.String())
 		}
@@ -139,53 +116,8 @@ func Parse(dir, scope string) (*Package, error) {
 		}
 		p.Prompts = append(p.Prompts, abs)
 	}
-	seen := map[string]bool{}
-	for _, s := range m.Server {
-		if !serverRe.MatchString(s.Name) {
-			return nil, fail("服务名 %q 不合法（[A-Za-z0-9_-]{1,32}）", s.Name)
-		}
-		if seen[s.Name] {
-			return nil, fail("服务名 %q 重复", s.Name)
-		}
-		seen[s.Name] = true
-		if (s.Command == "") == (s.URL == "") {
-			return nil, fail("服务 %s 须且只能配置 command 或 url 之一", s.Name)
-		}
-		switch s.Trust {
-		case "", "ask", "readonly", "trusted":
-		default:
-			return nil, fail("服务 %s 的 trust %q 不合法（ask / readonly / trusted）", s.Name, s.Trust)
-		}
-		if s.Sandbox != "" {
-			if _, err := toolhub.ParseSandboxMode(s.Sandbox); err != nil {
-				return nil, fail("服务 %s：%v", s.Name, err)
-			}
-		}
-		if s.Cwd != "" && !strings.Contains(s.Cwd, "${"+DirVar+"}") {
-			if _, err := within(dir, s.Cwd); err != nil {
-				return nil, fail("服务 %s 的 cwd：%v", s.Name, err)
-			}
-		}
-	}
-	for i, h := range m.Hook {
-		switch h.Event {
-		case "pre_tool_use", "post_tool_use", "stop":
-		default:
-			return nil, fail("第 %d 条钩子 event %q 不支持（pre_tool_use / post_tool_use / stop）", i+1, h.Event)
-		}
-		if strings.TrimSpace(h.Command) == "" {
-			return nil, fail("第 %d 条钩子缺 command", i+1)
-		}
-		if h.Sandbox != "" {
-			if _, err := toolhub.ParseSandboxMode(h.Sandbox); err != nil {
-				return nil, fail("第 %d 条钩子 sandbox：%v", i+1, err)
-			}
-		}
-		if h.Matcher != "" {
-			if _, err := regexp.Compile("^(?:" + h.Matcher + ")$"); err != nil {
-				return nil, fail("第 %d 条钩子 matcher：%v", i+1, err)
-			}
-		}
+	if p.Sections, err = decodeSections(file, dir); err != nil {
+		return nil, fail("%v", err)
 	}
 	for name := range m.Config {
 		meta, ok := component.MetaOf(name)
@@ -205,7 +137,10 @@ func Parse(dir, scope string) (*Package, error) {
 	return p, nil
 }
 
-// within 把相对路径解析到包目录下；绝对路径或跳出包目录报错。
+// Within 把相对路径解析到包目录下；绝对路径或跳出包目录报错（段解码校验路径用）。
+func Within(dir, rel string) (string, error) { return within(dir, rel) }
+
+// within 见 Within。
 func within(dir, rel string) (string, error) {
 	if rel == "" || filepath.IsAbs(rel) || filepath.VolumeName(rel) != "" || strings.HasPrefix(rel, "/") || strings.HasPrefix(rel, `\`) {
 		return "", fmt.Errorf("%q 须是包目录内的相对路径", rel)
@@ -264,7 +199,7 @@ func HasAny(root string) bool {
 }
 
 // Load 用户级 <home>/plugins 与项目级 <dir>/.ybase/plugins（只在受信时）。
-// 同名包项目级覆盖用户级（记一条提示）；不同包的 MCP 服务重名报错。顺序：用户级在前、项目级在后，各按名字排序。
+// 同名包项目级覆盖用户级（记一条提示）；段内容之间的冲突（如 MCP 服务重名）由处理该段的组件检查。顺序：用户级在前、项目级在后，各按名字排序。
 func Load(home, root string, trusted bool) ([]*Package, []string, error) {
 	var all []*Package
 	var notes []string
@@ -295,15 +230,6 @@ func Load(home, root string, trusted bool) ([]*Package, []string, error) {
 	} else if HasAny(projDir) {
 		notes = append(notes, "项目未受信，跳过项目插件包 "+projDir+"（ybase trust 可信任）")
 	}
-	owner := map[string]string{}
-	for _, p := range all {
-		for _, s := range p.Server {
-			if prev, dup := owner[s.Name]; dup {
-				return nil, nil, fmt.Errorf("插件包 %s：MCP 服务名 %q 与插件包 %s 重复", p.File, s.Name, prev)
-			}
-			owner[s.Name] = p.Name
-		}
-	}
 	return all, notes, nil
 }
 
@@ -329,15 +255,16 @@ func (p *Package) Profile() *component.Profile {
 // Contents 包里有哪些内容（展示用），如 "MCP 服务 fs、技能、提示词 1 段"。
 func (p *Package) Contents() string {
 	var out []string
-	if len(p.Server) > 0 {
-		var ns []string
-		for _, s := range p.Server {
-			ns = append(ns, s.Name)
+	for _, k := range p.SectionKeys() {
+		sec, _ := SectionOf(k)
+		d := sec.Label
+		if sec.Summary != nil {
+			d = sec.Summary(p.Sections[k])
 		}
-		out = append(out, "MCP 服务 "+strings.Join(ns, "、"))
-	}
-	if len(p.Hook) > 0 {
-		out = append(out, fmt.Sprintf("钩子 %d 条", len(p.Hook)))
+		if d == "" {
+			d = k
+		}
+		out = append(out, d)
 	}
 	if p.SkillsDir != "" {
 		out = append(out, "技能")
