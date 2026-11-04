@@ -11,7 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
-	goruntime "runtime"
+	"runtime"
 	"strings"
 	"time"
 
@@ -370,7 +370,7 @@ func Subject(tool string, args json.RawMessage, root string) (s string, cmd bool
 
 // foldCase 规则匹配是否忽略大小写：Windows 文件系统与 PowerShell 命令名都不分大小写，
 // 区分大小写时 write_file(.env) 拦不住写 .ENV（2026-11-04 审查 P1-13）。测试可改。
-var foldCase = goruntime.GOOS == "windows"
+var foldCase = runtime.GOOS == "windows"
 
 // Glob `*` 匹配任意字符（含 /）；结尾 `:*` 等同 `*`（前缀）。Windows 上不分大小写，其余平台区分。
 func Glob(pat, s string) bool {

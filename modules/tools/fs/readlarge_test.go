@@ -4,7 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	goruntime "runtime"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -79,11 +79,11 @@ func TestReadFileLargeAllocBounded(t *testing.T) {
 	}
 	f.Close()
 	tool := ReadFile(root)
-	var before, after goruntime.MemStats
-	goruntime.GC()
-	goruntime.ReadMemStats(&before)
+	var before, after runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&before)
 	_ = callFileTool(t, tool, `{"path":"huge.log","limit":2}`)
-	goruntime.ReadMemStats(&after)
+	runtime.ReadMemStats(&after)
 	// 逐行读仍会为每行分配（约等于文件大小的一部分转瞬即逝的小对象），但不会一次性要整份文件那么大的缓冲；
 	// 用"单次峰值"不好测，改测 HeapAlloc 增长：整读时读完就有 size 字节的切片存活到函数返回前。
 	if grew := after.TotalAlloc - before.TotalAlloc; grew > uint64(size)*3 {
