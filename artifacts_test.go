@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"ybase/runtime/store"
 	"ybase/runtime/store/memstore"
 )
 
@@ -34,7 +35,7 @@ func TestMemArtifactsGC(t *testing.T) {
 	}
 }
 
-// SDK 启动后 Host.GC 已接上（assemble.Wire 按工件存储的 GC 方法接线），Maintain 会定期回收。
+// SDK 的工件存储可回收：assemble.Wire 按 store.BlobGC 接线，store.Maintain 定期调用。
 func TestSDKWiresArtifactGC(t *testing.T) {
 	a, err := New(Minimal(), WithStore(memstore.New()), WithWorkdir(t.TempDir()), WithModels(testHub(), "m"))
 	if err != nil {
@@ -45,7 +46,7 @@ func TestSDKWiresArtifactGC(t *testing.T) {
 	if err := a.Start(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if a.host.GC == nil {
-		t.Fatal("SDK 的进程内工件存储应接上 Host.GC")
+	if _, ok := a.handle.Blobs().(store.BlobGC); !ok {
+		t.Fatal("SDK 的进程内工件存储应实现 store.BlobGC（assemble.Wire 据此交给 store.Maintain 定期回收）")
 	}
 }

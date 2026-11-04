@@ -191,7 +191,7 @@ func TestMaintainPrunesOldRows(t *testing.T) {
 	_ = r.db.RecordTrace(ctx, store.TraceEvent{Trace: "old", Session: "s1", Kind: "k", At: 1})
 	mctx, cancel := context.WithCancel(ctx)
 	done := make(chan struct{})
-	go func() { r.h.Maintain(mctx, time.Hour, -1); close(done) }() // keep<0 → 缺省；先清一次
+	go func() { store.Maintain(mctx, store.MaintainOptions{Store: r.db, Every: time.Hour}); close(done) }() // Keep 缺省；先清一次
 	time.Sleep(200 * time.Millisecond)
 	cancel()
 	<-done

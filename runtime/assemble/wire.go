@@ -10,6 +10,7 @@ import (
 
 	"ybase/runtime/agent"
 	"ybase/runtime/agentdef"
+	"ybase/runtime/bus"
 	"ybase/runtime/component"
 	"ybase/runtime/host"
 	"ybase/runtime/session"
@@ -42,6 +43,8 @@ type WireOptions struct {
 type Wired struct {
 	Builder *Builder
 	host    *host.Host
+	db      store.Store
+	gc      func(context.Context) (int, error) // 工件回收（工件存储实现了 store.BlobGC 时非空）
 	ready   []ReadyFunc
 	retain  time.Duration
 }
@@ -71,11 +74,10 @@ func Wire(o WireOptions) (*Wired, error) {
 	}
 	h.Limit = k.Concurrency
 	h.TreePolicy, h.TreeRestarts = k.TreePolicy, k.TreeRestarts
-	// 工件文件回收（审查 P1-41）：没有引用、超过宽限期未触碰的文件删掉。
-	if gc, ok := o.Blobs.(interface {
-		GC(context.Context, time.Duration) (int, error)
-	}); ok {
-		h.GC = func(ctx context.Context) (int, error) { return gc.GC(ctx, BlobGrace) }
+	// 工件文件回收（审查 P1-41）：没有引用、超过宽限期未触碰的文件删掉；由 Background 里的存储清理循环调用。
+	var blobGC func(context.Context) (int, error)
+	if gc, ok := o.Blobs.(store.BlobGC); ok {
+		blobGC = func(ctx context.Context) (int, error) { return gc.GC(ctx, BlobGrace) }
 	}
 	maxSteps := o.MaxSteps
 	rb := &Builder{DB: o.DB, Artifacts: o.Blobs, Models: o.Models.Hub, Model: o.Models.Model, Workdir: o.Workdir,
@@ -100,7 +102,7 @@ func Wire(o WireOptions) (*Wired, error) {
 	// 顶层会话带委派 / 领导工具；子会话与工作组成员按 child 构造（深度 1）。
 	h.New = func(id, def string) (*agent.Agent, *session.Config, error) { return rb.Build(id, def, false) }
 	h.Child = func(id, def string) (*agent.Agent, *session.Config, error) { return rb.Build(id, def, true) }
-	return &Wired{Builder: rb, host: h, ready: col.Ready, retain: k.Retain}, nil
+	return &Wired{Builder: rb, host: h, db: o.DB, gc: blobGC, ready: col.Ready, retain: k.Retain}, nil
 }
 
 // Background 启动后台循环：休眠会话的兜底扫描（SleepAfter>0）、存储清理、启动时派发一次发件箱
@@ -111,7 +113,13 @@ func (w *Wired) Background() context.CancelFunc {
 	if w.host.SleepAfter > 0 {
 		go w.host.ScanLoop(ctx, w.host.SleepAfter)
 	}
-	go w.host.Maintain(ctx, 0, w.retain)
+	// 存储清理（过期的观测与记账行、无引用的工件）：只碰存储，不经宿主（审查 P2 归属）。
+	go store.Maintain(ctx, store.MaintainOptions{Store: w.db, GC: w.gc, Keep: w.retain,
+		Notify: func(kind string, data map[string]any) {
+			if w.host.Bus != nil {
+				w.host.Bus.Publish(bus.Envelope{Kind: kind, Data: data})
+			}
+		}})
 	go func() { _, _ = w.host.FlushOutbox(ctx) }()
 	return cancel
 }
