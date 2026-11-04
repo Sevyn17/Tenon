@@ -32,6 +32,7 @@ var ErrClosed = errors.New("memstore: 已关闭")
 // Store 内存存储。零值不可用，用 New 创建。
 type Store struct {
 	mu       sync.Mutex
+	txMu     sync.Mutex // Tx 之间串行（见 Tx）
 	closed   bool
 	clock    int64 // 单调时间戳（毫秒）：保证 updated_at / created_at 严格递增，排序稳定
 	sessions map[string]*sess
@@ -41,7 +42,7 @@ type Store struct {
 	inbox   map[string][]inboxRow          // 会话 → 准入顺序
 	tools   map[string]map[string]*toolRow // 会话 → call_id → 记录
 	pending map[string]store.Pending
-	outbox  []outboxRow         // 发件箱（08 9.6）：派发后保留行（sent），与 sqlite 一致
+	outbox  []outboxRow        // 发件箱（08 9.6）：派发后保留行（sent），与 sqlite 一致
 	traces  []store.TraceEvent // trace 事件（08 8.7 explain）
 
 	cbMu     sync.Mutex

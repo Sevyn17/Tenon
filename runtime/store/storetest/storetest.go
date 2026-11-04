@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -52,6 +53,8 @@ func Run(t *testing.T, open func(t *testing.T) store.Store) {
 		{"Prune", testPrune},
 		{"TraceEvents", testTraceEvents},
 		{"SubStoresAndTx", testSubStoresAndTx},
+		{"TxRollback", testTxRollback},
+		{"Concurrency", testConcurrency},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) { c.f(t, open(t)) })
@@ -1267,5 +1270,160 @@ func testSleepingWithMail(t *testing.T, db store.Store) {
 	ids, err := sc.SleepingWithMail(ctx, []string{store.InboxInput, store.InboxNotice}, 64)
 	if err != nil || len(ids) != 1 || ids[0] != "z" {
 		t.Fatalf("应只查出有 wake 信件的 z：%v %v", ids, err)
+	}
+}
+
+// —— 事务回滚与并发（2026-11-04 审查 P1-55）：第三方实现（如 Postgres）Tx 不原子、认领不互斥时这里会失败 ——//
+
+func testTxRollback(t *testing.T, db store.Store) {
+	ctx := context.Background()
+	c := newCore()
+	create(t, db, store.SessionMeta{ID: "rb"}, c)
+	boom := errors.New("回滚")
+	err := db.Tx(ctx, func(tx store.Store) error {
+		if _, err := tx.Admit(ctx, "rb", store.InboxItem{ItemID: "r1", Kind: store.InboxInput, Input: `[]`}); err != nil {
+			return err
+		}
+		if err := tx.CreateSession(ctx, store.SessionMeta{ID: "rb-2"}, c.Snapshot().Header, nil); err != nil {
+			return err
+		}
+		return boom
+	})
+	if !errors.Is(err, boom) {
+		t.Fatalf("Tx 应返回 fn 的错误: %v", err)
+	}
+	if items, _ := db.Inbox(ctx, "rb"); len(items) != 0 {
+		t.Fatalf("回滚后事务内的写入不应可见: %+v", items)
+	}
+	if ok, _ := db.Exists(ctx, "rb-2"); ok {
+		t.Fatal("回滚后事务内建的会话不应存在")
+	}
+	// 回滚后存储照常可用。
+	if fresh, err := db.Admit(ctx, "rb", store.InboxItem{ItemID: "r1", Kind: store.InboxInput, Input: `[]`}); err != nil || !fresh {
+		t.Fatalf("回滚后同一 item 应能重新准入: %v %v", fresh, err)
+	}
+	// 嵌套 Tx 在外层事务里执行，不自锁；外层回滚连同嵌套里的写入一起撤销。
+	done := make(chan error, 1)
+	go func() {
+		done <- db.Tx(ctx, func(tx store.Store) error {
+			if err := tx.Tx(ctx, func(in store.Store) error {
+				_, err := in.Admit(ctx, "rb", store.InboxItem{ItemID: "n1", Kind: store.InboxInput, Input: `[]`})
+				return err
+			}); err != nil {
+				return err
+			}
+			return boom
+		})
+	}()
+	select {
+	case err := <-done:
+		if !errors.Is(err, boom) {
+			t.Fatalf("嵌套 Tx: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("嵌套 Tx 卡死")
+	}
+	if ok, _ := db.InInbox(ctx, "rb", "n1"); ok {
+		t.Fatal("外层回滚应撤销嵌套事务里的写入")
+	}
+}
+
+// run 并发跑 n 份 f，等全部结束。
+func run(n int, f func(i int)) {
+	var wg sync.WaitGroup
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func(i int) { defer wg.Done(); f(i) }(i)
+	}
+	wg.Wait()
+}
+
+func testConcurrency(t *testing.T, db store.Store) {
+	ctx := context.Background()
+	const n = 8
+	h := newCore().Snapshot().Header
+	if err := db.CreateSession(ctx, store.SessionMeta{ID: "cc"}, h, nil); err != nil {
+		t.Fatal(err)
+	}
+	// 发件箱：并发认领，每条只被一个认领者拿到，合起来不漏。
+	var out []store.OutboxItem
+	for i := 0; i < 20; i++ {
+		out = append(out, store.OutboxItem{ID: fmt.Sprintf("o%02d", i), Envelope: []byte(`{}`), CreatedAt: int64(i + 1)})
+	}
+	if err := db.Commit(ctx, store.Checkpoint{SessionID: "cc", Header: h, RunState: "idle", Outbox: out}); err != nil {
+		t.Fatal(err)
+	}
+	var mu sync.Mutex
+	seen := map[string]int{}
+	run(n, func(i int) {
+		got, err := db.ClaimOutbox(ctx, fmt.Sprintf("h%d", i), time.Hour, 5)
+		if err != nil {
+			t.Errorf("ClaimOutbox: %v", err)
+			return
+		}
+		mu.Lock()
+		for _, it := range got {
+			seen[it.ID]++
+		}
+		mu.Unlock()
+	})
+	if len(seen) != len(out) {
+		t.Fatalf("并发认领应合起来拿到全部 %d 条，得 %d", len(out), len(seen))
+	}
+	for id, k := range seen {
+		if k != 1 {
+			t.Fatalf("%s 被认领了 %d 次", id, k)
+		}
+	}
+	// 回信核对：同一 corr 并发回信，恰好一个成功。
+	if err := db.IssueCorr(ctx, store.Pending{Corr: "cc-corr", SessionID: "cc", ReplyTo: "agent:w"}); err != nil {
+		t.Fatal(err)
+	}
+	var claimed int32
+	run(n, func(int) {
+		if _, err := db.ClaimCorr(ctx, "cc-corr", "cc", "agent:w"); err == nil {
+			mu.Lock()
+			claimed++
+			mu.Unlock()
+		}
+	})
+	if claimed != 1 {
+		t.Fatalf("同一 corr 应恰好核对成功一次，得 %d", claimed)
+	}
+	// 信箱：同一 item 并发准入，恰好一次 fresh。
+	var fresh int32
+	run(n, func(int) {
+		ok, err := db.Admit(ctx, "cc", store.InboxItem{ItemID: "dup", Kind: store.InboxInput, Input: `[]`})
+		if err == nil && ok {
+			mu.Lock()
+			fresh++
+			mu.Unlock()
+		}
+	})
+	if fresh != 1 {
+		t.Fatalf("同一 item 并发准入应恰好一次 fresh，得 %d", fresh)
+	}
+	// 检查点：同一 ExpectLogLen 并发提交，恰好一个成功，其余 ErrConflict。
+	c := newCore()
+	create(t, db, store.SessionMeta{ID: "cc-commit"}, c)
+	c.Input(txt("a"), nil)
+	s := c.Snapshot()
+	var ok, conflict int32
+	run(n, func(int) {
+		err := db.Commit(ctx, store.Checkpoint{SessionID: "cc-commit", ExpectLogLen: 0, AppendFrom: 0,
+			Append: s.Entries, Header: s.Header, RunState: "running"})
+		mu.Lock()
+		defer mu.Unlock()
+		switch {
+		case err == nil:
+			ok++
+		case errors.Is(err, store.ErrConflict):
+			conflict++
+		default:
+			t.Errorf("并发 Commit 意外错误: %v", err)
+		}
+	})
+	if ok != 1 || conflict != n-1 {
+		t.Fatalf("同一 ExpectLogLen 并发提交：成功 %d、冲突 %d，期望 1 / %d", ok, conflict, n-1)
 	}
 }
