@@ -40,7 +40,7 @@ func (db *DB) ClaimCorr(ctx context.Context, corr, sessionID, from string) (stor
 // PendingCorr 读一条登记（不存在返回 ErrNotFound）。
 func (db *DB) PendingCorr(ctx context.Context, corr string) (store.Pending, error) {
 	var p store.Pending
-	err := db.q().QueryRowContext(ctx, `SELECT corr, session_id, reply_to, trace, issued_idx, deadline, used, created_at
+	err := db.rq().QueryRowContext(ctx, `SELECT corr, session_id, reply_to, trace, issued_idx, deadline, used, created_at
 		FROM session_pending WHERE tenant = ? AND corr = ?`, Tenant, corr).
 		Scan(&p.Corr, &p.SessionID, &p.ReplyTo, &p.Trace, &p.IssuedIdx, &p.Deadline, &p.Used, &p.CreatedAt)
 	if errors.Is(err, sql.ErrNoRows) {

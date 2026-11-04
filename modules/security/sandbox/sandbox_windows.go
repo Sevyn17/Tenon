@@ -48,8 +48,23 @@ var (
 	advapi32                  = windows.NewLazySystemDLL("advapi32.dll")
 	procCreateRestrictedToken = advapi32.NewProc("CreateRestrictedToken")
 
-	granted sync.Map // root → error（每进程每工作区只授一次）
+	granted sync.Map // root → struct{}（每进程每工作区授权成功一次即可；失败不缓存，下次重试）
+	grantMu sync.Mutex
 )
+
+// prepare 预先为工作区授权 workspace-write（见 Sandbox.Prepare）。
+func prepare(s *Sandbox) error {
+	root, err := filepath.Abs(s.Root)
+	if err != nil {
+		return err
+	}
+	cap, err := CapabilitySID(root)
+	if err != nil {
+		return err
+	}
+	_, err = grantWorkspace(s, root, cap)
+	return err
+}
 
 // platformSupported 本平台有受限模式的实现（写受限令牌 + 能力 SID）。变量而非常量：测试可切换。
 var platformSupported = true
@@ -204,15 +219,15 @@ func editDACL(path string, entries []windows.EXPLICIT_ACCESS) error {
 
 // grantWorkspace 工作区根授能力 SID 可写（可继承），受保护目录拒写；返回专用临时目录。
 func grantWorkspace(s *Sandbox, root string, cap *windows.SID) (string, error) {
+	// 首次授权串行：后台预授权（Prepare）与第一条 shell 同时到达时，后到者等前者做完，不重复改整棵 ACL。
+	grantMu.Lock()
+	defer grantMu.Unlock()
 	tmp, err := sandboxTemp(s.TempDir, root)
 	if err != nil {
 		return "", err
 	}
-	if v, ok := granted.Load(root); ok {
-		if v == nil {
-			return tmp, nil
-		}
-		return "", v.(error)
+	if _, ok := granted.Load(root); ok { // 只缓存成功；失败不记，下次（预授权失败后的第一次受限执行）再试
+		return tmp, nil
 	}
 	err = func() error {
 		var pin runtime.Pinner
@@ -251,7 +266,6 @@ func grantWorkspace(s *Sandbox, root string, cap *windows.SID) (string, error) {
 		return nil
 	}()
 	if err != nil {
-		granted.Store(root, err)
 		return "", err
 	}
 	granted.Store(root, nil)

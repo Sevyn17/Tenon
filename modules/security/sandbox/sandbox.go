@@ -77,6 +77,11 @@ func (s *Sandbox) protect() []string {
 	return s.Protect
 }
 
+// Prepare 预先为工作区做 workspace-write 授权（Windows：给工作区根加能力 SID 的可继承 ACE、受保护目录拒写）。
+// 大仓库里 ACL 传播到整棵子树要几十秒，原先压在第一次 shell 调用上，可能撞工具超时（2026-11-04 审查 P1-45）；
+// 插件 Start 时在后台调用。幂等：同一工作区每进程只授一次，与 Apply 并发时后到者等前者完成。
+func (s *Sandbox) Prepare() error { return prepare(s) }
+
 // Apply 把 cmd 放进 mode 沙箱。返回的 cleanup 在 cmd.Start 之后调用（释放令牌等）。
 func (s *Sandbox) Apply(cmd *exec.Cmd, mode Mode) (cleanup func(), err error) {
 	if mode == Full {

@@ -172,7 +172,9 @@ func (a *Agent) checkpoint(ctx context.Context, run string, rec *reqlog.Record) 
 // publishSnapshot 记下最近一次提交（或打开时恢复）的会话快照，供 actor 之外的读者用（Committed）。
 // 条目切片复制一份：Core 截断（Rewind）后再追加会改写原底层数组里的位置。条目本身只读、共享。
 func (a *Agent) publishSnapshot(s session.Snapshot) {
-	s.Entries = append([]*session.Entry(nil), s.Entries...)
+	// 不复制条目切片：内核只往末尾追加（读者看不到超出自己长度的部分），Rewind 截掉容量后再追加
+	// 会换新底层数组，已发出去的快照不会被改写（2026-11-04 审查 P1-40：原先每次提交复制整个切片，
+	// 整条会话累计 O(n²)）。
 	a.snapMu.Lock()
 	a.snap = &s
 	a.snapMu.Unlock()

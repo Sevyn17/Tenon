@@ -42,15 +42,17 @@ type editItem struct {
 }
 
 // Edit 构造 edit 工具。
-func Edit(root string) *toolhub.Tool {
+// tr 可选：编辑已存在的文件前做读后写检查（审查 P1-43）。
+func Edit(root string, tr ...*Tracker) *toolhub.Tool {
 	root, _ = filepath.Abs(root)
+	track := firstTracker(tr)
 	return &toolhub.Tool{
 		Spec: session.ToolSpec{Name: "edit",
 			Description: "精确编辑文件：按 old_text → new_text 替换，可一次多处（在原文件上匹配、全部成功才写入）。old_text 为空表示新建文件。修改已有文件优先用它，不要整文件重写。",
 			Schema:      json.RawMessage(editSchema)},
 		Risk:  toolhub.Write,
 		Attrs: map[string]any{toolhub.AttrWorkspace: true, toolhub.AttrEffect: toolhub.EffectWrite},
-		Call: func(_ context.Context, _ *toolhub.Cx, raw json.RawMessage) (toolhub.Output, error) {
+		Call: func(_ context.Context, cx *toolhub.Cx, raw json.RawMessage) (toolhub.Output, error) {
 			var a editArgs
 			if err := json.Unmarshal(raw, &a); err != nil {
 				return toolhub.Errorf("参数不合法：%v", err), nil
@@ -59,10 +61,14 @@ func Edit(root string) *toolhub.Tool {
 			if err != nil {
 				return toolhub.Errorf("%v", err), nil
 			}
+			if err := track.Check(cx, p, a.Path); err != nil {
+				return toolhub.Errorf("%v", err), nil
+			}
 			msg, err := applyEdits(p, a.Path, a.Edits)
 			if err != nil {
 				return toolhub.Errorf("%v", err), nil
 			}
+			track.Note(cx, p) // 自己写的结果算读过：连续 edit 不必每次重读
 			return toolhub.Text(msg), nil
 		},
 	}

@@ -90,6 +90,8 @@ type Core struct {
 	base     int
 	items    []*Entry
 	readOnly bool
+	// wire 加载窗口里已用过的厂商调用 id（usedWireIDs 的缓存；nil = 未建或已失效）
+	wire map[string]bool
 
 	now   func() time.Time
 	genID func() string
@@ -221,7 +223,11 @@ func (c *Core) lastTurn() uint32 {
 
 // turnHasAssistant 报告某回合是否已有 Assistant 条目。
 func (c *Core) turnHasAssistant(turn uint32) bool {
-	for _, e := range c.items {
+	for i := len(c.items) - 1; i >= 0; i-- { // 回合号单调不减：从尾部往前，越过该回合即停
+		e := c.items[i]
+		if e.Turn < turn {
+			break
+		}
 		if e.Turn == turn && e.Item.Kind == KindAssistant {
 			return true
 		}
@@ -234,6 +240,9 @@ func (c *Core) appendEntry(turn uint32, meta map[string]any, it Item) *Entry {
 	e := &Entry{V: 1, ID: c.nextEntryID(), Turn: turn, At: c.now().UnixMilli(), Meta: meta, Item: it}
 	c.items = append(c.items, e)
 	c.hdr.LogLen = c.absLen()
+	if c.wire != nil {
+		c.addWire(e)
+	}
 	return e
 }
 
@@ -515,7 +524,10 @@ func (c *Core) Rewind(to int) ([]Change, error) {
 		}
 		c.hdr.CompactionBase = prev
 	}
-	c.items = c.items[:to-c.base]
+	// 截到 to 并截掉容量：之后的追加必然换新底层数组，不会改写已经发出去的快照里的条目
+	// （快照与内核共享底层数组、不复制，见 Snapshot；2026-11-04 审查 P1-40）。
+	c.items = c.items[: to-c.base : to-c.base]
+	c.wire = nil
 	c.hdr.LogLen = c.absLen()
 	if c.hdr.LogLen == 0 {
 		c.hdr.LastEntryID = ""
@@ -887,19 +899,54 @@ func (c *Core) normalizeCalls(calls []ToolCall) {
 	}
 }
 
-// usedWireIDs 加载窗口里已用过的厂商调用 id。
+// usedWireIDs 加载窗口里已用过的厂商调用 id。增量维护：首次用时扫一遍，之后随 appendEntry 追加、
+// Rewind 失效（审查 P1-40：原先每次 ModelDone 都全量扫加载窗口）。返回副本，调用方可以往里加。
 func (c *Core) usedWireIDs() map[string]bool {
-	used := map[string]bool{}
-	for _, e := range c.items {
-		if a := e.Item.Assistant; e.Item.Kind == KindAssistant && a != nil {
-			for _, tc := range a.ToolCalls {
-				if tc.WireID != "" {
-					used[tc.WireID] = true
-				}
+	if c.wire == nil {
+		c.wire = map[string]bool{}
+		for _, e := range c.items {
+			c.addWire(e)
+		}
+	}
+	used := make(map[string]bool, len(c.wire)+4)
+	for k := range c.wire {
+		used[k] = true
+	}
+	return used
+}
+
+func (c *Core) addWire(e *Entry) {
+	if a := e.Item.Assistant; e.Item.Kind == KindAssistant && a != nil {
+		for _, tc := range a.ToolCalls {
+			if tc.WireID != "" {
+				c.wire[tc.WireID] = true
 			}
 		}
 	}
-	return used
+}
+
+// CompactPoints 当前合法的压缩切点（升序，等价于对 [CompactionBase, 日志长度] 逐个调 CanCompact）。
+// 一次遍历算完，供要找切点的压缩器用（审查 P1-40：逐个 CanCompact 是 O(n²)）。
+func (c *Core) CompactPoints() []int {
+	var out []int
+	open := 0
+	for off := 0; ; off++ {
+		if upto := c.base + off; upto >= c.hdr.CompactionBase && open == 0 {
+			out = append(out, upto)
+		}
+		if off >= len(c.items) {
+			break
+		}
+		switch it := c.items[off].Item; it.Kind {
+		case KindAssistant:
+			open = len(it.Assistant.ToolCalls)
+		case KindToolResult:
+			if open > 0 {
+				open--
+			}
+		}
+	}
+	return out
 }
 
 // invalidArgs 参数是否是 normalizeCalls 规整过的非法 JSON。

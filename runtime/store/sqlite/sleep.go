@@ -20,7 +20,7 @@ import (
 // SessionStatus 读会话生命周期状态（active / sleeping / deleted）。
 func (db *DB) SessionStatus(ctx context.Context, sessionID string) (string, error) {
 	var st string
-	err := db.q().QueryRowContext(ctx, `SELECT status FROM sessions WHERE tenant = ? AND id = ?`, Tenant, sessionID).Scan(&st)
+	err := db.rq().QueryRowContext(ctx, `SELECT status FROM sessions WHERE tenant = ? AND id = ?`, Tenant, sessionID).Scan(&st)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", store.ErrNotFound
 	}
@@ -59,7 +59,7 @@ func (db *DB) SessionsWithStatus(ctx context.Context, status string, limit int) 
 		q += ` LIMIT ?`
 		args = append(args, limit)
 	}
-	rows, err := db.q().QueryContext(ctx, q, args...)
+	rows, err := db.rq().QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -91,7 +91,7 @@ func (db *DB) SleepingWithMail(ctx context.Context, kinds []string, limit int) (
 		q += ` LIMIT ?`
 		args = append(args, limit)
 	}
-	rows, err := db.q().QueryContext(ctx, q, args...)
+	rows, err := db.rq().QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}

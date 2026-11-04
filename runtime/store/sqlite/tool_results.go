@@ -76,7 +76,7 @@ func (db *DB) advanceTool(ctx context.Context, sessionID, callID, from, set stri
 func (db *DB) GetTool(ctx context.Context, sessionID, callID string) (*ToolRecord, error) {
 	var r ToolRecord
 	var dl int64
-	err := db.q().QueryRowContext(ctx, `SELECT session_id, call_id, status, kind, args_hash, decision, delivered, output,
+	err := db.rq().QueryRowContext(ctx, `SELECT session_id, call_id, status, kind, args_hash, decision, delivered, output,
 		deadline, token_hash FROM tool_results WHERE tenant = ? AND session_id = ? AND call_id = ?`, Tenant, sessionID, callID).
 		Scan(&r.SessionID, &r.CallID, &r.Status, &r.Kind, &r.ArgsHash, &r.Decision, &r.Delivered, &r.Output, &dl, &r.TokenHash)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -93,7 +93,7 @@ func (db *DB) GetTool(ctx context.Context, sessionID, callID string) (*ToolRecor
 
 // PendingTools 列出会话的挂起记录（未加载会话的视图、超时扫描用）。
 func (db *DB) PendingTools(ctx context.Context, sessionID string) ([]ToolRecord, error) {
-	rows, err := db.q().QueryContext(ctx, `SELECT call_id, kind, args_hash, deadline FROM tool_results
+	rows, err := db.rq().QueryContext(ctx, `SELECT call_id, kind, args_hash, deadline FROM tool_results
 		WHERE tenant = ? AND session_id = ? AND status = ? ORDER BY created_at`, Tenant, sessionID, ToolPending)
 	if err != nil {
 		return nil, err

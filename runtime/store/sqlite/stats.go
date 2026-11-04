@@ -9,7 +9,7 @@ import (
 // SessionStats 汇总一个会话的用量与最近一次请求组成。
 func (db *DB) SessionStats(ctx context.Context, sessionID string) (Stats, error) {
 	var st Stats
-	rows, err := db.q().QueryContext(ctx, `SELECT kind, status, attrs FROM trace_spans
+	rows, err := db.rq().QueryContext(ctx, `SELECT kind, status, attrs FROM trace_spans
 		WHERE tenant = ? AND session_id = ? AND kind IN ('attempt','tool','compact')`, Tenant, sessionID)
 	if err != nil {
 		return st, err
@@ -64,7 +64,7 @@ func (db *DB) SessionStats(ctx context.Context, sessionID string) (Stats, error)
 		return st, err
 	}
 	var comp string
-	err = db.q().QueryRowContext(ctx, `SELECT request_id, composition FROM session_requests
+	err = db.rq().QueryRowContext(ctx, `SELECT request_id, composition FROM session_requests
 		WHERE tenant = ? AND session_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1`, Tenant, sessionID).Scan(&st.LastRequest, &comp)
 	if err != nil && err != sql.ErrNoRows {
 		return st, err

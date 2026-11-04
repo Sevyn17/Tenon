@@ -114,12 +114,17 @@ func CutPoint(core *session.Core, keep int) int {
 	cx := core.Context()
 	lo := lowBound(cx, core.Snapshot().Header.CompactionBase)
 	end := cx.Base + len(cx.Items)
+	// 合法切点一次算出（审查 P1-40：原先对每个 u 调 CanCompact，每次从窗口开头扫，O(n²)）。
+	ok := map[int]bool{}
+	for _, u := range core.CompactPoints() {
+		ok[u] = true
+	}
 	kept := 0
 	for u := end; u > lo; u-- {
 		if u < end {
 			kept += entryTokens(cx.Items[u-cx.Base])
 		}
-		if kept >= keep && core.CanCompact(u) {
+		if kept >= keep && ok[u] {
 			return u
 		}
 	}

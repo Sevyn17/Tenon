@@ -39,7 +39,7 @@ func (db *DB) GetDefinition(ctx context.Context, kind, id string, version int) (
 	}
 	var body string
 	var v int
-	err := db.q().QueryRowContext(ctx, q, args...).Scan(&body, &v)
+	err := db.rq().QueryRowContext(ctx, q, args...).Scan(&body, &v)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", 0, ErrNotFound
 	}
@@ -48,7 +48,7 @@ func (db *DB) GetDefinition(ctx context.Context, kind, id string, version int) (
 
 // ListDefinitions 列出 kind 下出现过的定义 id（每个 id 一次，按 id 升序）。
 func (db *DB) ListDefinitions(ctx context.Context, kind string) ([]string, error) {
-	rows, err := db.q().QueryContext(ctx,
+	rows, err := db.rq().QueryContext(ctx,
 		`SELECT DISTINCT id FROM definitions WHERE tenant = ? AND kind = ? ORDER BY id`, Tenant, kind)
 	if err != nil {
 		return nil, err

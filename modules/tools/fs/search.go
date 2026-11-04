@@ -41,32 +41,48 @@ var skipDirs = map[string]bool{".git": true, "node_modules": true, "vendor": tru
 // ---------- read_file ----------
 
 // ReadFile 带行范围的读文件。
-func ReadFile(root string) *toolhub.Tool {
+// tr 可选：记下本会话读过的文件，供 write_file / edit 的读后写检查（审查 P1-43）。
+func ReadFile(root string, tr ...*Tracker) *toolhub.Tool {
 	root, _ = filepath.Abs(root)
-	return toolhub.Simple("read_file",
+	track := firstTracker(tr)
+	t := toolhub.Simple("read_file",
 		fmt.Sprintf("读取文本文件（路径相对工作目录）。offset 为起始行（1 起），limit 为行数；默认最多 %d 行 / %dKB，截断时按提示用 offset 继续。", ReadMaxLines, ReadMaxBytes>>10),
-		`{"type":"object","properties":{"path":{"type":"string"},"offset":{"type":"integer","description":"起始行号，1 起"},"limit":{"type":"integer","description":"最多读取的行数"}},"required":["path"]}`,
-		func(_ context.Context, raw json.RawMessage) (string, error) {
-			var a struct {
-				Path          string
-				Offset, Limit int
+		`{"type":"object","properties":{"path":{"type":"string"},"offset":{"type":"integer","description":"起始行号，1 起"},"limit":{"type":"integer","description":"最多读取的行数"}},"required":["path"]}`, nil)
+	t.Call = func(_ context.Context, cx *toolhub.Cx, raw json.RawMessage) (toolhub.Output, error) {
+		var a struct {
+			Path          string
+			Offset, Limit int
+		}
+		if err := json.Unmarshal(raw, &a); err != nil {
+			return toolhub.Errorf("参数不合法：%v", err), nil
+		}
+		p, err := resolve(root, a.Path)
+		if err != nil {
+			return toolhub.Errorf("%v", err), nil
+		}
+		var s string
+		if st, serr := os.Stat(p); serr == nil && st.Size() > ReadStreamAbove {
+			s, err = readLarge(a.Path, p, a.Offset, a.Limit) // 大文件流式读，不整读进内存（审查 P1-42）
+		} else {
+			var b []byte
+			if b, err = os.ReadFile(p); err == nil {
+				s, err = readRange(a.Path, b, a.Offset, a.Limit)
 			}
-			if err := json.Unmarshal(raw, &a); err != nil {
-				return "", fmt.Errorf("参数不合法：%v", err)
-			}
-			p, err := resolve(root, a.Path)
-			if err != nil {
-				return "", err
-			}
-			if st, err := os.Stat(p); err == nil && st.Size() > ReadStreamAbove {
-				return readLarge(a.Path, p, a.Offset, a.Limit) // 大文件流式读，不整读进内存（审查 P1-42）
-			}
-			b, err := os.ReadFile(p)
-			if err != nil {
-				return "", err
-			}
-			return readRange(a.Path, b, a.Offset, a.Limit)
-		})
+		}
+		if err != nil {
+			return toolhub.Errorf("%v", err), nil
+		}
+		track.Note(cx, p)
+		return toolhub.Text(s), nil
+	}
+	return t
+}
+
+func firstTracker(tr []*Tracker) *Tracker {
+	if len(tr) > 0 {
+		return tr[0]
+	}
+	return nil
 }
 
 func readRange(display string, b []byte, offset, limit int) (string, error) {

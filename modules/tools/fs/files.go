@@ -20,15 +20,17 @@ import (
 const ListDirMax = 1000
 
 // WriteFile 整文件写入（新建或覆盖，自动建父目录）。修改已有文件应优先用 edit。
-func WriteFile(root string) *toolhub.Tool {
+// tr 可选：覆盖已存在的文件前做读后写检查（审查 P1-43）。
+func WriteFile(root string, tr ...*Tracker) *toolhub.Tool {
 	root, _ = filepath.Abs(root)
+	track := firstTracker(tr)
 	return &toolhub.Tool{
 		Spec: session.ToolSpec{Name: "write_file",
 			Description: "写入文本文件（新建或整体覆盖，自动创建父目录；路径相对工作目录）。修改已有文件请用 edit。",
 			Schema:      json.RawMessage(`{"type":"object","properties":{"path":{"type":"string"},"content":{"type":"string"}},"required":["path","content"]}`)},
 		Risk:  toolhub.Write,
 		Attrs: map[string]any{toolhub.AttrWorkspace: true, toolhub.AttrEffect: toolhub.EffectWrite},
-		Call: func(_ context.Context, _ *toolhub.Cx, raw json.RawMessage) (toolhub.Output, error) {
+		Call: func(_ context.Context, cx *toolhub.Cx, raw json.RawMessage) (toolhub.Output, error) {
 			var a struct{ Path, Content string }
 			if err := json.Unmarshal(raw, &a); err != nil {
 				return toolhub.Errorf("参数不合法：%v", err), nil
@@ -40,9 +42,13 @@ func WriteFile(root string) *toolhub.Tool {
 			if st, err := os.Stat(p); err == nil && st.IsDir() {
 				return toolhub.Errorf("%s 是目录", a.Path), nil
 			}
+			if err := track.Check(cx, p, a.Path); err != nil {
+				return toolhub.Errorf("%v", err), nil
+			}
 			if err := writeAtomic(p, []byte(a.Content)); err != nil {
 				return toolhub.Errorf("写入失败：%v", err), nil
 			}
+			track.Note(cx, p)
 			return toolhub.Text(fmt.Sprintf("已写入 %s（%d 字节）", a.Path, len(a.Content))), nil
 		},
 	}

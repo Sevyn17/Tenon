@@ -20,7 +20,7 @@ func (db *DB) Outbox(ctx context.Context, limit int) ([]store.OutboxItem, error)
 		q += ` LIMIT ?`
 		args = append(args, limit)
 	}
-	rows, err := db.q().QueryContext(ctx, q, args...)
+	rows, err := db.rq().QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}

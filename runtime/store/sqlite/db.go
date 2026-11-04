@@ -22,6 +22,9 @@ import (
 // DB 一个存储文件。
 type DB struct {
 	sql      *sql.DB
+	// rd 只读连接池（query_only）：WAL 下读不必排在写连接后面（2026-11-04 审查 P1-33：原先单连接读写串行，
+	// Tx 超过 TxConnWait 时别的 goroutine 的合法读也报错）。nil = 没有读池（读走 sql）。
+	rd       *sql.DB
 	tx       *sql.Tx // 非空表示当前是 Tx 内的事务视图（05：按子存储访问 + Tx）
 	events   []bus.Envelope
 	mu       sync.Mutex
@@ -47,6 +50,20 @@ func (db *DB) q() execer {
 	}
 	return db.sql
 }
+
+// rq 只读执行器：事务视图内走 tx（读到本事务的写入），否则走只读连接池。
+func (db *DB) rq() execer {
+	if db.tx != nil {
+		return db.tx
+	}
+	if db.rd != nil {
+		return db.rd
+	}
+	return db.q()
+}
+
+// ReadConns 只读连接池大小（约束清单「存储」）。
+const ReadConns = 4
 
 // ErrOuterInTx Tx 进行中用外层句柄、在 TxConnWait 内等不到连接（多半是 Tx 的 fn 误用了外层句柄）。
 var ErrOuterInTx = errors.New("sqlite: 事务进行中，外层句柄等不到连接（Tx 的 fn 里请用传进来的 Store）")
@@ -129,6 +146,13 @@ func Open(ctx context.Context, path string, opt Options) (*DB, error) {
 		}
 		db, err := openOnce(ctx, dsn)
 		if err == nil {
+			rd, err := sql.Open("sqlite", dsn+"&_pragma=query_only(1)")
+			if err != nil {
+				db.sql.Close()
+				return nil, err
+			}
+			rd.SetMaxOpenConns(ReadConns)
+			db.rd = rd
 			return db, nil
 		}
 		lastErr = err
@@ -173,7 +197,12 @@ func isBusy(err error) bool {
 }
 
 // Close 关闭。
-func (db *DB) Close() error { return db.sql.Close() }
+func (db *DB) Close() error {
+	if db.rd != nil {
+		_ = db.rd.Close()
+	}
+	return db.sql.Close()
+}
 
 // SQL 暴露底层连接（插件 Db 服务、测试用）。
 func (db *DB) SQL() *sql.DB { return db.sql }

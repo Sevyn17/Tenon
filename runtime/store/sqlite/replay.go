@@ -35,14 +35,14 @@ func (db *DB) notify(evs []bus.Envelope) {
 // Replay 实现 bus.Source：返回 seq > after 的条目追加与回退事件（按 seq 升序）及水位。
 func (db *DB) Replay(ctx context.Context, session string, after int64) ([]bus.Envelope, int64, error) {
 	var next int64
-	if err := db.q().QueryRowContext(ctx, `SELECT next_sync_seq FROM sessions WHERE tenant = ? AND id = ?`, Tenant, session).Scan(&next); err != nil {
+	if err := db.rq().QueryRowContext(ctx, `SELECT next_sync_seq FROM sessions WHERE tenant = ? AND id = ?`, Tenant, session).Scan(&next); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, 0, ErrNotFound
 		}
 		return nil, 0, err
 	}
 	var out []bus.Envelope
-	rows, err := db.q().QueryContext(ctx, `SELECT idx, sync_seq, at, body FROM session_entries
+	rows, err := db.rq().QueryContext(ctx, `SELECT idx, sync_seq, at, body FROM session_entries
 		WHERE tenant = ? AND session_id = ? AND sync_seq > ? ORDER BY sync_seq`, Tenant, session, after)
 	if err != nil {
 		return nil, 0, err
@@ -62,7 +62,7 @@ func (db *DB) Replay(ctx context.Context, session string, after int64) ([]bus.En
 	if err := rows.Err(); err != nil {
 		return nil, 0, err
 	}
-	rr, err := db.q().QueryContext(ctx, `SELECT rewind_seq, MIN(idx), MAX(truncated_at) FROM session_entries_archive
+	rr, err := db.rq().QueryContext(ctx, `SELECT rewind_seq, MIN(idx), MAX(truncated_at) FROM session_entries_archive
 		WHERE tenant = ? AND session_id = ? AND rewind_seq > ? GROUP BY rewind_seq`, Tenant, session, after)
 	if err != nil {
 		return nil, 0, err
@@ -103,7 +103,7 @@ func (db *DB) ListSessions(ctx context.Context, before int64, limit int, topOnly
 	}
 	q += ` ORDER BY updated_at DESC LIMIT ?`
 	args = append(args, limit)
-	rows, err := db.q().QueryContext(ctx, q, args...)
+	rows, err := db.rq().QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}

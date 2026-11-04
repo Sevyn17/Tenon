@@ -74,7 +74,7 @@ func (b *Blobs) Get(h string) ([]byte, error) {
 // GC 回收没有任何引用、且超过宽限期未被触碰的文件（data-contract §6）。
 func (b *Blobs) GC(ctx context.Context, grace time.Duration) (int, error) {
 	cut := time.Now().Add(-grace).UnixMilli()
-	rows, err := b.db.q().QueryContext(ctx, `SELECT sha256 FROM blobs WHERE touched_at < ?
+	rows, err := b.db.rq().QueryContext(ctx, `SELECT sha256 FROM blobs WHERE touched_at < ?
 		AND sha256 NOT IN (SELECT sha256 FROM blob_refs)`, cut)
 	if err != nil {
 		return 0, err

@@ -25,7 +25,7 @@ func (db *DB) RecordTrace(ctx context.Context, ev store.TraceEvent) error {
 
 // TraceEvents 按发生顺序列出某个 trace 的全部事件。
 func (db *DB) TraceEvents(ctx context.Context, trace string) ([]store.TraceEvent, error) {
-	rows, err := db.q().QueryContext(ctx, `SELECT trace, at, session, kind, detail FROM trace_events WHERE tenant = ? AND trace = ? ORDER BY at, rowid`, Tenant, trace)
+	rows, err := db.rq().QueryContext(ctx, `SELECT trace, at, session, kind, detail FROM trace_events WHERE tenant = ? AND trace = ? ORDER BY at, rowid`, Tenant, trace)
 	if err != nil {
 		return nil, err
 	}

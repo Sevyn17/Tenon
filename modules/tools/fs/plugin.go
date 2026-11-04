@@ -26,12 +26,14 @@ func (*plug) Setup(cx *component.Registrar) error {
 	}
 	// 工具装配期构造一次，各会话共用同一批只读对象（框架设计 04 4.2）。工作目录来自 service:workdir，
 	// 与会话无关；将来若按会话给不同根，从 toolhub.Cx.Ctx 取。
+	// 读后写检查（审查 P1-43）：read_file / edit / write_file 共用一份按会话的读写记录。
+	tr := &Tracker{}
 	tools := []*toolhub.Tool{
-		ReadFile(root).WithItems(ItemRead),
+		ReadFile(root, tr).WithItems(ItemRead),
 		Grep(root).WithItems(ItemRead),
 		Glob(root).WithItems(ItemRead),
-		Edit(root).WithItems(ItemWrite),
-		WriteFile(root).WithItems(ItemWrite),
+		Edit(root, tr).WithItems(ItemWrite),
+		WriteFile(root, tr).WithItems(ItemWrite),
 		ListDir(root).WithItems(ItemRead),
 	}
 	cx.Register(assemble.PointSessionTools, "fs", assemble.ToolsEntry{Order: 10,
