@@ -205,16 +205,14 @@ func (h *Host) DeliverText(ctx context.Context, sessionID, from, text string) er
 
 func (h *Host) deliverSession(ctx context.Context, env mail.Envelope) error {
 	id := env.To.ID
-	ok, err := h.DB.Exists(ctx, id)
-	if err != nil {
-		return err
-	}
-	if !ok {
+	// 只读会话行一次（审查 P1-34：原先 Exists + SessionStatus + 整份日志 Load 共 3 次往返，投递成本随日志长度增长；
+	// 已删除的会话 Load 本来就查不到，原先的 "deleted" 分支走不到）。
+	l, err := h.head(ctx, id)
+	if errors.Is(err, store.ErrNotFound) {
 		return fmt.Errorf("%w: %s", ErrSessionNotFound, id)
 	}
-	if st, err := h.DB.SessionStatus(ctx, id); err == nil && st == "deleted" {
-		h.publish(id, "mail.rejected", map[string]any{"from": env.From.String(), "reason": "closed"})
-		return fmt.Errorf("%w: %s", ErrClosed, id)
+	if err != nil {
+		return err
 	}
 	// 联系名单（08 D4）：默认只放开创建者本人、登记组件、以及带 corr 的回信；
 	// 组件登记的 Allow 规则只能放开这条「往 session: 投递」的缺省限制（D4）。
@@ -223,10 +221,6 @@ func (h *Host) deliverSession(ctx context.Context, env mail.Envelope) error {
 		h.recordTrace(env.Trace, id, "guard_denied", reason)
 		h.publish(id, "guard.denied", map[string]any{"from": env.From.String(), "to": env.To.String(), "reason": reason})
 		return fmt.Errorf("%w: %s", ErrNotAllowed, reason)
-	}
-	l, err := h.DB.Load(ctx, id, nil)
-	if err != nil {
-		return err
 	}
 	if err := guardContact(env, l.Meta, verdict == component.Allow); err != nil {
 		h.recordTrace(env.Trace, id, "guard_denied", err.Error())
@@ -308,7 +302,7 @@ func (h *Host) deliverSession(ctx context.Context, env mail.Envelope) error {
 // control 处理 control 信封（中断 / 关闭）：不进模型。
 func (h *Host) control(ctx context.Context, id string, env mail.Envelope) error {
 	cmd := strings.TrimSpace(env.Body)
-	l, err := h.DB.Load(ctx, id, nil)
+	l, err := h.head(ctx, id)
 	if err != nil {
 		return err
 	}

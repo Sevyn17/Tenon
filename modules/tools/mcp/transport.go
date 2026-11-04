@@ -217,8 +217,12 @@ func (t *stdioTransport) notify(ctx context.Context, method string, params any) 
 
 func (t *stdioTransport) close() error {
 	_ = t.stdin.Close()
-	if t.cmd.Process != nil {
-		_ = proc.Kill(t.cmd)
+	select {
+	case <-t.done: // 进程已经退出（读协程已收尾）：不必再起 taskkill，重连更快
+	default:
+		if t.cmd.Process != nil {
+			_ = proc.Kill(t.cmd)
+		}
 	}
 	select { // 子进程仍持有 stdout 时读协程等不到 EOF：最多等 CloseWait，不让进程退出卡在这里
 	case <-t.done:

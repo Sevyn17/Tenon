@@ -62,3 +62,34 @@ func (s *Store) SessionsWithStatus(ctx context.Context, status string, limit int
 	}
 	return out, nil
 }
+
+// SleepingWithMail 有可唤醒信件（kind 属于 kinds）的休眠会话 id，按 id 升序，最多 limit 个（与 sqlite 一致）。
+func (s *Store) SleepingWithMail(ctx context.Context, kinds []string, limit int) ([]string, error) {
+	if err := s.lock(); err != nil {
+		return nil, err
+	}
+	defer s.mu.Unlock()
+	want := map[string]bool{}
+	for _, k := range kinds {
+		want[k] = true
+	}
+	out := []string{}
+	for id, x := range s.sessions {
+		if x.status != store.StatusSleeping {
+			continue
+		}
+		for _, r := range s.inbox[id] {
+			if !r.consumed && want[r.it.Kind] {
+				out = append(out, id)
+				break
+			}
+		}
+	}
+	sort.Strings(out)
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
+}
+
+var _ store.SleepScanner = (*Store)(nil)

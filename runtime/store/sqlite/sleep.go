@@ -11,6 +11,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"ybase/runtime/store"
@@ -73,3 +74,37 @@ func (db *DB) SessionsWithStatus(ctx context.Context, status string, limit int) 
 	}
 	return out, rows.Err()
 }
+
+// SleepingWithMail 有可唤醒信件（kind 属于 kinds）的休眠会话 id，按 id 升序，最多 limit 个（limit <= 0 不限）。
+func (db *DB) SleepingWithMail(ctx context.Context, kinds []string, limit int) ([]string, error) {
+	if len(kinds) == 0 {
+		return []string{}, nil
+	}
+	q := `SELECT s.id FROM sessions s WHERE s.tenant = ? AND s.status = ? AND EXISTS (
+		SELECT 1 FROM session_inbox i WHERE i.tenant = s.tenant AND i.session_id = s.id AND i.consumed_at = 0
+		AND i.kind IN (?` + strings.Repeat(",?", len(kinds)-1) + `)) ORDER BY s.id`
+	args := []any{Tenant, store.StatusSleeping}
+	for _, k := range kinds {
+		args = append(args, k)
+	}
+	if limit > 0 {
+		q += ` LIMIT ?`
+		args = append(args, limit)
+	}
+	rows, err := db.q().QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []string{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
+}
+
+var _ store.SleepScanner = (*DB)(nil)

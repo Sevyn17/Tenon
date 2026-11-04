@@ -55,7 +55,7 @@ func (h *Host) spawn(ctx context.Context, parent, id, origin, def string, f Fact
 	}
 	var hd Handle
 	if existed {
-		l, err := h.DB.Load(ctx, id, nil)
+		l, err := h.head(ctx, id)
 		if err != nil {
 			return "", err
 		}

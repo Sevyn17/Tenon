@@ -148,6 +148,12 @@ type SleepStore interface {
 	SessionsWithStatus(ctx context.Context, status string, limit int) ([]string, error)
 }
 
+// SleepScanner 可选：一次查出有可唤醒信件（input / notice）的休眠会话（审查 P1-37：原先按 id 取前 64 个
+// 休眠会话再逐个查信箱，前 64 个没信时后面有信的永远扫不到，还是 N+1 查询）。未实现时宿主退回逐个查。
+type SleepScanner interface {
+	SleepingWithMail(ctx context.Context, kinds []string, limit int) ([]string, error)
+}
+
 // ErrCorrRejected：回信核对失败（不存在、已过期、已用过、发送者不是预期回复方）。
 var ErrCorrRejected = errors.New("store: corr 回信核对失败")
 

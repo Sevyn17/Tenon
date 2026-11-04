@@ -128,7 +128,12 @@ func (h *Hub) SideCall(ctx context.Context, alias string, req session.Request) (
 func (h *Hub) chain(i int, base session.Request) func(context.Context, *Request) <-chan Event {
 	if i >= len(h.layers) {
 		return func(ctx context.Context, r *Request) <-chan Event {
-			if err := CheckShape(base, r.Req); err != nil {
+			// 没有模型层时请求原样到这里，前缀必然相同：不做逐条 JSON 比对（审查 P1-39：原先每次调模型都把
+			// 整段历史序列化两遍，生产上没有模型层，纯空转）。
+			if len(h.layers) == 0 {
+				return h.schedule(ctx, r)
+			}
+			if err := checkShape(base, r.Req); err != nil {
 				return failNow(&Failure{Code: CodeShape, Message: err.Error()})
 			}
 			return h.schedule(ctx, r)
@@ -149,6 +154,9 @@ func (h *Hub) chain(i int, base session.Request) func(context.Context, *Request)
 		return l.Call(ctx, r, inner)
 	}
 }
+
+// checkShape 结构校验入口（测试可替换以计数）。
+var checkShape = CheckShape
 
 // CheckShape R2：最终请求的消息以基础请求为前缀（逐字节），工具是子集且定义不变。
 func CheckShape(base, final session.Request) error {

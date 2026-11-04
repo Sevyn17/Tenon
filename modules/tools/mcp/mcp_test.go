@@ -49,7 +49,7 @@ func handle(m message) (any, *RPCError) {
 		case "env":
 			return map[string]any{"content": []any{map[string]any{"type": "text", "text": "secret=" + os.Getenv("FAKE_SECRET") + ";keep=" + os.Getenv("FAKE_KEEP") + ";extra=" + os.Getenv("FAKE_EXTRA")}}}, nil
 		case "slow":
-			time.Sleep(3 * time.Second)
+			time.Sleep(8 * time.Second)
 			return map[string]any{"content": []any{}}, nil
 		}
 		return nil, &RPCError{Code: -32602, Message: "unknown tool"}
@@ -103,7 +103,7 @@ func stdioServer(t *testing.T) Server {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return Server{Name: "fake", Command: exe, Env: map[string]string{"FAKE_MCP": "1", "FAKE_EXTRA": "x"}, Timeout: 2}
+	return Server{Name: "fake", Command: exe, Env: map[string]string{"FAKE_MCP": "1", "FAKE_EXTRA": "x"}, Timeout: 5} // 负载高时起进程 + 握手要时间（2 s 在全量并行时会超时）
 }
 
 func callTool(t *testing.T, ts []*toolhub.Tool, name, args string) toolhub.Output {

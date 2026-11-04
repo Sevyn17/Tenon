@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -41,6 +42,7 @@ func Run(t *testing.T, open func(t *testing.T) store.Store) {
 		{"Export", testExport},
 		{"LeaseFencing", testLeaseFencing},
 		{"SleepStatus", testSleepStatus},
+		{"SleepingWithMail", testSleepingWithMail},
 		{"PendingCorr", testPendingCorr},
 		{"FindSessionByKey", testFindSessionByKey},
 		{"Outbox", testOutbox},
@@ -1229,5 +1231,41 @@ func testTraceEvents(t *testing.T, db store.Store) {
 	}
 	if empty, err := db.TraceEvents(ctx, "none"); err != nil || len(empty) != 0 {
 		t.Fatalf("empty trace: %v %+v", err, empty)
+	}
+}
+
+// testSleepingWithMail 休眠扫描一次查出有可唤醒信件的会话：前面一大批没信件的不挤掉后面有信件的，
+// 只有背景信件的不算（2026-11-04 审查 P1-37）。存储未实现 SleepScanner 时跳过。
+func testSleepingWithMail(t *testing.T, db store.Store) {
+	sc, ok := db.(store.SleepScanner)
+	if !ok {
+		t.Skip("存储未实现 SleepScanner")
+	}
+	ctx := context.Background()
+	sleep := func(id string) {
+		t.Helper()
+		create(t, db, store.SessionMeta{ID: id}, newCore())
+		ep, err := db.AcquireLease(ctx, id, "n")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := db.SetSessionStatus(ctx, id, store.StatusActive, store.StatusSleeping, ep); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i := 0; i < 70; i++ {
+		sleep(fmt.Sprintf("a%02d", i))
+	}
+	sleep("y")
+	sleep("z")
+	if _, err := db.Admit(ctx, "y", store.InboxItem{ItemID: "c1", Kind: store.InboxContext, Input: `[]`}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Admit(ctx, "z", store.InboxItem{ItemID: "w1", Kind: store.InboxInput, Input: `[]`}); err != nil {
+		t.Fatal(err)
+	}
+	ids, err := sc.SleepingWithMail(ctx, []string{store.InboxInput, store.InboxNotice}, 64)
+	if err != nil || len(ids) != 1 || ids[0] != "z" {
+		t.Fatalf("应只查出有 wake 信件的 z：%v %v", ids, err)
 	}
 }

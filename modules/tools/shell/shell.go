@@ -30,35 +30,73 @@ const (
 	JobWait         = 30 * time.Second
 )
 
-// tailBuf 只保留最近 cap 字节的并发安全缓冲。
+// tailBuf 只保留最近 cap 字节的并发安全缓冲。环形：写满后覆盖最旧的字节，不再重分配
+// （2026-11-04 审查 P1-44：原先写满后每次写都把整段 cap 字节复制一遍，大输出命令开销是 O(总量 × cap)）。
 type tailBuf struct {
 	mu    sync.Mutex
 	cap   int
-	data  []byte
-	total int64 // 累计写入字节
+	ring  []byte // 长度增长到 cap 后固定
+	total int64  // 累计写入字节；下一个字节写在 ring[total % cap]
 }
 
 func (b *tailBuf) Write(p []byte) (int, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	b.total += int64(len(p))
-	b.data = append(b.data, p...)
-	if over := len(b.data) - b.cap; over > 0 {
-		b.data = append(b.data[:0:0], b.data[over:]...)
+	n := len(p)
+	if b.cap <= 0 {
+		b.total += int64(n)
+		return n, nil
 	}
-	return len(p), nil
+	if len(p) > b.cap { // 只有最后 cap 字节留得下
+		b.total += int64(len(p) - b.cap)
+		p = p[len(p)-b.cap:]
+		if len(b.ring) < b.cap {
+			// 这次写会覆盖全部 cap 字节：直接转成满环，按 total % cap 定位
+			// （未满时追加是从 ring[0] 起放，与跳过后的 total 对不上）。
+			b.ring = append(b.ring, make([]byte, b.cap-len(b.ring))...)
+		}
+	}
+	if len(b.ring) < b.cap { // 还没写满：追加，满了再转成环
+		room := b.cap - len(b.ring)
+		k := min(room, len(p))
+		b.ring = append(b.ring, p[:k]...)
+		b.total += int64(k)
+		p = p[k:]
+	}
+	for len(p) > 0 {
+		pos := int(b.total % int64(b.cap))
+		k := copy(b.ring[pos:], p)
+		b.total += int64(k)
+		p = p[k:]
+	}
+	return n, nil
 }
 
 // since 返回自累计偏移 off 起的输出、新偏移、被丢弃的字节数。
 func (b *tailBuf) since(off int64) (string, int64, int64) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	first := b.total - int64(len(b.data))
+	first := b.total - int64(len(b.ring))
 	var dropped int64
 	if off < first {
 		dropped, off = first-off, first
 	}
-	return string(b.data[off-first:]), b.total, dropped
+	n := int(b.total - off)
+	if n <= 0 {
+		return "", b.total, dropped
+	}
+	if len(b.ring) < b.cap { // 未写满：按顺序存放
+		return string(b.ring[len(b.ring)-n:]), b.total, dropped
+	}
+	start := int(off % int64(b.cap))
+	out := make([]byte, 0, n)
+	if start+n <= b.cap {
+		out = append(out, b.ring[start:start+n]...)
+	} else {
+		out = append(out, b.ring[start:]...)
+		out = append(out, b.ring[:n-(b.cap-start)]...)
+	}
+	return string(out), b.total, dropped
 }
 
 // Shell 一组共享后台 job 表的 shell 工具。

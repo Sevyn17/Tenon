@@ -148,7 +148,13 @@ func Start(o StartOptions) (*Runtime, error) {
 	if sleepAfter > 0 { // 休眠会话的兜底扫描（02 2.2）：有信件的休眠会话定期唤醒
 		go r.Host.ScanLoop(ctx, sleepAfter)
 	}
-	go r.Host.Maintain(ctx, 0, kern.Retain) // 存储清理：过期的待回复、已派发外发、trace 事件
+	// 工件文件回收（审查 P1-41）：没有引用、超过宽限期未触碰的文件删掉。宽限期防止刚写入、引用还没落库的文件被误删。
+	if gc, ok := r.Rt.Store.Blobs().(interface {
+		GC(context.Context, time.Duration) (int, error)
+	}); ok {
+		r.Host.GC = func(ctx context.Context) (int, error) { return gc.GC(ctx, BlobGrace) }
+	}
+	go r.Host.Maintain(ctx, 0, kern.Retain) // 存储清理：过期的待回复、已派发外发、trace 事件、无引用的工件
 	// 启动时派发一次发件箱：上次进程在提交之后、派发之前退出时留下的外发不必等到下一个回合结束。
 	go func() { _, _ = r.Host.FlushOutbox(ctx) }()
 	return r, nil
@@ -273,3 +279,6 @@ func (r *Runtime) BuildApp(o AppOptions) (*Built, error) {
 	}
 	return &Built{API: api, DB: db, Model: modelName, Perms: perms, Builder: rb, ready: col.Ready}, nil
 }
+
+// BlobGrace 工件回收的宽限期：没有引用的文件超过这么久未被触碰才删（约束清单「存储」）。
+const BlobGrace = 24 * time.Hour

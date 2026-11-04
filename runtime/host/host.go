@@ -149,6 +149,9 @@ type Host struct {
 	Guard func(*mail.Envelope) error
 	// Guards 组件登记的守卫规则（04 4.2、08 D4），装配期从 Assembly 取来。
 	Guards []component.GuardRule
+	// GC 可空：Maintain 每轮调用的额外清理（如回收没有引用的工件文件），返回回收条数
+	// （2026-11-04 审查 P1-41：原先工件存储的 GC 没有调用方，文件只增不减）。
+	GC func(ctx context.Context) (int, error)
 
 	mu     sync.Mutex
 	actors map[string]*actor
@@ -241,11 +244,24 @@ func (h *Host) Open(ctx context.Context, id string) (Handle, error) {
 	return h.open(ctx, id, "", f, nil)
 }
 
+// head 只读会话行（元数据与头部），不读也不反序列化任何条目：base 取最大值（审查 P1-34 / P1-35）。
+func (h *Host) head(ctx context.Context, id string) (*store.Loaded, error) {
+	return LoadHead(ctx, h.DB, id)
+}
+
+// LoadHead 只读会话行与头部、不读条目的 Load（base 取最大值，两种存储都返回空条目）。
+// 投递、翻页这类只要元数据的路径用它，成本不随日志长度增长。
+func LoadHead(ctx context.Context, db interface {
+	Load(ctx context.Context, id string, base *int) (*store.Loaded, error)
+}, id string) (*store.Loaded, error) {
+	noEntries := math.MaxInt
+	return db.Load(ctx, id, &noEntries)
+}
+
 // isChild 会话是否是子会话（子智能体或工作组成员）；会话不存在返回 false。
 // 只要会话行：base 取到最大，不读任何条目。
 func (h *Host) isChild(ctx context.Context, id string) (bool, error) {
-	noEntries := math.MaxInt
-	l, err := h.DB.Load(ctx, id, &noEntries)
+	l, err := h.head(ctx, id)
 	if errors.Is(err, store.ErrNotFound) {
 		return false, nil
 	}
@@ -605,7 +621,20 @@ func (a *actor) sleep(ctx context.Context) (bool, error) {
 
 // ScanOnce 兜底扫描：唤醒信箱里有信件的休眠会话（02 2.2）。并发扫描由租约决定谁生效。
 func (h *Host) ScanOnce(ctx context.Context) (int, error) {
-	ids, err := h.DB.SessionsWithStatus(ctx, store.StatusSleeping, 64)
+	if sc, ok := h.DB.(store.SleepScanner); ok { // 一次查出有可唤醒信件的休眠会话（审查 P1-37）
+		ids, err := sc.SleepingWithMail(ctx, []string{store.InboxInput, store.InboxNotice}, ScanBatch)
+		if err != nil {
+			return 0, err
+		}
+		woke := 0
+		for _, id := range ids {
+			if _, err := h.Open(ctx, id); err == nil {
+				woke++
+			}
+		}
+		return woke, nil
+	}
+	ids, err := h.DB.SessionsWithStatus(ctx, store.StatusSleeping, ScanBatch)
 	if err != nil {
 		return 0, err
 	}
@@ -628,7 +657,7 @@ func (h *Host) ScanOnce(ctx context.Context) (int, error) {
 // keep <= 0 按 RetainDefault。存储不支持清理时直接返回。
 func (h *Host) Maintain(ctx context.Context, every, keep time.Duration) {
 	p, ok := h.DB.(store.PruneStore)
-	if !ok {
+	if !ok && h.GC == nil {
 		return
 	}
 	if every <= 0 {
@@ -638,10 +667,19 @@ func (h *Host) Maintain(ctx context.Context, every, keep time.Duration) {
 		keep = RetainDefault
 	}
 	prune := func() {
-		if n, err := p.Prune(ctx, time.Now().Add(-keep)); err != nil {
-			h.publish("", "store.prune_failed", map[string]any{"error": err.Error()})
-		} else if n > 0 {
-			h.publish("", "store.pruned", map[string]any{"rows": n})
+		if ok {
+			if n, err := p.Prune(ctx, time.Now().Add(-keep)); err != nil {
+				h.publish("", "store.prune_failed", map[string]any{"error": err.Error()})
+			} else if n > 0 {
+				h.publish("", "store.pruned", map[string]any{"rows": n})
+			}
+		}
+		if h.GC != nil {
+			if n, err := h.GC(ctx); err != nil {
+				h.publish("", "store.gc_failed", map[string]any{"error": err.Error()})
+			} else if n > 0 {
+				h.publish("", "store.gc", map[string]any{"blobs": n})
+			}
 		}
 	}
 	prune()
@@ -656,6 +694,9 @@ func (h *Host) Maintain(ctx context.Context, every, keep time.Duration) {
 		}
 	}
 }
+
+// ScanBatch 兜底扫描每轮最多唤醒的会话数。
+const ScanBatch = 64
 
 // RetainDefault 观测与记账行的缺省保留期（约束清单「存储」）。
 const RetainDefault = 7 * 24 * time.Hour
@@ -719,20 +760,26 @@ func (a *actor) suspend(ctx context.Context, reason string) error {
 // cancelChildren 取消本会话直接派生、仍在运行的子会话（Rewind 的所属树处理，02 2.2）。
 // 只处理内存里打开的子会话：没打开的子会话没有进行中的一轮，无需取消。
 func (h *Host) cancelChildren(ctx context.Context, parent string) {
-	list, err := h.DB.ListSessions(ctx, 0, 500, false)
-	if err != nil {
-		return
+	// 直接遍历已打开的 actor（审查 P1-38：原先扫 ListSessions(…, 500)，最多 500 条，
+	// 会话多时较老的子会话会漏掉）。父会话 id 从会话行读。
+	h.mu.Lock()
+	var open []*actor
+	for _, a := range h.actors {
+		if a.id != parent {
+			open = append(open, a)
+		}
 	}
-	for _, m := range list {
-		if m.ParentID != parent {
-			continue
+	h.mu.Unlock()
+	var kids []*actor
+	for _, a := range open { // 只读打开着的会话的会话行（不读条目），数量随打开的会话数而不是全库
+		if l, err := LoadHead(ctx, h.DB, a.id); err == nil && l.Meta.ParentID == parent {
+			kids = append(kids, a)
 		}
-		hd, ok := h.Get(m.ID)
-		if !ok {
-			continue
-		}
-		_ = hd.Do(Command{Kind: Close})
-		h.publish(m.ID, "session.closed", map[string]any{"reason": "parent_rewind"})
+	}
+	for _, a := range kids {
+		_ = Handle{a}.Do(Command{Kind: Cancel})  // 进行中的回合先取消
+		_ = Handle{a}.Post(Command{Kind: Close}) // 入队即返回：不在父会话的 actor 里等子回合收尾
+		h.publish(a.id, "session.closed", map[string]any{"reason": "parent_rewind"})
 	}
 }
 

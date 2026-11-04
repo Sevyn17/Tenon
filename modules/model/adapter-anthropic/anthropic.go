@@ -28,6 +28,9 @@ const AnthropicVersion = "2023-06-01"
 // DefaultAnthropicMaxTokens max_tokens 为必填，未给时的默认值。
 const DefaultAnthropicMaxTokens = 8192
 
+// anthropicMaxBreakpoints 单次请求的 cache_control 断点上限（厂商限制）。
+const anthropicMaxBreakpoints = 4
+
 // Anthropic anthropic-messages 协议适配器。
 type Anthropic struct {
 	HTTP *http.Client
@@ -193,10 +196,36 @@ func anthropicBody(r *modelhub.Request, ep modelhub.Endpoint) map[string]any {
 			push("user", anBlock{Type: "text", Text: t})
 		}
 	}
-	// 最后一条 user 消息打缓存断点：下一步请求能命中整段历史前缀。
-	if n := len(msgs); n > 0 && msgs[n-1].Role == "user" {
-		bs := msgs[n-1].Content
+	// 缓存断点（审查 P1-46：原先只有最后一条 user 消息打断点，工具循环里一条 user 消息并入很多 tool_result，
+	// 跨度超过厂商的回看窗口时整段重写缓存）。厂商上限 4 个：工具末尾 1 + 系统末块 1 + 消息滚动 2
+	// （最后两条 user 消息：本次写入的断点下次还能被读到）。系统块上显式的 Breakpoint 在名额内保留。
+	userIdx := []int{}
+	for i := len(msgs) - 1; i >= 0 && len(userIdx) < 2; i-- {
+		if msgs[i].Role == "user" {
+			userIdx = append(userIdx, i)
+		}
+	}
+	for _, i := range userIdx {
+		bs := msgs[i].Content
 		bs[len(bs)-1].CacheControl = &anCache{Type: "ephemeral"}
+	}
+	budget := anthropicMaxBreakpoints - len(userIdx)
+	if len(req.Tools) > 0 {
+		budget--
+	}
+	if n := len(system); n > 0 {
+		system[n-1].CacheControl = &anCache{Type: "ephemeral"}
+		used := 1
+		for i := n - 2; i >= 0; i-- { // 显式断点从后往前保留，超出名额的去掉
+			if system[i].CacheControl == nil {
+				continue
+			}
+			if used >= budget {
+				system[i].CacheControl = nil
+				continue
+			}
+			used++
+		}
 	}
 	maxTok := uint64(DefaultAnthropicMaxTokens)
 	if req.Params.MaxTokens != nil {
@@ -218,6 +247,7 @@ func anthropicBody(r *modelhub.Request, ep modelhub.Endpoint) map[string]any {
 			}
 			tools = append(tools, tm)
 		}
+		tools[len(tools)-1]["cache_control"] = anCache{Type: "ephemeral"} // 工具定义会话内冻结：末尾打断点
 		b["tools"] = tools
 	}
 	if req.Params.Temperature != nil {

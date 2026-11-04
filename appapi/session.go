@@ -135,7 +135,7 @@ func (a *App) Entries(ctx context.Context, in EntriesArgs) (EntriesResult, error
 	if err := need(in.Session); err != nil {
 		return EntriesResult{}, err
 	}
-	l, err := a.o.DB.Load(ctx, in.Session, nil)
+	l, err := host.LoadHead(ctx, a.o.DB, in.Session) // 只要头部：翻页不再全量反序列化（审查 P1-35）
 	if err != nil {
 		return EntriesResult{}, wrap(err)
 	}
