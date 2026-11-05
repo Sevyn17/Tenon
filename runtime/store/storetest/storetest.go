@@ -55,6 +55,8 @@ func Run(t *testing.T, open func(t *testing.T) store.Store) {
 		{"Tx", testSubStoresAndTx},
 		{"TxRollback", testTxRollback},
 		{"Concurrency", testConcurrency},
+		{"CheckpointEvents", testCheckpointEvents},
+		{"EventsCursorExpired", testEventsCursorExpired},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) { c.f(t, open(t)) })
@@ -227,19 +229,25 @@ func testTruncate(t *testing.T, db store.Store) {
 		AppendFrom: 1, Append: s.Entries[1:], Header: s.Header}); err != nil {
 		t.Fatalf("Commit: %v", err)
 	}
-	// a=1, b=2，截断占 3，c=4
+	// a=1, b=2，截断占 3，c=4。事件表只追加（06 10.2.1）：被截掉的 b 的追加事件仍在，后面跟着回退，
+	// 按顺序重放得到同样的日志；b 的正文从归档取回。
 	evs, wm, err := db.Replay(ctx, "s", 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(evs) != 3 || wm != 4 {
-		t.Fatalf("回放 %+v wm=%d", evs, wm)
+	if len(evs) != 4 || wm != 4 {
+		t.Fatalf("回放 %d 条 wm=%d", len(evs), wm)
 	}
-	if evs[0].Seq != 1 || evs[1].Seq != 3 || evs[1].Kind != store.EventRewind || evs[2].Seq != 4 || evs[2].Kind != store.EventEntry {
-		t.Fatalf("seq 序列: %+v", evs)
+	for i, k := range []string{store.EventEntry, store.EventEntry, store.EventRewind, store.EventEntry} {
+		if evs[i].Seq != int64(i+1) || evs[i].Kind != k {
+			t.Fatalf("第 %d 条：seq=%d kind=%s，期望 %d %s", i, evs[i].Seq, evs[i].Kind, i+1, k)
+		}
 	}
-	if to := evs[1].Data.(map[string]any)["to"]; to != 1 {
+	if to := evs[2].Data.(map[string]any)["to"]; to != 1 {
 		t.Fatalf("rewind to = %v", to)
+	}
+	if b, _ := evs[1].Data.(map[string]any)["entry"].(json.RawMessage); !bytes.Contains(b, []byte(`"b"`)) {
+		t.Fatalf("被截掉的条目正文应从归档取回：%s", b)
 	}
 	l, _ := db.Load(ctx, "s", nil)
 	if len(l.Snapshot.Entries) != 2 || l.Snapshot.Entries[1].Item.User == nil {
@@ -1441,4 +1449,69 @@ func lookup(ctx context.Context, db interface {
 		return store.ToolRecord{}, false, err
 	}
 	return *r, true, nil
+}
+
+// testCheckpointEvents 检查点附带的持久事件（06 10.2.1 规则 2）：与条目同事务写入，排在条目之后各占一个游标，
+// 回放时 data 原样；提交通知与回放一致。
+func testCheckpointEvents(t *testing.T, db store.Store) {
+	ctx := context.Background()
+	c := newCore()
+	create(t, db, store.SessionMeta{ID: "ev"}, c)
+	_ = c.Record(txt("a"), nil)
+	var got []bus.Envelope
+	db.OnCommit(func(e bus.Envelope) { got = append(got, e) })
+	defer db.OnCommit(nil)
+	commitAll(t, db, "ev", c, 0, func(cp *store.Checkpoint) {
+		cp.Events = []store.Event{{Kind: "session.mode_changed", Data: json.RawMessage(`{"mode":"ask"}`)},
+			{Kind: "session.state_changed", Data: json.RawMessage(`{"run_state":"running"}`)}}
+	})
+	evs, wm, err := db.Replay(ctx, "ev", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(evs) != 3 || wm != 3 {
+		t.Fatalf("回放 %d 条 wm=%d，期望 3 条（条目 + 两个事件）", len(evs), wm)
+	}
+	if evs[0].Kind != store.EventEntry || evs[1].Kind != "session.mode_changed" || evs[1].Seq != 2 || evs[2].Seq != 3 {
+		t.Fatalf("顺序不对：%s/%d %s/%d %s/%d", evs[0].Kind, evs[0].Seq, evs[1].Kind, evs[1].Seq, evs[2].Kind, evs[2].Seq)
+	}
+	if d, _ := evs[1].Data.(json.RawMessage); !bytes.Contains(d, []byte(`"ask"`)) {
+		t.Fatalf("事件 data 应原样回放：%v", evs[1].Data)
+	}
+	if len(got) != 3 || got[2].Kind != "session.state_changed" || got[2].Seq != 3 {
+		t.Fatalf("提交通知应与回放一致：%+v", got)
+	}
+	// 冲突的检查点：事件也不写。
+	if err := db.Commit(ctx, store.Checkpoint{SessionID: "ev", ExpectLogLen: 99, Header: c.Snapshot().Header,
+		Events: []store.Event{{Kind: "x", Data: json.RawMessage(`{}`)}}}); !errors.Is(err, store.ErrConflict) {
+		t.Fatalf("应冲突：%v", err)
+	}
+	if evs, _, _ := db.Replay(ctx, "ev", 3); len(evs) != 0 {
+		t.Fatalf("冲突的检查点不应写事件：%+v", evs)
+	}
+}
+
+// testEventsCursorExpired 事件按保留期清理（06 10.12 Q3）：清理后早于被清游标的回放返回 ErrCursorExpired，
+// 从被清的最大游标往后订阅仍可用。
+func testEventsCursorExpired(t *testing.T, db store.Store) {
+	ctx := context.Background()
+	pr, ok := db.(store.PruneStore)
+	if !ok {
+		t.Skip("存储未实现可选的 PruneStore")
+	}
+	c := newCore()
+	create(t, db, store.SessionMeta{ID: "ex"}, c)
+	_ = c.Record(txt("a"), nil)
+	_ = c.Record(txt("b"), nil)
+	commitAll(t, db, "ex", c, 0, nil)
+	if _, err := pr.Prune(ctx, time.Now().Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := db.Replay(ctx, "ex", 0); !errors.Is(err, store.ErrCursorExpired) {
+		t.Fatalf("游标 0 早于已清理的事件，应 ErrCursorExpired：%v", err)
+	}
+	evs, wm, err := db.Replay(ctx, "ex", 2)
+	if err != nil || len(evs) != 0 || wm != 2 {
+		t.Fatalf("从最大被清游标往后订阅应可用：%d %d %v", len(evs), wm, err)
+	}
 }

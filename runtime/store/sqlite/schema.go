@@ -157,4 +157,21 @@ var coreMigrations = []migration{
 		`DROP INDEX IF EXISTS sessions_list`,
 		`CREATE INDEX sessions_recent ON sessions(tenant, updated_at)`,
 	}},
+	// v10：会话事件表（protocol 2，06 10.2.1）。每个会话一条只追加的事件序列，游标沿用 next_sync_seq 计数；
+	// 检查点产生的事件与状态变化同事务写入，Replay 只读这张表。entry 事件只记 {idx, entry_id}，正文回放时
+	// 从 session_entries / session_entries_archive 按 id 取。event_floor 是按保留期清掉的最大游标（Q3），
+	// 早于它的订阅返回 ErrCursorExpired。已有会话按现有条目与归档补历史事件，游标沿用原 sync_seq / rewind_seq。
+	{version: 10, stmts: []string{
+		`CREATE TABLE session_events(tenant TEXT NOT NULL, session_id TEXT NOT NULL, cursor INTEGER NOT NULL,
+			kind TEXT NOT NULL, data TEXT NOT NULL, at INTEGER NOT NULL, PRIMARY KEY(tenant, session_id, cursor))`,
+		`CREATE INDEX session_events_at ON session_events(tenant, at)`,
+		`ALTER TABLE sessions ADD COLUMN event_floor INTEGER NOT NULL DEFAULT 0`,
+		`CREATE INDEX session_entries_id ON session_entries(tenant, session_id, id)`,
+		`CREATE INDEX session_entries_archive_id ON session_entries_archive(tenant, session_id, id)`,
+		`INSERT OR IGNORE INTO session_events(tenant, session_id, cursor, kind, data, at)
+			SELECT tenant, session_id, sync_seq, 'entry', json_object('idx', idx, 'entry_id', id), at FROM session_entries`,
+		`INSERT OR IGNORE INTO session_events(tenant, session_id, cursor, kind, data, at)
+			SELECT tenant, session_id, rewind_seq, 'rewind', json_object('to', MIN(idx)), MAX(truncated_at)
+			FROM session_entries_archive GROUP BY tenant, session_id, rewind_seq`,
+	}},
 }

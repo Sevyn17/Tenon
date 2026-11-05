@@ -73,5 +73,18 @@ func (s *Store) Prune(ctx context.Context, before time.Time) (int, error) {
 		kt = append(kt, ev)
 	}
 	s.traces = kt
+	// 会话事件按保留期清理（06 10.12 Q3），清掉的最大游标记进 eventFloor（与 sqlite 的 event_floor 一致）。
+	for _, x := range s.sessions {
+		ke := x.events[:0]
+		for _, ev := range x.events {
+			if ev.at < cut {
+				x.eventFloor = max(x.eventFloor, ev.cursor)
+				n++
+				continue
+			}
+			ke = append(ke, ev)
+		}
+		x.events = ke
+	}
 	return n, nil
 }

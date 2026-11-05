@@ -101,6 +101,9 @@ func (db *DB) Commit(ctx context.Context, cp store.Checkpoint) error {
 			if _, err := tx.ExecContext(ctx, `DELETE FROM session_entries WHERE tenant = ? AND session_id = ? AND idx >= ?`, store.Tenant, cp.SessionID, *cp.TruncateFrom); err != nil {
 				return err
 			}
+			if err := putEvent(ctx, tx, cp.SessionID, seq, store.EventRewind, fmt.Sprintf(`{"to":%d}`, *cp.TruncateFrom), now); err != nil {
+				return err
+			}
 			evs = append(evs, bus.Envelope{V: bus.Version, Seq: int64(seq), At: now, Session: cp.SessionID, Kind: store.EventRewind,
 				Data: map[string]any{"to": *cp.TruncateFrom}})
 			seq++ // 每次截断占一个 sync_seq，订阅者据此识别回退
@@ -113,6 +116,19 @@ func (db *DB) Commit(ctx context.Context, cp store.Checkpoint) error {
 			b, _ := json.Marshal(e)
 			evs = append(evs, bus.Envelope{V: bus.Version, Seq: int64(start + i), At: e.At, Session: cp.SessionID, Kind: store.EventEntry,
 				Data: map[string]any{"idx": cp.AppendFrom + i, "entry": json.RawMessage(b)}})
+		}
+		// 其他持久事件（档位、设置、运行状态……）排在条目之后，各占一个游标（06 10.2.1 规则 2）。
+		for _, ev := range cp.Events {
+			data := string(ev.Data)
+			if data == "" {
+				data = "{}"
+			}
+			if err := putEvent(ctx, tx, cp.SessionID, seq, ev.Kind, data, now); err != nil {
+				return err
+			}
+			evs = append(evs, bus.Envelope{V: bus.Version, Seq: int64(seq), At: now, Session: cp.SessionID, Kind: ev.Kind,
+				Data: json.RawMessage(data)})
+			seq++
 		}
 		hs, hb, err := splitHeader(cp.Header)
 		if err != nil {
@@ -352,9 +368,21 @@ func appendEntries(ctx context.Context, tx *sql.Tx, sid string, from int, es []*
 			VALUES(?,?,?,?,?,?,?,?,?,?)`, store.Tenant, sid, from+i, e.ID, e.Turn, e.Item.Kind, Summarize(e), string(b), e.At, seq); err != nil {
 			return seq, err
 		}
+		// 事件行只记位置与 id，正文回放时从条目表 / 归档按 id 取（06 10.2.1 规则 3）。
+		d, _ := json.Marshal(map[string]any{"idx": from + i, "entry_id": e.ID})
+		if err := putEvent(ctx, tx, sid, seq, store.EventEntry, string(d), e.At); err != nil {
+			return seq, err
+		}
 		seq++
 	}
 	return seq, nil
+}
+
+// putEvent 追加一行会话事件（与它描述的状态变化同事务）。
+func putEvent(ctx context.Context, tx *sql.Tx, sid string, cursor int, kind, data string, at int64) error {
+	_, err := tx.ExecContext(ctx, `INSERT INTO session_events(tenant, session_id, cursor, kind, data, at) VALUES(?,?,?,?,?,?)`,
+		store.Tenant, sid, cursor, kind, data, at)
+	return err
 }
 
 func putSpan(ctx context.Context, tx *sql.Tx, sid string, s store.Span) error {

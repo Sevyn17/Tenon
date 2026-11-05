@@ -7,7 +7,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"sort"
+	"fmt"
 
 	"ybase/runtime/bus"
 	"ybase/runtime/store"
@@ -33,57 +33,67 @@ func (db *DB) notify(evs []bus.Envelope) {
 	}
 }
 
-// Replay 实现 bus.Source：返回 seq > after 的条目追加与回退事件（按 seq 升序）及水位。
+// Replay 实现 bus.Source：只读会话事件表（06 10.2.1 规则 4），返回 cursor > after 的持久事件（升序）及水位。
+// entry 事件的正文按 entry_id 从条目表或归档取回，回放形状仍是 {idx, entry}；其他事件 data 原样。
+// after 早于按保留期清掉的游标（event_floor）时返回 store.ErrCursorExpired（Q3）。
 func (db *DB) Replay(ctx context.Context, session string, after int64) ([]bus.Envelope, int64, error) {
-	var next int64
-	if err := db.rq().QueryRowContext(ctx, `SELECT next_sync_seq FROM sessions WHERE tenant = ? AND id = ?`, store.Tenant, session).Scan(&next); err != nil {
+	var next, floor int64
+	if err := db.rq().QueryRowContext(ctx, `SELECT next_sync_seq, event_floor FROM sessions WHERE tenant = ? AND id = ?`,
+		store.Tenant, session).Scan(&next, &floor); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, 0, store.ErrNotFound
 		}
 		return nil, 0, err
 	}
-	var out []bus.Envelope
-	rows, err := db.rq().QueryContext(ctx, `SELECT idx, sync_seq, at, body FROM session_entries
-		WHERE tenant = ? AND session_id = ? AND sync_seq > ? ORDER BY sync_seq`, store.Tenant, session, after)
+	if after < floor {
+		return nil, 0, fmt.Errorf("%w: 游标 %d 早于 %d", store.ErrCursorExpired, after, floor)
+	}
+	rows, err := db.rq().QueryContext(ctx, `SELECT e.cursor, e.kind, e.data, e.at,
+		COALESCE((SELECT body FROM session_entries s WHERE s.tenant = e.tenant AND s.session_id = e.session_id
+			AND s.id = json_extract(e.data, '$.entry_id')),
+		(SELECT body FROM session_entries_archive a WHERE a.tenant = e.tenant AND a.session_id = e.session_id
+			AND a.id = json_extract(e.data, '$.entry_id') ORDER BY a.rewind_seq LIMIT 1), '')
+		FROM session_events e WHERE e.tenant = ? AND e.session_id = ? AND e.cursor > ? ORDER BY e.cursor`,
+		store.Tenant, session, after)
 	if err != nil {
 		return nil, 0, err
 	}
+	defer rows.Close()
+	var out []bus.Envelope
 	for rows.Next() {
-		var idx int
-		var seq, at int64
-		var body string
-		if err := rows.Scan(&idx, &seq, &at, &body); err != nil {
-			rows.Close()
+		var cur, at int64
+		var kind, data, body string
+		if err := rows.Scan(&cur, &kind, &data, &at, &body); err != nil {
 			return nil, 0, err
 		}
-		out = append(out, bus.Envelope{V: bus.Version, Seq: seq, At: at, Session: session, Kind: store.EventEntry,
-			Data: map[string]any{"idx": idx, "entry": json.RawMessage(body)}})
+		out = append(out, replayEnvelope(session, cur, kind, data, body, at))
 	}
-	rows.Close()
 	if err := rows.Err(); err != nil {
 		return nil, 0, err
 	}
-	rr, err := db.rq().QueryContext(ctx, `SELECT rewind_seq, MIN(idx), MAX(truncated_at) FROM session_entries_archive
-		WHERE tenant = ? AND session_id = ? AND rewind_seq > ? GROUP BY rewind_seq`, store.Tenant, session, after)
-	if err != nil {
-		return nil, 0, err
-	}
-	for rr.Next() {
-		var seq, at int64
-		var to int
-		if err := rr.Scan(&seq, &to, &at); err != nil {
-			rr.Close()
-			return nil, 0, err
-		}
-		out = append(out, bus.Envelope{V: bus.Version, Seq: seq, At: at, Session: session, Kind: store.EventRewind,
-			Data: map[string]any{"to": to}})
-	}
-	rr.Close()
-	if err := rr.Err(); err != nil {
-		return nil, 0, err
-	}
-	sort.SliceStable(out, func(i, j int) bool { return out[i].Seq < out[j].Seq })
 	return out, next - 1, nil
+}
+
+// replayEnvelope 一行事件 → 总线信封。entry / rewind 的 data 解成 map（与提交通知同形），其余原样。
+func replayEnvelope(session string, cur int64, kind, data, body string, at int64) bus.Envelope {
+	env := bus.Envelope{V: bus.Version, Seq: cur, At: at, Session: session, Kind: kind}
+	switch kind {
+	case store.EventEntry:
+		var d struct {
+			Idx int `json:"idx"`
+		}
+		_ = json.Unmarshal([]byte(data), &d)
+		env.Data = map[string]any{"idx": d.Idx, "entry": json.RawMessage(body)}
+	case store.EventRewind:
+		var d struct {
+			To int `json:"to"`
+		}
+		_ = json.Unmarshal([]byte(data), &d)
+		env.Data = map[string]any{"to": d.To}
+	default:
+		env.Data = json.RawMessage(data)
+	}
+	return env
 }
 
 // ListSessions 按更新时间倒序列出未删除会话；before > 0 时只列 updated_at < before 的（分页游标）。

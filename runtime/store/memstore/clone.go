@@ -42,6 +42,7 @@ func (s *Store) snap() snapshot {
 		}
 		c.reqOrder = append([]string(nil), x.reqOrder...)
 		c.spans = append([]spanRow(nil), x.spans...)
+		c.events = append([]evRow(nil), x.events...)
 		sn.sessions[k] = &c
 	}
 	for k, v := range s.shells {

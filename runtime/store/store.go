@@ -34,6 +34,9 @@ var ErrStateMismatch = errors.New("store: 工具记录状态不符")
 // ErrLeaseLost：本写者不再持有会话写租约（纪元不符）——旧节点的迟到写入被拒（02 2.2 fencing）。
 var ErrLeaseLost = errors.New("store: 会话写租约已失效")
 
+// ErrCursorExpired：订阅游标对应的事件已按保留期清理（06 10.2、10.12 Q3），调用方应重新取快照再订阅。
+var ErrCursorExpired = errors.New("store: 事件游标已过期")
+
 // 会话生命周期状态（02 2.2）。deleted 由 DeleteSession 置墓碑。
 const (
 	StatusActive    = "active"
@@ -254,6 +257,9 @@ type Checkpoint struct {
 	Preview      string
 	// Outbox 本轮运行中要外发的信封：与检查点同事务写入，提交后再派发（08 9.6）。
 	Outbox []OutboxItem
+	// Events 本次检查点附带的其他持久事件（档位、设置、运行状态变化等，06 10.2.1）：排在条目事件之后，各占一个游标。
+	// 条目追加与回退的事件由存储自己生成，不用放在这里。
+	Events []Event
 }
 
 // Loaded 读取结果。
@@ -334,11 +340,18 @@ type ToolRecord struct {
 	TokenHash string
 }
 
-// 持久事件类型。
+// 持久事件类型（会话事件表，06 10.2.1）。entry / rewind 由存储随检查点生成，回放时 data 分别为 {idx, entry}、{to}；
+// 其余种类由调用方经 Checkpoint.Events 写入，data 原样回放（json.RawMessage）。
 const (
 	EventEntry  = "entry"  // data: {idx, entry}
 	EventRewind = "rewind" // data: {to}
 )
+
+// Event 一条要写进事件表的持久事件。
+type Event struct {
+	Kind string
+	Data json.RawMessage
+}
 
 // SessionInfo 会话列表的一行。
 type SessionInfo struct {

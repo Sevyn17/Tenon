@@ -29,7 +29,7 @@ func (db *DB) DeleteSession(ctx context.Context, id string, cleaners []store.Cle
 	}
 	return db.inTx(ctx, func(tx *sql.Tx) error {
 		for _, t := range []string{"session_entries", "session_entries_archive", "session_requests", "session_inbox",
-			"tool_results", "trace_spans", "blob_refs"} {
+			"tool_results", "trace_spans", "blob_refs", "session_events"} {
 			if _, err := tx.ExecContext(ctx, `DELETE FROM `+t+` WHERE tenant = ? AND session_id = ?`, store.Tenant, id); err != nil {
 				return err
 			}

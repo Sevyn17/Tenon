@@ -69,6 +69,22 @@ type sess struct {
 	requests map[string]request
 	reqOrder []string
 	spans    []spanRow
+
+	// 会话事件序列（06 10.2.1，与 sqlite 的 session_events 同语义）：只追加，Replay 只读它；
+	// eventFloor 是按保留期清掉的最大游标，早于它的回放返回 ErrCursorExpired。
+	events     []evRow
+	eventFloor int64
+}
+
+// evRow 一条会话事件。entry 带条目正文（条目写入后不变，与 sqlite 按 id 取回等价），rewind 带截断点，其余带原始 data。
+type evRow struct {
+	cursor int64
+	kind   string
+	idx    int
+	to     int
+	body   []byte
+	data   json.RawMessage
+	at     int64
 }
 
 type entry struct {
@@ -224,6 +240,7 @@ func (s *Store) CreateSession(ctx context.Context, m store.SessionMeta, hdr sess
 		updatedAt: s.now(), entries: map[int]entry{}, requests: map[string]request{}}
 	for i, e := range entries {
 		x.entries[i] = entry{body: bodies[i], at: e.At, seq: x.nextSeq}
+		x.events = append(x.events, evRow{cursor: int64(x.nextSeq), kind: store.EventEntry, idx: i, body: bodies[i], at: e.At})
 		x.nextSeq++
 	}
 	x.logLen = len(entries)
@@ -291,6 +308,7 @@ func (s *Store) Commit(ctx context.Context, cp store.Checkpoint) error {
 			x.archive = append(x.archive, archived{idx: idx, body: e.body, seq: e.seq, truncatedAt: now, rewindSeq: seq})
 			delete(x.entries, idx)
 		}
+		x.events = append(x.events, evRow{cursor: int64(seq), kind: store.EventRewind, to: from, at: now})
 		evs = append(evs, bus.Envelope{V: bus.Version, Seq: int64(seq), At: now, Session: cp.SessionID, Kind: store.EventRewind,
 			Data: map[string]any{"to": from}})
 		seq++ // 每次截断占一个 sync_seq
@@ -298,8 +316,20 @@ func (s *Store) Commit(ctx context.Context, cp store.Checkpoint) error {
 	for i, e := range cp.Append {
 		idx := cp.AppendFrom + i
 		x.entries[idx] = entry{body: bodies[i], at: e.At, seq: seq}
+		x.events = append(x.events, evRow{cursor: int64(seq), kind: store.EventEntry, idx: idx, body: bodies[i], at: e.At})
 		evs = append(evs, bus.Envelope{V: bus.Version, Seq: int64(seq), At: e.At, Session: cp.SessionID, Kind: store.EventEntry,
 			Data: map[string]any{"idx": idx, "entry": json.RawMessage(bodies[i])}})
+		seq++
+	}
+	// 其他持久事件排在条目之后，各占一个游标（06 10.2.1 规则 2）。
+	for _, ev := range cp.Events {
+		data := cloneRaw(ev.Data)
+		if len(data) == 0 {
+			data = json.RawMessage(`{}`)
+		}
+		x.events = append(x.events, evRow{cursor: int64(seq), kind: ev.Kind, data: data, at: now})
+		evs = append(evs, bus.Envelope{V: bus.Version, Seq: int64(seq), At: now, Session: cp.SessionID, Kind: ev.Kind,
+			Data: json.RawMessage(append([]byte(nil), data...))})
 		seq++
 	}
 	s.putShell(hash, shell)
@@ -640,35 +670,26 @@ func (s *Store) Replay(ctx context.Context, sessionID string, after int64) ([]bu
 	if x == nil {
 		return nil, 0, store.ErrNotFound
 	}
+	if after < x.eventFloor {
+		return nil, 0, fmt.Errorf("%w: 游标 %d 早于 %d", store.ErrCursorExpired, after, x.eventFloor)
+	}
+	// 只读事件序列（06 10.2.1 规则 4），形状与 sqlite 一致：entry {idx, entry}、rewind {to}、其余原样。
 	var out []bus.Envelope
-	for idx, e := range x.entries {
-		if int64(e.seq) > after {
-			out = append(out, bus.Envelope{V: bus.Version, Seq: int64(e.seq), At: e.at, Session: sessionID, Kind: store.EventEntry,
-				Data: map[string]any{"idx": idx, "entry": json.RawMessage(append([]byte(nil), e.body...))}})
-		}
-	}
-	type rw struct {
-		to int
-		at int64
-	}
-	groups := map[int]*rw{}
-	for _, a := range x.archive {
-		if int64(a.rewindSeq) <= after {
+	for _, ev := range x.events {
+		if ev.cursor <= after {
 			continue
 		}
-		g := groups[a.rewindSeq]
-		if g == nil {
-			groups[a.rewindSeq] = &rw{to: a.idx, at: a.truncatedAt}
-			continue
+		env := bus.Envelope{V: bus.Version, Seq: ev.cursor, At: ev.at, Session: sessionID, Kind: ev.kind}
+		switch ev.kind {
+		case store.EventEntry:
+			env.Data = map[string]any{"idx": ev.idx, "entry": json.RawMessage(append([]byte(nil), ev.body...))}
+		case store.EventRewind:
+			env.Data = map[string]any{"to": ev.to}
+		default:
+			env.Data = json.RawMessage(append([]byte(nil), ev.data...))
 		}
-		g.to = min(g.to, a.idx)
-		g.at = max(g.at, a.truncatedAt)
+		out = append(out, env)
 	}
-	for seq, g := range groups {
-		out = append(out, bus.Envelope{V: bus.Version, Seq: int64(seq), At: g.at, Session: sessionID, Kind: store.EventRewind,
-			Data: map[string]any{"to": g.to}})
-	}
-	sort.SliceStable(out, func(i, j int) bool { return out[i].Seq < out[j].Seq })
 	return out, int64(x.nextSeq - 1), nil
 }
 

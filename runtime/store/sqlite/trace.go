@@ -47,6 +47,14 @@ func (db *DB) Prune(ctx context.Context, before time.Time) (int, error) {
 	cut := before.UnixMilli()
 	n := 0
 	err := db.inTx(ctx, func(tx *sql.Tx) error {
+		// 会话事件按保留期清理（06 10.12 Q3）：先把每个会话要删的最大游标记进 event_floor，
+		// 早于它的订阅返回 ErrCursorExpired，客户端重新取快照。
+		if _, err := tx.ExecContext(ctx, `UPDATE sessions SET event_floor = MAX(event_floor,
+			(SELECT MAX(cursor) FROM session_events e WHERE e.tenant = sessions.tenant AND e.session_id = sessions.id AND e.at < ?))
+			WHERE tenant = ? AND EXISTS (SELECT 1 FROM session_events e WHERE e.tenant = sessions.tenant AND e.session_id = sessions.id AND e.at < ?)`,
+			cut, store.Tenant, cut); err != nil {
+			return err
+		}
 		for _, q := range []struct {
 			sql  string
 			args []any
@@ -54,6 +62,7 @@ func (db *DB) Prune(ctx context.Context, before time.Time) (int, error) {
 			{`DELETE FROM session_pending WHERE tenant = ? AND (used = 1 OR (deadline > 0 AND deadline < ?)) AND created_at < ?`, []any{store.Tenant, cut, cut}},
 			{`DELETE FROM session_outbox WHERE tenant = ? AND (sent = 1 OR dead <> '') AND created_at < ?`, []any{store.Tenant, cut}},
 			{`DELETE FROM trace_events WHERE tenant = ? AND at < ?`, []any{store.Tenant, cut}},
+			{`DELETE FROM session_events WHERE tenant = ? AND at < ?`, []any{store.Tenant, cut}},
 		} {
 			res, err := tx.ExecContext(ctx, q.sql, q.args...)
 			if err != nil {
