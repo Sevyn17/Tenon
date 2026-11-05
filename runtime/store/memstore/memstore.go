@@ -440,7 +440,8 @@ func (s *Store) Load(ctx context.Context, id string, base *int) (*store.Loaded, 
 	}
 	m := x.meta
 	m.Meta, m.UseConfig = objOr(m.Meta), objOr(m.UseConfig)
-	return &store.Loaded{Meta: m, RunState: x.runState, Snapshot: session.Snapshot{Header: hdr, Base: from, Entries: entries}}, nil
+	return &store.Loaded{Meta: m, RunState: x.runState, Snapshot: session.Snapshot{Header: hdr, Base: from, Entries: entries},
+		Cursor: int64(x.nextSeq - 1)}, nil
 }
 
 func objOr(b json.RawMessage) json.RawMessage {

@@ -267,6 +267,8 @@ type Loaded struct {
 	Meta     SessionMeta
 	RunState string
 	Snapshot session.Snapshot
+	// Cursor 读取时会话事件序列的最新游标（与头部同一次读取，protocol 2 快照的 cursor，06 10.2.2 规则 4）。
+	Cursor int64
 }
 
 // Cleaner 插件清理回调（OnSessionDelete 点位的实现）。

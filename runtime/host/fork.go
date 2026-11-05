@@ -17,6 +17,12 @@ import (
 
 // Fork 从 src 的 [0, upto) 分出新会话 dst；upto < 0 表示整段日志。返回新会话句柄。
 func (h *Host) Fork(ctx context.Context, src, dst string, upto int, origin string) (Handle, error) {
+	return h.ForkIf(ctx, src, dst, upto, origin, nil)
+}
+
+// ForkIf 同 Fork；ifCursor 非空时来源会话的当前事件游标必须等于它，否则返回 ErrStale（protocol 2 if_cursor）。
+// 目标已存在返回 store.ErrConflict。
+func (h *Host) ForkIf(ctx context.Context, src, dst string, upto int, origin string, ifCursor *int64) (Handle, error) {
 	if origin == "" {
 		origin = "fork"
 	}
@@ -25,7 +31,7 @@ func (h *Host) Fork(ctx context.Context, src, dst string, upto int, origin strin
 	}
 	if ok, err := h.DB.Exists(ctx, dst); err != nil || ok {
 		if err == nil {
-			err = fmt.Errorf("host: 会话 %s 已存在", dst)
+			err = fmt.Errorf("%w: host: 会话 %s 已存在", store.ErrConflict, dst)
 		}
 		return Handle{}, err
 	}
@@ -34,12 +40,15 @@ func (h *Host) Fork(ctx context.Context, src, dst string, upto int, origin strin
 	if err != nil {
 		return Handle{}, err
 	}
+	if ifCursor != nil && l.Cursor != *ifCursor {
+		return Handle{}, fmt.Errorf("%w: 期望 %d，当前 %d", ErrStale, *ifCursor, l.Cursor)
+	}
 	core, err := session.Restore(l.Snapshot)
 	if err != nil {
 		return Handle{}, err
 	}
 	if core.Status() != session.StatusIdle {
-		return Handle{}, fmt.Errorf("host: 来源会话 %s 有进行中的回合，不能分叉", src)
+		return Handle{}, fmt.Errorf("%w: 来源会话 %s 有进行中的回合，不能分叉", session.ErrNotIdle, src)
 	}
 	if upto >= 0 && upto < l.Snapshot.Header.LogLen {
 		// 分叉点 = 某回合首条 User 的下标：Rewind(upto) 校验它是回合起点、截到 [0, upto) 并处理压缩边界。

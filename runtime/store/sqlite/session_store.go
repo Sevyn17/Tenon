@@ -208,10 +208,10 @@ func (db *DB) Load(ctx context.Context, id string, base *int) (*store.Loaded, er
 		metaJ, useCfgJ string
 	)
 	err := db.rq().QueryRowContext(ctx, `SELECT agent_id, agent_hash, creator, parent_id, origin, fork_upto, title, run_state, header, shell_hash,
-		session_key, meta, use_config
+		session_key, meta, use_config, next_sync_seq - 1
 		FROM sessions WHERE id = ? AND tenant = ? AND status != 'deleted'`, id, store.Tenant).
 		Scan(&l.Meta.AgentID, &l.Meta.AgentHash, &l.Meta.Creator, &l.Meta.ParentID, &l.Meta.Origin, &l.Meta.ForkUpto, &l.Meta.Title, &l.RunState, &hb, &shellH,
-			&key, &metaJ, &useCfgJ)
+			&key, &metaJ, &useCfgJ, &l.Cursor)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, store.ErrNotFound
 	}

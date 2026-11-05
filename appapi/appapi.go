@@ -20,6 +20,7 @@ import (
 	"ybase/runtime/pkgs"
 	"ybase/runtime/session"
 	"ybase/runtime/store"
+	"ybase/runtime/toolhub"
 )
 
 // Protocol 协议版本：同版本只加字段和命令；改语义或删字段升版本（§六）。
@@ -46,6 +47,8 @@ type Options struct {
 	Profile   *component.Profile // plugins.list 用；nil = 不提供
 	Packages  []*pkgs.Package    // packages.list 用：已加载的插件包
 	UI        *UI                // ask 的回答经 session.answer 送回；nil = 应用自己实现 assemble.UI
+	// Artifacts 工件存储（protocol 2 artifact.get / put、超长工具结果的全文引用）；nil = 不提供。
+	Artifacts toolhub.Artifacts
 }
 
 // App 一个进程一个：持有装配结果，对外提供命令与事件。方法并发安全。

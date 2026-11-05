@@ -249,6 +249,8 @@ const (
 	MetaFrom   = "from"
 	MetaTrust  = "trust" // trusted / untrusted
 	MetaSteer  = "steer" // append / redirect
+	// MetaClientIDs 条目吃进的输入的 client_id（inbox item id / steer 幂等键，protocol 2 的 entry.client_ids）。
+	MetaClientIDs = "client_ids"
 )
 
 // —— 配置 ——//

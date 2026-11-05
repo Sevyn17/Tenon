@@ -33,6 +33,8 @@ import (
 var (
 	ErrBusy   = errors.New("host: 命令队列已满")
 	ErrClosed = errors.New("host: 会话已关闭")
+	// ErrStale 命令带的 IfCursor 与会话当前游标不符（protocol 2 乐观并发，06 10.4）。
+	ErrStale = errors.New("host: 会话游标已变化")
 )
 
 // Kind 命令种类（session-host D1 全集；op_id 去重推迟）。
@@ -64,8 +66,9 @@ type Command struct {
 	Kind     Kind
 	ItemID   string // Send / Note：调用方生成，幂等键
 	Text     string
-	Trust    string // trusted / untrusted
-	Source   string // user / agent / system …
+	Content  session.Content // Send / Note：非空时代替 Text（图片、文件等部件，protocol 2）
+	Trust    string          // trusted / untrusted
+	Source   string          // user / agent / system …
 	Mode     session.SteerMode
 	CallID   string  // Confirm
 	Approve  bool    // Confirm
@@ -74,7 +77,15 @@ type Command struct {
 	Key      string  // SetExt
 	Value    any     // SetExt
 	MaxSteps *uint32 // SetConfig：单回合步数上限，0 = 不限
-	done     chan error
+	// IfCursor Rewind / Compact：非空时执行前核对会话事件游标，不符返回 ErrStale（多端同时操作时防止拿着过期界面改日志）。
+	IfCursor *int64
+	// ToTurn Rewind：非零时按回合号截断（保留 ToTurn 之前的回合），在 actor 里解析成下标，代替 To（protocol 2 rewind {to_turn}）。
+	ToTurn uint32
+	// RewoundTo Rewind：非空时写回实际截到的下标（目标回合已不存在时为日志长度，什么都不截）。
+	RewoundTo *int
+	// Committed SetExt / SetConfig：非空时，空闲下已提交则置 true；回合中只改内存、随下个检查点落库时保持 false（protocol 2 committed）。
+	Committed *bool
+	done      chan error
 }
 
 // Decision before_turn 的结论。
@@ -220,6 +231,13 @@ func (h Handle) Done() <-chan struct{} { return h.a.exit }
 // Err actor 退出原因。
 func (h Handle) Err() error { return h.a.exitErr }
 
+// InTurn 会话是否有进行中的回合（protocol 2：send 的 queued、需空闲命令的 not_idle 判断）。
+func (h Handle) InTurn() bool {
+	h.a.mu.Lock()
+	defer h.a.mu.Unlock()
+	return h.a.inTurn
+}
+
 // Open 打开（不存在则新建，origin = new）。已打开的返回同一句柄。
 // 已存在的子会话（origin = subagent / member）按 Child 构造：休眠唤醒、重启后收信、control
 // 都走这里，用 New 会让委派工具重新可见、深度限制失效（2026-11-04 审查 P0-5）。
@@ -238,6 +256,47 @@ func (h *Host) Open(ctx context.Context, id string) (Handle, error) {
 		}
 	}
 	return h.open(ctx, id, "", f, nil)
+}
+
+// OpenExisting 同 Open，但会话不存在时返回 ErrSessionNotFound，不新建（protocol 2 G1：任何命令都不隐式新建会话）。
+func (h *Host) OpenExisting(ctx context.Context, id string) (Handle, error) {
+	if hd, ok := h.Get(id); ok {
+		return hd, nil
+	}
+	ok, err := h.DB.Exists(ctx, id)
+	if err != nil {
+		return Handle{}, err
+	}
+	if !ok {
+		return Handle{}, fmt.Errorf("%w: %s", ErrSessionNotFound, id)
+	}
+	return h.Open(ctx, id)
+}
+
+// Create 新建顶层会话（origin = new）并打开；def 为智能体定义名（空 = 无定义会话）。
+// bizMeta 写进会话行的业务键（可空）。会话已存在返回 store.ErrConflict（protocol 2 session.create）。
+func (h *Host) Create(ctx context.Context, id, def string, bizMeta json.RawMessage) (Handle, error) {
+	if ok, err := h.DB.Exists(ctx, id); err != nil {
+		return Handle{}, err
+	} else if ok {
+		return Handle{}, fmt.Errorf("%w: 会话 %s 已存在", store.ErrConflict, id)
+	}
+	hd, err := h.open(ctx, id, def, h.New, func(ag *agent.Agent, cfg *session.Config) error {
+		meta := store.SessionMeta{Origin: "new", Meta: bizMeta}
+		if ag.Def != nil {
+			meta.AgentID, meta.AgentHash = ag.Def.ID, ag.Def.Version
+		}
+		_, err := ag.OpenAs(ctx, cfg, meta)
+		return err
+	})
+	if err != nil {
+		return Handle{}, err
+	}
+	if err := h.created(ctx, id, Origin{Kind: "new"}); err != nil {
+		_ = hd.Do(Command{Kind: Close})
+		return Handle{}, err
+	}
+	return hd, nil
 }
 
 // head 只读会话行（元数据与头部），不读也不反序列化任何条目：base 取最大值（审查 P1-34 / P1-35）。
@@ -419,6 +478,8 @@ type actor struct {
 	turnQueued map[string]bool
 	// turnCaps 是本轮的工具授权范围（信封 caps 交集）：turn 开始时设给 agent，结束时清空。
 	turnCaps []string
+	// steered 本回合已受理的插话 client_id（protocol 2 steer 幂等：插话只在回合中有效，同回合重发只确认不重复插入）。只在 actor 协程里读写。
+	steered map[string]bool
 	// mailDirty 自上次在需求边界读信箱后，是否有新信件落进本会话信箱（审查 P1-36：原先每次调模型前都查一次信箱，
 	// 绝大多数步没有新信）。经本宿主写信箱的路径（投递、Send / Note、交还插话）都会置位；打开时置位以读到积压。
 	mailDirty atomic.Bool
@@ -473,7 +534,11 @@ func (a *actor) enqueue(c Command) error {
 		if c.Kind == Note {
 			kind = store.InboxNote
 		}
-		body, _ := json.Marshal(session.Content{session.NewTextPart(c.Text)})
+		in := c.Content
+		if len(in) == 0 {
+			in = session.Content{session.NewTextPart(c.Text)}
+		}
+		body, _ := json.Marshal(in)
 		fresh, err := a.h.DB.Admit(context.Background(), a.id, store.InboxItem{ItemID: c.ItemID, Kind: kind,
 			Input: string(body), Trust: c.Trust})
 		if err != nil {
@@ -781,18 +846,37 @@ func (a *actor) idle(ctx context.Context, c Command) (bool, error) {
 		if err := core.SetExt(c.Key, c.Value); err != nil {
 			return false, err
 		}
-		return false, a.ag.Commit(ctx)
+		return false, markCommitted(c, a.ag.Commit(ctx))
 	case SetConfig:
 		if _, err := core.SetConfig(session.ConfigPatch{MaxSteps: c.MaxSteps}); err != nil {
 			return false, err
 		}
-		return false, a.ag.Commit(ctx)
+		return false, markCommitted(c, a.ag.Commit(ctx))
 	case Compact:
+		if err := a.checkCursor(ctx, c.IfCursor); err != nil {
+			return false, err
+		}
 		if err := core.Compact(text(c.Text), c.Upto, map[string]any{"source": "user"}); err != nil {
 			return false, err
 		}
 		return false, a.ag.Commit(ctx)
 	case Rewind:
+		if err := a.checkCursor(ctx, c.IfCursor); err != nil {
+			return false, err
+		}
+		if c.ToTurn > 0 { // protocol 2 rewind {to_turn}：在 actor 里按已提交日志解析，和执行是同一个状态
+			to, err := turnStart(core, c.ToTurn)
+			if err != nil {
+				return false, err
+			}
+			c.To = to
+		}
+		if c.RewoundTo != nil {
+			*c.RewoundTo = c.To
+		}
+		if c.To == core.Snapshot().Header.LogLen { // 目标回合已不存在：什么都不截（重发同一 to_turn 无害）
+			return false, nil
+		}
 		if err := core.Rewind(c.To); err != nil {
 			return false, err
 		}
@@ -1003,6 +1087,7 @@ func inboxSet(ids []string) map[string]bool {
 // turn 跑一个回合：可取消的 ctx、turn span、after_turn、回合中排队的 Idle 命令在回合后处理。
 func (a *actor) turn(ctx context.Context, f func(context.Context) (session.EndReason, error)) (session.EndReason, error) {
 	// 先登记取消函数再排并发槽位：排队期间到达的 Cancel 要能取消这一轮（02 2.4）。
+	a.steered = nil
 	tctx, cancel := context.WithCancel(ctx)
 	a.mu.Lock()
 	a.cancel, a.inTurn = cancel, true
@@ -1150,8 +1235,18 @@ func (a *actor) between(need *session.Need) (*session.Need, error) {
 		}
 		switch c.Kind {
 		case Steer:
-			n, err := a.ag.Core.Steer(text(c.Text), meta(c), steerMode(c.Mode))
+			if c.ItemID != "" && a.steered[c.ItemID] {
+				reply(c, nil)
+				continue
+			}
+			n, err := a.ag.Core.Steer(steerContent(c), meta(c), steerMode(c.Mode))
 			reply(c, err)
+			if err == nil && c.ItemID != "" {
+				if a.steered == nil {
+					a.steered = map[string]bool{}
+				}
+				a.steered[c.ItemID] = true
+			}
 			if err == nil && n != nil {
 				need = n // WaitingTools 改向：未执行调用补 Redirected，直接进入下一步
 			}
@@ -1242,12 +1337,23 @@ func (a *actor) wireConfirm() {
 
 func text(s string) session.Content { return session.Content{session.NewTextPart(s)} }
 
+// steerContent 插话内容：带部件时用部件，否则用文本。
+func steerContent(c Command) session.Content {
+	if len(c.Content) > 0 {
+		return c.Content
+	}
+	return text(c.Text)
+}
+
 func meta(c Command) map[string]any {
 	src := c.Source
 	if src == "" {
 		src = "user"
 	}
 	m := map[string]any{session.MetaSource: src}
+	if c.Kind == Steer && c.ItemID != "" {
+		m[session.MetaClientIDs] = []string{c.ItemID}
+	}
 	if c.Trust != "" {
 		m[session.MetaTrust] = c.Trust
 	}
@@ -1354,4 +1460,46 @@ func (a *actor) handBack(ctx context.Context) {
 		a.mailDirty.Store(true)
 		a.h.publish(a.id, "turn.unconsumed", map[string]any{"content": pi.Content})
 	}
+}
+
+// checkCursor 核对会话当前事件游标（protocol 2 if_cursor）：want 为空不核对。在 actor 里读，
+// 本会话只有持租约的这个 actor 在写，读到的就是执行这条命令时的游标。
+func (a *actor) checkCursor(ctx context.Context, want *int64) error {
+	if want == nil {
+		return nil
+	}
+	l, err := LoadHead(ctx, a.h.DB, a.id)
+	if err != nil {
+		return err
+	}
+	if l.Cursor != *want {
+		return fmt.Errorf("%w: 期望 %d，当前 %d", ErrStale, *want, l.Cursor)
+	}
+	return nil
+}
+
+// turnStart 回合 turn 的起点下标（该回合首条 User 条目）：rewind {to_turn} 截到这里。
+// 日志里没有 turn 及之后的回合时返回日志长度（不截）；turn 早于压缩点（起点不在已加载窗口里）返回 ErrBadRewind。
+func turnStart(core *session.Core, turn uint32) (int, error) {
+	s := core.Snapshot()
+	for i, e := range s.Entries {
+		if e.Turn < turn {
+			continue
+		}
+		if i == 0 && s.Base > 0 {
+			return 0, fmt.Errorf("%w: 回合 %d 早于压缩点 %d", session.ErrBadRewind, turn, s.Base)
+		}
+		if e.Item.Kind == session.KindUser && (i == 0 || s.Entries[i-1].Turn != e.Turn) {
+			return s.Base + i, nil
+		}
+	}
+	return s.Header.LogLen, nil
+}
+
+// markCommitted 空闲下 SetExt / SetConfig 提交成功时置 c.Committed（调用方要知道变化是否已落库）。
+func markCommitted(c Command, err error) error {
+	if err == nil && c.Committed != nil {
+		*c.Committed = true
+	}
+	return err
 }

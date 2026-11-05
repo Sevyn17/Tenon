@@ -20,7 +20,7 @@ import (
 const MaxWireText = 64 << 10
 
 // MetaClientIDs 用户条目 meta 里记吃进的输入的 client_id（inbox item id，06 10.3）。
-const MetaClientIDs = "client_ids"
+const MetaClientIDs = session.MetaClientIDs
 
 // Spill 把超长的工具结果全文存成工件，返回引用；nil 或失败时只截断、不给引用。
 type Spill func(text string) (ref string, ok bool)

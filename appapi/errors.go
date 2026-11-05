@@ -22,11 +22,13 @@ const (
 	CodeNeedConfirm  = "need_confirm" // 项目档位放宽了权限且未确认过：带 confirm=true 重发
 )
 
-// Error 带稳定错误码的错误；JSON 形态 {code, message, retry}。Message 与原错误文本一致（CLI 原样打印）。
+// Error 带稳定错误码的错误；JSON 形态 {code, message, retry, details?}。Message 与原错误文本一致（CLI 原样打印）。
+// Details 是 protocol 2 的结构化补充（如 conflict 的 reason，06 10.7）。
 type Error struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
-	Retry   bool   `json:"retry"`
+	Code    string         `json:"code"`
+	Message string         `json:"message"`
+	Retry   bool           `json:"retry"`
+	Details map[string]any `json:"details,omitempty"`
 	err     error
 }
 
