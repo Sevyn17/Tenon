@@ -2,7 +2,7 @@
 // 交互来自快照的 interactions 与 interaction.opened 事件，回答经 interaction.respond（只收第一条）。
 
 import { useState } from "react";
-import type { Interaction } from "./wire.gen";
+import type { Interaction } from "./client/wire.gen";
 import { errText, pretty } from "./util";
 
 export type Scope = "once" | "session";

@@ -5,7 +5,7 @@
 // 重连后重新取一次列表。
 
 import { useCallback, useEffect, useState } from "react";
-import { LOCAL_RECONNECTED } from "./api";
+import { LOCAL_RECONNECTED } from "./client/commands";
 import { Chat } from "./Chat";
 import { AskDialog, ConfirmDialog, PromptDialog, type PromptReq } from "./Dialogs";
 import { ModesPanel, PluginsPanel, SessionList, StatsPanel } from "./Panels";
@@ -17,7 +17,7 @@ import {
   type Interaction,
   type InteractionResolved,
   type Notice as NoticeData,
-} from "./wire.gen";
+} from "./client/wire.gen";
 
 type Tab = "chat" | "modes" | "plugins" | "stats";
 

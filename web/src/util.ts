@@ -1,7 +1,7 @@
 // 公共小工具。
 
-import { ApiError } from "./api";
-import type { Entry, Part } from "./wire.gen";
+import { ApiError } from "./client/commands";
+import type { Entry, Part } from "./client/wire.gen";
 
 /** 内容片段里的文本拼起来；非文本片段用占位符。 */
 export function textOf(c: Part[] | undefined): string {

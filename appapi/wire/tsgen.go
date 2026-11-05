@@ -1,6 +1,6 @@
 package wire
 
-// TS 类型生成（06 10.3）：协议类型是唯一来源，web/src/wire.gen.ts 由这里生成，不再手写。
+// TS 类型生成（06 10.3）：协议类型是唯一来源，web/src/client/wire.gen.ts 由这里生成，不再手写。
 // 类型清单与常量清单都直接引用 Go 符号：改名、删字段时编译或固定用例测试会失败。
 
 import (
@@ -63,7 +63,7 @@ func tsName(t reflect.Type) string {
 	return t.Name()
 }
 
-// TypeScript 生成 web/src/wire.gen.ts 的全文。
+// TypeScript 生成 web/src/client/wire.gen.ts 的全文。
 func TypeScript() string {
 	named := map[reflect.Type]bool{}
 	for _, v := range tsTypes {

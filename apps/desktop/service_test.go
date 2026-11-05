@@ -1,7 +1,7 @@
 package main
 
 // 绑定服务测试：用最小宿主（假模型、sqlite 临时库）驱动 Service.Call，并检查事件转发；
-// 另校验前端 web/src/api.ts 的命令表与 appapi.ConnCommands() 一致。
+// 另校验前端 web/src/client/commands.ts 的命令表与 appapi.ConnCommands() 一致。
 
 import (
 	"context"
@@ -157,20 +157,20 @@ func TestServiceCall(t *testing.T) {
 	}
 }
 
-// 前端命令表（web/src/api.ts 的 COMMANDS）必须与连接上可用的命令（appapi.ConnCommands）一致。
+// 前端命令表（web/src/client/commands.ts 的 COMMANDS）必须与连接上可用的命令（appapi.ConnCommands）一致。
 func TestProtocolCommands(t *testing.T) {
-	src, err := os.ReadFile(filepath.Join("..", "..", "web", "src", "api.ts"))
+	src, err := os.ReadFile(filepath.Join("..", "..", "web", "src", "client", "commands.ts"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	s := string(src)
 	i := strings.Index(s, "export const COMMANDS = [")
 	if i < 0 {
-		t.Fatal("api.ts 里找不到 COMMANDS")
+		t.Fatal("commands.ts 里找不到 COMMANDS")
 	}
 	j := strings.Index(s[i:], "] as const")
 	if j < 0 {
-		t.Fatal("api.ts 的 COMMANDS 没有结束")
+		t.Fatal("commands.ts 的 COMMANDS 没有结束")
 	}
 	var got []string
 	for _, m := range regexp.MustCompile(`"([a-z_.]+)"`).FindAllStringSubmatch(s[i:i+j], -1) {
@@ -178,6 +178,6 @@ func TestProtocolCommands(t *testing.T) {
 	}
 	slices.Sort(got)
 	if want := appapi.ConnCommands(); !slices.Equal(got, want) {
-		t.Fatalf("api.ts COMMANDS = %v\nappapi.ConnCommands() = %v", got, want)
+		t.Fatalf("commands.ts COMMANDS = %v\nappapi.ConnCommands() = %v", got, want)
 	}
 }

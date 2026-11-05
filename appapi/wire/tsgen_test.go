@@ -8,11 +8,11 @@ import (
 	"testing"
 )
 
-var update = flag.Bool("update", false, "重新生成 web/src/wire.gen.ts")
+var update = flag.Bool("update", false, "重新生成 web/src/client/wire.gen.ts")
 
-// web/src/wire.gen.ts 与 Go 协议类型一致（06 10.3 G9：不再手写 TS 类型）。
+// web/src/client/wire.gen.ts 与 Go 协议类型一致（06 10.3 G9：不再手写 TS 类型）。
 func TestTypeScript(t *testing.T) {
-	path := filepath.Join("..", "..", "web", "src", "wire.gen.ts")
+	path := filepath.Join("..", "..", "web", "src", "client", "wire.gen.ts")
 	got := TypeScript()
 	if *update {
 		if err := os.WriteFile(path, []byte(got), 0o644); err != nil {

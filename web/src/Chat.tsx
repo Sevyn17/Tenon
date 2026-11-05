@@ -8,7 +8,7 @@
 // 工具卡片按 call_id 对应：条目里已有的调用由条目渲染，还没落库的由 tool.* 事件渲染。turn.ended 清掉残留。
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { LOCAL_RECONNECTED } from "./api";
+import { LOCAL_RECONNECTED } from "./client/commands";
 import { Markdown } from "./Markdown";
 import { call, clientID, onEvent } from "./transport";
 import { entryText, errCode, errReason, errText, pretty, preview, textOf } from "./util";
@@ -29,7 +29,7 @@ import type {
   ToolEnded,
   ToolRunning,
   ToolStarted,
-} from "./wire.gen";
+} from "./client/wire.gen";
 
 const PAGE = 50;
 

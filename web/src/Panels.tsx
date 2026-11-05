@@ -1,7 +1,7 @@
 // 侧栏与面板：会话列表、权限档位、插件、统计。
 
 import { useCallback, useEffect, useState } from "react";
-import type { ConfigField as Field, Mode as ModeState, ModeInfo, ModeItem, PluginInfo, SessionInfo, Stats } from "./wire.gen";
+import type { ConfigField as Field, Mode as ModeState, ModeInfo, ModeItem, PluginInfo, SessionInfo, Stats } from "./client/wire.gen";
 import { call } from "./transport";
 import { errCode, errText, fmtTime } from "./util";
 
