@@ -1,0 +1,7 @@
+{"id":"e0","idx":0,"turn":1,"at":1000,"source":"user","client_ids":["c-1","c-2"],"item":{"kind":"user","content":[{"kind":"text","text":"看图"},{"kind":"media","media":{"ref":"artifact://abc","mime":"image/png","size":3,"sha256":"abc"}}]}}
+{"id":"e1","idx":1,"turn":1,"at":1001,"item":{"kind":"assistant","content":[{"kind":"text","text":"好"}],"reasoning":[{"text":"先看文件"}],"tool_calls":[{"id":"c1","name":"read_file","args":{"path":"a.go"}},{"id":"c2","name":"glob","args":{}}],"model":"m","usage":{"input":10,"output":2,"cache_read":8,"cache_write":0,"source":"reported"}}}
+{"id":"e2","idx":2,"turn":1,"at":1002,"item":{"kind":"tool_result","call_id":"c1","output":[{"kind":"text","text":"package a"}],"status":"ok"}}
+{"id":"e3","idx":3,"turn":1,"at":1003,"item":{"kind":"tool_result","call_id":"c2","status":"cancelled","cancel_reason":"turn_cancelled"}}
+{"id":"e4","idx":4,"turn":2,"at":1004,"item":{"kind":"compaction","upto":3,"summary":[{"kind":"text","text":"摘要"}]}}
+{"id":"e5","idx":5,"turn":2,"at":1005,"item":{"kind":"context","source":"status","text":"\u003cstatus-update/\u003e"}}
+{"id":"e6","idx":6,"turn":2,"at":1006,"item":{"kind":"unknown","raw":{"kind":"future"}}}
