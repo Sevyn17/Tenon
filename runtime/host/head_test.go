@@ -28,6 +28,9 @@ func (c *fullLoadCounter) Load(ctx context.Context, id string, base *int) (*stor
 func TestDeliverReadsHeadOnly(t *testing.T) {
 	ctx := context.Background()
 	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{})
+	// 打开会话之前就包上计数器：回合结束会在后台派发发件箱、读 h.DB，回合后再换字段是数据竞争。
+	c := &fullLoadCounter{Store: r.db}
+	r.h.DB = c
 	hd := mustOpen(t, r.h, "s1")
 	if err := hd.Do(Command{Kind: Send, Text: "一"}); err != nil {
 		t.Fatal(err)
@@ -35,8 +38,7 @@ func TestDeliverReadsHeadOnly(t *testing.T) {
 	if err := hd.Wait(); err != nil {
 		t.Fatal(err)
 	}
-	c := &fullLoadCounter{Store: r.db}
-	r.h.DB = c
+	c.full.Store(0) // 只数下面投递时的整份加载
 	if err := r.h.Deliver(ctx, mail.Envelope{From: mail.Address{Kind: mail.AddrComponent, ID: "test"},
 		To: mail.Address{Kind: mail.AddrSession, ID: "s1"}, Body: "二"}); err != nil {
 		t.Fatal(err)
