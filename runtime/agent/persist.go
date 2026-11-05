@@ -46,6 +46,7 @@ func (a *Agent) OpenAs(ctx context.Context, cfg *session.Config, meta store.Sess
 			return false, err
 		}
 		a.buf.committed = 0
+		a.buf.remember("idle", a.Core.Snapshot().Header)
 		a.bindCtx(meta)
 		a.publishSnapshot(a.Core.Snapshot())
 		return false, nil
@@ -61,6 +62,11 @@ func (a *Agent) OpenAs(ctx context.Context, cfg *session.Config, meta store.Sess
 	a.Origin = l.Meta.Origin
 	a.bindCtx(l.Meta)
 	a.buf.committed = l.Snapshot.Header.LogLen
+	run := l.RunState
+	if run == "" {
+		run = "idle"
+	}
+	a.buf.remember(run, l.Snapshot.Header)
 	a.publishSnapshot(c.Snapshot())
 	a.resumed = recovery{need: c.Resumed()}
 	if n := a.resumed.need; n != nil && n.Kind == session.NeedModel {
@@ -153,11 +159,13 @@ func (a *Agent) checkpoint(ctx context.Context, run string, rec *reqlog.Record) 
 	}
 	hub, hubN := a.tools.snapshot()
 	cp.Spans = append(append([]store.Span(nil), a.buf.spans...), hub...)
+	cp.Events = a.buf.stateEvents(run, s.Header) // 运行状态、设置、Ext 变化随检查点写持久事件（06 10.2.2 规则 2）
 	if err := a.Store.Commit(ctx, cp); err != nil {
 		return err
 	}
 	a.tools.drop(hubN)
 	a.buf.reset(s.Header.LogLen)
+	a.buf.remember(run, s.Header)
 	a.publishSnapshot(s)
 	return nil
 }

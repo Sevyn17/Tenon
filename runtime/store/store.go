@@ -345,6 +345,10 @@ type ToolRecord struct {
 const (
 	EventEntry  = "entry"  // data: {idx, entry}
 	EventRewind = "rewind" // data: {to}
+	// 以下由 agent 在检查点里比较新旧头部生成（06 10.2.2 规则 2：会话状态的每个变化都是持久事件）。
+	EventRunState = "run_state" // data: {run_state}：idle / running / suspended
+	EventSettings = "settings"  // data: {max_steps}
+	EventExt      = "ext"       // data: {key, value}：会话头 Ext 的一项变化（value = null 表示删除）
 )
 
 // Event 一条要写进事件表的持久事件。

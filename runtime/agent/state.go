@@ -4,6 +4,8 @@ package agent
 // 方法只碰自己的字段；actor 独占的字段（提交缓冲、恢复状态）不加锁，单独成组。
 
 import (
+	"encoding/json"
+	"sort"
 	"sync"
 
 	"ybase/runtime/reqlog"
@@ -182,12 +184,81 @@ type commitBuf struct {
 	spans     []store.Span       // 待提交的 step / attempt / compact span（G2）
 	outbox    []store.OutboxItem // 外发信封（08 9.6：外发与检查点同事务）
 	consume   []string           // 删除的 inbox 项（session-host H7：core.Input 成功后同事务删除）
+
+	// 已提交的会话状态（protocol 2，06 10.2.2 规则 2）：检查点按它与新头部比较，变了就随检查点写持久事件。
+	known    bool
+	run      string
+	maxSteps uint32
+	ext      map[string]string // 键 → 值的 JSON
 }
 
 // reset 提交成功后清空缓冲。
 func (b *commitBuf) reset(logLen int) {
 	b.committed = logLen
 	b.spans, b.outbox, b.consume = nil, nil, nil
+}
+
+// remember 记下已提交的运行状态、设置与 Ext（打开会话与每次提交后调用）。
+func (b *commitBuf) remember(run string, h session.Header) {
+	b.known, b.run, b.maxSteps, b.ext = true, run, maxStepsOf(h), extJSON(h.Ext)
+}
+
+// stateEvents 新头部相对已提交状态的变化 → 持久事件（运行状态、设置、Ext 各项）。
+func (b *commitBuf) stateEvents(run string, h session.Header) []store.Event {
+	if !b.known {
+		return nil
+	}
+	var out []store.Event
+	if run != b.run {
+		d, _ := json.Marshal(map[string]any{"run_state": run})
+		out = append(out, store.Event{Kind: store.EventRunState, Data: d})
+	}
+	if ms := maxStepsOf(h); ms != b.maxSteps {
+		d, _ := json.Marshal(map[string]any{"max_steps": ms})
+		out = append(out, store.Event{Kind: store.EventSettings, Data: d})
+	}
+	now := extJSON(h.Ext)
+	keys := make([]string, 0, len(now)+len(b.ext))
+	for k := range now {
+		keys = append(keys, k)
+	}
+	for k := range b.ext {
+		if _, ok := now[k]; !ok {
+			keys = append(keys, k)
+		}
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		v, ok := now[k]
+		if ok && v == b.ext[k] {
+			continue
+		}
+		if !ok {
+			v = "null"
+		}
+		d, _ := json.Marshal(map[string]any{"key": k, "value": json.RawMessage(v)})
+		out = append(out, store.Event{Kind: store.EventExt, Data: d})
+	}
+	return out
+}
+
+func maxStepsOf(h session.Header) uint32 {
+	if h.Config == nil {
+		return 0
+	}
+	return h.Config.Policy.MaxSteps
+}
+
+func extJSON(ext map[string]any) map[string]string {
+	out := make(map[string]string, len(ext))
+	for k, v := range ext {
+		b, err := json.Marshal(v)
+		if err != nil {
+			continue
+		}
+		out[k] = string(b)
+	}
+	return out
 }
 
 // recovery Open 恢复出的状态（actor 独占）：待满足需求与原样重发的请求。
