@@ -271,7 +271,11 @@ function GroupView(p: DockProps & { group: GroupNode }) {
             </div>
           );
         })}
-        {drop && <div className={s.drop} data-edge={drop} />}
+        {drop && (
+          <div className={s.drop}>
+            <div className={s.dropHint} data-edge={drop} />
+          </div>
+        )}
       </div>
     </div>
   );

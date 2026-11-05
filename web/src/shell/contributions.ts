@@ -3,7 +3,7 @@
 //
 // 一个 Shell 实例一组注册表（createRegistries），不是模块级单例：同一页面可以挂多个工作台互不干扰。
 
-import type { ReactNode } from "react";
+import type { ComponentType, ReactNode } from "react";
 import type { Client, Interaction, SessionInfo } from "../client";
 import type { DeclNode, MarkdownExtension, ToolView, UIAction } from "../ui";
 import { defineRegistry, type Contribution, type Registry } from "./registry";
@@ -99,6 +99,11 @@ export interface PanelProps {
   visible: boolean;
 }
 
+export interface PanelCardProps {
+  session: string | null;
+  open: () => void;
+}
+
 export interface Panel extends Contribution {
   title: string;
   icon: ReactNode;
@@ -109,8 +114,9 @@ export interface Panel extends Contribution {
   needsSession?: boolean;
   /** 缺省放在右侧还是底部。 */
   dock?: "right" | "bottom";
-  /** 对话内小卡片：对话区够宽且本面板没开时显示的概览（返回 null 不显示）。 */
-  card?: (cx: CommandContext) => ReactNode;
+  /** 对话内小卡片（④）：对话区够宽且本面板没开时显示的概览组件。组件自己取数据，没有可说的时返回 null；
+   *  外框用 PanelCard（点了 open() 打开本面板）。 */
+  card?: ComponentType<PanelCardProps>;
   render: (p: PanelProps) => ReactNode;
 }
 

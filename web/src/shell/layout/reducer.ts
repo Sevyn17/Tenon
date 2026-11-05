@@ -48,6 +48,8 @@ export interface LayoutState {
   maximized: string | null;
   /** 最近关闭的面板（⌘⇧T 恢复），最新在前。 */
   closed: { panel: string; dock: DockId }[];
+  /** 面板的打开参数（openPanel(id, params)，如用量面板定位到某回合）。 */
+  params: Record<string, unknown>;
 }
 
 export const EMPTY_LAYOUT: LayoutState = {
@@ -57,6 +59,7 @@ export const EMPTY_LAYOUT: LayoutState = {
   floats: [],
   maximized: null,
   closed: [],
+  params: {},
 };
 
 let seq = 0;
@@ -65,7 +68,7 @@ const nid = (p: string) => `${p}${Date.now().toString(36)}${(seq++).toString(36)
 export type DropEdge = "center" | "top" | "bottom" | "left" | "right";
 
 export type LayoutAction =
-  | { type: "open"; panel: string; dock?: DockId; group?: string }
+  | { type: "open"; panel: string; dock?: DockId; group?: string; params?: unknown }
   | { type: "close"; panel: string }
   | { type: "toggle"; panel: string; dock?: DockId }
   | { type: "activate"; group: string; panel: string }
@@ -196,6 +199,18 @@ function withoutPanel(s: LayoutState, panel: string): LayoutState {
   };
 }
 
+function withParams(s: LayoutState, panel: string, params: unknown): LayoutState {
+  if (params === undefined) return s;
+  return { ...s, params: { ...s.params, [panel]: params } };
+}
+
+function dropParams(s: LayoutState, panel: string): LayoutState {
+  if (!(panel in s.params)) return s;
+  const params = { ...s.params };
+  delete params[panel];
+  return { ...s, params };
+}
+
 function addToGroup(n: LayoutNode | null, group: string | null, panel: string, index?: number): LayoutNode {
   const target = group ? findGroup(n, group) : firstGroup(n);
   if (!n || !target) {
@@ -250,24 +265,24 @@ export function layoutReducer(s: LayoutState, a: LayoutAction): LayoutState {
     case "open": {
       const at = locate(s, a.panel);
       if (at) {
-        if ("float" in at) return s;
+        if ("float" in at) return withParams(s, a.panel, a.params);
         const docks = {
           ...s.docks,
           [at.dock]: mapTree(s.docks[at.dock], (g) => (g.id === at.group.id ? { ...g, active: a.panel } : g)),
         };
-        return { ...s, docks, hidden: { ...s.hidden, [at.dock]: false } };
+        return withParams({ ...s, docks, hidden: { ...s.hidden, [at.dock]: false } }, a.panel, a.params);
       }
       const dock = a.dock ?? "right";
-      return {
+      return withParams({
         ...s,
         docks: { ...s.docks, [dock]: addToGroup(s.docks[dock], a.group ?? null, a.panel) },
         hidden: { ...s.hidden, [dock]: false },
         closed: s.closed.filter((c) => c.panel !== a.panel),
-      };
+      }, a.panel, a.params);
     }
     case "close":
       if (!isOpen(s, a.panel)) return s;
-      return { ...withoutPanel(s, a.panel), closed: pushClosed(s, a.panel) };
+      return dropParams({ ...withoutPanel(s, a.panel), closed: pushClosed(s, a.panel) }, a.panel);
     case "toggle":
       return isVisible(s, a.panel) ? layoutReducer(s, { type: "close", panel: a.panel }) : layoutReducer(s, { type: "open", panel: a.panel, dock: a.dock });
     case "activate":
@@ -361,6 +376,10 @@ export function sanitize(s: unknown, known: Set<string>): LayoutState {
       size: { ...EMPTY_LAYOUT.size, ...x.size },
       floats: Array.isArray(x.floats) ? x.floats : [],
       closed: Array.isArray(x.closed) ? x.closed.filter((c) => known.has(c.panel)) : [],
+      params:
+        x.params && typeof x.params === "object"
+          ? Object.fromEntries(Object.entries(x.params).filter(([k]) => known.has(k)))
+          : {},
     };
     for (const d of ["right", "bottom"] as DockId[])
       for (const p of allPanels(st.docks[d] ?? null)) if (!known.has(p)) st = withoutPanel(st, p);

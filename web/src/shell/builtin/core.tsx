@@ -24,6 +24,8 @@ export function corePack(reg: Registries): ContributionPack {
       ctx.add(reg.regions, { id: "sidebar", render: () => <Sidebar /> });
       ctx.add(reg.regions, { id: "main", render: () => <MainArea /> });
       ctx.add(reg.presets, { id: "workbench", order: 0, title: "工作台", sidebar: "sidebar", main: "main", panels: "dock" });
+      ctx.add(reg.presets, { id: "chat", order: 1, title: "聊天", sidebar: "sidebar", main: "main", panels: "drawer" });
+      ctx.add(reg.presets, { id: "embed", order: 2, title: "嵌入（单会话）", sidebar: null, main: "main", panels: "float" });
 
       // ---- 命令 ----
       const cmd = (c: Parameters<typeof reg.commands.add>[0]) => ctx.add(reg.commands, c);

@@ -99,6 +99,16 @@
   border-color: var(--border-strong);
   transform: translateY(-1px);
 }
+.card_warning {
+  border-color: color-mix(in srgb, var(--warning) 45%, transparent);
+}
+.card_danger {
+  border-color: color-mix(in srgb, var(--danger) 45%, transparent);
+}
+.cardBody {
+  color: var(--fg);
+  line-height: 1.45;
+}
 .cardHead {
   display: flex;
   align-items: center;

@@ -29,6 +29,10 @@ export interface Prefs {
   sidebarWidth: number;
   /** 语言。 */
   locale: "zh" | "en";
+  /** 布局预设（LayoutPreset id；"" = 第一个）。 */
+  preset: string;
+  /** 命名布局：名称 → 布局快照（命令面板里一键切换）。 */
+  layouts: Record<string, unknown>;
 }
 
 export const DEFAULT_PREFS: Prefs = {
@@ -45,6 +49,8 @@ export const DEFAULT_PREFS: Prefs = {
   sidebarCollapsed: false,
   sidebarWidth: 280,
   locale: "zh",
+  preset: "",
+  layouts: {},
 };
 
 export interface PrefsStore extends ReadStore<Prefs> {

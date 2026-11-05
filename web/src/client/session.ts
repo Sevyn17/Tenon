@@ -35,7 +35,7 @@ export interface SessionStore extends ReadStore<SessionView> {
   readonly id: string;
   /** 取快照、日志尾部并订阅。create 为真时会话不存在就新建（显式新建，服务端不隐式建）。 */
   open(opts?: { create?: boolean }): Promise<void>;
-  /** 取消订阅；之后的事件不再合成。 */
+  /** 取消订阅；之后的事件不再合成。与 open 成对调用（引用计数，最后一个 close 才真正退订）。 */
   close(): void;
   /** 向上翻一页。 */
   loadOlder(): Promise<void>;
@@ -52,6 +52,7 @@ export function createSessionStore(conn: Connection, id: string): SessionStore {
   const store = createStore<SessionView>({ ...initialState(id), outbox: [], loadingOlder: false });
   let gen = 0; // 加载代次：重新加载或关闭后，旧请求的结果丢弃
   let off: (() => void) | null = null;
+  let refs = 0;
 
   const patch = (f: (v: SessionView) => SessionView) => store.update(f);
   const setState = (f: (s: SessionState) => SessionState) =>
@@ -153,10 +154,19 @@ export function createSessionStore(conn: Connection, id: string): SessionStore {
     get: store.get,
     subscribe: store.subscribe,
     async open(opts) {
+      // 引用计数：对话区与面板可能同时打开同一会话，只有第一个打开者加载、最后一个关闭者退订。
+      refs++;
+      if (refs > 1) {
+        if (opts?.create && store.get().status === "error") await load(true);
+        return;
+      }
       if (!off) off = conn.onEvent(onEvent);
       await load(!!opts?.create);
     },
     close() {
+      if (refs === 0) return;
+      refs--;
+      if (refs > 0) return;
       gen++;
       off?.();
       off = null;

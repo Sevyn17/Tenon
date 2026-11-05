@@ -173,8 +173,9 @@
 /* 拖拽落点：上 / 下 / 左 / 右 / 中央 */
 .drop {
   position: absolute;
-  inset: 36px 0 0 0;
+  inset: 0;
   z-index: 4;
+  pointer-events: none;
 }
 .dropHint {
   position: absolute;

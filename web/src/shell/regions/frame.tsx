@@ -20,7 +20,8 @@ export function Frame() {
   const presets = useRegistry(sh.reg.presets);
   const panels = useRegistry(sh.reg.panels);
   const layout = useStore(sh.layout);
-  const preset = presets[0];
+  const prefs = useStore(sh.prefs);
+  const preset = presets.find((x) => x.id === prefs.preset) ?? presets[0];
   const sidebar = preset?.sidebar ? regions.find((r) => r.id === preset.sidebar) : undefined;
   const main = regions.find((r) => r.id === (preset?.main ?? "main"));
   const panelMap = useMemo(() => new Map(panels.map((p) => [p.id, p])), [panels]);
@@ -34,13 +35,16 @@ export function Frame() {
       {p.needsSession && !nav.session ? (
         <EmptyState title={sh.t("panel.needsSession")} />
       ) : (
-        p.render({ session: nav.session, visible })
+        p.render({ session: nav.session, visible, params: layout.params[p.id] })
       )}
     </ErrorBoundary>
   );
 
   const focus = nav.focus;
-  const docked = preset?.panels !== null;
+  // panels：dock = 停靠区 + 竖栏；float = 只有浮动面板（embed）；drawer = 右侧停靠区当抽屉、不显示底部区与竖栏（chat）；null = 不要面板。
+  const mode = preset ? preset.panels : "dock";
+  const docked = mode === "dock";
+  const drawer = mode === "drawer";
   return (
     <div className={s.frame}>
       {!focus && sidebar && <ErrorBoundary label="左栏">{sidebar.render()}</ErrorBoundary>}
@@ -55,11 +59,11 @@ export function Frame() {
           <Dock dock="bottom" state={layout} dispatch={sh.layout.dispatch} panels={panelMap} renderPanel={renderPanel} />
         )}
       </div>
-      {!focus && docked && (
+      {!focus && (docked || drawer) && (
         <Dock dock="right" state={layout} dispatch={sh.layout.dispatch} panels={panelMap} renderPanel={renderPanel} />
       )}
       {!focus && docked && <Rail panels={panels} />}
-      <Floats state={layout} dispatch={sh.layout.dispatch} panels={panelMap} renderPanel={renderPanel} />
+      {mode !== null && <Floats state={layout} dispatch={sh.layout.dispatch} panels={panelMap} renderPanel={renderPanel} />}
       <Slot at="shell.overlay" />
       {nav.palette && <Palette mode={nav.palette} />}
       {nav.shortcuts && <Shortcuts />}
@@ -107,12 +111,12 @@ function Rail({ panels }: { panels: Panel[] }) {
       <span className={s.railGrow} />
       <Slot at="rail.bottom" />
       <Tooltip label="底部停靠区" keybind={bindingOf(sh, "shell.toggleBottom")} side="left">
-        <button type="button" className={s.railBtn} aria-pressed={!!layout.docks.bottom && !layout.hidden.bottom} onClick={() => sh.api.run("shell.toggleBottom")}>
+        <button type="button" className={s.railBtn} aria-label="底部停靠区" aria-pressed={!!layout.docks.bottom && !layout.hidden.bottom} onClick={() => sh.api.run("shell.toggleBottom")}>
           <PanelBottom size={16} />
         </button>
       </Tooltip>
       <Tooltip label="右侧面板区" keybind={bindingOf(sh, "shell.togglePanels")} side="left">
-        <button type="button" className={s.railBtn} aria-pressed={!!layout.docks.right && !layout.hidden.right} onClick={() => sh.api.run("shell.togglePanels")}>
+        <button type="button" className={s.railBtn} aria-label="右侧面板区" aria-pressed={!!layout.docks.right && !layout.hidden.right} onClick={() => sh.api.run("shell.togglePanels")}>
           <PanelRight size={16} />
         </button>
       </Tooltip>

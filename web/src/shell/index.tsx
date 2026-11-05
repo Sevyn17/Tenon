@@ -19,6 +19,7 @@ import { createPrefs, type Prefs } from "./prefs";
 import { createPackHost, type ContributionPack } from "./registry";
 import { corePack } from "./builtin/core";
 import { settingsPack } from "./builtin/settings";
+import { panelsPack } from "./builtin/panels";
 import { Frame } from "./regions/frame";
 
 export * from "./registry";
@@ -73,8 +74,8 @@ export function createShell(o: ShellOptions = {}): Shell {
       api.openSession(snap.id);
       setTimeout(() => api.focusComposer(), 0);
     },
-    openPanel: (id, params) => layout.dispatch({ type: "open", panel: id, ...(params ? {} : {}) }),
-    togglePanel: (id) => layout.dispatch({ type: "toggle", panel: id }),
+    openPanel: (id, params) => layout.dispatch({ type: "open", panel: id, dock: reg.panels.byId(id)?.dock, params }),
+    togglePanel: (id) => layout.dispatch({ type: "toggle", panel: id, dock: reg.panels.byId(id)?.dock }),
     closePanel: (id) => layout.dispatch({ type: "close", panel: id }),
     openPage: (id) => nav.update((v) => ({ ...v, page: id })),
     openSettings: (page = "general", entry) => nav.update((v) => ({ ...v, settings: { page, entry }, palette: null })),
@@ -134,6 +135,7 @@ export function createShell(o: ShellOptions = {}): Shell {
   packs.register(corePack(reg));
   packs.register(shellPack(state));
   packs.register(settingsPack(state));
+  packs.register(panelsPack(state));
   for (const p of o.contributions ?? []) packs.register(p);
 
   // 后端环境：握手后用 capabilities；plugins.list 拿到已启用的后端插件（不可用时不检查插件）。
@@ -304,6 +306,39 @@ function shellPack(sh: ShellState): ContributionPack {
           const cur = sh.prefs.get().theme;
           sh.prefs.set("theme", order[(order.indexOf(cur) + 1) % order.length]);
         },
+      });
+      // 每个面板一个开关命令 panel.<id>（快捷键取面板声明的 keybind，可在设置里改绑），随面板注册增删。
+      const panelCmds = new Map<string, () => void>();
+      const syncPanels = () => {
+        const list = sh.reg.panels.get();
+        const ids = new Set(list.map((p) => p.id));
+        for (const [id, undo] of panelCmds) {
+          if (!ids.has(id)) {
+            undo();
+            panelCmds.delete(id);
+          }
+        }
+        for (const p of list) {
+          if (panelCmds.has(p.id)) continue;
+          panelCmds.set(
+            p.id,
+            sh.reg.commands.add({
+              id: `panel.${p.id}`,
+              title: `切换面板：${p.title}`,
+              section: "panels",
+              keybind: p.keybind,
+              global: true,
+              pack: "shell",
+              run: () => sh.api.togglePanel(p.id),
+            }),
+          );
+        }
+      };
+      syncPanels();
+      ctx.onDispose(sh.reg.panels.subscribe(syncPanels));
+      ctx.onDispose(() => {
+        for (const undo of panelCmds.values()) undo();
+        panelCmds.clear();
       });
       cmd({
         id: "shell.escape",

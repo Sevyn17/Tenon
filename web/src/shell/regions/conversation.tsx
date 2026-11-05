@@ -10,6 +10,7 @@ import {
   Badge,
   Composer,
   Dot,
+  ErrorBoundary,
   IconButton,
   InteractionCard,
   MarkdownExtensions,
@@ -26,6 +27,7 @@ import {
   type UIInteraction,
   type UITool,
 } from "../../ui";
+import { isVisible } from "../layout/reducer";
 import { Slot, useChainSlot, useCommandContext, useRegistry, useShell, whenState } from "../context";
 import { toUIActions, type ActionTarget } from "../contributions";
 import { useMenuGroups } from "./sidebar";
@@ -275,7 +277,7 @@ function Conversation({ id }: { id: string }) {
       <Slot at="conversation.banner" props={{ session: id }} />
       <div className={s.body} style={{ ["--conv-width" as string]: `${prefs.chatWidth}px` }}>
         <MarkdownExtensions value={mdExts.map((m) => m.ext)}>{content}</MarkdownExtensions>
-        <InlineCards />
+        <InlineCards session={id} />
       </div>
       <div className={s.composerWrap}>
         <Composer
@@ -365,42 +367,36 @@ function Header({ id, title, running, mode }: { id: string; title: string; runni
   );
 }
 
-/** ④ 对话内小卡片：面板声明了 card 且该面板没打开时显示，点了打开面板。 */
-function InlineCards() {
+/** ④ 对话内小卡片：面板声明了 card 且该面板没在可见处打开时显示，点了打开面板。卡片组件自己取数据，没话说时返回 null。 */
+function InlineCards({ session }: { session: string }) {
   const sh = useShell();
   const panels = useRegistry(sh.reg.panels);
   const layout = useStore(sh.layout);
-  const cx0 = useCommandContext();
-  const open = new Set<string>();
-  for (const d of ["right", "bottom"] as const) {
-    if (layout.hidden[d]) continue;
-    const walk = (n: typeof layout.docks.right): void => {
-      if (!n) return;
-      if (n.type === "group") open.add(n.active);
-      else n.children.forEach(walk);
-    };
-    walk(layout.docks[d]);
-  }
-  const cards: { id: string; title: string; icon: ReactNode; node: ReactNode }[] = [];
-  for (const p of panels) {
-    if (!p.card || open.has(p.id)) continue;
-    const node = p.card(cx0);
-    if (node) cards.push({ id: p.id, title: p.title, icon: p.icon, node });
-  }
-  const extra = <Slot at="conversation.card" props={{ session: cx0.session }} />;
-  if (!cards.length) return <div className={s.cards}>{extra}</div>;
   return (
     <div className={s.cards}>
-      {cards.map((c) => (
-        <button key={c.id} type="button" className={s.card} onClick={() => sh.api.openPanel(c.id)}>
-          <div className={s.cardHead}>
-            {c.icon} {c.title}
-          </div>
-          {c.node}
-        </button>
-      ))}
-      {extra}
+      {panels.map((p) => {
+        if (!p.card || isVisible(layout, p.id)) return null;
+        const C = p.card;
+        return (
+          <ErrorBoundary key={p.id} label={`卡片 ${p.title}`} fallback={() => null} onError={(e) => p.pack && sh.packs.fail(p.pack, e.message)}>
+            <C session={session} open={() => sh.api.openPanel(p.id)} />
+          </ErrorBoundary>
+        );
+      })}
+      <Slot at="conversation.card" props={{ session }} />
     </div>
+  );
+}
+
+/** 小卡片的外框：图标 + 标题 + 内容，整张可点。面板的 card 组件用它包住自己的内容。 */
+export function PanelCard(p: { icon?: ReactNode; title: ReactNode; onOpen: () => void; tone?: "warning" | "danger"; children?: ReactNode }) {
+  return (
+    <button type="button" className={cx(s.card, p.tone && s[`card_${p.tone}`])} onClick={p.onOpen}>
+      <div className={s.cardHead}>
+        {p.icon} {p.title}
+      </div>
+      {p.children && <div className={s.cardBody}>{p.children}</div>}
+    </button>
   );
 }
 
