@@ -386,6 +386,10 @@ const (
 	// 以下由 InteractionStore 写（06 10.6）。
 	EventInteractionOpened   = "interaction_opened"   // data: Pending.Payload
 	EventInteractionResolved = "interaction_resolved" // data: {id, session, outcome, by}
+	// 会话生命周期（06 10.5 表一：由易失改为持久）。forked 由 CreateSession 在建分叉会话的同一事务里写；
+	// closed 由宿主在关闭会话的检查点里写。
+	EventForked = "forked" // data: {from, upto, origin}
+	EventClosed = "closed" // data: {reason}
 )
 
 // Event 一条要写进事件表的持久事件。

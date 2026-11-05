@@ -184,6 +184,7 @@ type commitBuf struct {
 	spans     []store.Span       // 待提交的 step / attempt / compact span（G2）
 	outbox    []store.OutboxItem // 外发信封（08 9.6：外发与检查点同事务）
 	consume   []string           // 删除的 inbox 项（session-host H7：core.Input 成功后同事务删除）
+	events    []store.Event      // 宿主附加的持久事件（会话关闭、分叉等，06 10.5 表一），排在状态事件之后
 
 	// 已提交的会话状态（protocol 2，06 10.2.2 规则 2）：检查点按它与新头部比较，变了就随检查点写持久事件。
 	known    bool
@@ -195,7 +196,7 @@ type commitBuf struct {
 // reset 提交成功后清空缓冲。
 func (b *commitBuf) reset(logLen int) {
 	b.committed = logLen
-	b.spans, b.outbox, b.consume = nil, nil, nil
+	b.spans, b.outbox, b.consume, b.events = nil, nil, nil, nil
 }
 
 // remember 记下已提交的运行状态、设置与 Ext（打开会话与每次提交后调用）。

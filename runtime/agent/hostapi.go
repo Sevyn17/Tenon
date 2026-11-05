@@ -197,3 +197,13 @@ func (a *Agent) TakeUnconsumed() []session.PendingInput {
 	a.unconsumed = nil
 	return u
 }
+
+// AddEvent 把一条持久事件记进下一次检查点（与它描述的状态变化同事务写入，06 10.2.1 规则 2）。
+// 宿主用它写会话关闭、分叉这类不由头部比较得出的事件。data 为空写 {}。
+func (a *Agent) AddEvent(kind string, data any) {
+	b, err := json.Marshal(data)
+	if err != nil || data == nil {
+		b = []byte(`{}`)
+	}
+	a.buf.events = append(a.buf.events, store.Event{Kind: kind, Data: b})
+}

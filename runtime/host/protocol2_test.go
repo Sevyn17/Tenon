@@ -146,3 +146,94 @@ func TestSetConfigCommitted(t *testing.T) {
 		t.Fatal("空闲时 SetConfig 应已提交")
 	}
 }
+
+// session.forked / session.closed 是持久事件（06 10.5 表一）：forked 与建分叉会话同事务，closed 随关闭的检查点写。
+func TestForkedAndClosedEventsDurable(t *testing.T) {
+	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{})
+	ctx := context.Background()
+	src, err := r.h.Create(ctx, "src", "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := src.Do(Command{Kind: Send, Text: "a"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := src.Wait(); err != nil {
+		t.Fatal(err)
+	}
+	f, err := r.h.Fork(ctx, "src", "f", -1, "fork")
+	if err != nil {
+		t.Fatal(err)
+	}
+	evs, _, err := r.db.Replay(ctx, "f", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	forked := false
+	for _, e := range evs {
+		if e.Kind == store.EventForked {
+			forked = true
+		}
+	}
+	if !forked {
+		t.Fatalf("分叉会话应有持久 forked 事件：%d 条", len(evs))
+	}
+	if err := f.Do(Command{Kind: Close, Text: "bye"}); err != nil {
+		t.Fatal(err)
+	}
+	<-f.Done()
+	evs, _, _ = r.db.Replay(ctx, "f", 0)
+	if last := evs[len(evs)-1]; last.Kind != store.EventClosed {
+		t.Fatalf("关闭应写持久 closed 事件：%s", last.Kind)
+	}
+}
+
+// session.forked / session.closed 是持久事件（06 10.5 表一）：重连回放能看到，不再只是总线上的易失事件。
+func TestForkAndCloseAreDurable(t *testing.T) {
+	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{})
+	ctx := context.Background()
+	src, err := r.h.Create(ctx, "src", "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := src.Do(Command{Kind: Send, Text: "a"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := src.Wait(); err != nil {
+		t.Fatal(err)
+	}
+	f, err := r.h.Fork(ctx, "src", "f1", -1, "fork")
+	if err != nil {
+		t.Fatal(err)
+	}
+	kinds := func(id string) []string {
+		t.Helper()
+		evs, _, err := r.db.Replay(ctx, id, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out []string
+		for _, e := range evs {
+			out = append(out, e.Kind)
+		}
+		return out
+	}
+	has := func(ks []string, k string) bool {
+		for _, x := range ks {
+			if x == k {
+				return true
+			}
+		}
+		return false
+	}
+	if ks := kinds("f1"); !has(ks, store.EventForked) {
+		t.Fatalf("分叉会话应有持久的 forked 事件：%v", ks)
+	}
+	if err := f.Do(Command{Kind: Close, Text: "user"}); err != nil {
+		t.Fatal(err)
+	}
+	<-f.Done()
+	if ks := kinds("f1"); !has(ks, store.EventClosed) {
+		t.Fatalf("关闭应写持久的 closed 事件：%v", ks)
+	}
+}

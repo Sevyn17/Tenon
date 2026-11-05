@@ -244,8 +244,23 @@ func (s *Store) CreateSession(ctx context.Context, m store.SessionMeta, hdr sess
 		x.nextSeq++
 	}
 	x.logLen = len(entries)
+	var evs []bus.Envelope
+	// 分叉 / 旁支会话：forked 与建会话一起写（与 sqlite 一致，06 10.5 表一）。
+	if m.Origin == "fork" || m.Origin == "side" {
+		d, _ := json.Marshal(map[string]any{"from": m.ParentID, "upto": m.ForkUpto, "origin": m.Origin})
+		at := s.now()
+		x.events = append(x.events, evRow{cursor: int64(x.nextSeq), kind: store.EventForked, data: d, at: at})
+		evs = append(evs, bus.Envelope{V: bus.Version, Seq: int64(x.nextSeq), At: at, Session: m.ID, Kind: store.EventForked,
+			Data: json.RawMessage(append([]byte(nil), d...))})
+		x.nextSeq++
+	}
 	s.putShell(hash, shell)
 	s.sessions[m.ID] = x
+	if len(evs) > 0 {
+		s.mu.Unlock()
+		s.notify(evs)
+		s.mu.Lock() // 调用方 defer 解锁
+	}
 	return nil
 }
 

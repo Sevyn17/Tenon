@@ -804,9 +804,9 @@ func (h *Host) cancelChildren(ctx context.Context, parent string) {
 		}
 	}
 	for _, a := range kids {
-		_ = Handle{a}.Do(Command{Kind: Cancel})  // 进行中的回合先取消
-		_ = Handle{a}.Post(Command{Kind: Close}) // 入队即返回：不在父会话的 actor 里等子回合收尾
-		h.publish(a.id, "session.closed", map[string]any{"reason": "parent_rewind"})
+		_ = Handle{a}.Do(Command{Kind: Cancel}) // 进行中的回合先取消
+		// 入队即返回：不在父会话的 actor 里等子回合收尾；session.closed 由关闭的检查点写成持久事件。
+		_ = Handle{a}.Post(Command{Kind: Close, Text: "parent_rewind"})
 	}
 }
 
@@ -901,6 +901,11 @@ func (a *actor) idle(ctx context.Context, c Command) (bool, error) {
 		_ = core.SetExt("rt.drained", true) // 区分正常退出与崩溃（D1）
 		return true, a.ag.Commit(ctx)
 	case Close:
+		reason := c.Text
+		if reason == "" {
+			reason = "closed"
+		}
+		a.ag.AddEvent(store.EventClosed, map[string]any{"reason": reason}) // 持久事件，与关闭的检查点同事务（06 10.5 表一）
 		return true, a.ag.Commit(ctx)
 	}
 	return false, fmt.Errorf("host: 未知命令 %q", c.Kind)

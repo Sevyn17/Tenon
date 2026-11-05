@@ -305,6 +305,13 @@ func (c *Conn) translate(e bus.Envelope) []wire.Envelope {
 		by, _ := m["by"].(string)
 		return []wire.Envelope{c.envelope(e.Session, wire.EvInteractionDone, e.Seq, 0,
 			wire.InteractionResolved{ID: id, Session: sid, Outcome: outcome, By: by})}
+	case store.EventForked:
+		from, _ := m["from"].(string)
+		return []wire.Envelope{c.envelope(e.Session, wire.EvSessionForked, e.Seq, 0,
+			wire.SessionForked{From: from, Upto: intOf(m["upto"])})}
+	case store.EventClosed:
+		reason, _ := m["reason"].(string)
+		return []wire.Envelope{c.envelope(e.Session, wire.EvSessionClosed, e.Seq, 0, wire.SessionClosed{Reason: reason})}
 	case store.EventExt:
 		if md := c.modeOf(e.Session, m); md != nil {
 			return []wire.Envelope{c.envelope(e.Session, wire.EvModeChanged, e.Seq, 0, *md)}

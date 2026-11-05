@@ -78,7 +78,7 @@ func (h *Host) ForkIf(ctx context.Context, src, dst string, upto int, origin str
 	if err != nil {
 		return Handle{}, err
 	}
-	h.publish(dst, "session.forked", map[string]any{"from": src, "upto": hdr.LogLen, "origin": origin})
+	// session.forked 已由 CreateSession 在建会话的同一事务里写成持久事件（06 10.5 表一）。
 	return hd, nil
 }
 

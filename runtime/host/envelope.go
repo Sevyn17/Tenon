@@ -315,7 +315,7 @@ func (h *Host) control(ctx context.Context, id string, env mail.Envelope) error 
 		}
 	case "close":
 		// 入队即算投递：回合中的 Close 要等回合结束，不能让发件箱派发同步等它（P0-6）。
-		if err := hd.Post(Command{Kind: Close}); err != nil {
+		if err := hd.Post(Command{Kind: Close, Text: "control"}); err != nil {
 			return err
 		}
 	default:

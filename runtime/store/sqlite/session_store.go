@@ -41,7 +41,8 @@ func (db *DB) CreateSession(ctx context.Context, m store.SessionMeta, hdr sessio
 		m.Origin = "new"
 	}
 	now := time.Now().UnixMilli()
-	return db.inTx(ctx, func(tx *sql.Tx) error {
+	var forked *bus.Envelope
+	err := db.inTx(ctx, func(tx *sql.Tx) error {
 		shell, hb, err := splitHeader(hdr)
 		if err != nil {
 			return err
@@ -58,16 +59,31 @@ func (db *DB) CreateSession(ctx context.Context, m store.SessionMeta, hdr sessio
 			}
 			return err
 		}
-		if len(entries) == 0 {
-			return nil
+		seq := 1
+		if len(entries) > 0 {
+			if seq, err = appendEntries(ctx, tx, m.ID, 0, entries, 1); err != nil {
+				return err
+			}
 		}
-		seq, err := appendEntries(ctx, tx, m.ID, 0, entries, 1)
-		if err != nil {
-			return err
+		// 分叉 / 旁支会话：forked 是新会话的第一条非条目事件，与建会话同事务（06 10.5 表一）。
+		if m.Origin == "fork" || m.Origin == "side" {
+			d, _ := json.Marshal(map[string]any{"from": m.ParentID, "upto": m.ForkUpto, "origin": m.Origin})
+			if err := putEvent(ctx, tx, m.ID, seq, store.EventForked, string(d), now); err != nil {
+				return err
+			}
+			forked = &bus.Envelope{V: bus.Version, Seq: int64(seq), At: now, Session: m.ID, Kind: store.EventForked, Data: json.RawMessage(d)}
+			seq++
+		}
+		if seq == 1 {
+			return nil
 		}
 		_, err = tx.ExecContext(ctx, `UPDATE sessions SET log_len = ?, next_sync_seq = ? WHERE tenant = ? AND id = ?`, len(entries), seq, store.Tenant, m.ID)
 		return err
 	})
+	if err == nil && forked != nil {
+		db.emit([]bus.Envelope{*forked})
+	}
+	return err
 }
 
 // Commit 执行一次 checkpoint。条件写失败返回 ErrConflict，事务整体回滚。
