@@ -108,6 +108,8 @@ plan = [{ model = "deepseek/deepseek-v4-pro" }]
 [model."openai/gpt-4o-mini"]
 context_window = 128000
 max_output = 16384
+[model."openai/gpt-4o-mini".caps]
+images = true
 
 [model."anthropic/claude-sonnet-4-5"]
 context_window = 200000

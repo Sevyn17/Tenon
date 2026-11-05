@@ -58,12 +58,31 @@ type rsPart struct {
 	Text string `json:"text"`
 }
 
+// rsInputPart 输入内容的一段（input_text / input_image）。
+type rsInputPart struct {
+	Type     string `json:"type"`
+	Text     string `json:"text,omitempty"`
+	ImageURL string `json:"image_url,omitempty"`
+}
+
+// rsInput 文本 + 图片（data URL 内嵌）组成的输入内容；没有图片时只有一段文本（与原先一致）。
+func rsInput(text string, imgs []modelhub.Image) []rsInputPart {
+	parts := make([]rsInputPart, 0, len(imgs)+1)
+	if text != "" || len(imgs) == 0 {
+		parts = append(parts, rsInputPart{Type: "input_text", Text: text})
+	}
+	for _, im := range imgs {
+		parts = append(parts, rsInputPart{Type: "input_image", ImageURL: modelhub.DataURL(im)})
+	}
+	return parts
+}
+
 func responsesBody(r *modelhub.Request, ep modelhub.Endpoint) map[string]any {
 	req := r.Req
 	wire := map[string]string{}
 	input := []map[string]any{}
 	for _, m := range req.Messages {
-		t := modelhub.ContentString(m.Content)
+		t, imgs := modelhub.SplitContent(r, ep, m.Content)
 		switch m.Role {
 		case "assistant":
 			for _, rb := range m.Reasoning {
@@ -101,10 +120,14 @@ func responsesBody(r *modelhub.Request, ep modelhub.Endpoint) map[string]any {
 			if id == "" {
 				id = m.ToolCallID
 			}
-			input = append(input, map[string]any{"type": "function_call_output", "call_id": id, "output": t})
+			// 带图片时 output 写成 input_text / input_image 数组（Responses API 允许函数结果带图片）。
+			var output any = t
+			if len(imgs) > 0 {
+				output = rsInput(t, imgs)
+			}
+			input = append(input, map[string]any{"type": "function_call_output", "call_id": id, "output": output})
 		default:
-			input = append(input, map[string]any{"type": "message", "role": "user",
-				"content": []rsPart{{Type: "input_text", Text: t}}})
+			input = append(input, map[string]any{"type": "message", "role": "user", "content": rsInput(t, imgs)})
 		}
 	}
 	b := map[string]any{"model": ep.Model, "input": input, "stream": true, "store": false,

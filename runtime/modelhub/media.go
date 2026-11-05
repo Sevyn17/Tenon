@@ -5,6 +5,7 @@ package modelhub
 // 模型目录声明了 caps.images 的端点才发图片，其余照旧留占位文字。
 
 import (
+	"encoding/base64"
 	"fmt"
 	"strings"
 
@@ -57,4 +58,9 @@ func loadImage(r *Request, ep Endpoint, p session.Part) (Image, bool) {
 		return Image{}, false
 	}
 	return Image{MIME: p.Media.MIME, Data: b}, true
+}
+
+// DataURL 图片的 data URL（data:<mime>;base64,<内容>），OpenAI 两种协议内嵌图片用。
+func DataURL(im Image) string {
+	return "data:" + im.MIME + ";base64," + base64.StdEncoding.EncodeToString(im.Data)
 }

@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"sort"
@@ -58,9 +59,32 @@ type oaCall struct {
 
 type oaMsg struct {
 	Role       string   `json:"role"`
-	Content    *string  `json:"content"`
+	Content    any      `json:"content"` // *string，或带图片的 user 消息用 []oaPart；nil = null
 	ToolCalls  []oaCall `json:"tool_calls,omitempty"`
 	ToolCallID string   `json:"tool_call_id,omitempty"`
+}
+
+// oaPart 多模态 user 消息的一段（text / image_url）。
+type oaPart struct {
+	Type     string      `json:"type"`
+	Text     string      `json:"text,omitempty"`
+	ImageURL *oaImageURL `json:"image_url,omitempty"`
+}
+
+type oaImageURL struct {
+	URL string `json:"url"`
+}
+
+// oaUserParts 文本 + 图片（data URL 内嵌）组成的 user 消息内容。
+func oaUserParts(text string, imgs []modelhub.Image) []oaPart {
+	parts := make([]oaPart, 0, len(imgs)+1)
+	if text != "" {
+		parts = append(parts, oaPart{Type: "text", Text: text})
+	}
+	for _, im := range imgs {
+		parts = append(parts, oaPart{Type: "image_url", ImageURL: &oaImageURL{URL: modelhub.DataURL(im)}})
+	}
+	return parts
 }
 
 type oaTool struct {
@@ -84,8 +108,21 @@ func openAIBody(r *modelhub.Request, ep modelhub.Endpoint) map[string]any {
 		msgs = append(msgs, oaMsg{Role: "system", Content: &s})
 	}
 	wire := map[string]string{}
+	// tool 消息只收文本：工具结果里的图片攒起来，这一串 tool 消息结束后补一条 user 消息带上
+	// （插在 tool 消息之间会破坏"tool 消息紧跟调用"的约束）。
+	var toolImgs []modelhub.Image
+	flushToolImgs := func() {
+		if len(toolImgs) == 0 {
+			return
+		}
+		msgs = append(msgs, oaMsg{Role: "user", Content: oaUserParts("（以上工具结果附带的图片）", toolImgs)})
+		toolImgs = nil
+	}
 	for _, m := range req.Messages {
-		t := modelhub.ContentString(m.Content)
+		t, imgs := modelhub.SplitContent(r, ep, m.Content)
+		if m.Role != "tool" {
+			flushToolImgs()
+		}
 		switch m.Role {
 		case "assistant":
 			wm := oaMsg{Role: "assistant"}
@@ -110,11 +147,20 @@ func openAIBody(r *modelhub.Request, ep modelhub.Endpoint) map[string]any {
 			if id == "" {
 				id = m.ToolCallID
 			}
+			if len(imgs) > 0 {
+				t += fmt.Sprintf("\n[附 %d 张图片，见下一条消息]", len(imgs))
+			}
 			msgs = append(msgs, oaMsg{Role: "tool", ToolCallID: id, Content: &t})
+			toolImgs = append(toolImgs, imgs...)
 		default:
-			msgs = append(msgs, oaMsg{Role: "user", Content: &t})
+			if len(imgs) > 0 {
+				msgs = append(msgs, oaMsg{Role: "user", Content: oaUserParts(t, imgs)})
+			} else {
+				msgs = append(msgs, oaMsg{Role: "user", Content: &t})
+			}
 		}
 	}
+	flushToolImgs()
 	b := map[string]any{"model": ep.Model, "messages": msgs, "stream": true,
 		"stream_options": map[string]any{"include_usage": true}}
 	if len(req.Tools) > 0 {
