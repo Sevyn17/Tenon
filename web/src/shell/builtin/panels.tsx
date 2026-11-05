@@ -1,10 +1,11 @@
 // 内置面板（前端方案第五、六节 ⑤）：待处理（全部会话未结束的交互）、工具活动（当前会话的工具调用）。
 // 第 7 步补齐任务、改动、用量、子会话、工件查看。面板与插件面板走同一注册表，可用同 id 替换。
 
-import { Activity, Inbox } from "lucide-react";
+import { useEffect } from "react";
+import { Activity, Bell, Inbox, X } from "lucide-react";
 import type { Interaction } from "../../client";
 import { useInteractions, useSession, useStore } from "../../client/react";
-import { Dot, EmptyState } from "../../ui";
+import { Button, Dot, EmptyState, IconButton } from "../../ui";
 import type { ContributionPack } from "../registry";
 import type { PanelCardProps, PanelProps } from "../contributions";
 import type { ShellState } from "../context";
@@ -83,6 +84,51 @@ function Tools({ session }: PanelProps) {
   );
 }
 
+function ago(ms: number): string {
+  const s0 = Math.round((Date.now() - ms) / 1000);
+  if (s0 < 60) return "刚刚";
+  if (s0 < 3600) return `${Math.floor(s0 / 60)} 分钟前`;
+  return new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+/** 通知中心：回合完成、需要确认、插件发的通知。面板可见时全部标为已读。 */
+function Notices({ sh, visible }: { sh: ShellState; visible: boolean }) {
+  const list = useStore(sh.notices);
+  useEffect(() => {
+    if (visible) sh.notices.markAllRead();
+  }, [visible, list, sh.notices]);
+  if (!list.length) return <EmptyState icon={<Bell size={20} />} title="没有通知" />;
+  return (
+    <>
+      <div className={s.toolbar}>
+        <span className={s.grow} />
+        <Button size="sm" variant="ghost" onClick={() => sh.notices.clear()}>
+          清空
+        </Button>
+      </div>
+      <ul className={s.list}>
+        {list.map((n) => (
+          <li key={n.id} className={s.notice}>
+            <button type="button" className={s.row} disabled={!n.session} onClick={() => n.session && sh.api.openSession(n.session)}>
+              <Dot state={n.tone === "danger" ? "danger" : n.tone === "warning" ? "warning" : n.tone === "success" ? "success" : "idle"} />
+              <span className={s.rowMain}>
+                <span className={s.rowTitle}>{n.title}</span>
+                <span className={s.rowSub}>
+                  {ago(n.at)}
+                  {n.body && ` · ${n.body}`}
+                </span>
+              </span>
+            </button>
+            <IconButton label="删除通知" size="sm" onClick={() => sh.notices.remove(n.id)}>
+              <X size={12} />
+            </IconButton>
+          </li>
+        ))}
+      </ul>
+    </>
+  );
+}
+
 export function panelsPack(sh: ShellState): ContributionPack {
   return {
     id: "panels",
@@ -107,6 +153,15 @@ export function panelsPack(sh: ShellState): ContributionPack {
         keybind: "Mod+Shift+E",
         needsSession: true,
         render: (p) => <Tools {...p} />,
+      });
+      ctx.add(sh.reg.panels, {
+        id: "notices",
+        order: 90,
+        title: "通知",
+        icon: <Bell size={16} />,
+        keybind: "Mod+Shift+N",
+        badge: () => sh.notices.unread() || undefined,
+        render: (p) => <Notices sh={sh} visible={p.visible} />,
       });
     },
   };

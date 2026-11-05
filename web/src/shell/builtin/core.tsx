@@ -1,7 +1,7 @@
 // 内置贡献包 core：工作台自己的命令（带缺省快捷键）、区域、布局预设、消息操作。
 // 与插件贡献走同一组注册表：嵌入方用同 id、更小的 priority 替换，或 createShell({ disable: ["core.xxx"] }) 关掉。
 
-import { Copy, CornerUpLeft, GitBranch, Pencil, Quote, RotateCcw } from "lucide-react";
+import { MessageSquareQuote, Copy, CornerUpLeft, GitBranch, MessagesSquare, Paperclip, Pencil, Quote, RotateCcw } from "lucide-react";
 import { copyText } from "../../ui";
 import type { ContributionPack } from "../registry";
 import type { Registries } from "../contributions";
@@ -85,11 +85,51 @@ export function corePack(reg: Registries): ContributionPack {
         },
       });
 
+      // ---- 输入框："+" 菜单的添加项、"@" 引用会话 ----
+      ctx.add(reg.composerActions, {
+        id: "add.file",
+        group: "add",
+        order: 0,
+        title: "添加文件或图片",
+        icon: <Paperclip size={14} />,
+        keywords: ["附件", "图片", "file", "image"],
+        run: (x) => {
+          const el = document.createElement("input");
+          el.type = "file";
+          el.multiple = true;
+          el.onchange = () => {
+            const f = [...(el.files ?? [])];
+            if (f.length) x.attach(f);
+          };
+          el.click();
+        },
+      });
+      ctx.add(reg.mentions, {
+        id: "sessions",
+        group: "会话",
+        order: 10,
+        suggest: (q, x) => {
+          const needle = q.toLowerCase();
+          return x.client.sessions
+            .get()
+            .items.filter((r) => r.id !== x.session && (!needle || (r.title || r.id).toLowerCase().includes(needle) || r.id.includes(needle)))
+            .slice(0, 8)
+            .map((r) => ({
+              id: "session:" + r.id,
+              group: "会话",
+              title: r.title || r.id,
+              description: r.preview,
+              icon: <MessagesSquare size={14} />,
+              insert: `@session:${r.id}`,
+            }));
+        },
+      });
+
       // ---- 消息操作（悬停条与 ⋯ 菜单）----
       const act = (a: Parameters<typeof reg.messageActions.add>[0]) => ctx.add(reg.messageActions, a);
       act({
         id: "msg.copy",
-        appliesTo: ["user", "assistant"],
+        appliesTo: ["user", "assistant", "selection"],
         label: "复制",
         icon: <Copy size={14} />,
         placement: "hover",
@@ -139,13 +179,25 @@ export function corePack(reg: Registries): ContributionPack {
       });
       act({
         id: "msg.quote",
-        appliesTo: ["user", "assistant"],
+        appliesTo: ["user", "assistant", "selection"],
         label: "引用到输入框",
         icon: <Quote size={14} />,
         order: 10,
         run: (x) => {
           const q = (x.text ?? "").split("\n").map((l) => "> " + l).join("\n");
           x.shell.insert(q + "\n\n");
+          x.shell.focusComposer();
+        },
+      });
+      act({
+        id: "msg.askAbout",
+        appliesTo: ["selection"],
+        label: "就这段追问",
+        icon: <MessageSquareQuote size={14} />,
+        order: 12,
+        run: (x) => {
+          const q = (x.text ?? "").split("\n").map((l) => "> " + l).join("\n");
+          x.shell.insert(q + "\n\n这段是什么意思？");
           x.shell.focusComposer();
         },
       });

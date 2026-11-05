@@ -2,7 +2,7 @@
 // 数据全部来自 @ybase/client 的 SessionStore 与 InteractionsStore；呈现用 @ybase/ui 的会话组件；
 // 可插入的位置都经插槽与注册表（消息操作、工具渲染、交互渲染、输入框动作、尾巴建议）。
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { MoreHorizontal, ShieldCheck, Square } from "lucide-react";
 import type { Interaction, ToolState } from "../../client";
 import { useInteractions, useSession, useStore } from "../../client/react";
@@ -11,7 +11,11 @@ import {
   Composer,
   Dot,
   ErrorBoundary,
+  FindBar,
   IconButton,
+  SelectionToolbar,
+  TurnNav,
+  jumpTurn,
   InteractionCard,
   MarkdownExtensions,
   Menu,
@@ -31,6 +35,7 @@ import { isVisible } from "../layout/reducer";
 import { Slot, useChainSlot, useCommandContext, useRegistry, useShell, whenState } from "../context";
 import { toUIActions, type ActionTarget } from "../contributions";
 import { useMenuGroups } from "./sidebar";
+import { useAttachments, useHistory, useMentions } from "./composer";
 import s from "./conversation.module.css";
 
 /** 主区：当前会话的对话，或某个主区页面。 */
@@ -182,6 +187,20 @@ function Conversation({ id }: { id: string }) {
   const [focusSig, setFocusSig] = useState(0);
   useEffect(() => sh.bus.on("focusComposer", () => setFocusSig((n) => n + 1)), [sh.bus]);
 
+  // 对话内查找（⌘F）、上 / 下一回合（⌥↑ / ⌥↓）：命令经事件通道发到当前对话。
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const [finding, setFinding] = useState(false);
+  const [findSig, setFindSig] = useState(0);
+  useEffect(
+    () =>
+      sh.bus.on("find", () => {
+        setFinding(true);
+        setFindSig((n) => n + 1);
+      }),
+    [sh.bus],
+  );
+  useEffect(() => sh.bus.on("jumpTurn", (d) => jumpTurn(bodyRef.current, d.dir)), [sh.bus]);
+
   const toolView = (name: string): ToolView | undefined => {
     for (const r of renderers) {
       if (r.tool === name || (r.tool.endsWith("*") && name.startsWith(r.tool.slice(0, -1)))) return r.view;
@@ -196,18 +215,51 @@ function Conversation({ id }: { id: string }) {
     return toUIActions(actions, { ...cmd, session: id, target, entryId: entry?.id, turn: t.turn, text });
   };
 
+  // 回合导航条的刻度：每个有用户输入的回合一个，悬停显示首句。
+  const marks = useMemo(
+    () =>
+      turns.flatMap((t) => {
+        const u = t.blocks.find((b) => b.kind === "user");
+        if (!u || u.kind !== "user") return [];
+        const text = (u.entry.item.content ?? []).map((p) => p.text ?? "").join("").trim();
+        return [{ turn: t.turn, label: text.split("\n")[0].slice(0, 80) || `第 ${t.turn} 回合` }];
+      }),
+    [turns],
+  );
+  const selectionActions = (text: string) => toUIActions(actions, { ...cmd, session: id, target: "selection", text });
+
+  const atts = useAttachments(id);
+  const history = useHistory(st.entries);
+  const mentions = useMentions();
+
   const send = async () => {
     const t = draft.trim();
-    if (!t) return;
+    const media = atts.parts;
+    if (!t && !media.length) return;
     setDraft("");
+    atts.clear();
+    history.reset();
     try {
-      await store.send(t);
+      await store.send(t, media.length ? [...media, ...(t ? [{ kind: "text", text: t }] : [])] : undefined);
     } catch (e) {
       sh.api.toast(e instanceof Error ? e.message : String(e), "danger");
     }
   };
 
-  const composerItems = useComposerItems(id, setDraft);
+  // 回合被拒（turn.rejected）：把那几条输入放回输入框并说明原因，不让用户的话丢掉。
+  const rejected = st.rejected;
+  useEffect(() => {
+    if (!rejected) return;
+    const ids = new Set(rejected.inputs);
+    const back = store.get().outbox.filter((o) => ids.has(o.client_id));
+    const text = back.map((o) => o.text).filter(Boolean).join("\n\n");
+    for (const o of back) store.discard(o.client_id);
+    if (text) setDraft((v) => (v ? text + "\n\n" + v : text));
+    sh.api.toast(`没有开始回合：${rejected.reason || "被拒绝"}${text ? "，输入已放回输入框" : ""}`, "warning");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rejected]);
+
+  const composerItems = useComposerItems(id, setDraft, atts.add);
 
   const cur = pending[Math.min(ix, Math.max(0, pending.length - 1))];
   const takeover = cur ? (
@@ -275,9 +327,12 @@ function Conversation({ id }: { id: string }) {
       {st.closed && <div className={cx(s.banner, s.banner_danger)}>{sh.t("conv.closed", { reason: st.closed })}</div>}
       {st.error && st.status === "error" && <div className={cx(s.banner, s.banner_danger)}>{st.error}</div>}
       <Slot at="conversation.banner" props={{ session: id }} />
-      <div className={s.body} style={{ ["--conv-width" as string]: `${prefs.chatWidth}px` }}>
+      <div ref={bodyRef} className={s.body} style={{ ["--conv-width" as string]: `${prefs.chatWidth}px` }}>
+        {finding && <FindBar root={bodyRef} focusSignal={findSig} onClose={() => setFinding(false)} />}
         <MarkdownExtensions value={mdExts.map((m) => m.ext)}>{content}</MarkdownExtensions>
         <InlineCards session={id} />
+        <TurnNav root={bodyRef} marks={marks} />
+        <SelectionToolbar root={bodyRef} actions={selectionActions} />
       </div>
       <div className={s.composerWrap}>
         <Composer
@@ -291,6 +346,11 @@ function Conversation({ id }: { id: string }) {
           placeholder={st.runState === "running" ? sh.t("conv.placeholder.running") : sh.t("conv.placeholder")}
           sendKey={prefs.sendKey}
           items={composerItems}
+          mentions={mentions}
+          attachments={atts.items}
+          onAttach={atts.add}
+          onRemoveAttachment={atts.remove}
+          onHistory={history.step}
           queued={st.outbox
             .filter((o) => o.state !== "sent")
             .map((o) => ({ id: o.client_id, text: o.text, state: o.state === "failed" ? "failed" : "sending", error: o.error }))}
@@ -425,7 +485,11 @@ function useDraft(id: string): [string, (v: string | ((x: string) => string)) =>
 }
 
 /** "+" 菜单与 / 命令：ComposerAction 注册表 + 声明了 slash 的命令。 */
-function useComposerItems(session: string, setDraft: (v: string | ((x: string) => string)) => void): ComposerItem[] {
+function useComposerItems(
+  session: string,
+  setDraft: (v: string | ((x: string) => string)) => void,
+  attach: (f: File[]) => void,
+): ComposerItem[] {
   const sh = useShell();
   const acts = useRegistry(sh.reg.composerActions);
   const cmds = useRegistry(sh.reg.commands);
@@ -445,7 +509,7 @@ function useComposerItems(session: string, setDraft: (v: string | ((x: string) =
       keywords: a.keywords,
       disabled: w.disabled,
       reason: w.reason,
-      run: () => a.run({ ...cx0, session, insert, attach: () => {} }),
+      run: () => a.run({ ...cx0, session, insert, attach }),
     });
   }
   for (const c of cmds) {

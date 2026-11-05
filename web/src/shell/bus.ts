@@ -6,6 +6,10 @@ export interface ShellEvents {
   insert: { session: string; text: string };
   /** 聚焦当前输入框。 */
   focusComposer: Record<string, never>;
+  /** 打开对话内查找（⌘F）。 */
+  find: Record<string, never>;
+  /** 跳到上 / 下一回合（⌥↑ / ⌥↓）。 */
+  jumpTurn: { dir: -1 | 1 };
 }
 
 export interface ShellBus {

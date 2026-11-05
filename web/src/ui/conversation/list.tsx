@@ -200,7 +200,7 @@ export function MessageList(p: MessageListProps) {
 
   return (
     <div className={cx(s.listWrap, p.className)}>
-      <div className={s.list} ref={ref} onScroll={onScroll}>
+      <div className={s.list} ref={ref} onScroll={onScroll} data-scroll>
         <div className={s.listInner}>
           {p.hasOlder && (
             <div className={s.loadOlder}>

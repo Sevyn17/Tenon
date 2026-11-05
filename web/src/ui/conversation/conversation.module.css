@@ -845,3 +845,124 @@
 .composerBox[hidden] {
   display: none;
 }
+
+/* —— 回合导航条 —— */
+.turnNav {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  max-height: 60%;
+  overflow: hidden;
+  padding: var(--space-1) 0;
+}
+.turnTick {
+  display: block;
+  width: 10px;
+  height: 7px;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+.turnTick::before {
+  content: "";
+  display: block;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--fg-4);
+  transition: background var(--dur) var(--ease), width var(--dur) var(--ease);
+}
+.turnTick:hover::before {
+  background: var(--fg-2);
+}
+.turnTick[data-active]::before {
+  background: var(--accent);
+}
+.turnNav:hover .turnTick {
+  width: 16px;
+}
+
+/* —— 对话内查找 —— */
+.findBar {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-5);
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px 3px 3px var(--space-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--bg-elevated);
+  backdrop-filter: blur(12px);
+  box-shadow: var(--shadow-lg);
+  animation: fadeIn var(--dur) var(--ease-enter);
+}
+.findInput {
+  width: 200px;
+  border: 0;
+  outline: none;
+  background: none;
+  color: var(--fg);
+  font-size: var(--text-sm);
+}
+.findCount {
+  min-width: 52px;
+  text-align: right;
+  padding-right: var(--space-1);
+  color: var(--fg-3);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+::highlight(ybase-find) {
+  background-color: #e5a50a55;
+  color: inherit;
+}
+::highlight(ybase-find-current) {
+  background-color: #ff8c00;
+  color: #000;
+}
+
+/* —— 选中文本工具条 —— */
+.selBar {
+  position: fixed;
+  z-index: var(--z-popover);
+  transform: translate(-50%, calc(-100% - 6px));
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--bg-elevated);
+  backdrop-filter: blur(12px);
+  box-shadow: var(--shadow-lg);
+  animation: fadeIn var(--dur) var(--ease);
+}
+.selBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  height: 26px;
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: none;
+  color: var(--fg);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.selBtn:hover {
+  background: var(--bg-hover);
+}
+.selBtn:disabled {
+  color: var(--fg-3);
+  cursor: default;
+}

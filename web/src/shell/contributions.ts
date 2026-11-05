@@ -5,7 +5,7 @@
 
 import type { ComponentType, ReactNode } from "react";
 import type { Client, Interaction, SessionInfo } from "../client";
-import type { DeclNode, MarkdownExtension, ToolView, UIAction } from "../ui";
+import type { DeclNode, MarkdownExtension, MentionItem, ToolView, UIAction } from "../ui";
 import { defineRegistry, type Contribution, type Registry } from "./registry";
 
 // ---- 命令（快捷键是命令的字段，见 keys.ts）----
@@ -175,6 +175,14 @@ export interface FollowupProvider extends Contribution {
 
 // ---- 输入框 ----
 
+/** "@" 提及的候选来源（会话、文件、插件给的东西）。按查询同步返回；没有候选返回空数组。 */
+export interface MentionProvider extends Contribution {
+  /** 分组标题。 */
+  group: string;
+  when?: (cx: CommandContext) => boolean | string;
+  suggest: (query: string, cx: CommandContext) => MentionItem[];
+}
+
 export interface ComposerAction extends Contribution {
   group: "add" | "command";
   title: string;
@@ -261,6 +269,7 @@ export interface Registries {
   interactionRenderers: Registry<InteractionRenderer>;
   followups: Registry<FollowupProvider>;
   composerActions: Registry<ComposerAction>;
+  mentions: Registry<MentionProvider>;
   settingsPages: Registry<SettingsPage>;
   settingsSections: Registry<SettingsSection>;
 }
@@ -280,6 +289,7 @@ export function createRegistries(): Registries {
     interactionRenderers: defineRegistry("interaction-renderer"),
     followups: defineRegistry("followup"),
     composerActions: defineRegistry("composer-action"),
+    mentions: defineRegistry("mention"),
     settingsPages: defineRegistry("settings-page"),
     settingsSections: defineRegistry("settings-section"),
   };

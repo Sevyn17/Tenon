@@ -8,6 +8,7 @@ import { createContext, Fragment, useContext, useMemo, type ReactNode } from "re
 import type { Client, Store } from "../client";
 import type { NavState } from "./nav";
 import type { ShellBus } from "./bus";
+import type { NoticesStore } from "./notices";
 import { useStore } from "../client/react";
 import { DeclarativeView, ErrorBoundary, type DeclAction } from "../ui";
 import type { CommandContext, Registries, ShellApi, SlotItem, SlotKind } from "./contributions";
@@ -38,6 +39,8 @@ export interface ShellState {
   nav: Store<NavState>;
   /** 区域之间的请求（插入输入框、聚焦输入框）。 */
   bus: ShellBus;
+  /** 通知中心（回合完成、需要确认、插件的 notify）。 */
+  notices: NoticesStore;
   brand: Brand;
   /** 声明式 UI 的动作执行（按钮只能调协议命令 / 开面板 / 填输入框 / 回答交互）。 */
   runDecl: (a: DeclAction, values?: Record<string, unknown>) => Promise<void>;

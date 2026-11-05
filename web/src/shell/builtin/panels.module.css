@@ -47,3 +47,23 @@ button.row:hover {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  padding: var(--space-1) var(--space-2);
+  border-bottom: 1px solid var(--border);
+}
+.grow {
+  flex: 1;
+}
+.notice {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding-right: var(--space-1);
+}
+.notice > .row {
+  flex: 1;
+  min-width: 0;
+}

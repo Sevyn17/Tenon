@@ -26,6 +26,19 @@ export interface ComposerItem {
   run: () => void | string | Promise<void | string>;
 }
 
+/** "@" 菜单里的一项：选中后用 insert 替换输入里的 "@查询"。 */
+export interface MentionItem {
+  id: string;
+  /** 分组标题（文件 / 会话 / 插件给的组）。 */
+  group: string;
+  title: string;
+  description?: string;
+  icon?: ReactNode;
+  insert: string;
+  disabled?: boolean;
+  reason?: string;
+}
+
 export interface Attachment {
   id: string;
   name: string;
@@ -57,6 +70,8 @@ export interface ComposerProps {
   /** Enter 发送（缺省）还是 Ctrl/⌘+Enter 发送。 */
   sendKey?: "enter" | "mod-enter";
   items?: ComposerItem[];
+  /** "@" 提及：按查询给候选（宿主从 MentionProvider 注册表合并）。没有就不弹 @ 菜单。 */
+  mentions?: (query: string) => MentionItem[];
   attachments?: Attachment[];
   onAttach?: (files: File[]) => void;
   onRemoveAttachment?: (id: string) => void;
@@ -80,7 +95,10 @@ export interface ComposerProps {
 export function Composer(p: ComposerProps) {
   const ta = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const fromHistory = useRef<string | null>(null);
   const [menu, setMenu] = useState<"plus" | "slash" | null>(null);
+  const [caret, setCaret] = useState(0);
+  const [mentionOff, setMentionOff] = useState<string | null>(null);
   const [active, setActive] = useState(0);
   const [drag, setDrag] = useState(false);
 
@@ -124,7 +142,35 @@ export function Composer(p: ComposerProps) {
     return [];
   }, [menu, p.items, slashQuery]);
 
-  useEffect(() => setActive(0), [menu, slashQuery]);
+  // "@" 菜单：光标前是 "@查询"（行首或空白之后，查询里没有空白）。Esc 关掉后同一个查询不再弹出。
+  const mention = useMemo(() => {
+    if (!p.mentions) return null;
+    const m = /(?:^|\s)@([^\s@]*)$/.exec(p.value.slice(0, caret));
+    if (!m) return null;
+    return { query: m[1], start: caret - m[1].length - 1 };
+  }, [p.mentions, p.value, caret]);
+  const mentionKey = mention ? `${mention.start}:${mention.query}` : null;
+  const mentionItems = useMemo(
+    () => (mention && mentionKey !== mentionOff && !menu ? p.mentions!(mention.query).slice(0, 50) : []),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [mentionKey, mentionOff, menu, p.mentions],
+  );
+
+  useEffect(() => setActive(0), [menu, slashQuery, mentionKey]);
+
+  const pickMention = (it: MentionItem) => {
+    if (it.disabled || !mention) return;
+    const before = p.value.slice(0, mention.start);
+    const after = p.value.slice(caret);
+    const ins = it.insert + (after.startsWith(" ") ? "" : " ");
+    p.onChange(before + ins + after);
+    const pos = before.length + ins.length;
+    requestAnimationFrame(() => {
+      ta.current?.focus();
+      ta.current?.setSelectionRange(pos, pos);
+      setCaret(pos);
+    });
+  };
 
   const pick = async (it: ComposerItem) => {
     if (it.disabled) return;
@@ -140,6 +186,24 @@ export function Composer(p: ComposerProps) {
 
   const onKey = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.nativeEvent.isComposing) return; // 输入法候选中
+    if (mentionItems.length) {
+      const n = mentionItems.length;
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        setActive((a) => (a + (e.key === "ArrowDown" ? 1 : n - 1)) % n);
+        return;
+      }
+      if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault();
+        pickMention(mentionItems[Math.min(active, n - 1)]);
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setMentionOff(mentionKey);
+        return;
+      }
+    }
     if (menu && shown.length) {
       if (e.key === "ArrowDown") {
         e.preventDefault();
@@ -172,10 +236,12 @@ export function Composer(p: ComposerProps) {
       } else if (ta.current) ta.current.dataset.esc = String(now);
       return;
     }
-    if ((e.key === "ArrowUp" || e.key === "ArrowDown") && p.value === "" && p.onHistory) {
+    // 历史：空输入框，或输入框里仍是上次翻出来的那条（没改过）时，↑ / ↓ 继续翻。
+    if ((e.key === "ArrowUp" || e.key === "ArrowDown") && p.onHistory && (p.value === "" || p.value === fromHistory.current)) {
       const h = p.onHistory(e.key === "ArrowUp" ? -1 : 1);
       if (h !== undefined) {
         e.preventDefault();
+        fromHistory.current = h;
         p.onChange(h);
       }
       return;
@@ -247,6 +313,7 @@ export function Composer(p: ComposerProps) {
         onDragLeave={() => setDrag(false)}
         onDrop={onDrop}
       >
+        {mentionItems.length > 0 && <MentionMenu items={mentionItems} active={active} onHover={setActive} onPick={pickMention} />}
         {menu && shown.length > 0 && (
           <SlashMenu items={shown} active={active} onHover={setActive} onPick={(i) => void pick(i)} />
         )}
@@ -273,7 +340,11 @@ export function Composer(p: ComposerProps) {
           value={p.value}
           disabled={p.disabled}
           placeholder={p.disabled ? p.disabledReason : (p.placeholder ?? (p.running ? "回合进行中：输入作为插话，下一步生效" : "给智能体发消息，/ 调出命令"))}
-          onChange={(e) => p.onChange(e.target.value)}
+          onChange={(e) => {
+            setCaret(e.target.selectionStart ?? e.target.value.length);
+            p.onChange(e.target.value);
+          }}
+          onSelect={(e) => setCaret(e.currentTarget.selectionStart ?? 0)}
           onKeyDown={onKey}
           onPaste={onPaste}
           aria-label="消息输入"
@@ -378,6 +449,49 @@ function SlashMenu({
           </div>
         ),
       )}
+    </div>
+  );
+}
+
+function MentionMenu({
+  items,
+  active,
+  onHover,
+  onPick,
+}: {
+  items: MentionItem[];
+  active: number;
+  onHover: (i: number) => void;
+  onPick: (i: MentionItem) => void;
+}) {
+  const groups = new Map<string, { it: MentionItem; i: number }[]>();
+  items.forEach((it, i) => groups.set(it.group, [...(groups.get(it.group) ?? []), { it, i }]));
+  return (
+    <div className={s.slash} role="listbox" aria-label="提及">
+      {[...groups].map(([label, xs]) => (
+        <div key={label}>
+          <div className={s.slashGroup}>{label}</div>
+          {xs.map(({ it, i }) => (
+            <button
+              key={it.id}
+              type="button"
+              role="option"
+              aria-selected={i === active}
+              data-active={i === active}
+              className={s.slashItem}
+              disabled={it.disabled}
+              title={it.disabled ? it.reason : undefined}
+              onMouseEnter={() => onHover(i)}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => onPick(it)}
+            >
+              <span className={s.slashIcon}>{it.icon}</span>
+              <span className={s.slashTitle}>{it.title}</span>
+              {it.description && <span className={s.slashDesc}>{it.description}</span>}
+            </button>
+          ))}
+        </div>
+      ))}
     </div>
   );
 }

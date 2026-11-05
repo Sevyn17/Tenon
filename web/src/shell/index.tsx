@@ -15,6 +15,8 @@ import { createRegistries, type ShellApi, type ShellNotice } from "./contributio
 import { createT, type Locale, type Messages } from "./i18n";
 import { createLayoutStore } from "./layout/store";
 import { createNav } from "./nav";
+import { createNotices } from "./notices";
+import { watchActivity } from "./notify";
 import { createPrefs, type Prefs } from "./prefs";
 import { createPackHost, type ContributionPack } from "./registry";
 import { corePack } from "./builtin/core";
@@ -63,7 +65,7 @@ export function createShell(o: ShellOptions = {}): Shell {
   const brand: Brand = { name: "YBase", ...o.brand };
   let toastFn: (text: string, tone?: ShellNotice["tone"]) => void = () => {};
   let askFn: (a: Asker) => void = () => {};
-  const notices: ShellNotice[] = [];
+  const notices = createNotices();
 
   const api: ShellApi = {
     current: () => nav.get().session,
@@ -92,8 +94,7 @@ export function createShell(o: ShellOptions = {}): Shell {
       void c.run(cx);
     },
     notify(n) {
-      notices.unshift({ ...n, id: String(Date.now()) + Math.random(), at: Date.now() });
-      if (notices.length > 50) notices.length = 50;
+      notices.add(n);
       toastFn(n.title, n.tone);
     },
     toast: (text, tone) => toastFn(text, tone),
@@ -110,6 +111,7 @@ export function createShell(o: ShellOptions = {}): Shell {
     layout,
     nav,
     bus,
+    notices,
     t,
     api,
     brand,
@@ -187,6 +189,7 @@ export function createShell(o: ShellOptions = {}): Shell {
       return () => mq.removeEventListener("change", f);
     }, [p.theme]);
     useKeybindings(state, isMac);
+    useEffect(() => watchActivity(state), []);
     return null;
   }
 
@@ -296,6 +299,31 @@ function shellPack(sh: ShellState): ContributionPack {
         section: "general",
         keybind: "?",
         run: () => sh.nav.update((v) => ({ ...v, shortcuts: !v.shortcuts })),
+      });
+      cmd({
+        id: "conversation.find",
+        title: "对话内查找",
+        section: "navigation",
+        keybind: "Mod+F",
+        global: true,
+        when: () => (sh.nav.get().session ? true : "没有打开的会话"),
+        run: () => sh.bus.emit("find", {}),
+      });
+      cmd({
+        id: "conversation.prevTurn",
+        title: "上一回合",
+        section: "navigation",
+        keybind: "Alt+ArrowUp",
+        when: () => (sh.nav.get().session ? true : "没有打开的会话"),
+        run: () => sh.bus.emit("jumpTurn", { dir: -1 }),
+      });
+      cmd({
+        id: "conversation.nextTurn",
+        title: "下一回合",
+        section: "navigation",
+        keybind: "Alt+ArrowDown",
+        when: () => (sh.nav.get().session ? true : "没有打开的会话"),
+        run: () => sh.bus.emit("jumpTurn", { dir: 1 }),
       });
       cmd({
         id: "shell.cycleTheme",
