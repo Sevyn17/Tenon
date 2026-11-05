@@ -4,9 +4,11 @@
 import { StrictMode, type ComponentType } from "react";
 import { createRoot } from "react-dom/client";
 
-const gallery = new URLSearchParams(location.search).has("gallery");
+const q = new URLSearchParams(location.search);
+const gallery = q.has("gallery");
 
 async function load(): Promise<ComponentType> {
+  if (gallery && q.get("gallery") === "chat") return (await import("./gallery-chat")).GalleryChat;
   if (gallery) return (await import("./gallery")).Gallery;
   await import("./styles.css");
   return (await import("./App")).App;

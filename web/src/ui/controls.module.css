@@ -144,6 +144,8 @@
   display: inline-block;
   width: var(--sp, 14px);
   height: var(--sp, 14px);
+  max-width: var(--sp, 14px);
+  max-height: var(--sp, 14px);
   border: 1.5px solid var(--fg-4);
   border-top-color: var(--fg-2);
   border-radius: 50%;
