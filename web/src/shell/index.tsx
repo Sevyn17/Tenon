@@ -22,6 +22,8 @@ import { createPackHost, type ContributionPack } from "./registry";
 import { corePack } from "./builtin/core";
 import { settingsPack } from "./builtin/settings";
 import { panelsPack } from "./builtin/panels";
+import { changesPack, tasksPack, workPanelsPack } from "./builtin/workpanels";
+import { modesPagePack, morePagesPack, watchDisabled } from "./builtin/pages";
 import { Frame } from "./regions/frame";
 
 export * from "./registry";
@@ -133,11 +135,17 @@ export function createShell(o: ShellOptions = {}): Shell {
     },
   };
 
-  packs.setDisabled(new Set([...(o.disable ?? []), ...prefs.get().disabledPacks]));
+  // 关掉的包：嵌入方的 disable 固定，设置里的开关（prefs.disabledPacks）即时生效。
+  watchDisabled(state, o.disable ?? []);
   packs.register(corePack(reg));
   packs.register(shellPack(state));
   packs.register(settingsPack(state));
   packs.register(panelsPack(state));
+  packs.register(workPanelsPack(state));
+  packs.register(tasksPack(state));
+  packs.register(changesPack(state));
+  packs.register(morePagesPack(state));
+  packs.register(modesPagePack(state));
   for (const p of o.contributions ?? []) packs.register(p);
 
   // 后端环境：握手后用 capabilities；plugins.list 拿到已启用的后端插件（不可用时不检查插件）。
