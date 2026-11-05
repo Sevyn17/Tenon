@@ -708,9 +708,11 @@
 
 /* —— 消息列表 —— */
 .list {
-  display: flex;
-  flex-direction: column;
-  padding: var(--space-6) 0 var(--space-4);
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  overflow-anchor: none;
 }
 .loadOlder {
   align-self: center;
@@ -801,11 +803,12 @@
   flex-direction: column;
 }
 .listInner {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding: var(--space-6) var(--space-4) var(--space-4);
+  max-width: var(--conv-width, 760px);
+  margin: 0 auto;
+  padding: var(--space-6) var(--space-5) var(--space-8);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
 }
 .toBottom {
   position: absolute;
@@ -838,52 +841,6 @@
   white-space: pre-wrap;
 }
 
-/* —— 消息列表外壳 —— */
-.listWrap {
-  position: relative;
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  overflow-anchor: none;
-}
-.listInner {
-  max-width: var(--conv-width, 760px);
-  margin: 0 auto;
-  padding: var(--space-6) var(--space-5) var(--space-8);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-6);
-}
-.toBottom {
-  position: sticky;
-  bottom: var(--space-3);
-  left: 50%;
-  transform: translateX(-50%);
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  margin: 0 auto;
-  padding: 4px 12px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-full);
-  background: var(--bg-elevated);
-  color: var(--fg-2);
-  font-size: var(--text-sm);
-  box-shadow: var(--shadow-lg);
-  cursor: pointer;
-  animation: slideUp var(--dur) var(--ease-enter);
-}
-.toBottom:hover {
-  color: var(--fg);
-}
-.contextNote {
-  align-self: center;
-  font-size: var(--text-xs);
-  color: var(--fg-3);
-  padding: 2px 8px;
-  border-radius: var(--radius-full);
-  background: var(--bg-hover);
-}
 /* hidden 属性要压过 .composerBox 的 display:flex（接管时编辑区保持挂载但不显示）。 */
 .composerBox[hidden] {
   display: none;

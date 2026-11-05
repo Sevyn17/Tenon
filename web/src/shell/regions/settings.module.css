@@ -1,0 +1,144 @@
+/* ⑨ 设置覆盖层：左侧分节导航 + 搜索，右侧页面。 */
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-dialog);
+  display: grid;
+  place-items: center;
+  background: var(--scrim);
+  animation: fade var(--dur) var(--ease);
+}
+.box {
+  width: min(960px, 94vw);
+  height: min(680px, 88vh);
+  display: flex;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-xl);
+  background: var(--bg-app);
+  box-shadow: var(--shadow-2xl);
+  overflow: hidden;
+  animation: pop var(--dur) var(--ease-enter);
+}
+.nav {
+  flex: none;
+  width: 220px;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-sidebar);
+  border-right: 1px solid var(--border);
+}
+.search {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: var(--space-3);
+  padding: 0 var(--space-2);
+  height: 30px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-input, var(--bg-app));
+  color: var(--fg-3);
+}
+.search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: none;
+  color: var(--fg);
+  font: inherit;
+  font-size: var(--text-sm);
+}
+.search:focus-within {
+  border-color: var(--accent);
+}
+.navList {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 var(--space-2) var(--space-3);
+}
+.navGroup + .navGroup {
+  margin-top: var(--space-3);
+}
+.navGroupLabel {
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--fg-3);
+}
+.navItem {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: 30px;
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: none;
+  color: var(--fg-2);
+  text-align: left;
+  cursor: pointer;
+  font-size: var(--text-sm);
+}
+.navItem:hover {
+  background: var(--bg-hover);
+  color: var(--fg);
+}
+.navActive,
+.navActive:hover {
+  background: var(--bg-selected);
+  color: var(--fg);
+}
+.navHint {
+  color: var(--fg-3);
+  font-size: var(--text-xs);
+}
+.navEmpty {
+  padding: var(--space-4) var(--space-2);
+  color: var(--fg-3);
+  font-size: var(--text-sm);
+}
+.grow {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 52px;
+  padding: 0 var(--space-4) 0 var(--space-6);
+  border-bottom: 1px solid var(--border);
+}
+.head h2 {
+  margin: 0;
+  font-size: var(--text-lg, 15px);
+  font-weight: 600;
+}
+.body {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-5, 20px) var(--space-6);
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes pop {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+}

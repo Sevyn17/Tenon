@@ -1,0 +1,177 @@
+/* ③ 对话区：头部 + 消息流 + 输入框；④ 对话内小卡片浮在消息流右侧。 */
+
+.conv {
+  position: relative;
+  flex: 1;
+  min-width: 400px;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-app);
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: var(--toolbar-h);
+  padding: 0 var(--space-3) 0 var(--space-4);
+  border-bottom: 1px solid var(--border);
+  flex: none;
+}
+.title {
+  font-size: var(--text-md);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 40%;
+}
+.meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--fg-3);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+}
+.grow {
+  flex: 1;
+}
+
+.banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--text-sm);
+  background: var(--warning-soft);
+  color: var(--fg);
+  border-bottom: 1px solid var(--border);
+}
+.banner_danger {
+  background: var(--danger-soft);
+}
+
+.body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.composerWrap {
+  flex: none;
+  width: 100%;
+  max-width: calc(var(--conv-width, 760px) + 40px);
+  margin: 0 auto;
+  padding: 0 var(--space-5) var(--space-4);
+}
+
+/* —— ④ 对话内小卡片 —— */
+.cards {
+  position: absolute;
+  top: var(--space-4);
+  right: var(--space-4);
+  width: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  z-index: 2;
+  pointer-events: none;
+}
+.card {
+  pointer-events: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  background: var(--bg-elevated);
+  backdrop-filter: blur(12px);
+  box-shadow: var(--shadow-sm);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  text-align: left;
+  color: var(--fg);
+  transition: border-color var(--dur) var(--ease), transform var(--dur) var(--ease);
+  animation: cardIn var(--dur-slow) var(--ease-enter);
+}
+.card:hover {
+  border-color: var(--border-strong);
+  transform: translateY(-1px);
+}
+.cardHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--fg-2);
+  font-size: var(--text-xs);
+  margin-bottom: 2px;
+}
+@keyframes cardIn {
+  from {
+    opacity: 0;
+    transform: translateX(8px);
+  }
+}
+/* 对话区太窄时小卡片不显示（container query：只看对话区自己的宽度）。 */
+.body {
+  container-type: inline-size;
+}
+@container (max-width: 1040px) {
+  .cards {
+    display: none;
+  }
+}
+
+/* —— 空会话首屏 —— */
+.hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  min-height: 50vh;
+  text-align: center;
+}
+.heroTitle {
+  font-size: var(--text-2xl);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.heroHint {
+  color: var(--fg-2);
+  max-width: 460px;
+}
+.examples {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+.example {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: none;
+  padding: 6px 14px;
+  color: var(--fg-2);
+  cursor: pointer;
+}
+.example:hover {
+  background: var(--bg-hover);
+  color: var(--fg);
+}
+
+/* —— 主区页面 —— */
+.page {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.pageBody {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--space-6) var(--space-8);
+}

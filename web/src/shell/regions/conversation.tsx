@@ -1,0 +1,476 @@
+// ③ 对话区（前端方案第五、六之二、七至十节）：头部、消息流、回合尾巴、输入框与交互接管、④ 对话内小卡片。
+// 数据全部来自 @ybase/client 的 SessionStore 与 InteractionsStore；呈现用 @ybase/ui 的会话组件；
+// 可插入的位置都经插槽与注册表（消息操作、工具渲染、交互渲染、输入框动作、尾巴建议）。
+
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { MoreHorizontal, ShieldCheck, Square } from "lucide-react";
+import type { Interaction, ToolState } from "../../client";
+import { useInteractions, useSession, useStore } from "../../client/react";
+import {
+  Badge,
+  Composer,
+  Dot,
+  IconButton,
+  InteractionCard,
+  MarkdownExtensions,
+  Menu,
+  MessageList,
+  TurnTail,
+  buildTurns,
+  cx,
+  type Block,
+  type ComposerItem,
+  type ToolView,
+  type Turn,
+  type TurnStats,
+  type UIInteraction,
+  type UITool,
+} from "../../ui";
+import { Slot, useChainSlot, useCommandContext, useRegistry, useShell, whenState } from "../context";
+import { toUIActions, type ActionTarget } from "../contributions";
+import { useMenuGroups } from "./sidebar";
+import s from "./conversation.module.css";
+
+/** 主区：当前会话的对话，或某个主区页面。 */
+export function MainArea() {
+  const sh = useShell();
+  const nav = useStore(sh.nav);
+  const pages = useRegistry(sh.reg.pages);
+  if (nav.page) {
+    const p = pages.find((x) => x.id === nav.page);
+    if (p)
+      return (
+        <main className={s.page}>
+          <header className={s.head}>
+            <span className={s.title}>{p.title}</span>
+            <span className={s.grow} />
+            <IconButton label="返回对话" size="sm" onClick={() => sh.api.openPage(null)}>
+              ✕
+            </IconButton>
+          </header>
+          <div className={s.pageBody}>{p.render()}</div>
+        </main>
+      );
+  }
+  if (!nav.session) return <EmptyMain />;
+  return <Conversation key={nav.session} id={nav.session} />;
+}
+
+function EmptyMain() {
+  const sh = useShell();
+  return (
+    <main className={s.conv}>
+      <div className={s.body}>
+        <Hero onPick={async (t) => {
+          await sh.api.newSession();
+          setTimeout(() => sh.api.insert(t), 0);
+        }} />
+      </div>
+    </main>
+  );
+}
+
+function Hero({ onPick }: { onPick: (t: string) => void }) {
+  const sh = useShell();
+  return (
+    <Slot
+      at="conversation.empty"
+      kind="single"
+      fallback={
+        <div className={s.hero}>
+          <div className={s.heroTitle}>{sh.brand.greeting ?? sh.t("conv.empty.title")}</div>
+          <div className={s.heroHint}>{sh.t("conv.empty.hint")}</div>
+          {sh.brand.examples && sh.brand.examples.length > 0 && (
+            <div className={s.examples}>
+              {sh.brand.examples.map((e) => (
+                <button key={e} type="button" className={s.example} onClick={() => onPick(e)}>
+                  {e}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      }
+    />
+  );
+}
+
+// ---- 工具：客户端状态 → 组件状态 ----
+
+function toUITool(t: ToolState): UITool {
+  const phase: UITool["phase"] =
+    t.phase === "ended" ? (t.status === "ok" ? "ok" : t.status === "cancelled" ? "cancelled" : "error") : t.phase;
+  return { call_id: t.call_id, name: t.name, args: t.args, phase, output: t.preview, output_ref: t.output_ref, startedAt: t.startedAt, endedAt: t.endedAt };
+}
+
+/** 回合统计：耗时、步数、工具数、tokens（来自回合内 assistant 条目的 usage）。 */
+function statsOf(t: Turn): TurnStats | undefined {
+  const es = t.entries;
+  if (!es.length) return undefined;
+  let input = 0,
+    output = 0,
+    cacheRead = 0,
+    steps = 0,
+    tools = 0;
+  let model = "";
+  for (const e of es) {
+    if (e.item.kind !== "assistant") continue;
+    steps++;
+    tools += e.item.tool_calls?.length ?? 0;
+    if (e.item.usage) {
+      input += e.item.usage.input;
+      output += e.item.usage.output;
+      cacheRead += e.item.usage.cache_read;
+    }
+    if (e.item.model) model = e.item.model;
+  }
+  if (!steps) return undefined;
+  return { durationMs: Math.max(0, es[es.length - 1].at - es[0].at), steps, tools, input, output, cacheRead, model };
+}
+
+// ---- 对话 ----
+
+function Conversation({ id }: { id: string }) {
+  const sh = useShell();
+  const prefs = useStore(sh.prefs);
+  const [st, store] = useSession(id, { create: true });
+  const inter = useInteractions();
+  const cmd = useCommandContext();
+  const actions = useRegistry(sh.reg.messageActions);
+  const renderers = useRegistry(sh.reg.toolRenderers);
+  const mdExts = useRegistry(sh.reg.markdown);
+  const irs = useRegistry(sh.reg.interactionRenderers);
+  const [draft, setDraft] = useDraft(id);
+  const [ix, setIx] = useState(0);
+
+  const pending = useMemo(
+    () => inter.open.filter((x) => x.session === id || x.session.startsWith(id + "/")),
+    [inter.open, id],
+  );
+  const awaiting = useMemo(() => {
+    const ids = new Set<string>();
+    for (const it of pending) {
+      const callId = (it as Interaction & { approval?: { call_id?: string } }).approval?.call_id;
+      if (callId) ids.add(callId);
+    }
+    return ids;
+  }, [pending]);
+
+  const turns = useMemo(
+    () =>
+      buildTurns({
+        entries: st.entries,
+        streams: st.streams,
+        tools: st.tools.map(toUITool),
+        liveTurn: st.turn?.turn ?? (st.runState === "running" ? (st.entries[st.entries.length - 1]?.turn ?? 0) + 1 : null),
+        awaiting,
+      }),
+    [st.entries, st.streams, st.tools, st.turn, st.runState, awaiting],
+  );
+
+  // 外部插入（shell.api.insert）：走本工作台的事件通道，不走 window（同页多个工作台互不串扰）。
+  useEffect(
+    () =>
+      sh.bus.on("insert", (d) => {
+        if (d.session === id || d.session === "*") setDraft((v) => (v ? v + (v.endsWith(" ") ? "" : " ") + d.text : d.text));
+      }),
+    [sh.bus, id, setDraft],
+  );
+  // 聚焦输入框（shell.api.focusComposer / ⌘L）：递增信号让 Composer 抢焦点。
+  const [focusSig, setFocusSig] = useState(0);
+  useEffect(() => sh.bus.on("focusComposer", () => setFocusSig((n) => n + 1)), [sh.bus]);
+
+  const toolView = (name: string): ToolView | undefined => {
+    for (const r of renderers) {
+      if (r.tool === name || (r.tool.endsWith("*") && name.startsWith(r.tool.slice(0, -1)))) return r.view;
+    }
+    return undefined;
+  };
+
+  const actionsFor = (b: Block, t: Turn) => {
+    const target: ActionTarget = b.kind === "user" ? "user" : "assistant";
+    const entry = b.kind === "user" ? b.entry : b.kind === "text" ? b.entry : undefined;
+    const text = b.kind === "user" ? (b.entry.item.content ?? []).map((p) => p.text ?? "").join("") : b.kind === "text" ? b.text : "";
+    return toUIActions(actions, { ...cmd, session: id, target, entryId: entry?.id, turn: t.turn, text });
+  };
+
+  const send = async () => {
+    const t = draft.trim();
+    if (!t) return;
+    setDraft("");
+    try {
+      await store.send(t);
+    } catch (e) {
+      sh.api.toast(e instanceof Error ? e.message : String(e), "danger");
+    }
+  };
+
+  const composerItems = useComposerItems(id, setDraft);
+
+  const cur = pending[Math.min(ix, Math.max(0, pending.length - 1))];
+  const takeover = cur ? (
+    <InteractionCard
+      key={cur.id}
+      it={cur as UIInteraction}
+      keyboard
+      position={
+        pending.length > 1
+          ? {
+              index: pending.indexOf(cur),
+              total: pending.length,
+              prev: () => setIx((i) => Math.max(0, i - 1)),
+              next: () => setIx((i) => Math.min(pending.length - 1, i + 1)),
+            }
+          : undefined
+      }
+      source={cur.session !== id ? `主会话 › ${cur.session.slice(id.length + 1)}` : undefined}
+      body={irs.find((r) => r.kind === cur.kind)?.render(cur)}
+      onRespond={async (r) => {
+        await sh.client.interactions.respond(cur.id, r);
+      }}
+      onDenyWithReason={async (text) => {
+        await sh.client.interactions.respond(cur.id, { approve: false });
+        if (text.trim()) await store.send(text.trim());
+      }}
+    />
+  ) : null;
+
+  const chainTakeover = useChainSlot("composer.takeover", { session: id });
+  const lastIndex = turns.length - 1;
+  const content = (
+    <MessageList
+      turns={turns}
+      base={st.base}
+      hasOlder={st.entries.length > 0 && st.entries[0].idx > 0}
+      loadingOlder={st.loadingOlder}
+      onLoadOlder={() => void store.loadOlder()}
+      actionsFor={actionsFor}
+      toolView={toolView}
+      showContext={prefs.showContext}
+      tick={st.streams.map((x) => x.text.length).join(",") + "|" + st.tools.length}
+      empty={st.status === "ready" ? <Hero onPick={(t) => setDraft(t)} /> : null}
+      slot={(at, t) => <Slot at={`message.${at}`} props={{ session: id, turn: t.turn }} />}
+      tail={(t, i) => {
+        if (t.live) return null;
+        const isLast = i === lastIndex;
+        return (
+          <TurnTail
+            stats={statsOf(t)}
+            onOpenStats={() => sh.api.openPanel("usage", { turn: t.turn })}
+            actions={toUIActions(actions, { ...cmd, session: id, target: "turn", turn: t.turn })}
+            end={isLast && st.lastEnd && st.lastEnd.kind !== "done" ? st.lastEnd : null}
+            onContinue={() => void store.send("继续")}
+            extra={<Slot at="turn.tail" props={{ session: id, turn: t.turn, last: isLast }} />}
+          />
+        );
+      }}
+    />
+  );
+
+  return (
+    <main className={s.conv}>
+      <Header id={id} title={st.title || id} running={st.runState === "running"} mode={st.mode?.label} />
+      {st.closed && <div className={cx(s.banner, s.banner_danger)}>{sh.t("conv.closed", { reason: st.closed })}</div>}
+      {st.error && st.status === "error" && <div className={cx(s.banner, s.banner_danger)}>{st.error}</div>}
+      <Slot at="conversation.banner" props={{ session: id }} />
+      <div className={s.body} style={{ ["--conv-width" as string]: `${prefs.chatWidth}px` }}>
+        <MarkdownExtensions value={mdExts.map((m) => m.ext)}>{content}</MarkdownExtensions>
+        <InlineCards />
+      </div>
+      <div className={s.composerWrap}>
+        <Composer
+          value={draft}
+          onChange={setDraft}
+          onSend={() => void send()}
+          onStop={() => void store.cancel()}
+          running={st.runState === "running"}
+          disabled={!!st.closed}
+          disabledReason={st.closed ? sh.t("conv.closed", { reason: st.closed }) : undefined}
+          placeholder={st.runState === "running" ? sh.t("conv.placeholder.running") : sh.t("conv.placeholder")}
+          sendKey={prefs.sendKey}
+          items={composerItems}
+          queued={st.outbox
+            .filter((o) => o.state !== "sent")
+            .map((o) => ({ id: o.client_id, text: o.text, state: o.state === "failed" ? "failed" : "sending", error: o.error }))}
+          onRetryQueued={(cid) => void store.retry(cid)}
+          onDiscardQueued={(cid) => store.discard(cid)}
+          above={<Slot at="composer.above" props={{ session: id }} />}
+          toolbarLeft={
+            <>
+              {st.mode && (
+                <Badge tone="neutral">
+                  <ShieldCheck size={12} /> {st.mode.label || st.mode.mode}
+                </Badge>
+              )}
+              <Slot at="composer.toolbar.left" props={{ session: id }} />
+            </>
+          }
+          toolbarRight={<Slot at="composer.toolbar.right" props={{ session: id }} />}
+          below={<Slot at="composer.below" props={{ session: id }} />}
+          status={st.runState === "running" ? <RunningStatus startedAt={st.turn?.startedAt} onStop={() => void store.cancel()} /> : null}
+          takeover={takeover ?? chainTakeover}
+          autoFocus
+          focusSignal={focusSig}
+        />
+      </div>
+    </main>
+  );
+}
+
+function RunningStatus({ startedAt, onStop }: { startedAt?: number; onStop: () => void }) {
+  const [, tick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => tick((x) => x + 1), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const sec = startedAt ? Math.floor((Date.now() - startedAt) / 1000) : 0;
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+      <Dot state="running" /> 工作中 · {Math.floor(sec / 60)}:{String(sec % 60).padStart(2, "0")}
+      <IconButton label="停止" size="sm" onClick={onStop}>
+        <Square size={12} />
+      </IconButton>
+    </span>
+  );
+}
+
+function Header({ id, title, running, mode }: { id: string; title: string; running: boolean; mode?: string }) {
+  const groups = useMenuGroups("conversation.header.menu");
+  return (
+    <header className={s.head}>
+      <Slot at="conversation.header.leading" props={{ session: id }} />
+      <span className={s.title} title={id}>
+        {title}
+      </span>
+      <span className={s.meta}>
+        {running && (
+          <>
+            <Dot state="running" /> 运行中
+          </>
+        )}
+        {mode && !running && <span>{mode}</span>}
+      </span>
+      <span className={s.grow} />
+      <Slot at="conversation.header.actions" props={{ session: id }} />
+      <Menu
+        placement="bottom-end"
+        groups={groups}
+        trigger={({ ref, toggle }) => (
+          <IconButton ref={ref} label="会话菜单" size="sm" onClick={toggle}>
+            <MoreHorizontal size={16} />
+          </IconButton>
+        )}
+      />
+    </header>
+  );
+}
+
+/** ④ 对话内小卡片：面板声明了 card 且该面板没打开时显示，点了打开面板。 */
+function InlineCards() {
+  const sh = useShell();
+  const panels = useRegistry(sh.reg.panels);
+  const layout = useStore(sh.layout);
+  const cx0 = useCommandContext();
+  const open = new Set<string>();
+  for (const d of ["right", "bottom"] as const) {
+    if (layout.hidden[d]) continue;
+    const walk = (n: typeof layout.docks.right): void => {
+      if (!n) return;
+      if (n.type === "group") open.add(n.active);
+      else n.children.forEach(walk);
+    };
+    walk(layout.docks[d]);
+  }
+  const cards: { id: string; title: string; icon: ReactNode; node: ReactNode }[] = [];
+  for (const p of panels) {
+    if (!p.card || open.has(p.id)) continue;
+    const node = p.card(cx0);
+    if (node) cards.push({ id: p.id, title: p.title, icon: p.icon, node });
+  }
+  const extra = <Slot at="conversation.card" props={{ session: cx0.session }} />;
+  if (!cards.length) return <div className={s.cards}>{extra}</div>;
+  return (
+    <div className={s.cards}>
+      {cards.map((c) => (
+        <button key={c.id} type="button" className={s.card} onClick={() => sh.api.openPanel(c.id)}>
+          <div className={s.cardHead}>
+            {c.icon} {c.title}
+          </div>
+          {c.node}
+        </button>
+      ))}
+      {extra}
+    </div>
+  );
+}
+
+/** 草稿按会话保存在 sessionStorage（刷新不丢，切会话各自保留）。 */
+function useDraft(id: string): [string, (v: string | ((x: string) => string)) => void] {
+  const key = `ybase.draft.${id}`;
+  const [v, setV] = useState(() => {
+    try {
+      return sessionStorage.getItem(key) ?? "";
+    } catch {
+      return "";
+    }
+  });
+  const set = (x: string | ((y: string) => string)) =>
+    setV((cur) => {
+      const nv = typeof x === "function" ? x(cur) : x;
+      try {
+        if (nv) sessionStorage.setItem(key, nv);
+        else sessionStorage.removeItem(key);
+      } catch {
+        /* 存储不可用 */
+      }
+      return nv;
+    });
+  return [v, set];
+}
+
+/** "+" 菜单与 / 命令：ComposerAction 注册表 + 声明了 slash 的命令。 */
+function useComposerItems(session: string, setDraft: (v: string | ((x: string) => string)) => void): ComposerItem[] {
+  const sh = useShell();
+  const acts = useRegistry(sh.reg.composerActions);
+  const cmds = useRegistry(sh.reg.commands);
+  const cx0 = useCommandContext();
+  const insert = (t: string) => setDraft((v) => (v ? v + t : t));
+  const out: ComposerItem[] = [];
+  for (const a of acts) {
+    const w = whenState(a.when?.(cx0));
+    if (!w.show) continue;
+    out.push({
+      id: a.id,
+      group: a.group,
+      title: a.title,
+      description: a.description,
+      icon: a.icon,
+      slash: a.slash,
+      keywords: a.keywords,
+      disabled: w.disabled,
+      reason: w.reason,
+      run: () => a.run({ ...cx0, session, insert, attach: () => {} }),
+    });
+  }
+  for (const c of cmds) {
+    if (!c.slash || out.some((x) => x.slash === c.slash)) continue;
+    const w = whenState(c.when?.(cx0));
+    if (!w.show) continue;
+    out.push({
+      id: "cmd:" + c.id,
+      group: "command",
+      title: c.title,
+      description: c.description,
+      icon: c.icon,
+      slash: c.slash,
+      keywords: c.keywords,
+      disabled: w.disabled,
+      reason: w.reason,
+      run: async () => {
+        setDraft("");
+        await c.run(cx0);
+      },
+    });
+  }
+  return out;
+}

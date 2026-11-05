@@ -73,6 +73,8 @@ export interface ComposerProps {
   status?: ReactNode;
   takeover?: ReactNode;
   autoFocus?: boolean;
+  /** 变化时聚焦编辑区（宿主"聚焦输入框"命令用）。 */
+  focusSignal?: number;
 }
 
 export function Composer(p: ComposerProps) {
@@ -93,6 +95,10 @@ export function Composer(p: ComposerProps) {
   useEffect(() => {
     if (p.autoFocus) ta.current?.focus();
   }, [p.autoFocus]);
+
+  useEffect(() => {
+    if (p.focusSignal) ta.current?.focus();
+  }, [p.focusSignal]);
 
   // "/" 菜单：编辑区以 /xxx 开头且没有空格时。
   const slashQuery = /^\/(\S*)$/.exec(p.value)?.[1];
