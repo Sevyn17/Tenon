@@ -240,8 +240,21 @@ func (c *Conn) run(ctx context.Context, id string, live *bus.Sub, replay []bus.E
 
 // translate 总线事件 → 公开的线上事件（0–2 条）。不在 10.5 两张表里的一律不推。
 func (c *Conn) translate(e bus.Envelope) []wire.Envelope {
+	if v, ok := e.Data.(v2Event); ok { // stream2.go 发的分段流式事件：载荷已是线上类型
+		if !wire.Public(e.Kind) {
+			return nil
+		}
+		return []wire.Envelope{c.envelope(e.Session, e.Kind, 0, v.Turn, v.Payload)}
+	}
 	m := dataMap(e.Data)
 	switch e.Kind {
+	case EventTurnStart:
+		turn := uint32(intOf(m["turn"]))
+		inputs := stringList(m["inputs"])
+		if inputs == nil {
+			inputs = []string{}
+		}
+		return []wire.Envelope{c.envelope(e.Session, wire.EvTurnStarted, 0, turn, wire.TurnStarted{Turn: turn, Inputs: inputs})}
 	case store.EventEntry:
 		var ent session.Entry
 		raw, err := json.Marshal(m["entry"])

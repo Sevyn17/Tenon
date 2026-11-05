@@ -45,6 +45,8 @@ type Hooks struct {
 	OnToolCall   func(call session.ToolCall)
 	OnToolResult func(call session.ToolCall, output string, isErr bool)
 	OnConfirm    func(callID, tool, reason string) // 挂起式确认开始（HumanRequested）
+	// OnStream 分段流式事件（protocol 2，见 stream.go）：带 entry_id、调用 id 与重试序号。与 OnText / OnReset 并存。
+	OnStream func(StreamEvent)
 }
 
 // PersistStore agent 用到的存储能力：会话日志 + 工具确认决定。
@@ -279,6 +281,7 @@ func (a *Agent) sendModel(ctx context.Context, need *session.Need, req session.R
 	sp := a.startSpan("attempt", req.Model, a.curStep()).Set("request_id", need.Model.RequestID).
 		Set("turn", need.Model.Turn).Set("step", need.Model.Step).Set("shell_hash", rec.FinalHash)
 	first := time.Time{}
+	ss := a.newStepStream(need, retried) // protocol 2 分段流式（stream.go）
 	onText := func(d string) {
 		if first.IsZero() {
 			first = a.clock()
@@ -286,16 +289,33 @@ func (a *Agent) sendModel(ctx context.Context, need *session.Need, req session.R
 		if a.Hooks.OnText != nil {
 			a.Hooks.OnText(d)
 		}
+		ss.text(d)
+	}
+	onReset := func() {
+		if a.Hooks.OnReset != nil {
+			a.Hooks.OnReset()
+		}
+		ss.reset()
 	}
 	var (
 		reply session.AssistantItem
 		stop  session.StopReason
 	)
-	if rm, ok := a.Model.(RequestModel); ok { // modelhub：带 need id（R3）与 Reset
-		reply, stop, err = rm.StreamRequest(ctx, need.Model.RequestID, req, onText, a.Hooks.OnReset)
+	if sm, ok := a.Model.(SinkModel); ok { // modelhub：推理增量与工具调用片段也送出
+		reply, stop, err = sm.StreamSink(ctx, need.Model.RequestID, req, modelhub.Sink{Text: onText,
+			Reasoning: func(d string) {
+				if first.IsZero() {
+					first = a.clock()
+				}
+				ss.reasoning(d)
+			},
+			Tool: ss.tool, Reset: onReset})
+	} else if rm, ok := a.Model.(RequestModel); ok { // 带 need id（R3）与 Reset
+		reply, stop, err = rm.StreamRequest(ctx, need.Model.RequestID, req, onText, onReset)
 	} else {
 		reply, stop, err = a.Model.Stream(ctx, req, onText)
 	}
+	ss.assign(&reply) // 预分配的调用 id 写回回复：tool 事件的 call_id 与条目、工具结果一致
 	if !first.IsZero() {
 		sp.Set("ttft_ms", first.Sub(sp.s.Start).Milliseconds())
 	}
@@ -310,9 +330,10 @@ func (a *Agent) sendModel(ctx context.Context, need *session.Need, req session.R
 	// 上下文超限：强制压缩一次后重发（DSH maxOverflowRetries=1）。
 	if err != nil && ctx.Err() == nil && !retried && a.Compactor != nil && modelhub.IsCode(err, modelhub.CodeContextOverflow) {
 		if r2, v2, e := a.buildRequest(ctx, true); e == nil && v2 != nil {
-			return a.sendModel(ctx, need, r2, v2, true)
+			return a.sendModel(ctx, need, r2, v2, true) // 重发的那一步发 reset，本步不发 end
 		}
 	}
+	ss.end()
 	id, nid := need.Model.RequestID, need.ID
 	switch {
 	case err == nil:

@@ -480,6 +480,8 @@ type actor struct {
 	turnCaps []string
 	// steered 本回合已受理的插话 client_id（protocol 2 steer 幂等：插话只在回合中有效，同回合重发只确认不重复插入）。只在 actor 协程里读写。
 	steered map[string]bool
+	// turnInputs 即将开始的回合吃进的输入（inbox item id），turn_start 发出后清空。只在 actor 协程里读写。
+	turnInputs []string
 	// mailDirty 自上次在需求边界读信箱后，是否有新信件落进本会话信箱（审查 P1-36：原先每次调模型前都查一次信箱，
 	// 绝大多数步没有新信）。经本宿主写信箱的路径（投递、Send / Note、交还插话）都会置位；打开时置位以读到积压。
 	mailDirty atomic.Bool
@@ -960,6 +962,7 @@ func (a *actor) drainInbox(ctx context.Context) (stop bool, err error) {
 			a.h.recordTrace(env.Trace, a.id, "session", "")
 		}
 		m := envelopeMeta(env, untrusted)
+		m[session.MetaClientIDs] = consume // 本回合吃进的输入（protocol 2 entry.client_ids、turn.started.inputs）
 		if hk := a.h.Hooks.BeforeTurn; hk != nil {
 			nc, d, err := hk(a.id, content, untrusted)
 			if err != nil {
@@ -992,6 +995,7 @@ func (a *actor) drainInbox(ctx context.Context) (stop bool, err error) {
 			}
 			content = nc
 		}
+		a.turnInputs = consume        // 守卫放行后才记：被拒的输入不开回合
 		a.turnCaps = batchCaps(batch) // 信封 caps 交集：本轮只许调这些工具（空=不限）
 		end, terr := a.turn(ctx, func(tctx context.Context) (session.EndReason, error) {
 			return a.ag.SendContent(tctx, content, m, consume)
@@ -1121,7 +1125,9 @@ func (a *actor) turn(ctx context.Context, f func(context.Context) (session.EndRe
 	sp := a.ag.StartSpan("turn", "", "")
 	a.ag.TurnSpanID = sp.ID()
 	defer func() { a.ag.TurnSpanID = "" }()
-	a.h.publish(a.id, "turn_start", nil)
+	// turn / inputs 供 protocol 2 的 turn.started：回合号与吃进的输入的 client_id。
+	a.h.publish(a.id, "turn_start", map[string]any{"turn": a.ag.Core.TurnNumber(), "inputs": a.turnInputs})
+	a.turnInputs = nil
 	a.ag.SetCaps(a.turnCaps) // 本轮授权范围（信封 caps 交集，T3）
 	defer a.ag.SetCaps(nil)
 	end, err := f(tctx)
@@ -1428,6 +1434,7 @@ func (a *actor) insertFrom(ctx context.Context, items []store.InboxItem) error {
 		content = nc
 	}
 	m := envelopeMeta(env, untrusted)
+	m[session.MetaClientIDs] = ids
 	// 回合中插入的信封同样收窄本轮授权范围（触发链 caps 取交集），不可信输入只升不降。
 	a.turnCaps = intersectCaps(a.turnCaps, batchCaps(batch))
 	a.ag.SetCaps(a.turnCaps)

@@ -60,9 +60,20 @@ func (f *Failure) Error() string { return string(f.Code) + ": " + f.Message }
 type Event struct {
 	TextDelta      string
 	ReasoningDelta string
-	Reset          bool // StreamReset：之前的增量作废（重试 / 换项前发出）
-	Done           *Done
-	Failed         *Failure
+	// Tool 工具调用的流式片段（protocol 2 tool.started / tool.args_delta）：同一调用的片段 Index 相同。
+	// 只用于展示；完整调用仍以 Done.Reply.ToolCalls 为准。
+	Tool   *ToolDelta
+	Reset  bool // StreamReset：之前的增量作废（重试 / 换项前发出）
+	Done   *Done
+	Failed *Failure
+}
+
+// ToolDelta 一个工具调用的流式片段。Index 是调用在本次回复流里的位置（适配器原样给出的块 / 项序号，
+// 只要求同一调用相同、按调用顺序递增）；Name 在调用开始的片段里给出，Args 是参数 JSON 的增量文本。
+type ToolDelta struct {
+	Index int
+	Name  string
+	Args  string
 }
 
 // Done 成功终止。

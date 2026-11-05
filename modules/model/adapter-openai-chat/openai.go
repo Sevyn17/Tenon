@@ -346,13 +346,16 @@ func parseOpenAI(ctx context.Context, r io.Reader, model, reasoningField string,
 				if tc.ID != "" {
 					a.id = tc.ID
 				}
+				td := modelhub.ToolDelta{Index: tc.Index, Args: tc.Function.Arguments}
+				if tc.Function.Name != "" && a.name == "" { // 名字只在调用开始时送一次
+					td.Name = tc.Function.Name
+				}
 				if tc.Function.Name != "" {
 					a.name = tc.Function.Name
 				}
 				a.args.WriteString(tc.Function.Arguments)
-			}
-			if len(d.ToolCalls) > 0 {
-				out <- modelhub.Event{} // 心跳：长工具参数流期间不被判超时（P0-13）
+				// 调用片段：界面显示进度，同时重置空闲计时，长工具参数流期间不被判超时（P0-13）
+				out <- modelhub.Event{Tool: &td}
 			}
 		}
 		if u := ck.Usage; u != nil {

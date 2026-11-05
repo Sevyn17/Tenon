@@ -338,7 +338,7 @@ func (h *Hub) attempt(ctx context.Context, r *Request, ad Adapter, ep Endpoint, 
 			case ev.Failed != nil:
 				return ev.Failed
 			default:
-				if ev.TextDelta != "" || ev.ReasoningDelta != "" {
+				if ev.TextDelta != "" || ev.ReasoningDelta != "" || ev.Tool != nil {
 					*emitted = true
 				}
 				out <- ev

@@ -220,7 +220,13 @@ func (c *Core) turnHasAssistant(turn uint32) bool {
 
 // appendEntry 追加条目并推进 LogLen。
 func (c *Core) appendEntry(turn uint32, meta map[string]any, it Item) *Entry {
-	e := &Entry{V: 1, ID: c.nextEntryID(), Turn: turn, At: c.now().UnixMilli(), Meta: meta, Item: it}
+	return c.appendEntryID(c.nextEntryID(), turn, meta, it)
+}
+
+// appendEntryID 同 appendEntry，条目 id 由调用方给定（assistant 条目用本步的请求 id，见 assistantEntryID）。
+func (c *Core) appendEntryID(id string, turn uint32, meta map[string]any, it Item) *Entry {
+	c.hdr.LastEntryID = id
+	e := &Entry{V: 1, ID: id, Turn: turn, At: c.now().UnixMilli(), Meta: meta, Item: it}
 	c.items = append(c.items, e)
 	c.hdr.LogLen = c.absLen()
 	if c.wire != nil {
@@ -741,7 +747,7 @@ func (c *Core) ModelDone(requestID string, needID uint64, reply AssistantItem, s
 	}
 
 	// 追加 Assistant 条目（调用即使被改向也原样记录，R14 由 Cancelled 结果闭合）。
-	c.appendEntry(c.hdr.Turn.Turn, nil, Item{Kind: KindAssistant, Assistant: &reply})
+	c.appendEntryID(c.assistantEntryID(), c.hdr.Turn.Turn, nil, Item{Kind: KindAssistant, Assistant: &reply})
 
 	if redirected && len(reply.ToolCalls) > 0 { // T11：有效调用补 Cancelled(Redirected) → 步边界
 		for _, call := range reply.ToolCalls {
@@ -793,7 +799,7 @@ func (c *Core) ModelInterrupted(requestID string, needID uint64, reply Assistant
 	if len(reply.Content) > 0 || len(reply.ToolCalls) > 0 {
 		c.normalizeCalls(reply.ToolCalls) // 中断时参数常是半截 JSON
 		reply.Interrupted = true
-		c.appendEntry(c.hdr.Turn.Turn, nil, Item{Kind: KindAssistant, Assistant: &reply})
+		c.appendEntryID(c.assistantEntryID(), c.hdr.Turn.Turn, nil, Item{Kind: KindAssistant, Assistant: &reply})
 		for _, call := range reply.ToolCalls { // 被中断的调用不执行，补 Cancelled 闭合 R14
 			c.appendEntry(c.hdr.Turn.Turn, nil, Item{Kind: KindToolResult, ToolResult: &ToolResultItem{
 				CallID: call.ID, Status: ToolTurnCancelled}})
@@ -967,4 +973,31 @@ func (c *Core) checkModelFact(requestID string, needID uint64) error {
 		return errStale("模型结果与当前需求不匹配")
 	}
 	return nil
+}
+
+// assistantEntryID 本步 assistant 条目的 id：就是本步的请求 id（protocol 2 流式关联，06 10.5）。
+// 请求 id 在发出模型需求时就已分配、恢复后沿用，所以流式事件在条目落库前就能带上 entry_id，
+// 条目落库后 entry.id 与它相同。请求 id 是 UUIDv7，与其他条目 id 同样全局唯一、按时间有序。
+// 没有请求 id 时（不应发生）退回新生成的 id。
+func (c *Core) assistantEntryID() string {
+	if id := c.hdr.PendingModelRequestID; id != "" {
+		return id
+	}
+	return c.genID()
+}
+
+// PendingEntryID 等待模型时，本步 assistant 条目将用的 id（= 请求 id）；不在等模型时为空。
+func (c *Core) PendingEntryID() string {
+	if c.hdr.Status != StatusWaitingModel {
+		return ""
+	}
+	return c.hdr.PendingModelRequestID
+}
+
+// TurnNumber 进行中回合的序号；空闲时为下一个新回合将用的序号（宿主在回合开始前发事件用）。
+func (c *Core) TurnNumber() uint32 {
+	if c.hdr.Turn != nil {
+		return c.hdr.Turn.Turn
+	}
+	return c.newTurnNum()
 }

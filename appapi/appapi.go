@@ -55,6 +55,7 @@ type Options struct {
 type App struct {
 	o       Options
 	streams sync.Map // 会话 id → *streamer
+	lives   sync.Map // 会话 id → *liveState（protocol 2 分段流式与快照 live，stream2.go）
 	pend    pendingSet
 }
 
@@ -89,6 +90,9 @@ func New(o Options) (*App, error) {
 	}
 	o.Host.Hooks.AfterTurn = func(id string, end session.EndReason) {
 		a.flush(id)
+		if l := a.liveOf(id); l != nil { // 积压增量先于 turn.ended 发出，live 清空
+			l.endTurn()
+		}
 		if after != nil {
 			after(id, end)
 		}

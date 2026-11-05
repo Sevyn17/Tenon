@@ -318,6 +318,9 @@ loop:
 			if ev.Item != nil {
 				a := get(ev.OutputIndex, ev.Item.Type)
 				a.callID, a.name = ev.Item.CallID, ev.Item.Name
+				if ev.Item.Type == "function_call" { // 调用开始：名字先送出（protocol 2 tool.started）
+					out <- modelhub.Event{Tool: &modelhub.ToolDelta{Index: ev.OutputIndex, Name: ev.Item.Name}}
+				}
 			}
 		case "response.output_text.delta":
 			get(ev.OutputIndex, "message").buf.WriteString(ev.Delta)
@@ -327,7 +330,8 @@ loop:
 			out <- modelhub.Event{ReasoningDelta: ev.Delta}
 		case "response.function_call_arguments.delta":
 			get(ev.OutputIndex, "function_call").buf.WriteString(ev.Delta)
-			out <- modelhub.Event{} // 心跳：长工具参数流期间不被判超时（P0-13）
+			// 参数片段：界面显示进度，同时重置空闲计时，长工具参数流期间不被判超时（P0-13）
+			out <- modelhub.Event{Tool: &modelhub.ToolDelta{Index: ev.OutputIndex, Args: ev.Delta}}
 		case "response.output_item.done":
 			if ev.Item == nil {
 				continue

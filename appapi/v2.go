@@ -322,7 +322,19 @@ func (v V2) snapshot(ctx context.Context, id string) (wire.SessionSnapshot, erro
 	}
 	return wire.SessionSnapshot{ID: id, Parent: l.Meta.ParentID, Origin: l.Meta.Origin, Title: l.Meta.Title,
 		RunState: WireRunState(h.Status), Mode: v.committedMode(id, modeHdr), Settings: wire.Settings{MaxSteps: maxSteps(h)},
-		Log: wire.LogPos{Base: h.CompactionBase, Len: h.LogLen}, Interactions: []wire.Interaction{}, Cursor: l.Cursor}, nil
+		Log: wire.LogPos{Base: h.CompactionBase, Len: h.LogLen}, Interactions: []wire.Interaction{}, Cursor: l.Cursor,
+		Live: v.live(id, h)}, nil
+}
+
+// live 进行中回合当前步的流式状态（读内存、不承诺与 cursor 一致，10.2.2 规则 7）；空闲时不给。
+func (v V2) live(id string, h session.Header) *wire.Live {
+	if h.Status == session.StatusIdle {
+		return nil
+	}
+	if l := v.a.liveOf(id); l != nil {
+		return l.snapshot()
+	}
+	return nil
 }
 
 // committedMode 快照里的档位：已提交值（06 10.2.2 规则 5）。内存里已切换、还没落库时给落库的那个，

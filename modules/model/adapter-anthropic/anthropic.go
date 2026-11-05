@@ -416,6 +416,9 @@ func parseAnthropic(ctx context.Context, r io.Reader, model string, out chan<- m
 			if ev.ContentBlock != nil {
 				blocks[ev.Index] = &anAcc{kind: ev.ContentBlock.Type, id: ev.ContentBlock.ID, name: ev.ContentBlock.Name, data: ev.ContentBlock.Data}
 				order = append(order, ev.Index)
+				if ev.ContentBlock.Type == "tool_use" { // 调用开始：名字先送出（protocol 2 tool.started）
+					out <- modelhub.Event{Tool: &modelhub.ToolDelta{Index: ev.Index, Name: ev.ContentBlock.Name}}
+				}
 			}
 		case "content_block_delta":
 			b := blocks[ev.Index]
@@ -434,7 +437,8 @@ func parseAnthropic(ctx context.Context, r io.Reader, model string, out chan<- m
 				out <- modelhub.Event{} // 心跳：不展示的增量也要重置空闲计时（P0-13）
 			case "input_json_delta":
 				b.buf.WriteString(ev.Delta.PartialJSON)
-				out <- modelhub.Event{} // 心跳：长工具参数流期间不被判超时（P0-13）
+				// 参数片段：界面显示进度，同时重置空闲计时，长工具参数流期间不被判超时（P0-13）
+				out <- modelhub.Event{Tool: &modelhub.ToolDelta{Index: ev.Index, Args: ev.Delta.PartialJSON}}
 			}
 		case "message_delta":
 			if ev.Delta != nil && ev.Delta.StopReason != "" {

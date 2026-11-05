@@ -94,14 +94,19 @@ func (s *streamer) reset() {
 func (a *App) StreamHooks(id string) agent.Hooks {
 	s := &streamer{b: a.o.Bus, id: id}
 	a.streams.Store(id, s)
+	l := newLiveState(a.o.Bus, id) // protocol 2：message.* / tool.* 与快照 live（stream2.go）
+	a.lives.Store(id, l)
 	return agent.Hooks{
-		OnReset: s.reset,
-		OnText:  s.text,
+		OnReset:  s.reset,
+		OnText:   s.text,
+		OnStream: l.onStream,
 		OnToolCall: func(c session.ToolCall) {
 			s.publish(EventToolCall, map[string]any{"call_id": c.ID, "name": c.Name, "args": string(c.Args)})
+			l.onToolCall(c)
 		},
 		OnToolResult: func(c session.ToolCall, out string, isErr bool) {
 			s.publish(EventToolResult, map[string]any{"call_id": c.ID, "preview": Preview(out, PreviewLen), "error": isErr})
+			l.onToolResult(c, out, isErr)
 		},
 	}
 }
