@@ -1,12 +1,13 @@
 // 公共小工具。
 
-import { ApiError, type Content, type Entry } from "./protocol";
+import { ApiError } from "./api";
+import type { Entry, Part } from "./wire.gen";
 
-/** 内容块里的文本拼起来；非文本块用占位符。 */
-export function textOf(c: Content | undefined): string {
+/** 内容片段里的文本拼起来；非文本片段用占位符。 */
+export function textOf(c: Part[] | undefined): string {
   if (!c) return "";
   return c
-    .map((p) => (p.kind === "text" ? (p.text ?? "") : `[${p.kind}${p.media?.MIME ? " " + p.media.MIME : ""}]`))
+    .map((p) => (p.kind === "text" ? (p.text ?? "") : `[${p.kind}${p.media?.mime ? " " + p.media.mime : ""}]`))
     .join("");
 }
 
@@ -34,6 +35,13 @@ export function errCode(e: unknown): string {
   return e instanceof ApiError ? e.code : "";
 }
 
+/** conflict 的 details.reason（exists / answered / stale / leased）。 */
+export function errReason(e: unknown): string {
+  if (!(e instanceof ApiError)) return "";
+  const r = e.details?.["reason"];
+  return typeof r === "string" ? r : "";
+}
+
 /** 新会话 id：时间戳 + 随机后缀（只含字母数字与连字符）。 */
 export function newSessionID(): string {
   const d = new Date();
@@ -44,21 +52,21 @@ export function newSessionID(): string {
 
 export function fmtTime(ms?: number): string {
   if (!ms) return "";
-  const d = new Date(ms > 1e14 ? ms / 1e6 : ms); // 兼容纳秒 / 毫秒
-  return d.toLocaleString();
+  return new Date(ms).toLocaleString();
 }
 
 export function entryText(e: Entry): string {
   const it = e.item;
   switch (it.kind) {
     case "user":
-      return textOf(it.user?.Content);
     case "assistant":
-      return textOf(it.assistant?.Content);
+      return textOf(it.content);
     case "tool_result":
-      return textOf(it.tool_result?.Output);
+      return textOf(it.output);
     case "compaction":
-      return textOf(it.compaction?.Summary);
+      return textOf(it.summary);
+    case "context":
+      return it.text ?? "";
     default:
       return "";
   }

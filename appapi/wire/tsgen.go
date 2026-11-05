@@ -28,7 +28,8 @@ var tsTypes = []any{
 	RewindResult{}, CompactArgs{}, CompactResult{}, ForkArgs{}, SettingsArgs{}, SettingsResult{}, Response{},
 	RespondArgs{}, RespondResult{}, InteractionsResult{}, ModeInfo{}, ModeListResult{}, ModeSetArgs{},
 	ModeSetResult{}, ModeShowArgs{}, ModeItem{}, ModeShowResult{}, ArtifactGetArgs{}, ArtifactGetResult{},
-	ArtifactPutArgs{}, ArtifactPutResult{}, TraceArgs{}, TraceResult{}, Empty{}, Error{},
+	ArtifactPutArgs{}, ArtifactPutResult{}, TraceArgs{}, TraceResult{}, ConfigField{}, PluginInfo{},
+	PluginsListResult{}, PluginsSetArgs{}, PackageInfo{}, PackagesListResult{}, Empty{}, Error{},
 }
 
 // tsConsts 要生成的常量组：名字 → 取值（顺序即输出顺序）。

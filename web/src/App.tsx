@@ -1,12 +1,23 @@
-// 外壳：左侧会话列表，右侧聊天 / 档位 / 插件 / 统计；全局对话框（人工确认、ask_user、输入框）与提示条。
+// 外壳：左侧会话列表，右侧聊天 / 档位 / 插件 / 统计；全局对话框（交互：工具确认与模块提问、输入框）与提示条。
+//
+// 交互（06 10.6）：启动时 interactions.list 取当前身份可以回答的全部未结束交互，之后按订阅会话上的
+// interaction.opened / interaction.resolved 更新；子会话的交互也写在根会话上，订阅根会话即可看到。
+// 重连后重新取一次列表。
 
 import { useCallback, useEffect, useState } from "react";
+import { LOCAL_RECONNECTED } from "./api";
 import { Chat } from "./Chat";
-import { AskDialog, ConfirmDialog, PromptDialog, type ConfirmReq, type PromptReq } from "./Dialogs";
+import { AskDialog, ConfirmDialog, PromptDialog, type PromptReq } from "./Dialogs";
 import { ModesPanel, PluginsPanel, SessionList, StatsPanel } from "./Panels";
-import { EV, PROTOCOL, type AskEvent, type HelloResult, type HumanRequestedEvent, type NoticeEvent } from "./protocol";
-import { call, onEvent } from "./transport";
+import { call, clientID, onEvent } from "./transport";
 import { errText, newSessionID } from "./util";
+import {
+  PROTOCOL,
+  type HelloResult,
+  type Interaction,
+  type InteractionResolved,
+  type Notice as NoticeData,
+} from "./wire.gen";
 
 type Tab = "chat" | "modes" | "plugins" | "stats";
 
@@ -23,8 +34,7 @@ export function App() {
   const [session, setSession] = useState("default");
   const [tab, setTab] = useState<Tab>("chat");
   const [refresh, setRefresh] = useState(0);
-  const [confirms, setConfirms] = useState<ConfirmReq[]>([]);
-  const [asks, setAsks] = useState<AskEvent[]>([]);
+  const [pending, setPending] = useState<Interaction[]>([]);
   const [prompt, setPrompt] = useState<PromptReq | null>(null);
   const [notices, setNotices] = useState<Notice[]>([]);
 
@@ -34,34 +44,55 @@ export function App() {
     setTimeout(() => setNotices((ns) => ns.filter((n) => n.id !== id)), 8000);
   }, []);
 
+  const loadInteractions = useCallback(async () => {
+    try {
+      const r = await call("interactions.list", {});
+      setPending(r.items ?? []);
+    } catch (e) {
+      notice("读取待处理交互失败：" + errText(e));
+    }
+  }, [notice]);
+
   useEffect(() => {
-    call("hello", { client: "ybase-web", version: PROTOCOL })
-      .then(setHello)
+    call("hello", { client: "ybase-web", protocol: { min: PROTOCOL, max: PROTOCOL } })
+      .then((h) => {
+        setHello(h);
+        void loadInteractions();
+      })
       .catch((e) => setErr(errText(e)));
-  }, []);
+  }, [loadInteractions]);
 
   useEffect(
     () =>
       onEvent((ev) => {
         switch (ev.kind) {
-          case EV.humanRequested: {
-            const d = ev.data as HumanRequestedEvent;
-            setConfirms((cs) => (cs.some((c) => c.call_id === d.call_id) ? cs : [...cs, { ...d, session: ev.session }]));
+          case LOCAL_RECONNECTED:
+            void loadInteractions();
+            setRefresh((r) => r + 1);
+            break;
+          case "interaction.opened": {
+            const it = ev.data as Interaction;
+            setPending((ps) => (ps.some((p) => p.id === it.id) ? ps : [...ps, it]));
             break;
           }
-          case EV.ask:
-            setAsks((as) => [...as, ev.data as AskEvent]);
+          case "interaction.resolved": {
+            const d = ev.data as InteractionResolved;
+            setPending((ps) => ps.filter((p) => p.id !== d.id));
             break;
-          case EV.notice:
-            notice((ev.session ? `[${ev.session}] ` : "") + (ev.data as NoticeEvent).text);
+          }
+          case "notice": {
+            const d = ev.data as NoticeData;
+            notice((ev.session ? `[${ev.session}] ` : "") + d.text);
             break;
-          case EV.turnStart:
-          case EV.turnEnd:
+          }
+          case "sessions.changed":
+          case "turn.started":
+          case "turn.ended":
             setRefresh((r) => r + 1);
             break;
         }
       }),
-    [notice],
+    [notice, loadInteractions],
   );
 
   const ask = (title: string, label?: string, initial?: string) =>
@@ -75,8 +106,20 @@ export function App() {
     setRefresh((r) => r + 1);
   };
 
-  const confirm = confirms[0];
-  const askItem = asks[0];
+  // 回答交互：已被别处回答（conflict answered）或已失效时从列表里去掉，不算错误。
+  const respond = async (it: Interaction, response: { approve?: boolean; scope?: string; text?: string }) => {
+    try {
+      await call("interaction.respond", { interaction: it.id, response, client_id: clientID() });
+    } catch (e) {
+      const ae = e as { code?: string; reason?: string };
+      if (!(ae.code === "conflict" && ae.reason === "answered") && ae.code !== "not_found") throw e;
+      notice("这个交互已在别处处理");
+    } finally {
+      setPending((ps) => ps.filter((p) => p.id !== it.id));
+    }
+  };
+
+  const current = pending[0];
 
   return (
     <div className="app">
@@ -111,6 +154,7 @@ export function App() {
             </button>
           ))}
           <span className="spacer" />
+          {pending.length > 1 && <span className="tag">待处理 {pending.length}</span>}
           <span className="muted">会话 {session}</span>
         </nav>
         {err && <div className="error">连接失败：{err}</div>}
@@ -139,30 +183,15 @@ export function App() {
           </div>
         ))}
       </div>
-      {confirm && (
+      {current && current.kind === "approval" && (
         <ConfirmDialog
-          key={confirm.call_id}
-          req={confirm}
-          onDecide={async (decision) => {
-            const r = await call("session.confirm", {
-              session: confirm.session,
-              call_id: confirm.call_id,
-              decision,
-            });
-            return r.rules;
-          }}
-          onClose={() => setConfirms((cs) => cs.filter((c) => c.call_id !== confirm.call_id))}
+          key={current.id}
+          it={current}
+          onDecide={(approve, scope) => respond(current, { approve, scope })}
         />
       )}
-      {!confirm && askItem && (
-        <AskDialog
-          key={askItem.ask_id}
-          ask={askItem}
-          onAnswer={async (text) => {
-            await call("session.answer", { ask_id: askItem.ask_id, text });
-            setAsks((as) => as.filter((a) => a.ask_id !== askItem.ask_id));
-          }}
-        />
+      {current && current.kind === "question" && (
+        <AskDialog key={current.id} it={current} onAnswer={(text) => respond(current, { text })} />
       )}
       {prompt && <PromptDialog req={prompt} onDone={() => setPrompt(null)} />}
     </div>

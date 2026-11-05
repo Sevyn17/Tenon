@@ -161,6 +161,14 @@ func MergeHooks(x, y agent.Hooks) agent.Hooks {
 				y.OnConfirm(callID, tool, reason)
 			}
 		},
+		OnStream: func(ev agent.StreamEvent) {
+			if x.OnStream != nil {
+				x.OnStream(ev)
+			}
+			if y.OnStream != nil {
+				y.OnStream(ev)
+			}
+		},
 	}
 }
 

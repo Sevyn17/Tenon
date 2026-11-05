@@ -151,7 +151,7 @@ func TestConnViewerForbidden(t *testing.T) {
 	c := app.NewConn(context.Background(), wire.Principal{ID: "v", Role: wire.RoleViewer})
 	defer c.Close()
 	_, err := c.Call(context.Background(), "session.create", json.RawMessage(`{"session":"x"}`))
-	if e := AsError2(err); e == nil || e.Code != wire.CodeForbidden {
+	if e := AsError(err); e == nil || e.Code != wire.CodeForbidden {
 		t.Fatalf("viewer 建会话应 forbidden：%v", err)
 	}
 	out, err := c.Call(context.Background(), "hello", nil)
@@ -263,7 +263,7 @@ func TestConnSubscribeErrors(t *testing.T) {
 	c := app.NewConn(context.Background(), LocalPrincipal)
 	defer c.Close()
 	_, err := c.Call(context.Background(), "session.subscribe", json.RawMessage(`{"session":"none","after":0}`))
-	if e := AsError2(err); e == nil || e.Code != wire.CodeNotFound {
+	if e := AsError(err); e == nil || e.Code != wire.CodeNotFound {
 		t.Fatalf("不存在的会话应 not_found：%v", err)
 	}
 }

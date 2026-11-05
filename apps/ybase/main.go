@@ -25,6 +25,7 @@ import (
 	"strings"
 
 	"ybase/appapi"
+	"ybase/appapi/wire"
 	"ybase/apps/internal/boot"
 	"ybase/modules/security/permission"
 	"ybase/modules/security/sandbox"
@@ -547,7 +548,13 @@ func (c *cli) slash(ctx context.Context, line string) error {
 			}
 			n = v
 		}
-		if _, err := c.api.Rewind(ctx, appapi.RewindArgs{Session: c.cur.ID(), Turns: n}); err != nil {
+		// 退回最近 n 个回合 = 截掉回合号 ≥ 最后回合 - n + 1 的部分（protocol 2 rewind {to_turn} 是绝对目标）。
+		es := c.cur.Agent().Committed().Entries
+		if len(es) == 0 || int(es[len(es)-1].Turn) < n {
+			return fmt.Errorf("没有 %d 个回合可退回", n)
+		}
+		to := es[len(es)-1].Turn - uint32(n) + 1
+		if _, err := c.api.Rewind(ctx, wire.RewindArgs{Session: c.cur.ID(), ToTurn: to}); err != nil {
 			return err
 		}
 		fmt.Printf("已退回 %d 个回合\n", n)
@@ -579,7 +586,7 @@ func (c *cli) compact(ctx context.Context) error {
 		return fmt.Errorf("未装配 compact-basic 插件")
 	}
 	fmt.Println("[压缩中…]")
-	r, err := c.api.Compact(ctx, appapi.SessionArgs{Session: c.cur.ID()})
+	r, err := c.api.Compact(ctx, wire.CompactArgs{Session: c.cur.ID()})
 	if err != nil {
 		return err
 	}

@@ -1,7 +1,7 @@
 package main
 
 // 绑定服务测试：用最小宿主（假模型、sqlite 临时库）驱动 Service.Call，并检查事件转发；
-// 另校验前端 web/src/protocol.ts 的命令清单与 appapi.Commands() 一致。
+// 另校验前端 web/src/api.ts 的命令表与 appapi.ConnCommands() 一致。
 
 import (
 	"context"
@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"ybase/appapi"
+	"ybase/appapi/wire"
 	"ybase/runtime/agent"
 	"ybase/runtime/bus"
 	"ybase/runtime/host"
@@ -65,21 +66,21 @@ func newTestApp(t *testing.T) *appapi.App {
 
 type recorder struct {
 	mu  sync.Mutex
-	evs []bus.Envelope
+	evs []wire.Envelope
 }
 
 func (r *recorder) emit(name string, data any) {
 	if name != EventName {
 		return
 	}
-	if ev, ok := data.(bus.Envelope); ok {
+	if ev, ok := data.(wire.Envelope); ok {
 		r.mu.Lock()
 		r.evs = append(r.evs, ev)
 		r.mu.Unlock()
 	}
 }
 
-func (r *recorder) wait(t *testing.T, kind string) bus.Envelope {
+func (r *recorder) wait(t *testing.T, kind string) wire.Envelope {
 	t.Helper()
 	dl := time.Now().Add(30 * time.Second) // 全量并行跑时机器负载高，5s 会偶发超时
 	for time.Now().Before(dl) {
@@ -94,7 +95,7 @@ func (r *recorder) wait(t *testing.T, kind string) bus.Envelope {
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatalf("没等到事件 %s", kind)
-	return bus.Envelope{}
+	return wire.Envelope{}
 }
 
 func TestServiceCall(t *testing.T) {
@@ -103,47 +104,51 @@ func TestServiceCall(t *testing.T) {
 	svc.StartEvents()
 	defer svc.StopEvents()
 
-	out, err := svc.Call("hello", `{"client":"test","version":1}`)
+	out, err := svc.Call("hello", `{"client":"test","protocol":{"min":2,"max":2}}`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	var hr appapi.HelloResult
-	if err := json.Unmarshal([]byte(out), &hr); err != nil || hr.Protocol != appapi.Protocol || hr.Model != "m" {
+	var hr wire.HelloResult
+	if err := json.Unmarshal([]byte(out), &hr); err != nil || hr.Protocol != wire.Protocol || hr.Model != "m" ||
+		hr.Principal != appapi.LocalPrincipal {
 		t.Fatalf("hello: %s %v", out, err)
 	}
 
-	// 错误：未知命令 → unsupported；非法 JSON → bad_request；错误文本是 appapi.Error 的 JSON。
-	for cmd, want := range map[string]string{"nope": appapi.CodeUnsupported} {
-		_, err := svc.Call(cmd, "")
-		var e appapi.Error
-		if err == nil || json.Unmarshal([]byte(err.Error()), &e) != nil || e.Code != want {
-			t.Fatalf("%s: %v", cmd, err)
+	// 错误：未知命令 → unsupported；非法 JSON → bad_request；会话不存在 → not_found（不隐式新建）。
+	for _, c := range []struct{ cmd, args, want string }{
+		{"nope", "", wire.CodeUnsupported},
+		{"hello", "{bad", wire.CodeBadRequest},
+		{"session.get", `{"session":"none"}`, wire.CodeNotFound},
+	} {
+		_, err := svc.Call(c.cmd, c.args)
+		var e wire.Error
+		if err == nil || json.Unmarshal([]byte(err.Error()), &e) != nil || e.Code != c.want {
+			t.Fatalf("%s: 应为 %s：%v", c.cmd, c.want, err)
 		}
 	}
-	_, err = svc.Call("hello", "{bad")
-	var e appapi.Error
-	if err == nil || json.Unmarshal([]byte(err.Error()), &e) != nil || e.Code != appapi.CodeBadRequest {
-		t.Fatalf("bad json: %v", err)
-	}
 
-	if _, err := svc.Call("session.open", `{"session":"s1"}`); err != nil {
+	if _, err := svc.Call("session.create", `{"session":"s1"}`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.Call("session.send", `{"session":"s1","text":"hi"}`); err != nil {
+	if _, err := svc.Call("session.subscribe", `{"session":"s1"}`); err != nil {
 		t.Fatal(err)
 	}
-	rec.wait(t, appapi.EventTurnEnd)
-	ev := rec.wait(t, "entry")
-	if ev.Session != "s1" {
-		t.Fatalf("entry 会话 = %q", ev.Session)
+	rec.wait(t, wire.EvSynced)
+	if _, err := svc.Call("session.send", `{"session":"s1","text":"hi","client_id":"c1"}`); err != nil {
+		t.Fatal(err)
+	}
+	rec.wait(t, wire.EvTurnEnded)
+	ev := rec.wait(t, wire.EvEntryAppended)
+	if ev.Session != "s1" || ev.Cursor == 0 {
+		t.Fatalf("entry.appended：%+v", ev)
 	}
 
 	out, err = svc.Call("session.entries", `{"session":"s1","tail":10}`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	var er appapi.EntriesResult
-	if err := json.Unmarshal([]byte(out), &er); err != nil || len(er.Entries) < 2 {
+	var er wire.EntriesResult
+	if err := json.Unmarshal([]byte(out), &er); err != nil || len(er.Entries) < 2 || er.Entries[0].ClientIDs[0] != "c1" {
 		t.Fatalf("entries: %s %v", out, err)
 	}
 	out, err = svc.Call("sessions.list", "")
@@ -152,24 +157,27 @@ func TestServiceCall(t *testing.T) {
 	}
 }
 
-// 前端命令清单必须与 appapi.Commands() 一致。
+// 前端命令表（web/src/api.ts 的 COMMANDS）必须与连接上可用的命令（appapi.ConnCommands）一致。
 func TestProtocolCommands(t *testing.T) {
-	src, err := os.ReadFile(filepath.Join("..", "..", "web", "src", "protocol.ts"))
+	src, err := os.ReadFile(filepath.Join("..", "..", "web", "src", "api.ts"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	s := string(src)
 	i := strings.Index(s, "export const COMMANDS = [")
+	if i < 0 {
+		t.Fatal("api.ts 里找不到 COMMANDS")
+	}
 	j := strings.Index(s[i:], "] as const")
-	if i < 0 || j < 0 {
-		t.Fatal("protocol.ts 里找不到 COMMANDS")
+	if j < 0 {
+		t.Fatal("api.ts 的 COMMANDS 没有结束")
 	}
 	var got []string
 	for _, m := range regexp.MustCompile(`"([a-z_.]+)"`).FindAllStringSubmatch(s[i:i+j], -1) {
 		got = append(got, m[1])
 	}
 	slices.Sort(got)
-	if want := appapi.Commands(); !slices.Equal(got, want) {
-		t.Fatalf("protocol.ts COMMANDS = %v\nappapi.Commands() = %v", got, want)
+	if want := appapi.ConnCommands(); !slices.Equal(got, want) {
+		t.Fatalf("api.ts COMMANDS = %v\nappapi.ConnCommands() = %v", got, want)
 	}
 }

@@ -248,3 +248,47 @@ type TraceResult struct {
 }
 
 type Empty struct{}
+
+// ConfigField 插件配置项的 Schema（plugins.list）。
+type ConfigField struct {
+	Key         string `json:"key"`
+	Type        string `json:"type"`
+	Default     string `json:"default,omitempty"`
+	Title       string `json:"title,omitempty"`
+	Description string `json:"description,omitempty"`
+	Group       string `json:"group,omitempty"`
+	Widget      string `json:"widget,omitempty"`
+}
+
+type PluginInfo struct {
+	Name    string        `json:"name"`
+	On      bool          `json:"on"`
+	Default bool          `json:"default"`
+	Source  string        `json:"source"`
+	Effects []string      `json:"effects"`
+	Schema  []ConfigField `json:"schema"`
+}
+
+type PluginsListResult struct {
+	Plugins []PluginInfo `json:"plugins"`
+}
+
+type PluginsSetArgs struct {
+	Name    string         `json:"name"`
+	Enabled *bool          `json:"enabled,omitempty"`
+	Config  map[string]any `json:"config,omitempty"`
+	Scope   string         `json:"scope"` // user / project
+}
+
+type PackageInfo struct {
+	Name        string `json:"name"`
+	Version     string `json:"version"`
+	Description string `json:"description"`
+	Scope       string `json:"scope"` // user / project
+	Source      string `json:"source"`
+	Contents    string `json:"contents"`
+}
+
+type PackagesListResult struct {
+	Packages []PackageInfo `json:"packages"`
+}

@@ -4,7 +4,7 @@ package appapi
 //
 // 规则：回答者由连接身份决定（不在 responders 里返回 forbidden）；只收第一条回答，之后返回 conflict（answered，
 // details.outcome 带已有结果），同一 client_id 的重发返回第一次的结果；会话由别的进程持有时返回 conflict（leased）。
-// scope=session 的批准按调用生成会话规则（与 protocol 1 的 decision=session 相同），持久化到顶层会话头异步进行。
+// scope=session 的批准按调用生成会话规则，持久化到顶层会话头异步进行。
 
 import (
 	"context"
@@ -17,18 +17,18 @@ import (
 )
 
 // Respond 以本机身份回答交互（进程内调用；连接上的调用经 Conn.Call 带连接身份）。
-func (v V2) Respond(ctx context.Context, in wire.RespondArgs) (wire.RespondResult, error) {
+func (v *App) Respond(ctx context.Context, in wire.RespondArgs) (wire.RespondResult, error) {
 	return v.respondAs(ctx, in, LocalPrincipal)
 }
 
-func (v V2) respondAs(ctx context.Context, in wire.RespondArgs, p wire.Principal) (wire.RespondResult, error) {
+func (v *App) respondAs(ctx context.Context, in wire.RespondArgs, p wire.Principal) (wire.RespondResult, error) {
 	if in.Interaction == "" {
 		return wire.RespondResult{}, Errorf(wire.CodeBadRequest, "缺少 interaction")
 	}
 	if len(in.ClientID) > 128 {
 		return wire.RespondResult{}, invalid("client_id 超过 128 字节")
 	}
-	db := v.a.o.DB
+	db := v.o.DB
 	cur, err := db.Interaction(ctx, in.Interaction)
 	if err != nil {
 		return wire.RespondResult{}, err
@@ -59,7 +59,7 @@ func (v V2) respondAs(ctx context.Context, in wire.RespondArgs, p wire.Principal
 			if !ans.Approve {
 				return wire.RespondResult{}, invalid("scope=session 只用于批准")
 			}
-			if v.a.o.Modes == nil {
+			if v.o.Modes == nil {
 				return wire.RespondResult{}, Errorf(wire.CodeUnsupported, "未装权限插件，不能生成会话规则")
 			}
 			persist = func() { v.allowForSession(cur.SessionID, it.Approval) }
@@ -74,7 +74,7 @@ func (v V2) respondAs(ctx context.Context, in wire.RespondArgs, p wire.Principal
 	default:
 		return wire.RespondResult{}, Errorf(wire.CodeUnsupported, "不支持的交互种类 %q", cur.Kind)
 	}
-	got, won, err := v.a.o.Host.Respond(ctx, in.Interaction, res, ans)
+	got, won, err := v.o.Host.Respond(ctx, in.Interaction, res, ans)
 	if err != nil {
 		return wire.RespondResult{}, err
 	}
@@ -97,32 +97,32 @@ func answered(p store.Pending, clientID string) (wire.RespondResult, error) {
 
 // allowForSession scope=session：内存立即生效，持久化到顶层会话头异步进行（回合中 SetExt 要等步边界，
 // 而这一步正等着本次确认，同步等会死锁）；失败发 notice。
-func (v V2) allowForSession(sessionID string, ap *wire.Approval) {
+func (v *App) allowForSession(sessionID string, ap *wire.Approval) {
 	if ap == nil {
 		return
 	}
-	m := v.a.o.Modes
+	m := v.o.Modes
 	_, all := m.AllowForSession(sessionID, ap.Tool, ap.Args)
 	_, key := m.ExtKeys()
 	top := topOf(sessionID)
-	hd, ok := v.a.o.Host.Get(top)
+	hd, ok := v.o.Host.Get(top)
 	if !ok {
 		return
 	}
 	go func() {
 		if err := hd.Do(host.Command{Kind: host.SetExt, Key: key, Value: all}); err != nil {
-			v.a.Notice(sessionID, fmt.Sprintf("[会话规则未能保存：%v]", err))
+			v.Notice(sessionID, fmt.Sprintf("[会话规则未能保存：%v]", err))
 		}
 	}()
 }
 
 // Interactions 当前身份可以回答的全部未结束交互（跨会话）。
-func (v V2) Interactions(ctx context.Context, _ wire.Empty) (wire.InteractionsResult, error) {
+func (v *App) Interactions(ctx context.Context, _ wire.Empty) (wire.InteractionsResult, error) {
 	return v.interactionsFor(ctx, LocalPrincipal)
 }
 
-func (v V2) interactionsFor(ctx context.Context, p wire.Principal) (wire.InteractionsResult, error) {
-	ps, err := v.a.o.DB.OpenInteractions(ctx, "")
+func (v *App) interactionsFor(ctx context.Context, p wire.Principal) (wire.InteractionsResult, error) {
+	ps, err := v.o.DB.OpenInteractions(ctx, "")
 	if err != nil {
 		return wire.InteractionsResult{}, err
 	}
@@ -136,9 +136,9 @@ func (v V2) interactionsFor(ctx context.Context, p wire.Principal) (wire.Interac
 }
 
 // openInteractions 快照用：会话自己的与以它为根的子会话的未结束交互（只读已提交数据）。
-func (v V2) openInteractions(ctx context.Context, id string) []wire.Interaction {
+func (v *App) openInteractions(ctx context.Context, id string) []wire.Interaction {
 	out := []wire.Interaction{}
-	ps, err := v.a.o.DB.OpenInteractions(ctx, id)
+	ps, err := v.o.DB.OpenInteractions(ctx, id)
 	if err != nil {
 		return out
 	}
@@ -149,7 +149,7 @@ func (v V2) openInteractions(ctx context.Context, id string) []wire.Interaction 
 }
 
 // wireInteraction 登记行 → 线上交互。载荷是宿主登记时生成的线上形状；approval 补上"本次会话内都允许"会生成的规则。
-func (v V2) wireInteraction(p store.Pending) wire.Interaction {
+func (v *App) wireInteraction(p store.Pending) wire.Interaction {
 	var it wire.Interaction
 	_ = json.Unmarshal(p.Payload, &it)
 	it.ID, it.Session, it.Kind = p.InteractionID, p.SessionID, p.Kind
@@ -159,8 +159,8 @@ func (v V2) wireInteraction(p store.Pending) wire.Interaction {
 	if it.OpenedAt == 0 {
 		it.OpenedAt = p.CreatedAt
 	}
-	if ap := it.Approval; ap != nil && v.a.o.Modes != nil {
-		ap.SessionRules, ap.Blocked = v.a.o.Modes.SessionAllow(ap.Tool, ap.Args)
+	if ap := it.Approval; ap != nil && v.o.Modes != nil {
+		ap.SessionRules, ap.Blocked = v.o.Modes.SessionAllow(ap.Tool, ap.Args)
 	}
 	return it
 }

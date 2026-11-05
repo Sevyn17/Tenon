@@ -1,44 +1,44 @@
-// 对话框：人工确认（human_requested）、ask_user 提问、通用输入框。
+// 对话框：交互（工具确认 approval、模块提问 question，06 10.6）与通用输入框。
+// 交互来自快照的 interactions 与 interaction.opened 事件，回答经 interaction.respond（只收第一条）。
 
 import { useState } from "react";
-import type { AskEvent, Decision, HumanRequestedEvent } from "./protocol";
-import { pretty } from "./util";
+import type { Interaction } from "./wire.gen";
+import { errText, pretty } from "./util";
 
-export interface ConfirmReq extends HumanRequestedEvent {
-  session: string;
-}
+export type Scope = "once" | "session";
 
 export function ConfirmDialog(props: {
-  req: ConfirmReq;
-  onDecide: (d: Decision) => Promise<string[] | undefined>;
-  onClose: () => void;
+  it: Interaction;
+  onDecide: (approve: boolean, scope: Scope) => Promise<void>;
 }) {
-  const { req } = props;
+  const { it } = props;
+  const ap = it.approval;
   const [busy, setBusy] = useState(false);
-  const [rules, setRules] = useState<string[] | null>(null);
   const [err, setErr] = useState("");
-  const decide = async (d: Decision) => {
+  const decide = async (approve: boolean, scope: Scope) => {
     setBusy(true);
     setErr("");
     try {
-      const r = await props.onDecide(d);
-      if (d === "session" && r && r.length) setRules(r);
-      else props.onClose();
+      await props.onDecide(approve, scope);
     } catch (e) {
-      setErr(String(e instanceof Error ? e.message : e));
+      setErr(errText(e));
     } finally {
       setBusy(false);
     }
   };
+  const rules = ap?.session_rules ?? [];
   return (
     <div className="modal-back">
       <div className="modal">
-        <h3>需要确认：{req.tool}</h3>
-        <div className="muted">会话 {req.session}{req.reason ? ` · ${req.reason}` : ""}</div>
-        <pre className="args">{pretty(req.args)}</pre>
-        {rules ? (
+        <h3>需要确认：{ap?.tool ?? it.title}</h3>
+        <div className="muted">
+          会话 {it.session}
+          {ap?.reason ? ` · ${ap.reason}` : ""}
+        </div>
+        <pre className="args">{pretty(ap?.args)}</pre>
+        {rules.length > 0 && (
           <>
-            <div>已为本会话生成允许规则：</div>
+            <div className="muted small">「本会话内允许」会生成规则：</div>
             <ul className="rules">
               {rules.map((r) => (
                 <li key={r}>
@@ -46,41 +46,41 @@ export function ConfirmDialog(props: {
                 </li>
               ))}
             </ul>
-            <div className="row">
-              <button onClick={props.onClose}>关闭</button>
-            </div>
           </>
-        ) : (
-          <div className="row">
-            <button disabled={busy} onClick={() => void decide("once")}>
-              允许一次
-            </button>
-            <button disabled={busy} onClick={() => void decide("session")}>
-              本会话内允许
-            </button>
-            <button disabled={busy} className="danger" onClick={() => void decide("deny")}>
-              拒绝
-            </button>
-          </div>
         )}
+        {(ap?.blocked ?? []).length > 0 && (
+          <div className="warn small">不生成规则：{(ap?.blocked ?? []).join("、")}</div>
+        )}
+        <div className="row">
+          <button disabled={busy} onClick={() => void decide(true, "once")}>
+            允许一次
+          </button>
+          <button disabled={busy || rules.length === 0} onClick={() => void decide(true, "session")}>
+            本会话内允许
+          </button>
+          <button disabled={busy} className="danger" onClick={() => void decide(false, "once")}>
+            拒绝
+          </button>
+        </div>
         {err && <div className="error">{err}</div>}
       </div>
     </div>
   );
 }
 
-export function AskDialog(props: { ask: AskEvent; onAnswer: (text: string) => Promise<void> }) {
+export function AskDialog(props: { it: Interaction; onAnswer: (text: string) => Promise<void> }) {
+  const q = props.it.question;
   const [text, setText] = useState("");
   const [err, setErr] = useState("");
-  const send = (t: string) => props.onAnswer(t).catch((e) => setErr(String(e instanceof Error ? e.message : e)));
+  const send = (t: string) => props.onAnswer(t).catch((e) => setErr(errText(e)));
   return (
     <div className="modal-back">
       <div className="modal">
         <h3>智能体提问</h3>
-        <div className="question">{props.ask.question}</div>
-        {props.ask.options && props.ask.options.length > 0 && (
+        <div className="question">{q?.text ?? props.it.title}</div>
+        {q?.options && q.options.length > 0 && (
           <div className="col">
-            {props.ask.options.map((o) => (
+            {q.options.map((o) => (
               <button key={o} onClick={() => void send(o)}>
                 {o}
               </button>

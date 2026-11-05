@@ -1,12 +1,11 @@
 package appapi
 
-// UI 服务（runtime.UI）的事件化实现：Print / Warn 发 notice，Ask 发 ask{ask_id, question, options}
-// 并等 session.answer 送回答案。供桌面端 / api-server 用；CLI 有自己的终端界面。
-// UI 在装配时就要注入插件（早于 App 构造），所以只依赖总线，由应用先构造再交给 Options.UI。
+// UI 服务（runtime.UI）的事件化实现：Print / Warn 发 notice，Ask 向人提问并等回答。供桌面端 / api-server 用；
+// CLI 有自己的终端界面。UI 在装配时就要注入插件（早于 App 构造），所以只依赖总线，由应用先构造再交给 Options.UI。
 //
-// protocol 2（06 10.6）：App.New 把宿主交给 UI 之后，会话已打开时的提问登记成 question 交互（Host.Ask），
-// ask_id 就是交互 id；protocol 1 的 session.answer 与 protocol 2 的 interaction.respond 都经 Host.Respond 结束它。
-// 没有宿主或会话没打开时（装配期提问）退回进程内的等待通道。
+// 交互（06 10.6）：App.New 把宿主交给 UI 之后，会话已打开时的提问登记成 question 交互（Host.Ask），
+// 客户端经 interaction.respond 回答。没有宿主或会话没打开时（装配期提问）退回进程内的等待通道，
+// 只发内部事件 ask（不上线），由 Answer 送回答案。
 
 import (
 	"context"
@@ -86,7 +85,7 @@ func (u *UI) publishAsk(sessionID, id, question string, options []string) {
 	u.b.Publish(bus.Envelope{Session: sessionID, Kind: EventAsk, Data: map[string]any{"ask_id": id, "question": question, "options": options, "session": sessionID}})
 }
 
-// Answer 送回 ask_id 的答案（protocol 1 session.answer）。交互化的提问按交互结束（只收第一条）；
+// Answer 送回 ask_id 的答案（进程内调用）。交互化的提问按交互结束（只收第一条）；
 // 没有该问题（已超时 / 已回答）返回 not_found。
 func (u *UI) Answer(askID, text string) error {
 	u.mu.Lock()

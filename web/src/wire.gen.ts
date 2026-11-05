@@ -540,6 +540,49 @@ export interface TraceResult {
   text: string;
 }
 
+export interface ConfigField {
+  key: string;
+  type: string;
+  default?: string;
+  title?: string;
+  description?: string;
+  group?: string;
+  widget?: string;
+}
+
+export interface PluginInfo {
+  name: string;
+  on: boolean;
+  default: boolean;
+  source: string;
+  effects: string[];
+  schema: ConfigField[];
+}
+
+export interface PluginsListResult {
+  plugins: PluginInfo[];
+}
+
+export interface PluginsSetArgs {
+  name: string;
+  enabled?: boolean;
+  config?: Record<string, unknown>;
+  scope: string;
+}
+
+export interface PackageInfo {
+  name: string;
+  version: string;
+  description: string;
+  scope: string;
+  source: string;
+  contents: string;
+}
+
+export interface PackagesListResult {
+  packages: PackageInfo[];
+}
+
 export interface Empty {
 }
 

@@ -1,9 +1,8 @@
 package appapi
 
-// protocol 2 命令（docs/06 - 应用协议契约.md 10.4）：参数与结果全部用 appapi/wire 的线上类型，错误码按 10.7。
-// 与 protocol 1 的 Call 并存到 web/ 切换完成（10.11 S8），之后 protocol 1 删除、V2 的方法并回 App。
-// 订阅（session.subscribe / unsubscribe）随连接状态在传输层实现（S4）；交互命令（interaction.respond、
-// interactions.list）在 S6 加入。
+// 应用协议命令（protocol 2，docs/06 - 应用协议契约.md 10.4）：参数与结果全部用 appapi/wire 的线上类型，错误码按 10.7。
+// 入口是 App.Call2（进程内直接调用用 App.V2() 的方法）；订阅（session.subscribe / unsubscribe）与按连接身份回答交互
+// 在 Conn 上（conn.go）。protocol 1 已在 10.11 S8 删除。
 //
 // 约定（10.4）：任何命令都不隐式新建会话（G1）；改日志的命令接受 if_cursor；send / steer 必带 client_id。
 
@@ -24,6 +23,7 @@ import (
 
 	"ybase/appapi/wire"
 	"ybase/runtime/agentdef"
+	"ybase/runtime/component"
 	"ybase/runtime/host"
 	"ybase/runtime/reqlog"
 	"ybase/runtime/session"
@@ -40,93 +40,81 @@ const (
 	MaxArtifactPut   = 2 << 20
 )
 
-// applyWait SetExt / SetConfig 最多同步等多久（见 V2.apply）。
+// applyWait SetExt / SetConfig 最多同步等多久（见 App.apply）。
 var applyWait = 2 * time.Second
 
 // metaClientID session.create 记在会话行业务键里的 client_id（同一 client_id 重发返回已建会话）。
 const metaClientID = "client_id"
 
-// V2 protocol 2 的命令集。用 App.V2() 取得；方法并发安全。
-type V2 struct{ a *App }
+type handler func(ctx context.Context, a *App, args json.RawMessage) (any, error)
 
-// V2 protocol 2 命令集。
-func (a *App) V2() V2 { return V2{a} }
-
-type handler2 func(ctx context.Context, v V2, args json.RawMessage) (any, error)
-
-// bind2 同 bind，错误按 protocol 2 归类（AsError2）。
-func bind2[In, Out any](f func(V2, context.Context, In) (Out, error)) handler2 {
-	return func(ctx context.Context, v V2, raw json.RawMessage) (any, error) {
+// bind 同 bind，错误按 protocol 2 归类（AsError）。
+func bind[In, Out any](f func(*App, context.Context, In) (Out, error)) handler {
+	return func(ctx context.Context, a *App, raw json.RawMessage) (any, error) {
 		var in In
 		if t := bytes.TrimSpace(raw); len(t) > 0 && !bytes.Equal(t, []byte("null")) {
 			if err := json.Unmarshal(t, &in); err != nil {
 				return nil, Errorf(wire.CodeBadRequest, "参数解析失败：%v", err)
 			}
 		}
-		out, err := f(v, ctx, in)
+		out, err := f(a, ctx, in)
 		if err != nil {
-			return nil, AsError2(err)
+			return nil, AsError(err)
 		}
 		return out, nil
 	}
 }
 
-var commands2 = map[string]handler2{
-	"hello":               bind2(V2.Hello),
-	"sessions.list":       bind2(V2.SessionsList),
-	"session.create":      bind2(V2.Create),
-	"session.get":         bind2(V2.Get),
-	"session.entries":     bind2(V2.Entries),
-	"session.send":        bind2(V2.Send),
-	"session.steer":       bind2(V2.Steer),
-	"session.cancel":      bind2(V2.Cancel),
-	"session.rewind":      bind2(V2.Rewind),
-	"session.compact":     bind2(V2.Compact),
-	"session.fork":        bind2(V2.Fork),
-	"session.stats":       bind2(V2.Stats),
-	"session.settings":    bind2(V2.Settings),
-	"mode.list":           bind2(V2.ModeList),
-	"mode.get":            bind2(V2.ModeGet),
-	"mode.set":            bind2(V2.ModeSet),
-	"mode.show":           bind2(V2.ModeShow),
-	"artifact.get":        bind2(V2.ArtifactGet),
-	"artifact.put":        bind2(V2.ArtifactPut),
-	"trace.explain":       bind2(V2.Trace),
-	"interaction.respond": bind2(V2.Respond),
-	"interactions.list":   bind2(V2.Interactions),
-	"plugins.list": bind2(func(v V2, ctx context.Context, in NoArgs) ([]PluginInfo, error) {
-		return v.a.PluginsList(ctx, in)
-	}),
-	"packages.list": bind2(func(v V2, ctx context.Context, in NoArgs) ([]PackageInfo, error) {
-		return v.a.PackagesList(ctx, in)
-	}),
-	"plugins.set": bind2(func(v V2, ctx context.Context, in PluginsSetArgs) (Empty, error) {
-		return v.a.PluginsSet(ctx, in)
-	}),
+var commands = map[string]handler{
+	"hello":               bind((*App).Hello),
+	"sessions.list":       bind((*App).SessionsList),
+	"session.create":      bind((*App).Create),
+	"session.get":         bind((*App).Get),
+	"session.entries":     bind((*App).Entries),
+	"session.send":        bind((*App).Send),
+	"session.steer":       bind((*App).Steer),
+	"session.cancel":      bind((*App).Cancel),
+	"session.rewind":      bind((*App).Rewind),
+	"session.compact":     bind((*App).Compact),
+	"session.fork":        bind((*App).Fork),
+	"session.stats":       bind((*App).Stats),
+	"session.settings":    bind((*App).Settings),
+	"mode.list":           bind((*App).ModeList),
+	"mode.get":            bind((*App).ModeGet),
+	"mode.set":            bind((*App).ModeSet),
+	"mode.show":           bind((*App).ModeShow),
+	"artifact.get":        bind((*App).ArtifactGet),
+	"artifact.put":        bind((*App).ArtifactPut),
+	"trace.explain":       bind((*App).Trace),
+	"interaction.respond": bind((*App).Respond),
+	"interactions.list":   bind((*App).Interactions),
+	"plugins.list":        bind((*App).PluginsList),
+	"packages.list":       bind((*App).PackagesList),
+	"plugins.set":         bind((*App).PluginsSet),
 }
 
-// Commands2 protocol 2 支持的命令名（排序后）。
-func Commands2() []string {
-	out := make([]string, 0, len(commands2))
-	for k := range commands2 {
+// Commands protocol 2 支持的命令名（排序后）。
+func Commands() []string {
+	out := make([]string, 0, len(commands))
+	for k := range commands {
 		out = append(out, k)
 	}
 	sort.Strings(out)
 	return out
 }
 
-// Call2 按命令名分发 protocol 2 命令。错误一律是 *Error（码见 wire.Code*）。
-func (a *App) Call2(ctx context.Context, cmd string, args json.RawMessage) (any, error) {
-	h, ok := commands2[cmd]
+// Call 按命令名分发 protocol 2 命令。错误一律是 *Error（码见 wire.Code*）。
+func (a *App) Call(ctx context.Context, cmd string, args json.RawMessage) (any, error) {
+	h, ok := commands[cmd]
 	if !ok {
 		return nil, Errorf(wire.CodeUnsupported, "未知命令 %q", cmd)
 	}
-	return h(ctx, a.V2(), args)
+	return h(ctx, a, args)
 }
 
-// AsError2 按 protocol 2 的错误码（10.7）归类。已是 *Error 的：带原错误的按原错误重新归类（protocol 1 的归类不同，
-// 如 closed 在 protocol 1 里是 not_found，G2），不带的原样返回。
-func AsError2(err error) *Error {
+// AsError 按错误码表（10.7）归类。已是 *Error 的：带原错误的按原错误重新归类（结果不变，多包几层也一样），
+// 不带的原样返回。
+func AsError(err error) *Error {
 	if err == nil {
 		return nil
 	}
@@ -182,7 +170,7 @@ func invalid(format string, args ...any) *Error { return Errorf(wire.CodeInvalid
 // —— 握手与会话 ——
 
 // Hello 握手：客户端报支持的协议区间（都缺省 = 只认当前版本），不含 protocol 2 返回 unsupported。
-func (v V2) Hello(_ context.Context, in wire.HelloArgs) (wire.HelloResult, error) {
+func (v *App) Hello(_ context.Context, in wire.HelloArgs) (wire.HelloResult, error) {
 	lo, hi := in.Protocol.Min, in.Protocol.Max
 	if lo == 0 && hi == 0 {
 		lo, hi = wire.Protocol, wire.Protocol
@@ -190,14 +178,14 @@ func (v V2) Hello(_ context.Context, in wire.HelloArgs) (wire.HelloResult, error
 	if lo > wire.Protocol || hi < wire.Protocol {
 		return wire.HelloResult{}, Errorf(wire.CodeUnsupported, "协议区间 [%d, %d] 不含服务端支持的 %d", lo, hi, wire.Protocol)
 	}
-	o := v.a.o
+	o := v.o
 	return wire.HelloResult{Protocol: wire.Protocol, Server: Server, Principal: LocalPrincipal,
 		Capabilities: v.capabilities(), Model: o.Model, Workdir: o.Workdir, Trusted: o.Trusted, MaxOutput: MaxWireText}, nil
 }
 
 // capabilities 按装配了哪些部件列出可选功能，界面据此决定显示哪些入口。
-func (v V2) capabilities() []string {
-	o := v.a.o
+func (v *App) capabilities() []string {
+	o := v.o
 	out := []string{}
 	if o.Artifacts != nil {
 		out = append(out, "artifacts")
@@ -215,13 +203,20 @@ func (v V2) capabilities() []string {
 }
 
 // SessionsList 按更新时间倒序分页列会话。
-func (v V2) SessionsList(ctx context.Context, in wire.ListArgs) (wire.ListResult, error) {
-	r, err := v.a.SessionsList(ctx, ListArgs{Cursor: in.Cursor, Limit: in.Limit, All: in.All})
+func (v *App) SessionsList(ctx context.Context, in wire.ListArgs) (wire.ListResult, error) {
+	limit := in.Limit
+	if limit <= 0 || limit > 500 {
+		limit = 50
+	}
+	items, err := v.o.DB.ListSessions(ctx, in.Cursor, limit, !in.All)
 	if err != nil {
 		return wire.ListResult{}, err
 	}
-	out := wire.ListResult{Items: make([]wire.SessionInfo, len(r.Items)), Next: r.Next}
-	for i, s := range r.Items {
+	out := wire.ListResult{Items: make([]wire.SessionInfo, len(items))}
+	if len(items) == limit {
+		out.Next = items[len(items)-1].UpdatedAt
+	}
+	for i, s := range items {
 		out.Items[i] = wire.SessionInfo{ID: s.ID, Title: s.Title, Preview: s.Preview, RunState: wireRun(s.RunState),
 			Origin: s.Origin, Parent: s.ParentID, UpdatedAt: s.UpdatedAt}
 	}
@@ -238,8 +233,8 @@ func wireRun(s string) string {
 
 // Create 新建会话并返回快照。session 缺省时由 client_id 派生，都缺省时生成；已存在返回 conflict（exists），
 // 同一 client_id 重发返回已建会话的快照。
-func (v V2) Create(ctx context.Context, in wire.CreateArgs) (wire.SessionSnapshot, error) {
-	if v.a.o.Host.New == nil {
+func (v *App) Create(ctx context.Context, in wire.CreateArgs) (wire.SessionSnapshot, error) {
+	if v.o.Host.New == nil {
 		return wire.SessionSnapshot{}, Errorf(wire.CodeInternal, "appapi: 未设置会话构造器")
 	}
 	id := in.Session
@@ -257,7 +252,7 @@ func (v V2) Create(ctx context.Context, in wire.CreateArgs) (wire.SessionSnapsho
 	if in.ClientID != "" {
 		meta, _ = json.Marshal(map[string]string{metaClientID: in.ClientID})
 	}
-	if _, err := v.a.o.Host.Create(ctx, id, in.Definition, meta); err != nil {
+	if _, err := v.o.Host.Create(ctx, id, in.Definition, meta); err != nil {
 		if !errors.Is(err, store.ErrConflict) {
 			return wire.SessionSnapshot{}, err
 		}
@@ -270,8 +265,8 @@ func (v V2) Create(ctx context.Context, in wire.CreateArgs) (wire.SessionSnapsho
 }
 
 // createdBy 会话是否由带这个 client_id 的 session.create 建的。
-func (v V2) createdBy(ctx context.Context, id, clientID string) bool {
-	l, err := host.LoadHead(ctx, v.a.o.DB, id)
+func (v *App) createdBy(ctx context.Context, id, clientID string) bool {
+	l, err := host.LoadHead(ctx, v.o.DB, id)
 	if err != nil {
 		return false
 	}
@@ -301,7 +296,7 @@ func validID(id string) error {
 }
 
 // Get 会话快照（取代 session.open）：只读已提交数据，不打开会话；不存在返回 not_found。
-func (v V2) Get(ctx context.Context, in wire.SessionArgs) (wire.SessionSnapshot, error) {
+func (v *App) Get(ctx context.Context, in wire.SessionArgs) (wire.SessionSnapshot, error) {
 	if err := need(in.Session); err != nil {
 		return wire.SessionSnapshot{}, err
 	}
@@ -310,15 +305,15 @@ func (v V2) Get(ctx context.Context, in wire.SessionArgs) (wire.SessionSnapshot,
 
 // snapshot 会话头、运行状态与游标来自同一次读取（06 10.2.2 规则 4）：之后的变化一定在 cursor 之后。
 // 未结束的交互在 S6 补上，live 在 S5 补上。
-func (v V2) snapshot(ctx context.Context, id string) (wire.SessionSnapshot, error) {
-	l, err := host.LoadHead(ctx, v.a.o.DB, id)
+func (v *App) snapshot(ctx context.Context, id string) (wire.SessionSnapshot, error) {
+	l, err := host.LoadHead(ctx, v.o.DB, id)
 	if err != nil {
 		return wire.SessionSnapshot{}, err
 	}
 	h := l.Snapshot.Header
 	modeHdr := h // 档位持久化在顶层会话头上（子会话跟随顶层）
 	if top := topOf(id); top != id {
-		if tl, err := host.LoadHead(ctx, v.a.o.DB, top); err == nil {
+		if tl, err := host.LoadHead(ctx, v.o.DB, top); err == nil {
 			modeHdr = tl.Snapshot.Header
 		}
 	}
@@ -329,11 +324,11 @@ func (v V2) snapshot(ctx context.Context, id string) (wire.SessionSnapshot, erro
 }
 
 // live 进行中回合当前步的流式状态（读内存、不承诺与 cursor 一致，10.2.2 规则 7）；空闲时不给。
-func (v V2) live(id string, h session.Header) *wire.Live {
+func (v *App) live(id string, h session.Header) *wire.Live {
 	if h.Status == session.StatusIdle {
 		return nil
 	}
-	if l := v.a.liveOf(id); l != nil {
+	if l := v.liveOf(id); l != nil {
 		return l.snapshot()
 	}
 	return nil
@@ -341,8 +336,8 @@ func (v V2) live(id string, h session.Header) *wire.Live {
 
 // committedMode 快照里的档位：已提交值（06 10.2.2 规则 5）。内存里已切换、还没落库时给落库的那个，
 // 标签从档位表取（沙箱级别只有当前档位才有，这时留空，客户端以随后的 mode_changed 为准）。
-func (v V2) committedMode(id string, h session.Header) *wire.Mode {
-	m := v.a.o.Modes
+func (v *App) committedMode(id string, h session.Header) *wire.Mode {
+	m := v.o.Modes
 	if m == nil {
 		return nil
 	}
@@ -367,22 +362,43 @@ func maxSteps(h session.Header) uint32 {
 }
 
 // Entries 读已提交日志，条目按 10.3 翻译；工具结果超过 MaxWireText 时截断，有工件存储时给全文引用。
-func (v V2) Entries(ctx context.Context, in wire.EntriesArgs) (wire.EntriesResult, error) {
-	r, err := v.a.Entries(ctx, EntriesArgs{Session: in.Session, From: in.From, To: in.To, Tail: in.Tail})
+func (v *App) Entries(ctx context.Context, in wire.EntriesArgs) (wire.EntriesResult, error) {
+	if err := need(in.Session); err != nil {
+		return wire.EntriesResult{}, err
+	}
+	l, err := host.LoadHead(ctx, v.o.DB, in.Session) // 只要头部：翻页不全量反序列化（审查 P1-35）
 	if err != nil {
 		return wire.EntriesResult{}, err
 	}
-	out := wire.EntriesResult{Entries: make([]wire.Entry, len(r.Entries)), Base: r.Base, Len: r.LogLen}
+	h := l.Snapshot.Header
+	from, to := h.CompactionBase, h.LogLen
+	if in.From != nil {
+		from = *in.From
+	}
+	if in.To != nil {
+		to = *in.To
+	}
+	if in.Tail > 0 {
+		from, to = max(h.LogLen-in.Tail, 0), h.LogLen
+	}
+	if from < 0 || to < from {
+		return wire.EntriesResult{}, invalid("区间 [%d, %d) 不合法", from, to)
+	}
+	es, err := v.o.DB.Entries(ctx, in.Session, from, to)
+	if err != nil {
+		return wire.EntriesResult{}, err
+	}
+	out := wire.EntriesResult{Entries: make([]wire.Entry, len(es)), Base: h.CompactionBase, Len: h.LogLen}
 	spill := v.spill(in.Session)
-	for i, e := range r.Entries {
-		out.Entries[i] = WireEntry(e.Idx, e.Entry, spill)
+	for i, e := range es {
+		out.Entries[i] = WireEntry(from+i, e, spill)
 	}
 	return out, nil
 }
 
 // spill 把超长工具结果全文存成工件（内容寻址，重复存无害）。
-func (v V2) spill(id string) Spill {
-	art := v.a.o.Artifacts
+func (v *App) spill(id string) Spill {
+	art := v.o.Artifacts
 	if art == nil {
 		return nil
 	}
@@ -399,7 +415,7 @@ func (v V2) spill(id string) Spill {
 
 // Send 投递用户输入（落 inbox 即返回）。client_id 是幂等键：重发同一个只算一次。queued 表示投递时有进行中的回合：
 // 输入不开新回合，而是在这个回合的下一次调模型前插入，或排到回合结束后。
-func (v V2) Send(ctx context.Context, in wire.SendArgs) (wire.SendResult, error) {
+func (v *App) Send(ctx context.Context, in wire.SendArgs) (wire.SendResult, error) {
 	if err := need(in.Session); err != nil {
 		return wire.SendResult{}, err
 	}
@@ -410,7 +426,7 @@ func (v V2) Send(ctx context.Context, in wire.SendArgs) (wire.SendResult, error)
 	if err != nil {
 		return wire.SendResult{}, err
 	}
-	hd, err := v.a.o.Host.OpenExisting(ctx, in.Session)
+	hd, err := v.o.Host.OpenExisting(ctx, in.Session)
 	if err != nil {
 		return wire.SendResult{}, err
 	}
@@ -432,7 +448,7 @@ func needClientID(id string) error {
 }
 
 // content 输入部件 → 内核内容。只收文本与媒体；媒体必须引用本服务的工件（先 artifact.put 再引用）。
-func (v V2) content(parts []wire.Part, text string) (session.Content, error) {
+func (v *App) content(parts []wire.Part, text string) (session.Content, error) {
 	if (len(parts) > 0) == (text != "") {
 		return nil, Errorf(wire.CodeBadRequest, "content 与 text 必须给且只给一个")
 	}
@@ -453,7 +469,7 @@ func (v V2) content(parts []wire.Part, text string) (session.Content, error) {
 			if !ok {
 				return nil, invalid("第 %d 个部件：ref 须是 %s<sha256>", i+1, toolhub.ArtifactPrefix)
 			}
-			art := v.a.o.Artifacts
+			art := v.o.Artifacts
 			if art == nil { // 没有工件存储就核对不了引用，也取不回内容
 				return nil, Errorf(wire.CodeUnsupported, "没有工件存储，不能发送媒体")
 			}
@@ -484,7 +500,7 @@ func artifactHash(ref string) (string, bool) {
 }
 
 // Steer 回合中插话（下一步生效）。client_id 是幂等键：同一回合重发只插一次。没有进行中的回合返回 invalid。
-func (v V2) Steer(ctx context.Context, in wire.SteerArgs) (wire.Empty, error) {
+func (v *App) Steer(ctx context.Context, in wire.SteerArgs) (wire.Empty, error) {
 	if err := need(in.Session); err != nil {
 		return wire.Empty{}, err
 	}
@@ -502,7 +518,7 @@ func (v V2) Steer(ctx context.Context, in wire.SteerArgs) (wire.Empty, error) {
 }
 
 // Cancel 取消进行中的回合；没有回合时什么都不做（本身幂等）。
-func (v V2) Cancel(ctx context.Context, in wire.SessionArgs) (wire.Empty, error) {
+func (v *App) Cancel(ctx context.Context, in wire.SessionArgs) (wire.Empty, error) {
 	if err := need(in.Session); err != nil {
 		return wire.Empty{}, err
 	}
@@ -518,11 +534,11 @@ func (v V2) Cancel(ctx context.Context, in wire.SessionArgs) (wire.Empty, error)
 
 // running 已打开会话的句柄：会话存在但没打开说明没有进行中的回合（session.ErrNotWaiting），不存在返回 not_found。
 // 不为插话、取消去打开会话。
-func (v V2) running(ctx context.Context, id string) (host.Handle, error) {
-	if hd, ok := v.a.o.Host.Get(id); ok {
+func (v *App) running(ctx context.Context, id string) (host.Handle, error) {
+	if hd, ok := v.o.Host.Get(id); ok {
 		return hd, nil
 	}
-	ok, err := v.a.o.DB.Exists(ctx, id)
+	ok, err := v.o.DB.Exists(ctx, id)
 	if err != nil {
 		return host.Handle{}, err
 	}
@@ -533,8 +549,8 @@ func (v V2) running(ctx context.Context, id string) (host.Handle, error) {
 }
 
 // idleHandle 打开已有会话，要求没有进行中的回合（需空闲的命令用）。
-func (v V2) idleHandle(ctx context.Context, id string) (host.Handle, error) {
-	hd, err := v.a.o.Host.OpenExisting(ctx, id)
+func (v *App) idleHandle(ctx context.Context, id string) (host.Handle, error) {
+	hd, err := v.o.Host.OpenExisting(ctx, id)
 	if err != nil {
 		return host.Handle{}, err
 	}
@@ -548,7 +564,7 @@ func (v V2) idleHandle(ctx context.Context, id string) (host.Handle, error) {
 
 // Rewind 保留 to_turn 之前的回合，截掉 to_turn 及之后（绝对目标：目标回合已不存在时什么都不截）。
 // 需空闲；if_cursor 不符返回 conflict（stale）。
-func (v V2) Rewind(ctx context.Context, in wire.RewindArgs) (wire.RewindResult, error) {
+func (v *App) Rewind(ctx context.Context, in wire.RewindArgs) (wire.RewindResult, error) {
 	if err := need(in.Session); err != nil {
 		return wire.RewindResult{}, err
 	}
@@ -567,18 +583,18 @@ func (v V2) Rewind(ctx context.Context, in wire.RewindArgs) (wire.RewindResult, 
 }
 
 // Compact 手动压缩到 upto（缺省按保留尾部规则选）；已压缩到该位置时直接返回那次压缩。需空闲；if_cursor 不符返回 conflict（stale）。
-func (v V2) Compact(ctx context.Context, in wire.CompactArgs) (wire.CompactResult, error) {
+func (v *App) Compact(ctx context.Context, in wire.CompactArgs) (wire.CompactResult, error) {
 	if err := need(in.Session); err != nil {
 		return wire.CompactResult{}, err
 	}
-	if v.a.o.Compactor == nil {
+	if v.o.Compactor == nil {
 		return wire.CompactResult{}, Errorf(wire.CodeUnsupported, "未装配 compact-basic 插件")
 	}
 	hd, err := v.idleHandle(ctx, in.Session)
 	if err != nil {
 		return wire.CompactResult{}, err
 	}
-	l, err := v.a.o.DB.Load(ctx, in.Session, nil)
+	l, err := v.o.DB.Load(ctx, in.Session, nil)
 	if err != nil {
 		return wire.CompactResult{}, err
 	}
@@ -593,7 +609,7 @@ func (v V2) Compact(ctx context.Context, in wire.CompactArgs) (wire.CompactResul
 	if err != nil {
 		return wire.CompactResult{}, err
 	}
-	c := v.a.o.Compactor
+	c := v.o.Compactor
 	var view *reqlog.CompactionView
 	var meta map[string]any
 	if in.Upto != nil {
@@ -637,7 +653,7 @@ func lastSummary(s session.Snapshot) string {
 
 // Fork 从会话分出新会话，返回新会话快照。to 缺省时由 client_id 派生（同一 client_id 重发返回已分出的会话），
 // 都缺省时生成。来源须空闲；if_cursor 不符返回 conflict（stale）；目标已存在返回 conflict（exists）。
-func (v V2) Fork(ctx context.Context, in wire.ForkArgs) (wire.SessionSnapshot, error) {
+func (v *App) Fork(ctx context.Context, in wire.ForkArgs) (wire.SessionSnapshot, error) {
 	if err := need(in.Session); err != nil {
 		return wire.SessionSnapshot{}, err
 	}
@@ -655,19 +671,19 @@ func (v V2) Fork(ctx context.Context, in wire.ForkArgs) (wire.SessionSnapshot, e
 	if err := validID(to); err != nil {
 		return wire.SessionSnapshot{}, err
 	}
-	if hd, ok := v.a.o.Host.Get(in.Session); ok && hd.InTurn() {
+	if hd, ok := v.o.Host.Get(in.Session); ok && hd.InTurn() {
 		return wire.SessionSnapshot{}, fmt.Errorf("%w: 来源会话 %s 有进行中的回合", session.ErrNotIdle, in.Session)
 	}
 	upto := -1
 	if in.Upto != nil {
 		upto = *in.Upto
 	}
-	if _, err := v.a.o.Host.ForkIf(ctx, in.Session, to, upto, in.Origin, in.IfCursor); err != nil {
+	if _, err := v.o.Host.ForkIf(ctx, in.Session, to, upto, in.Origin, in.IfCursor); err != nil {
 		if !errors.Is(err, store.ErrConflict) {
 			return wire.SessionSnapshot{}, err
 		}
 		if in.ClientID != "" {
-			if l, e := host.LoadHead(ctx, v.a.o.DB, to); e == nil && l.Meta.ParentID == in.Session {
+			if l, e := host.LoadHead(ctx, v.o.DB, to); e == nil && l.Meta.ParentID == in.Session {
 				return v.snapshot(ctx, to)
 			}
 		}
@@ -679,11 +695,11 @@ func (v V2) Fork(ctx context.Context, in wire.ForkArgs) (wire.SessionSnapshot, e
 // —— 查询与设置 ——
 
 // exists 会话存在，否则 not_found。
-func (v V2) exists(ctx context.Context, id string) error {
+func (v *App) exists(ctx context.Context, id string) error {
 	if err := need(id); err != nil {
 		return err
 	}
-	ok, err := v.a.o.DB.Exists(ctx, id)
+	ok, err := v.o.DB.Exists(ctx, id)
 	if err != nil {
 		return err
 	}
@@ -694,37 +710,37 @@ func (v V2) exists(ctx context.Context, id string) error {
 }
 
 // Stats 会话统计（只读投影）。
-func (v V2) Stats(ctx context.Context, in wire.SessionArgs) (wire.Stats, error) {
+func (v *App) Stats(ctx context.Context, in wire.SessionArgs) (wire.Stats, error) {
 	if err := v.exists(ctx, in.Session); err != nil {
 		return wire.Stats{}, err
 	}
-	st, err := v.a.Stats(ctx, SessionArgs{Session: in.Session})
+	st, err := v.o.DB.SessionStats(ctx, in.Session)
 	if err != nil {
 		return wire.Stats{}, err
 	}
 	out := wire.Stats{Attempts: st.Attempts, Reported: st.Reported, Missing: st.Missing, Errors: st.Errors,
-		Input: st.Input, Output: st.Output, CacheRead: st.CacheRead, CacheWrite: st.CacheWrite, HitRate: st.HitRate,
+		Input: st.Input, Output: st.Output, CacheRead: st.CacheRead, CacheWrite: st.CacheWrite, HitRate: st.HitRate(),
 		ToolCalls: st.ToolCalls, Compacts: st.Compacts, LastRequest: st.LastRequest}
-	if st.Composition != nil {
-		out.Composition, _ = json.Marshal(st.Composition)
+	if len(st.Composition) > 0 && json.Valid(st.Composition) {
+		out.Composition = st.Composition
 	}
 	return out, nil
 }
 
 // Settings 查看或修改会话设置（取代 session.max_steps）。空闲时等落库后返回 committed=true；
 // 回合中只改内存、到步边界生效，返回 committed=false，落库时发 session.settings_changed（10.2.2 规则 5）。
-func (v V2) Settings(ctx context.Context, in wire.SettingsArgs) (wire.SettingsResult, error) {
+func (v *App) Settings(ctx context.Context, in wire.SettingsArgs) (wire.SettingsResult, error) {
 	if err := need(in.Session); err != nil {
 		return wire.SettingsResult{}, err
 	}
 	if in.MaxSteps == nil {
-		l, err := host.LoadHead(ctx, v.a.o.DB, in.Session)
+		l, err := host.LoadHead(ctx, v.o.DB, in.Session)
 		if err != nil {
 			return wire.SettingsResult{}, err
 		}
 		return wire.SettingsResult{Settings: wire.Settings{MaxSteps: maxSteps(l.Snapshot.Header)}, Committed: true}, nil
 	}
-	hd, err := v.a.o.Host.OpenExisting(ctx, in.Session)
+	hd, err := v.o.Host.OpenExisting(ctx, in.Session)
 	if err != nil {
 		return wire.SettingsResult{}, err
 	}
@@ -737,7 +753,7 @@ func (v V2) Settings(ctx context.Context, in wire.SettingsArgs) (wire.SettingsRe
 
 // apply 投递 SetExt / SetConfig 并等受理，最多等 applyWait：回合中这类命令要到步边界才受理，而这一步可能正等着
 // 人确认，不能一直等。等不到就返回 committed=false：命令照样在步边界生效、随下个检查点落库；失败时发 notice。
-func (v V2) apply(id string, hd host.Handle, c host.Command) (bool, error) {
+func (v *App) apply(id string, hd host.Handle, c host.Command) (bool, error) {
 	var ok bool
 	c.Committed = &ok
 	done := make(chan error, 1)
@@ -748,7 +764,7 @@ func (v V2) apply(id string, hd host.Handle, c host.Command) (bool, error) {
 	case <-time.After(applyWait):
 		go func() {
 			if err := <-done; err != nil {
-				v.a.Notice(id, fmt.Sprintf("[设置未能保存：%v]", err))
+				v.Notice(id, fmt.Sprintf("[设置未能保存：%v]", err))
 			}
 		}()
 		return false, nil
@@ -762,8 +778,8 @@ func wireMode(s ModeState) wire.Mode {
 }
 
 // ModeList 全部档位。
-func (v V2) ModeList(_ context.Context, _ wire.Empty) (wire.ModeListResult, error) {
-	m, err := v.a.modes()
+func (v *App) ModeList(_ context.Context, _ wire.Empty) (wire.ModeListResult, error) {
+	m, err := v.modes()
 	if err != nil {
 		return wire.ModeListResult{}, err
 	}
@@ -775,8 +791,8 @@ func (v V2) ModeList(_ context.Context, _ wire.Empty) (wire.ModeListResult, erro
 }
 
 // ModeGet 会话当前档位；committed 表示它已落库（回合中刚切换、还没到检查点时为 false）。
-func (v V2) ModeGet(ctx context.Context, in wire.SessionArgs) (wire.ModeSetResult, error) {
-	m, err := v.a.modes()
+func (v *App) ModeGet(ctx context.Context, in wire.SessionArgs) (wire.ModeSetResult, error) {
+	m, err := v.modes()
 	if err != nil {
 		return wire.ModeSetResult{}, err
 	}
@@ -785,7 +801,7 @@ func (v V2) ModeGet(ctx context.Context, in wire.SessionArgs) (wire.ModeSetResul
 	}
 	st := m.Get(in.Session)
 	committed := true
-	if l, err := host.LoadHead(ctx, v.a.o.DB, topOf(in.Session)); err == nil {
+	if l, err := host.LoadHead(ctx, v.o.DB, topOf(in.Session)); err == nil {
 		key, _ := m.ExtKeys()
 		if saved, ok := l.Snapshot.Header.Ext[key].(string); ok && saved != st.Mode {
 			committed = false
@@ -796,8 +812,8 @@ func (v V2) ModeGet(ctx context.Context, in wire.SessionArgs) (wire.ModeSetResul
 
 // ModeSet 切换档位：立即对后续工具调用生效，持久化到顶层会话头。空闲时等落库，committed=true；
 // 回合中到步边界落库，committed=false，落库时发 session.mode_changed（10.2.2 规则 5）。
-func (v V2) ModeSet(ctx context.Context, in wire.ModeSetArgs) (wire.ModeSetResult, error) {
-	m, err := v.a.modes()
+func (v *App) ModeSet(ctx context.Context, in wire.ModeSetArgs) (wire.ModeSetResult, error) {
+	m, err := v.modes()
 	if err != nil {
 		return wire.ModeSetResult{}, err
 	}
@@ -807,7 +823,7 @@ func (v V2) ModeSet(ctx context.Context, in wire.ModeSetArgs) (wire.ModeSetResul
 	if err := v.exists(ctx, in.Session); err != nil { // 先查会话，再改内存档位
 		return wire.ModeSetResult{}, err
 	}
-	top, err := v.a.o.Host.OpenExisting(ctx, topOf(in.Session))
+	top, err := v.o.Host.OpenExisting(ctx, topOf(in.Session))
 	if err != nil {
 		return wire.ModeSetResult{}, err
 	}
@@ -824,8 +840,8 @@ func (v V2) ModeSet(ctx context.Context, in wire.ModeSetArgs) (wire.ModeSetResul
 }
 
 // ModeShow 档位的完整取值表；mode 缺省取会话的当前档位。
-func (v V2) ModeShow(ctx context.Context, in wire.ModeShowArgs) (wire.ModeShowResult, error) {
-	m, err := v.a.modes()
+func (v *App) ModeShow(ctx context.Context, in wire.ModeShowArgs) (wire.ModeShowResult, error) {
+	m, err := v.modes()
 	if err != nil {
 		return wire.ModeShowResult{}, err
 	}
@@ -856,8 +872,8 @@ func (v V2) ModeShow(ctx context.Context, in wire.ModeShowArgs) (wire.ModeShowRe
 
 // ArtifactGet 分段读工件（G10）：offset / length 按字节，单次最多 MaxArtifactChunk。文本类且这一段是完整 UTF-8 时给 text，
 // 否则给 base64。
-func (v V2) ArtifactGet(ctx context.Context, in wire.ArtifactGetArgs) (wire.ArtifactGetResult, error) {
-	art := v.a.o.Artifacts
+func (v *App) ArtifactGet(ctx context.Context, in wire.ArtifactGetArgs) (wire.ArtifactGetResult, error) {
+	art := v.o.Artifacts
 	if art == nil {
 		return wire.ArtifactGetResult{}, Errorf(wire.CodeUnsupported, "没有工件存储")
 	}
@@ -890,8 +906,8 @@ func (v V2) ArtifactGet(ctx context.Context, in wire.ArtifactGetArgs) (wire.Arti
 }
 
 // ArtifactPut 上传输入用的小文件（不超过 MaxArtifactPut；更大的走 HTTP 上传，10.9），返回 artifact:// 引用。
-func (v V2) ArtifactPut(ctx context.Context, in wire.ArtifactPutArgs) (wire.ArtifactPutResult, error) {
-	art := v.a.o.Artifacts
+func (v *App) ArtifactPut(ctx context.Context, in wire.ArtifactPutArgs) (wire.ArtifactPutResult, error) {
+	art := v.o.Artifacts
 	if art == nil {
 		return wire.ArtifactPutResult{}, Errorf(wire.CodeUnsupported, "没有工件存储")
 	}
@@ -916,7 +932,63 @@ func (v V2) ArtifactPut(ctx context.Context, in wire.ArtifactPutArgs) (wire.Arti
 }
 
 // Trace 渲染一次任务经过的会话、信封、工具与拒绝原因。
-func (v V2) Trace(ctx context.Context, in wire.TraceArgs) (wire.TraceResult, error) {
-	r, err := v.a.ExplainTrace(ctx, TraceArgs{Trace: in.Trace})
-	return wire.TraceResult{Text: r.Text}, err
+func (v *App) Trace(ctx context.Context, in wire.TraceArgs) (wire.TraceResult, error) {
+	if in.Trace == "" {
+		return wire.TraceResult{}, Errorf(wire.CodeBadRequest, "缺少 trace")
+	}
+	out, err := RenderTrace(ctx, v.o.DB, in.Trace)
+	return wire.TraceResult{Text: out}, err
+}
+
+// —— 插件 ——
+
+// PluginsList 全部已登记插件的开关状态与配置 Schema（改开关需重启，见 PluginsSet）。
+func (v *App) PluginsList(_ context.Context, _ wire.Empty) (wire.PluginsListResult, error) {
+	if v.o.Profile == nil {
+		return wire.PluginsListResult{}, Errorf(wire.CodeUnsupported, "未提供插件信息")
+	}
+	out := wire.PluginsListResult{Plugins: []wire.PluginInfo{}}
+	for _, st := range v.o.Profile.States() {
+		wp := wire.PluginInfo{Name: st.Name, On: st.On, Default: st.Default, Source: st.Source,
+			Effects: append([]string{}, st.Effects...), Schema: []wire.ConfigField{}}
+		if m, ok := component.MetaOf(st.Name); ok {
+			for _, f := range component.SchemaOf(m.Config) {
+				wp.Schema = append(wp.Schema, wire.ConfigField{Key: f.Key, Type: f.Type, Default: f.Default, Title: f.Title,
+					Description: f.Description, Group: f.Group, Widget: f.Widget})
+			}
+		}
+		out.Plugins = append(out.Plugins, wp)
+	}
+	return out, nil
+}
+
+// PackagesList 已加载的插件包（用户级在前、项目级在后）。
+func (v *App) PackagesList(_ context.Context, _ wire.Empty) (wire.PackagesListResult, error) {
+	out := wire.PackagesListResult{Packages: []wire.PackageInfo{}}
+	for _, k := range v.o.Packages {
+		out.Packages = append(out.Packages, wire.PackageInfo{Name: k.Name, Version: k.Version, Description: k.Description,
+			Scope: k.Scope, Source: k.File, Contents: k.Contents()})
+	}
+	return out, nil
+}
+
+// PluginsSet 改插件开关 / 配置：未实现（需写 profile 文件），返回 unsupported。
+func (v *App) PluginsSet(_ context.Context, _ wire.PluginsSetArgs) (wire.Empty, error) {
+	return wire.Empty{}, Errorf(wire.CodeUnsupported, "plugins.set 未实现：请编辑 profile.toml 后重启")
+}
+
+// need 会话 id 必填。
+func need(id string) error {
+	if id == "" {
+		return Errorf(wire.CodeBadRequest, "缺少 session")
+	}
+	return nil
+}
+
+// modes 权限档位；未装权限插件返回 unsupported。
+func (a *App) modes() (Modes, error) {
+	if a.o.Modes == nil {
+		return nil, Errorf(wire.CodeUnsupported, "未装权限插件")
+	}
+	return a.o.Modes, nil
 }

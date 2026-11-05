@@ -52,7 +52,7 @@ func TestInteractionRespondFlow(t *testing.T) {
 	defer other.Close()
 	_, err := other.Call(context.Background(), "interaction.respond",
 		json.RawMessage(`{"interaction":"`+it.ID+`","response":{"approve":true}}`))
-	wantCode(t, AsError2(err), wire.CodeForbidden, "")
+	wantCode(t, AsError(err), wire.CodeForbidden, "")
 
 	args := `{"interaction":"` + it.ID + `","response":{"approve":true},"client_id":"r1"}`
 	out, err := c.Call(context.Background(), "interaction.respond", json.RawMessage(args))
@@ -67,7 +67,7 @@ func TestInteractionRespondFlow(t *testing.T) {
 	// 别的回答：conflict（answered），details 带已有 outcome。
 	_, err = c.Call(context.Background(), "interaction.respond",
 		json.RawMessage(`{"interaction":"`+it.ID+`","response":{"approve":false},"client_id":"r2"}`))
-	e2 := AsError2(err)
+	e2 := AsError(err)
 	wantCode(t, e2, wire.CodeConflict, wire.ConflictAnswered)
 	if e2.Details["outcome"] != wire.OutcomeApproved {
 		t.Fatalf("details.outcome 应为 approved：%+v", e2.Details)

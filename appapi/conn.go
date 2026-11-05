@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 
@@ -95,31 +96,31 @@ func (c *Conn) Close() {
 	}
 }
 
-// Call 执行一条 protocol 2 命令：订阅命令在这里处理，其余交给 App.Call2；viewer 只能查询和订阅（forbidden）。
+// Call 执行一条 protocol 2 命令：订阅命令在这里处理，其余交给 App.Call；viewer 只能查询和订阅（forbidden）。
 func (c *Conn) Call(ctx context.Context, cmd string, args json.RawMessage) (any, error) {
 	if c.p.Role != wire.RoleOperator && !viewerCommands[cmd] {
 		return nil, Errorf(wire.CodeForbidden, "身份 %s（%s）不能执行 %s", c.p.ID, c.p.Role, cmd)
 	}
 	switch cmd {
 	case "session.subscribe":
-		return bind2(func(_ V2, ctx context.Context, in wire.SubscribeArgs) (wire.Empty, error) {
+		return bind(func(_ *App, ctx context.Context, in wire.SubscribeArgs) (wire.Empty, error) {
 			return wire.Empty{}, c.Subscribe(ctx, in)
-		})(ctx, c.a.V2(), args)
+		})(ctx, c.a, args)
 	case "interaction.respond": // 回答者是连接身份（10.6）
-		return bind2(func(v V2, ctx context.Context, in wire.RespondArgs) (wire.RespondResult, error) {
+		return bind(func(v *App, ctx context.Context, in wire.RespondArgs) (wire.RespondResult, error) {
 			return v.respondAs(ctx, in, c.p)
-		})(ctx, c.a.V2(), args)
+		})(ctx, c.a, args)
 	case "interactions.list":
-		return bind2(func(v V2, ctx context.Context, _ wire.Empty) (wire.InteractionsResult, error) {
+		return bind(func(v *App, ctx context.Context, _ wire.Empty) (wire.InteractionsResult, error) {
 			return v.interactionsFor(ctx, c.p)
-		})(ctx, c.a.V2(), args)
+		})(ctx, c.a, args)
 	case "session.unsubscribe":
-		return bind2(func(_ V2, _ context.Context, in wire.SessionArgs) (wire.Empty, error) {
+		return bind(func(_ *App, _ context.Context, in wire.SessionArgs) (wire.Empty, error) {
 			c.Unsubscribe(in.Session)
 			return wire.Empty{}, nil
-		})(ctx, c.a.V2(), args)
+		})(ctx, c.a, args)
 	}
-	out, err := c.a.Call2(ctx, cmd, args)
+	out, err := c.a.Call(ctx, cmd, args)
 	if r, ok := out.(wire.HelloResult); ok && err == nil {
 		r.Principal = c.p
 		out = r
@@ -270,7 +271,7 @@ func (c *Conn) translate(e bus.Envelope) []wire.Envelope {
 			return nil
 		}
 		idx := intOf(m["idx"])
-		we := WireEntry(idx, &ent, c.a.V2().spill(e.Session))
+		we := WireEntry(idx, &ent, c.a.spill(e.Session))
 		out := []wire.Envelope{c.envelope(e.Session, wire.EvEntryAppended, e.Seq, ent.Turn, wire.EntryAppended{Entry: we})}
 		if ent.Item.Kind == session.KindCompaction && ent.Item.Compaction != nil { // 压缩点前移：与条目同一个游标
 			out = append(out, c.envelope(e.Session, wire.EvLogCompacted, e.Seq, ent.Turn,
@@ -576,4 +577,12 @@ func intOf(v any) int {
 		return int(i)
 	}
 	return 0
+}
+
+// ConnCommands 连接上可用的全部命令（Call 的命令加上连接级的 session.subscribe / unsubscribe），排序后。
+// 前端命令表与它一致（apps/desktop 的测试校验）。
+func ConnCommands() []string {
+	out := append(Commands(), "session.subscribe", "session.unsubscribe")
+	sort.Strings(out)
+	return out
 }

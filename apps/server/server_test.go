@@ -18,6 +18,7 @@ import (
 	"golang.org/x/net/websocket"
 
 	"ybase/appapi"
+	"ybase/appapi/wire"
 	"ybase/runtime/agent"
 	"ybase/runtime/bus"
 	"ybase/runtime/host"
@@ -234,7 +235,7 @@ func (c *client) call(id int, cmd string, args any) map[string]json.RawMessage {
 	}
 }
 
-func (c *client) waitEvent(kind string) bus.Envelope {
+func (c *client) waitEvent(kind string) wire.Envelope {
 	c.t.Helper()
 	dl := time.After(5 * time.Second)
 	for {
@@ -244,7 +245,7 @@ func (c *client) waitEvent(kind string) bus.Envelope {
 				c.t.Fatal("连接已关")
 			}
 			if raw, has := m["event"]; has {
-				var e bus.Envelope
+				var e wire.Envelope
 				_ = json.Unmarshal(raw, &e)
 				if e.Kind == kind {
 					return e
@@ -259,43 +260,76 @@ func (c *client) waitEvent(kind string) bus.Envelope {
 func TestHelloRoundtrip(t *testing.T) {
 	base, _ := newTestServer(t)
 	c := dial(t, base)
-	m := c.call(1, "hello", map[string]any{"client": "test", "version": 1})
+	m := c.call(1, "hello", map[string]any{"client": "test", "protocol": map[string]int{"min": 2, "max": 2}})
 	if string(m["ok"]) != "true" {
 		t.Fatalf("hello：%s", m["error"])
 	}
-	var res appapi.HelloResult
-	if err := json.Unmarshal(m["result"], &res); err != nil || res.Protocol != appapi.Protocol || res.Server != appapi.Server {
+	var res wire.HelloResult
+	if err := json.Unmarshal(m["result"], &res); err != nil || res.Protocol != wire.Protocol || res.Server != appapi.Server ||
+		res.Principal != appapi.LocalPrincipal {
 		t.Fatalf("hello 结果：%s %v", m["result"], err)
 	}
-	m = c.call(2, "no.such", nil)
-	var e appapi.Error
+	m = c.call(2, "hello", map[string]any{"client": "test", "protocol": map[string]int{"min": 1, "max": 1}})
+	var e wire.Error
 	_ = json.Unmarshal(m["error"], &e)
-	if string(m["ok"]) != "false" || e.Code != appapi.CodeUnsupported {
+	if string(m["ok"]) != "false" || e.Code != wire.CodeUnsupported {
+		t.Fatalf("协议区间不含 2 应为 unsupported：%v", m)
+	}
+	m = c.call(3, "no.such", nil)
+	e = wire.Error{}
+	_ = json.Unmarshal(m["error"], &e)
+	if string(m["ok"]) != "false" || e.Code != wire.CodeUnsupported {
 		t.Fatalf("未知命令：%v", m)
 	}
 	// 坏帧
 	_ = websocket.Message.Send(c.ws, "not json")
-	m = c.call(3, "sessions.list", map[string]any{})
+	m = c.call(4, "sessions.list", map[string]any{})
 	if string(m["ok"]) != "true" {
 		t.Fatalf("sessions.list：%s", m["error"])
 	}
 }
 
+// 事件只推连接订阅了的会话（10.5 事件过滤）：两个订阅了的连接都收到持久事件（带 cursor）与 turn.ended，
+// 没订阅的连接收不到这个会话的事件。
 func TestEventPush(t *testing.T) {
 	base, _ := newTestServer(t)
-	a, b := dial(t, base), dial(t, base) // 两个连接各自订阅
-	if m := a.call(1, "session.open", map[string]any{"session": "s1"}); string(m["ok"]) != "true" {
-		t.Fatalf("open：%s", m["error"])
+	a, b, idle := dial(t, base), dial(t, base), dial(t, base)
+	if m := a.call(1, "session.create", map[string]any{"session": "s1"}); string(m["ok"]) != "true" {
+		t.Fatalf("create：%s", m["error"])
 	}
-	if m := a.call(2, "session.send", map[string]any{"session": "s1", "text": "hi"}); string(m["ok"]) != "true" {
+	for i, c := range []*client{a, b} {
+		if m := c.call(10+i, "session.subscribe", map[string]any{"session": "s1"}); string(m["ok"]) != "true" {
+			t.Fatalf("subscribe：%s", m["error"])
+		}
+		c.waitEvent(wire.EvSynced)
+	}
+	if m := a.call(2, "session.send", map[string]any{"session": "s1", "text": "hi", "client_id": "c1"}); string(m["ok"]) != "true" {
 		t.Fatalf("send：%s", m["error"])
 	}
 	for _, c := range []*client{a, b} {
-		e := c.waitEvent("entry")
-		if e.Session != "s1" || e.Seq == 0 {
-			t.Fatalf("entry：%+v", e)
+		e := c.waitEvent(wire.EvEntryAppended)
+		if e.Session != "s1" || e.Cursor == 0 {
+			t.Fatalf("entry.appended：%+v", e)
 		}
-		c.waitEvent(appapi.EventTurnEnd)
+		c.waitEvent(wire.EvTurnEnded)
+	}
+	dl := time.After(200 * time.Millisecond)
+	for {
+		select {
+		case m, ok := <-idle.ch:
+			if !ok {
+				return
+			}
+			if raw, has := m["event"]; has {
+				var e wire.Envelope
+				_ = json.Unmarshal(raw, &e)
+				if e.Session == "s1" {
+					t.Fatalf("没订阅的连接不应收到 s1 的事件：%+v", e)
+				}
+			}
+		case <-dl:
+			return
+		}
 	}
 }
 

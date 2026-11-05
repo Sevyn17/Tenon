@@ -1,7 +1,7 @@
 // 侧栏与面板：会话列表、权限档位、插件、统计。
 
 import { useCallback, useEffect, useState } from "react";
-import type { Field, ModeInfo, ModeItem, ModeState, PluginInfo, SessionInfo, Stats } from "./protocol";
+import type { ConfigField as Field, Mode as ModeState, ModeInfo, ModeItem, PluginInfo, SessionInfo, Stats } from "./wire.gen";
 import { call } from "./transport";
 import { errCode, errText, fmtTime } from "./util";
 
@@ -46,7 +46,7 @@ export function SessionList(props: { current: string; onPick: (id: string) => vo
           <li key={s.id} className={s.id === props.current ? "on" : ""} onClick={() => props.onPick(s.id)} title={s.id}>
             <div className="title">{s.title || s.id}</div>
             <div className="muted small">
-              {s.run_state && s.run_state !== "Idle" ? s.run_state + " · " : ""}
+              {s.run_state === "running" ? "运行中 · " : ""}
               {fmtTime(s.updated_at)}
             </div>
             {s.preview && <div className="muted small ellipsis">{s.preview}</div>}
@@ -71,8 +71,8 @@ export function ModesPanel({ session }: { session: string }) {
   const refresh = useCallback(async () => {
     setErr("");
     try {
-      setList(await call("mode.list", {}));
-      if (session) setState(await call("mode.get", { session }));
+      setList((await call("mode.list", {})).modes ?? []);
+      if (session) setState((await call("mode.get", { session })).state);
     } catch (e) {
       setErr(errText(e));
     }
@@ -84,7 +84,7 @@ export function ModesPanel({ session }: { session: string }) {
 
   const show = async (mode: string) => {
     try {
-      setItems(await call("mode.show", { session, mode }));
+      setItems((await call("mode.show", { session, mode })).items ?? []);
       setShowing(mode);
     } catch (e) {
       setErr(errText(e));
@@ -94,7 +94,7 @@ export function ModesPanel({ session }: { session: string }) {
   const set = async (m: ModeInfo, ok = false) => {
     setErr("");
     try {
-      setState(await call("mode.set", { session, mode: m.id, confirm: ok }));
+      setState((await call("mode.set", { session, mode: m.id, confirm: ok })).state);
       setConfirm(null);
     } catch (e) {
       if (errCode(e) === "need_confirm") {
@@ -236,7 +236,6 @@ function PluginForm({ p }: { p: PluginInfo }) {
             <div key={f.key} className="field">
               <label title={f.key}>
                 {f.title || f.key}
-                {f.override && <span className="tag">可按智能体覆盖</span>}
               </label>
               <FieldInput
                 f={f}
@@ -266,7 +265,7 @@ export function PluginsPanel() {
   const [err, setErr] = useState("");
   useEffect(() => {
     call("plugins.list", {})
-      .then((r) => setList(r ?? []))
+      .then((r) => setList(r.plugins ?? []))
       .catch((e) => setErr(errText(e)));
   }, []);
   return (

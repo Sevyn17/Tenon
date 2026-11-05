@@ -9,7 +9,7 @@ import (
 	"crypto/subtle"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
+
 	"io/fs"
 	"net/http"
 	"net/url"
@@ -21,7 +21,7 @@ import (
 	"golang.org/x/net/websocket"
 
 	"ybase/appapi"
-	"ybase/runtime/bus"
+	"ybase/appapi/wire"
 )
 
 const (
@@ -213,7 +213,7 @@ type response struct {
 }
 
 type eventFrame struct {
-	Event bus.Envelope `json:"event"`
+	Event wire.Envelope `json:"event"`
 }
 
 // conn 一个 WebSocket 连接；写串行化。
@@ -245,10 +245,14 @@ func (s *Server) handleConn(ws *websocket.Conn) {
 	ctx, cancel := context.WithCancel(ws.Request().Context())
 	defer cancel()
 	c := &conn{ws: ws}
+	// protocol 2（06 10.8、10.9）：每个连接一个 appapi.Conn，身份由本服务的令牌鉴权得出（单机固定 local / operator）；
+	// 事件只推这个连接订阅了的会话。
+	ac := s.cfg.API.NewConn(ctx, appapi.LocalPrincipal)
+	defer ac.Close()
 	var wg sync.WaitGroup
 	wg.Add(2)
 	go func() { defer wg.Done(); <-ctx.Done(); _ = ws.Close() }()
-	go func() { defer wg.Done(); s.events(ctx, c) }()
+	go func() { defer wg.Done(); s.events(ctx, c, ac) }()
 	sem := make(chan struct{}, MaxInflight)
 	for {
 		var text string
@@ -265,7 +269,7 @@ func (s *Server) handleConn(ws *websocket.Conn) {
 		go func(f request) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			res, err := s.cfg.API.Call(ctx, f.Cmd, f.Args)
+			res, err := ac.Call(ctx, f.Cmd, f.Args)
 			if err != nil {
 				c.send(response{ID: f.ID, Error: appapi.AsError(err)})
 				return
@@ -277,16 +281,16 @@ func (s *Server) handleConn(ws *websocket.Conn) {
 	wg.Wait()
 }
 
-// events 订阅全部会话事件并推给本连接；慢订阅被总线断开后重订并发 resync（同桌面端）。
-func (s *Server) events(ctx context.Context, c *conn) {
-	for ctx.Err() == nil {
-		sub := s.cfg.API.Events(ctx, bus.Filter{})
-		for e := range sub.C() {
-			c.send(eventFrame{Event: e})
-		}
-		if errors.Is(sub.Err(), bus.ErrClosed) || ctx.Err() != nil {
+// events 把连接的出站事件（订阅了的会话的持久与易失事件、连接级 sessions.changed）推给客户端。
+// 背压在 Conn 里处理（合并、丢弃、断开订阅并发 session.lagged），这里只管按序写。
+func (s *Server) events(ctx context.Context, c *conn, ac *appapi.Conn) {
+	for {
+		evs, err := ac.Next(ctx)
+		if err != nil {
 			return
 		}
-		c.send(eventFrame{Event: bus.Envelope{V: bus.Version, Kind: "resync"}})
+		for _, e := range evs {
+			c.send(eventFrame{Event: e})
+		}
 	}
 }

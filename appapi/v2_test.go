@@ -45,7 +45,7 @@ func (a *memArt) Get(h string) ([]byte, error) {
 
 func call2(t *testing.T, app *App, cmd, args string) (any, *Error) {
 	t.Helper()
-	out, err := app.Call2(context.Background(), cmd, json.RawMessage(args))
+	out, err := app.Call(context.Background(), cmd, json.RawMessage(args))
 	if err == nil {
 		return out, nil
 	}
@@ -90,14 +90,11 @@ func TestV2NoImplicitCreate(t *testing.T) {
 
 // G2：closed、stale、exists、cursor_expired 各有自己的码。
 func TestV2ErrorCodes(t *testing.T) {
-	wantCode(t, AsError2(host.ErrClosed), wire.CodeClosed, "")
-	wantCode(t, AsError2(fmt.Errorf("x: %w", host.ErrStale)), wire.CodeConflict, wire.ConflictStale)
-	wantCode(t, AsError2(host.ErrBusy), wire.CodeBusy, "")
-	// protocol 1 的归类已是 not_found 的，带原错误时按 protocol 2 重新归类。
-	wantCode(t, AsError2(AsError(host.ErrClosed)), wire.CodeClosed, "")
-	if AsError(host.ErrClosed).Code != CodeNotFound {
-		t.Fatal("protocol 1 的归类不应变")
-	}
+	wantCode(t, AsError(host.ErrClosed), wire.CodeClosed, "")
+	wantCode(t, AsError(fmt.Errorf("x: %w", host.ErrStale)), wire.CodeConflict, wire.ConflictStale)
+	wantCode(t, AsError(host.ErrBusy), wire.CodeBusy, "")
+	// 已归类过的错误再归类结果不变（传输层、bind 各包一层）。
+	wantCode(t, AsError(AsError(host.ErrClosed)), wire.CodeClosed, "")
 }
 
 func TestV2CreateIdempotent(t *testing.T) {
