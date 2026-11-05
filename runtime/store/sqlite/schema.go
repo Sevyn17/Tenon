@@ -174,4 +174,20 @@ var coreMigrations = []migration{
 			SELECT tenant, session_id, rewind_seq, 'rewind', json_object('to', MIN(idx)), MAX(truncated_at)
 			FROM session_entries_archive GROUP BY tenant, session_id, rewind_seq`,
 	}},
+	// v11：交互（protocol 2，06 10.6）。session_pending 的一行带 interaction_id 时同时是一次"等人回答"：
+	// 公开的交互 id（corr 不公开）、种类、载荷（线上 Interaction 的 JSON）、根会话（子会话的交互也写进它的事件序列），
+	// 以及结束原因、时间、回答者、回答请求的 client_id 与回答文本。
+	{version: 11, stmts: []string{
+		`ALTER TABLE session_pending ADD COLUMN interaction_id TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE session_pending ADD COLUMN kind TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE session_pending ADD COLUMN payload TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE session_pending ADD COLUMN root TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE session_pending ADD COLUMN outcome TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE session_pending ADD COLUMN resolved_at INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE session_pending ADD COLUMN resolved_by TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE session_pending ADD COLUMN client_id TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE session_pending ADD COLUMN answer TEXT NOT NULL DEFAULT ''`,
+		`CREATE UNIQUE INDEX session_pending_interaction ON session_pending(tenant, interaction_id) WHERE interaction_id <> ''`,
+		`CREATE INDEX session_pending_open ON session_pending(tenant, outcome, interaction_id)`,
+	}},
 }

@@ -52,6 +52,7 @@ type Store interface {
 	SleepStore
 	InboxStore
 	CorrStore
+	InteractionStore
 	OutboxStore
 	TraceStore
 	ToolResultStore
@@ -157,6 +158,37 @@ type Pending struct {
 	Deadline  int64 // Unix 毫秒，0 = 无期限（超时视为无回复）
 	Used      bool
 	CreatedAt int64 // Unix 毫秒，登记时由实现写（Prune 按它判断保留期）
+
+	// 交互（protocol 2，06 10.6）：InteractionID 非空的登记同时是一次"等人回答"，打开与结束都写持久事件。
+	// 交互 id 是公开的，corr 不是（corr 是回信凭据，不推给订阅者）。
+	InteractionID string
+	Kind          string          // approval / question
+	Payload       json.RawMessage // interaction_opened 事件的载荷（线上 Interaction 的 JSON，由宿主生成）
+	Root          string          // 子会话发起的交互：顶层会话 id（事件同时写进它的序列）；顶层会话为空
+	Outcome       string          // approved / denied / answered / expired / voided；空 = 未结束
+	ResolvedAt    int64
+	By            string // 回答者（principal id）
+	ClientID      string // 回答请求的 client_id（同一 client_id 重发返回第一次的结果）
+	Answer        string // question 的回答文本
+}
+
+// Resolution 一次交互的结束。
+type Resolution struct {
+	Outcome, By, ClientID, Answer string
+}
+
+// InteractionStore 交互的登记与结束（06 10.6）。登记与结束各一个事务：状态行与持久事件同事务写入
+// （10.2.1 规则 2），子会话的交互同时写进根会话的事件序列。
+type InteractionStore interface {
+	// OpenInteraction 登记一次交互（同时是一条待回复，corr 用于回信路径）。epoch 非零时校验发起会话的租约纪元。
+	OpenInteraction(ctx context.Context, p Pending, epoch int64) error
+	// ResolveInteraction 结束一次交互：只有第一次生效（won = true），之后返回已有的结束内容。
+	// 生效时同一事务里把 corr 标记已用（之后的回信核对不过）。不存在返回 ErrNotFound。
+	ResolveInteraction(ctx context.Context, id string, r Resolution) (p Pending, won bool, err error)
+	// Interaction 读一次交互（不存在返回 ErrNotFound）。
+	Interaction(ctx context.Context, id string) (Pending, error)
+	// OpenInteractions 未结束的交互（按登记时间）：session 为空列全部；否则列 session 自己的与以它为根的子会话的。
+	OpenInteractions(ctx context.Context, session string) ([]Pending, error)
 }
 
 // CorrStore 待回复表（session_pending）。corr 不可猜，由内核签发。
@@ -351,6 +383,9 @@ const (
 	EventRunState = "run_state" // data: {run_state}：idle / running / suspended
 	EventSettings = "settings"  // data: {max_steps}
 	EventExt      = "ext"       // data: {key, value}：会话头 Ext 的一项变化（value = null 表示删除）
+	// 以下由 InteractionStore 写（06 10.6）。
+	EventInteractionOpened   = "interaction_opened"   // data: Pending.Payload
+	EventInteractionResolved = "interaction_resolved" // data: {id, session, outcome, by}
 )
 
 // Event 一条要写进事件表的持久事件。

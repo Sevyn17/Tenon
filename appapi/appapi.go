@@ -73,6 +73,9 @@ func New(o Options) (*App, error) {
 		o.Host.Bus = o.Bus
 	}
 	a := &App{o: o}
+	if o.UI != nil {
+		o.UI.bindHost(o.Host)
+	}
 	o.DB.OnCommit(o.Bus.Publish)
 	a.watchPending(context.Background()) // 总线关闭时退出
 

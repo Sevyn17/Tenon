@@ -23,7 +23,6 @@ import (
 	"ybase/runtime/agent"
 	"ybase/runtime/bus"
 	"ybase/runtime/component"
-	"ybase/runtime/mail"
 	"ybase/runtime/session"
 	"ybase/runtime/store"
 	"ybase/runtime/toolhub"
@@ -126,6 +125,7 @@ type Store interface {
 	store.InboxStore
 	store.OutboxStore
 	store.CorrStore
+	store.InteractionStore
 	store.TraceStore
 }
 
@@ -149,6 +149,8 @@ type Host struct {
 	// 回信（KindReply + corr）投回会话时按 corr 交给等待中的工具确认。
 	humanMu   sync.Mutex
 	humanWait map[string]chan bool
+	// askWait question 交互的等待方：corr → 回答通道（Host.Ask / Host.Respond，protocol 2 10.6）。同受 humanMu 保护。
+	askWait map[string]chan string
 	// SleepAfter 空闲多久后休眠（0 = 不休眠）。休眠的会话释放进程内对象与写租约，
 	// 只剩存储里的几行；有新信件时任一节点抢到租约即可唤醒（02 2.2）。
 	SleepAfter time.Duration
@@ -405,6 +407,8 @@ func (h *Host) open(ctx context.Context, id, def string, f Factory, pre func(*ag
 	ag.Epoch = epoch
 	a.epoch, a.holder = epoch, holder
 	ag.InstallCapsGuard() // 信封 caps 交集限制本轮可调用的工具（T3）
+	// 上次进程留下的未结束交互：等它的人已经不在了，标为 voided（恢复的工具调用会重新询问，06 10.6）。
+	h.voidStale(ctx, id)
 	go a.run()
 	return Handle{a}, nil
 }
@@ -1299,16 +1303,10 @@ func (a *actor) between(need *session.Need) (*session.Need, error) {
 // 迟到回信核对不过，不会被当成普通消息开新回合。
 func (a *actor) wireConfirm() {
 	a.ag.Hub.SetAwait(a.ag.AwaitFunc(func(ctx context.Context, cx *toolhub.Cx, reason string, deadline time.Time) bool {
-		corr := mail.NewID()
-		idx := 0
-		if core := a.ag.Core; core != nil {
-			c := core.Context()
-			idx = c.Base + len(c.Items)
-		}
-		if err := a.h.DB.IssueCorr(context.Background(), store.Pending{Corr: corr, SessionID: a.id,
-			Trace: a.ag.TraceID(), IssuedIdx: idx, Deadline: deadline.UnixMilli()}); err != nil {
-			corr = "" // 登记失败：只发 call_id，回信路径不可用，Confirm 命令照常
-		}
+		// 登记成 approval 交互（protocol 2，interaction.go）：打开与结束都是持久事件；登记失败时 corr 为空，
+		// 只发 call_id，回信路径不可用，Confirm 命令照常。
+		iid, corr := a.openInteraction("approval", cx.Tool.Spec.Name+" 需要确认", map[string]any{
+			"tool": cx.Tool.Spec.Name, "args": jsonArgs(cx.Args), "reason": reason}, deadline)
 		w := make(chan bool, 1)
 		a.mu.Lock()
 		a.waiters[cx.CallID] = w
@@ -1321,6 +1319,7 @@ func (a *actor) wireConfirm() {
 			a.h.humanWait[corr] = w
 			a.h.humanMu.Unlock()
 		}
+		outcome := OutcomeVoided
 		defer func() {
 			a.mu.Lock()
 			if a.waiters[cx.CallID] == w { // 按身份删：恢复后同一调用重问时登记的是新的等待者
@@ -1331,16 +1330,22 @@ func (a *actor) wireConfirm() {
 				a.h.humanMu.Lock()
 				delete(a.h.humanWait, corr)
 				a.h.humanMu.Unlock()
-				_ = a.h.DB.VoidCorr(context.Background(), corr)
 			}
+			// 结束交互（已被 Respond 结束的不变）；没登记成交互时只作废 corr。
+			a.closeInteraction(iid, corr, outcome)
 		}()
 		a.h.publish(a.id, "human_requested", map[string]any{"call_id": cx.CallID, "tool": cx.Tool.Spec.Name,
-			"reason": reason, "args": string(cx.Args), "corr": corr, "deadline": deadline.UnixMilli()})
+			"reason": reason, "args": string(cx.Args), "corr": corr, "deadline": deadline.UnixMilli(), "interaction": iid})
 		a.h.recordTrace(a.ag.TraceID(), a.id, "envelope", "session:"+a.id+" -> human（确认 "+cx.Tool.Spec.Name+"）")
 		select {
 		case ok := <-w:
+			outcome = OutcomeDenied
+			if ok {
+				outcome = OutcomeApproved
+			}
 			return ok
 		case <-ctx.Done():
+			outcome = waitOutcome(deadline)
 			return false
 		case <-a.exit:
 			return false

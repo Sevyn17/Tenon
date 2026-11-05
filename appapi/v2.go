@@ -72,26 +72,28 @@ func bind2[In, Out any](f func(V2, context.Context, In) (Out, error)) handler2 {
 }
 
 var commands2 = map[string]handler2{
-	"hello":            bind2(V2.Hello),
-	"sessions.list":    bind2(V2.SessionsList),
-	"session.create":   bind2(V2.Create),
-	"session.get":      bind2(V2.Get),
-	"session.entries":  bind2(V2.Entries),
-	"session.send":     bind2(V2.Send),
-	"session.steer":    bind2(V2.Steer),
-	"session.cancel":   bind2(V2.Cancel),
-	"session.rewind":   bind2(V2.Rewind),
-	"session.compact":  bind2(V2.Compact),
-	"session.fork":     bind2(V2.Fork),
-	"session.stats":    bind2(V2.Stats),
-	"session.settings": bind2(V2.Settings),
-	"mode.list":        bind2(V2.ModeList),
-	"mode.get":         bind2(V2.ModeGet),
-	"mode.set":         bind2(V2.ModeSet),
-	"mode.show":        bind2(V2.ModeShow),
-	"artifact.get":     bind2(V2.ArtifactGet),
-	"artifact.put":     bind2(V2.ArtifactPut),
-	"trace.explain":    bind2(V2.Trace),
+	"hello":               bind2(V2.Hello),
+	"sessions.list":       bind2(V2.SessionsList),
+	"session.create":      bind2(V2.Create),
+	"session.get":         bind2(V2.Get),
+	"session.entries":     bind2(V2.Entries),
+	"session.send":        bind2(V2.Send),
+	"session.steer":       bind2(V2.Steer),
+	"session.cancel":      bind2(V2.Cancel),
+	"session.rewind":      bind2(V2.Rewind),
+	"session.compact":     bind2(V2.Compact),
+	"session.fork":        bind2(V2.Fork),
+	"session.stats":       bind2(V2.Stats),
+	"session.settings":    bind2(V2.Settings),
+	"mode.list":           bind2(V2.ModeList),
+	"mode.get":            bind2(V2.ModeGet),
+	"mode.set":            bind2(V2.ModeSet),
+	"mode.show":           bind2(V2.ModeShow),
+	"artifact.get":        bind2(V2.ArtifactGet),
+	"artifact.put":        bind2(V2.ArtifactPut),
+	"trace.explain":       bind2(V2.Trace),
+	"interaction.respond": bind2(V2.Respond),
+	"interactions.list":   bind2(V2.Interactions),
 	"plugins.list": bind2(func(v V2, ctx context.Context, in NoArgs) ([]PluginInfo, error) {
 		return v.a.PluginsList(ctx, in)
 	}),
@@ -322,7 +324,7 @@ func (v V2) snapshot(ctx context.Context, id string) (wire.SessionSnapshot, erro
 	}
 	return wire.SessionSnapshot{ID: id, Parent: l.Meta.ParentID, Origin: l.Meta.Origin, Title: l.Meta.Title,
 		RunState: WireRunState(h.Status), Mode: v.committedMode(id, modeHdr), Settings: wire.Settings{MaxSteps: maxSteps(h)},
-		Log: wire.LogPos{Base: h.CompactionBase, Len: h.LogLen}, Interactions: []wire.Interaction{}, Cursor: l.Cursor,
+		Log: wire.LogPos{Base: h.CompactionBase, Len: h.LogLen}, Interactions: v.openInteractions(ctx, id), Cursor: l.Cursor,
 		Live: v.live(id, h)}, nil
 }
 

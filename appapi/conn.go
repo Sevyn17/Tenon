@@ -105,6 +105,14 @@ func (c *Conn) Call(ctx context.Context, cmd string, args json.RawMessage) (any,
 		return bind2(func(_ V2, ctx context.Context, in wire.SubscribeArgs) (wire.Empty, error) {
 			return wire.Empty{}, c.Subscribe(ctx, in)
 		})(ctx, c.a.V2(), args)
+	case "interaction.respond": // 回答者是连接身份（10.6）
+		return bind2(func(v V2, ctx context.Context, in wire.RespondArgs) (wire.RespondResult, error) {
+			return v.respondAs(ctx, in, c.p)
+		})(ctx, c.a.V2(), args)
+	case "interactions.list":
+		return bind2(func(v V2, ctx context.Context, _ wire.Empty) (wire.InteractionsResult, error) {
+			return v.interactionsFor(ctx, c.p)
+		})(ctx, c.a.V2(), args)
 	case "session.unsubscribe":
 		return bind2(func(_ V2, _ context.Context, in wire.SessionArgs) (wire.Empty, error) {
 			c.Unsubscribe(in.Session)
@@ -278,6 +286,25 @@ func (c *Conn) translate(e bus.Envelope) []wire.Envelope {
 	case store.EventSettings:
 		return []wire.Envelope{c.envelope(e.Session, wire.EvSettingsChanged, e.Seq, 0,
 			wire.SettingsChanged{Settings: wire.Settings{MaxSteps: uint32(intOf(m["max_steps"]))}})}
+	case store.EventInteractionOpened: // 载荷是宿主登记时生成的线上 Interaction；子会话的也写在根会话上
+		var it wire.Interaction
+		if raw, err := json.Marshal(m); err != nil || json.Unmarshal(raw, &it) != nil {
+			return nil
+		}
+		if it.Responders == nil {
+			it.Responders = []string{}
+		}
+		if ap := it.Approval; ap != nil && c.a.o.Modes != nil {
+			ap.SessionRules, ap.Blocked = c.a.o.Modes.SessionAllow(ap.Tool, ap.Args)
+		}
+		return []wire.Envelope{c.envelope(e.Session, wire.EvInteractionOpen, e.Seq, it.Turn, it)}
+	case store.EventInteractionResolved:
+		id, _ := m["id"].(string)
+		sid, _ := m["session"].(string)
+		outcome, _ := m["outcome"].(string)
+		by, _ := m["by"].(string)
+		return []wire.Envelope{c.envelope(e.Session, wire.EvInteractionDone, e.Seq, 0,
+			wire.InteractionResolved{ID: id, Session: sid, Outcome: outcome, By: by})}
 	case store.EventExt:
 		if md := c.modeOf(e.Session, m); md != nil {
 			return []wire.Envelope{c.envelope(e.Session, wire.EvModeChanged, e.Seq, 0, *md)}

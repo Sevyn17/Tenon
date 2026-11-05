@@ -57,6 +57,7 @@ func Run(t *testing.T, open func(t *testing.T) store.Store) {
 		{"Concurrency", testConcurrency},
 		{"CheckpointEvents", testCheckpointEvents},
 		{"EventsCursorExpired", testEventsCursorExpired},
+		{"Interactions", testInteractions},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) { c.f(t, open(t)) })
@@ -1513,5 +1514,64 @@ func testEventsCursorExpired(t *testing.T, db store.Store) {
 	evs, wm, err := db.Replay(ctx, "ex", 2)
 	if err != nil || len(evs) != 0 || wm != 2 {
 		t.Fatalf("从最大被清游标往后订阅应可用：%d %d %v", len(evs), wm, err)
+	}
+}
+
+// testInteractions 交互（06 10.6）：登记与结束各写一条持久事件，子会话的交互同时写进根会话；
+// 只有第一次结束生效，之后返回已有结果；结束后 corr 回信核对不过；未结束的交互能按根会话列出。
+func testInteractions(t *testing.T, db store.Store) {
+	ctx := context.Background()
+	create(t, db, store.SessionMeta{ID: "r"}, newCore())
+	create(t, db, store.SessionMeta{ID: "r/c", ParentID: "r", Origin: "subagent"}, newCore())
+	kinds := func(sid string) []string {
+		t.Helper()
+		evs, _, err := db.Replay(ctx, sid, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out []string
+		for _, e := range evs {
+			out = append(out, e.Kind)
+		}
+		return out
+	}
+	p := store.Pending{Corr: "corr-i", SessionID: "r/c", Root: "r", InteractionID: "i1", Kind: "approval",
+		Payload: json.RawMessage(`{"id":"i1","session":"r/c"}`)}
+	if err := db.OpenInteraction(ctx, p, 0); err != nil {
+		t.Fatal(err)
+	}
+	for _, sid := range []string{"r/c", "r"} {
+		if ks := kinds(sid); len(ks) != 1 || ks[0] != store.EventInteractionOpened {
+			t.Fatalf("%s 应有一条 interaction_opened：%v", sid, ks)
+		}
+	}
+	open, err := db.OpenInteractions(ctx, "r")
+	if err != nil || len(open) != 1 || open[0].InteractionID != "i1" {
+		t.Fatalf("按根会话应列出子会话的交互：%+v %v", open, err)
+	}
+	got, won, err := db.ResolveInteraction(ctx, "i1", store.Resolution{Outcome: "approved", By: "local", ClientID: "k1"})
+	if err != nil || !won || got.Outcome != "approved" || got.By != "local" {
+		t.Fatalf("第一次结束应生效：%+v %v %v", got, won, err)
+	}
+	got, won, err = db.ResolveInteraction(ctx, "i1", store.Resolution{Outcome: "denied", By: "other"})
+	if err != nil || won || got.Outcome != "approved" || got.ClientID != "k1" {
+		t.Fatalf("第二次结束不生效、返回已有结果：%+v %v %v", got, won, err)
+	}
+	for _, sid := range []string{"r/c", "r"} {
+		if ks := kinds(sid); len(ks) != 2 || ks[1] != store.EventInteractionResolved {
+			t.Fatalf("%s 应再有一条 interaction_resolved：%v", sid, ks)
+		}
+	}
+	if _, err := db.ClaimCorr(ctx, "corr-i", "r/c", ""); !errors.Is(err, store.ErrCorrRejected) {
+		t.Fatalf("交互结束后回信应被拒：%v", err)
+	}
+	if open, _ := db.OpenInteractions(ctx, ""); len(open) != 0 {
+		t.Fatalf("结束后不应再列出：%+v", open)
+	}
+	if _, _, err := db.ResolveInteraction(ctx, "none", store.Resolution{Outcome: "voided"}); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("不存在的交互应 ErrNotFound：%v", err)
+	}
+	if err := db.OpenInteraction(ctx, store.Pending{Corr: "corr-j", SessionID: "r", InteractionID: "i2"}, 999); !errors.Is(err, store.ErrLeaseLost) {
+		t.Fatalf("纪元不符应 ErrLeaseLost：%v", err)
 	}
 }
