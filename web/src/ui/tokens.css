@@ -1,0 +1,222 @@
+/* @ybase/ui 设计令牌：原始色板 → 语义变量 → 组件变量。换肤只需覆盖语义变量（[data-theme] 或嵌入方自己的选择器）。
+   初值参照 Codex 桌面版：灰阶 0–1000、强调蓝、13px 正文、4px 网格。 */
+
+:root {
+  /* —— 原始色板 —— */
+  --gray-0: #ffffff;
+  --gray-50: #f9f9f9;
+  --gray-100: #ededed;
+  --gray-200: #d9d9d9;
+  --gray-300: #afafaf;
+  --gray-400: #8f8f8f;
+  --gray-500: #5d5d5d;
+  --gray-600: #414141;
+  --gray-700: #303030;
+  --gray-750: #282828;
+  --gray-800: #212121;
+  --gray-900: #181818;
+  --gray-1000: #0d0d0d;
+  --blue-300: #339cff;
+  --blue-400: #0285ff;
+  --blue-500: #0169cc;
+  --green-300: #40c977;
+  --green-500: #1f9d55;
+  --red-300: #ff6b67;
+  --red-400: #fa423e;
+  --orange-400: #fb6a22;
+  --yellow-400: #e5a50a;
+
+  /* —— 排版 —— */
+  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, monospace;
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 28px;
+  --leading: 1.5;
+  --leading-read: 1.65;
+
+  /* —— 间距（4px 网格）—— */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+
+  /* —— 圆角 —— */
+  --radius-scale: 1.25;
+  --radius-xs: calc(2px * var(--radius-scale));
+  --radius-sm: calc(4px * var(--radius-scale));
+  --radius-md: calc(6px * var(--radius-scale));
+  --radius-lg: calc(8px * var(--radius-scale));
+  --radius-xl: calc(12px * var(--radius-scale));
+  --radius-2xl: calc(16px * var(--radius-scale));
+  --radius-full: 999px;
+
+  /* —— 动效 —— */
+  --dur-fast: 120ms;
+  --dur: 150ms;
+  --dur-slow: 300ms;
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-enter: cubic-bezier(0.19, 1, 0.22, 1);
+
+  /* —— 尺寸 —— */
+  --control-h: 28px;
+  --control-h-sm: 24px;
+  --control-h-lg: 32px;
+  --toolbar-h: 46px;
+  --icon: 16px;
+
+  /* —— 层级 —— */
+  --z-popover: 40;
+  --z-dialog: 50;
+  --z-toast: 60;
+}
+
+/* —— 语义变量：深色（缺省）—— */
+:root,
+[data-theme="dark"] {
+  color-scheme: dark;
+  --bg-app: var(--gray-900);
+  --bg-sidebar: #141414;
+  --bg-panel: var(--gray-900);
+  --bg-elevated: #212121f5;
+  --bg-sunken: #121212;
+  --bg-hover: #ffffff0d;
+  --bg-active: #ffffff14;
+  --bg-pressed: #ffffff1f;
+  --bg-selected: #339cff24;
+  --fg: #ececec;
+  --fg-2: #ececec8c; /* 55% */
+  --fg-3: #ececec59; /* 35% */
+  --fg-4: #ececec2e; /* 18% */
+  --fg-on-accent: #ffffff;
+  --border: #ffffff14;
+  --border-strong: #ffffff24;
+  --focus: #339cffb3;
+  --accent: var(--blue-300);
+  --accent-hover: var(--blue-400);
+  --accent-soft: #339cff1f;
+  --success: var(--green-300);
+  --success-soft: #40c9771f;
+  --danger: var(--red-300);
+  --danger-soft: #fa423e1f;
+  --warning: var(--yellow-400);
+  --warning-soft: #e5a50a1f;
+  --diff-add: #40c9773b;
+  --diff-del: #fa423e3b;
+  --shadow-sm: 0 1px 2px #00000040;
+  --shadow-lg: 0 8px 16px -4px #00000066;
+  --shadow-xl: 0 16px 32px -8px #00000080;
+  --scrim: #00000080;
+
+  /* 组件变量 */
+  --msg-user-bg: #2a2a2a;
+  --msg-user-fg: var(--fg);
+  --code-bg: #0f0f0f;
+  --card-bg: #1e1e1e;
+}
+
+/* —— 语义变量：浅色 —— */
+[data-theme="light"] {
+  color-scheme: light;
+  --bg-app: var(--gray-0);
+  --bg-sidebar: var(--gray-50);
+  --bg-panel: var(--gray-0);
+  --bg-elevated: #ffffffeb;
+  --bg-sunken: #f4f4f4;
+  --bg-hover: #0d0d0d0a;
+  --bg-active: #0d0d0d12;
+  --bg-pressed: #0d0d0d1c;
+  --bg-selected: #0285ff1a;
+  --fg: #0d0d0d;
+  --fg-2: #0d0d0d8c;
+  --fg-3: #0d0d0d59;
+  --fg-4: #0d0d0d2e;
+  --fg-on-accent: #ffffff;
+  --border: #0d0d0d14;
+  --border-strong: #0d0d0d24;
+  --focus: #0285ffb3;
+  --accent: var(--blue-400);
+  --accent-hover: var(--blue-500);
+  --accent-soft: #0285ff14;
+  --success: var(--green-500);
+  --success-soft: #1f9d551a;
+  --danger: var(--red-400);
+  --danger-soft: #fa423e14;
+  --warning: #b77c00;
+  --warning-soft: #e5a50a1f;
+  --diff-add: #40c97733;
+  --diff-del: #fa423e2e;
+  --shadow-sm: 0 1px 2px #0000000f;
+  --shadow-lg: 0 8px 16px -4px #0000001f;
+  --shadow-xl: 0 16px 32px -8px #00000030;
+  --scrim: #0000004d;
+
+  --msg-user-bg: #f0f0f0;
+  --msg-user-fg: var(--fg);
+  --code-bg: #f6f6f6;
+  --card-bg: #fafafa;
+}
+
+/* 紧凑密度 */
+[data-density="compact"] {
+  --control-h: 24px;
+  --control-h-lg: 28px;
+  --toolbar-h: 38px;
+  --text-base: 12px;
+  --text-md: 13px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-fast: 0ms;
+    --dur: 0ms;
+    --dur-slow: 0ms;
+  }
+}
+
+/* —— 全局基础 —— */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+}
+body {
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+  line-height: var(--leading);
+  color: var(--fg);
+  background: var(--bg-app);
+  -webkit-font-smoothing: antialiased;
+}
+button,
+input,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+}
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+::selection {
+  background: var(--accent-soft);
+}
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--fg-4) transparent;
+}
