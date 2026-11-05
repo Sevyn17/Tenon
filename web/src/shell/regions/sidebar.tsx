@@ -10,6 +10,7 @@ import { Count, Dot, IconButton, Kbd, Menu, Tooltip, cx, type MenuGroupSpec } fr
 import { Slot, useCommandContext, useRegistry, useShell, whenState } from "../context";
 import type { MenuItem, MenuPlace } from "../contributions";
 import { bindingOf } from "../commands";
+import { useViewport } from "../viewport";
 import s from "./sidebar.module.css";
 
 /** 某个菜单位置的菜单项 → Menu 的分组（按 group 分组）。 */
@@ -50,7 +51,9 @@ export function runMenuItem(it: MenuItem, cx: ReturnType<typeof useCommandContex
 export function Sidebar() {
   const sh = useShell();
   const prefs = useStore(sh.prefs);
-  const collapsed = prefs.sidebarCollapsed;
+  const vp = useViewport();
+  // md 档位强制图标条；sm 档位左栏只出现在抽屉里，抽屉里总是展开。
+  const collapsed = vp === "md" ? true : vp === "sm" ? false : prefs.sidebarCollapsed;
   return (
     <aside
       className={cx(s.sidebar, collapsed && s.collapsed)}
@@ -63,7 +66,7 @@ export function Sidebar() {
       {!collapsed && <SessionList />}
       <div style={{ flex: collapsed ? 1 : 0 }} />
       <Footer collapsed={collapsed} />
-      {!collapsed && <ResizeEdge />}
+      {!collapsed && vp === "lg" && <ResizeEdge />}
     </aside>
   );
 }

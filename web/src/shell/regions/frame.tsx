@@ -11,6 +11,7 @@ import { bindingOf, effectiveBindings, runCommand } from "../commands";
 import { Dock, Floats, useWindowDrop } from "../layout/dock";
 import { isOpen } from "../layout/reducer";
 import { Settings } from "./settings";
+import { useViewport } from "../viewport";
 import s from "./frame.module.css";
 
 export function Frame() {
@@ -41,15 +42,25 @@ export function Frame() {
   );
 
   const focus = nav.focus;
+  const vp = useViewport();
+  const narrow = vp === "sm";
   // panels：dock = 停靠区 + 竖栏；float = 只有浮动面板（embed）；drawer = 右侧停靠区当抽屉、不显示底部区与竖栏（chat）；null = 不要面板。
-  const mode = preset ? preset.panels : "dock";
+  // 窄屏（sm）一律按 drawer：右侧停靠区盖在对话上，没有底部区与竖栏（面板从命令面板 / 对话头部菜单打开）。
+  const mode = narrow && preset?.panels === "dock" ? "drawer" : preset ? preset.panels : "dock";
   const docked = mode === "dock";
   const drawer = mode === "drawer";
+  const closeDrawer = () => sh.nav.update((v) => ({ ...v, drawer: false }));
   return (
-    <div className={s.frame}>
-      {!focus && sidebar && <ErrorBoundary label="左栏">{sidebar.render()}</ErrorBoundary>}
+    <div className={s.frame} data-viewport={vp}>
+      {!focus && sidebar && !narrow && <ErrorBoundary label="左栏">{sidebar.render()}</ErrorBoundary>}
+      {!focus && sidebar && narrow && nav.drawer && (
+        <LeftDrawer onClose={closeDrawer}>
+          <ErrorBoundary label="左栏">{sidebar.render()}</ErrorBoundary>
+        </LeftDrawer>
+      )}
       <div className={s.center}>
         <ConnectionBanner />
+        <Announcer />
         <div className={s.mainWrap}>
           <ErrorBoundary label="主区" resetKey={nav.session}>
             {main?.render()}
@@ -59,8 +70,14 @@ export function Frame() {
           <Dock dock="bottom" state={layout} dispatch={sh.layout.dispatch} panels={panelMap} renderPanel={renderPanel} />
         )}
       </div>
-      {!focus && (docked || drawer) && (
+      {!focus && docked && (
         <Dock dock="right" state={layout} dispatch={sh.layout.dispatch} panels={panelMap} renderPanel={renderPanel} />
+      )}
+      {!focus && drawer && layout.docks.right && !layout.hidden.right && (
+        // 抽屉盖在对话上：点遮罩或 Esc 收起右侧停靠区（树保留，下次打开面板时原样回来）。
+        <RightDrawer onClose={() => sh.layout.dispatch({ type: "toggleDock", dock: "right" })}>
+          <Dock dock="right" state={layout} dispatch={sh.layout.dispatch} panels={panelMap} renderPanel={renderPanel} />
+        </RightDrawer>
       )}
       {!focus && docked && <Rail panels={panels} />}
       {mode !== null && <Floats state={layout} dispatch={sh.layout.dispatch} panels={panelMap} renderPanel={renderPanel} />}
@@ -69,6 +86,59 @@ export function Frame() {
       {nav.shortcuts && <Shortcuts />}
       {nav.settings && <Settings />}
     </div>
+  );
+}
+
+// ---- 窄屏左抽屉 ----
+
+/** 窄屏的会话栏抽屉：模态（全局快捷键分发在模态框打开时让路），所以 Esc 由它自己处理；打开时焦点移进来，关闭时还回去。 */
+function LeftDrawer({ onClose, children }: { onClose: () => void; children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const close = useRef(onClose);
+  close.current = onClose;
+  useEffect(() => {
+    const prev = document.activeElement as HTMLElement | null;
+    ref.current?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.isComposing) return;
+      e.preventDefault();
+      e.stopPropagation();
+      close.current();
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => {
+      window.removeEventListener("keydown", onKey, true);
+      prev?.focus?.();
+    };
+  }, []);
+  return (
+    <div className={s.drawerScrim} onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div ref={ref} tabIndex={-1} className={s.drawerLeft} role="dialog" aria-modal="true" aria-label="会话栏">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/** 右侧抽屉（drawer 模式）：遮罩 + Esc 收起。面板里的输入框按 Esc 也会收起，和左栏抽屉一致。 */
+function RightDrawer({ onClose, children }: { onClose: () => void; children: ReactNode }) {
+  const close = useRef(onClose);
+  close.current = onClose;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.isComposing || document.querySelector('[aria-modal="true"]')) return;
+      e.preventDefault();
+      e.stopPropagation();
+      close.current();
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, []);
+  return (
+    <>
+      <div className={s.drawerScrim} onMouseDown={() => close.current()} />
+      <div className={s.drawerRight}>{children}</div>
+    </>
   );
 }
 
@@ -302,5 +372,17 @@ function Shortcuts() {
         ))}
       </div>
     </Dialog>
+  );
+}
+
+// ---- 读屏播报（aria-live）：最新一条通知（回合完成、需要确认）----
+
+function Announcer() {
+  const sh = useShell();
+  const list = useStore(sh.notices);
+  return (
+    <div className={s.srOnly} role="status" aria-live="polite">
+      {list[0]?.title ?? ""}
+    </div>
   );
 }

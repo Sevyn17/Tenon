@@ -3,7 +3,7 @@
 // 可插入的位置都经插槽与注册表（消息操作、工具渲染、交互渲染、输入框动作、尾巴建议）。
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { MoreHorizontal, ShieldCheck, Square } from "lucide-react";
+import { Menu as Menu2, MoreHorizontal, ShieldCheck, Square } from "lucide-react";
 import type { Interaction, ToolState } from "../../client";
 import { useInteractions, useSession, useStore } from "../../client/react";
 import {
@@ -36,6 +36,7 @@ import { Slot, useChainSlot, useCommandContext, useRegistry, useShell, whenState
 import { toUIActions, type ActionTarget } from "../contributions";
 import { useMenuGroups } from "./sidebar";
 import { useAttachments, useHistory, useMentions } from "./composer";
+import { useViewport } from "../viewport";
 import s from "./conversation.module.css";
 
 /** 主区：当前会话的对话，或某个主区页面。 */
@@ -65,8 +66,17 @@ export function MainArea() {
 
 function EmptyMain() {
   const sh = useShell();
+  const vp = useViewport();
   return (
     <main className={s.conv}>
+      {vp === "sm" && (
+        <header className={s.head}>
+          <IconButton label="会话栏" size="sm" onClick={() => sh.api.run("shell.toggleSidebar")}>
+            <Menu2 size={16} />
+          </IconButton>
+          <span className={s.title}>{sh.brand.name}</span>
+        </header>
+      )}
       <div className={s.body}>
         <Hero onPick={async (t) => {
           await sh.api.newSession();
@@ -397,9 +407,16 @@ function RunningStatus({ startedAt, onStop }: { startedAt?: number; onStop: () =
 }
 
 function Header({ id, title, running, mode }: { id: string; title: string; running: boolean; mode?: string }) {
+  const sh = useShell();
+  const vp = useViewport();
   const groups = useMenuGroups("conversation.header.menu");
   return (
     <header className={s.head}>
+      {vp === "sm" && (
+        <IconButton label="会话栏" size="sm" onClick={() => sh.api.run("shell.toggleSidebar")}>
+          <Menu2 size={16} />
+        </IconButton>
+      )}
       <Slot at="conversation.header.leading" props={{ session: id }} />
       <span className={s.title} title={id}>
         {title}

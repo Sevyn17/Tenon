@@ -17,6 +17,7 @@ import { createLayoutStore } from "./layout/store";
 import { createNav } from "./nav";
 import { createNotices } from "./notices";
 import { watchActivity } from "./notify";
+import { currentViewport } from "./viewport";
 import { createPrefs, type Prefs } from "./prefs";
 import { createPackHost, type ContributionPack } from "./registry";
 import { corePack } from "./builtin/core";
@@ -71,7 +72,7 @@ export function createShell(o: ShellOptions = {}): Shell {
 
   const api: ShellApi = {
     current: () => nav.get().session,
-    openSession: (id) => nav.update((v) => ({ ...v, session: id, page: null, palette: null })),
+    openSession: (id) => nav.update((v) => ({ ...v, session: id, page: null, palette: null, drawer: false })),
     async newSession() {
       const snap = await client.call("session.create", {});
       client.sessions.upsert({ id: snap.id, title: snap.title, preview: "", run_state: snap.run_state, origin: snap.origin, updated_at: Date.now() });
@@ -267,7 +268,11 @@ function shellPack(sh: ShellState): ContributionPack {
         section: "general",
         keybind: "Mod+B",
         global: true,
-        run: () => sh.prefs.set("sidebarCollapsed", !sh.prefs.get().sidebarCollapsed),
+        // 窄屏（sm）时左栏是抽屉：开关抽屉，不改折叠偏好。
+        run: () =>
+          currentViewport() === "sm"
+            ? sh.nav.update((v) => ({ ...v, drawer: !v.drawer }))
+            : sh.prefs.set("sidebarCollapsed", !sh.prefs.get().sidebarCollapsed),
       });
       cmd({
         id: "shell.togglePanels",
@@ -384,8 +389,8 @@ function shellPack(sh: ShellState): ContributionPack {
         global: true,
         run: () => {
           const v = sh.nav.get();
-          if (v.palette || v.shortcuts || v.page || v.focus) {
-            sh.nav.update((x) => ({ ...x, palette: null, shortcuts: false, page: null, focus: false }));
+          if (v.palette || v.shortcuts || v.page || v.focus || v.drawer) {
+            sh.nav.update((x) => ({ ...x, palette: null, shortcuts: false, page: null, focus: false, drawer: false }));
             return;
           }
           return false;

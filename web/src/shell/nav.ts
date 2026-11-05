@@ -13,12 +13,14 @@ export interface NavState {
   palette: "commands" | "sessions" | null;
   /** 快捷键速查。 */
   shortcuts: boolean;
+  /** 窄屏（sm）下左栏抽屉是否打开。 */
+  drawer: boolean;
   /** 专注模式：隐藏左栏与面板区。 */
   focus: boolean;
 }
 
 export function createNav(initial: string | null = readHash()): Store<NavState> {
-  const nav = createStore<NavState>({ session: initial, page: null, settings: null, palette: null, shortcuts: false, focus: false });
+  const nav = createStore<NavState>({ session: initial, page: null, settings: null, palette: null, shortcuts: false, focus: false, drawer: false });
   let last = initial;
   nav.subscribe((v) => {
     if (v.session === last) return;
