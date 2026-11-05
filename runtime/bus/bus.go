@@ -13,6 +13,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 )
@@ -34,13 +35,17 @@ type Envelope struct {
 }
 
 // Filter 订阅过滤：Session 为空表示全部会话；Kinds 为空表示全部类型。
+// Tree 为真时同时收 Session 的子会话（id 形如 "<Session>/<子>"）的事件。
+// Live 只对 Follow 有效：回放完毕后也送易失事件（以及 Tree 下子会话的持久事件，只送实时、不回放）。
 type Filter struct {
 	Session string
 	Kinds   []string
+	Tree    bool
+	Live    bool
 }
 
 func (f Filter) match(e Envelope) bool {
-	if f.Session != "" && e.Session != f.Session {
+	if f.Session != "" && e.Session != f.Session && !(f.Tree && strings.HasPrefix(e.Session, f.Session+"/")) {
 		return false
 	}
 	if len(f.Kinds) == 0 || e.Kind == KindSynced {
@@ -150,7 +155,7 @@ func (s *Sub) offer(e Envelope) {
 	}
 	select {
 	case s.ch <- e:
-		if e.Seq > s.last {
+		if e.Seq > s.last && (s.f.Session == "" || e.Session == s.f.Session) { // 子会话的游标属于别的序列，不算断点
 			s.last = e.Seq
 		}
 		s.mu.Unlock()
@@ -231,8 +236,15 @@ func (b *Bus) Follow(ctx context.Context, src Source, f Filter, after int64) (*S
 	)
 	s := &Sub{b: b, f: f, ch: make(chan Envelope, b.cap), quit: make(chan struct{})}
 	s.gate = func(e Envelope) bool {
-		if e.Seq == 0 { // 易失事件不进可靠通道
-			return false
+		if e.Seq == 0 || e.Session != f.Session {
+			// 易失事件与子会话的事件：游标不属于本会话的序列，不回放、不按水位去重。
+			// 只有 Live 时、且回放送完之后才送（回放期间到的直接丢：易失事件丢了不影响正确性）。
+			if !f.Live {
+				return false
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			return !syncing
 		}
 		mu.Lock()
 		defer mu.Unlock()
@@ -300,7 +312,7 @@ func (s *Sub) sendBlocking(out []Envelope) bool {
 		}
 		select {
 		case s.ch <- e:
-			if e.Seq > s.last {
+			if e.Seq > s.last && (s.f.Session == "" || e.Session == s.f.Session) { // 子会话的游标属于别的序列，不算断点
 				s.last = e.Seq
 			}
 			s.mu.Unlock()

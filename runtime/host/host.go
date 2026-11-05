@@ -967,7 +967,12 @@ func (a *actor) drainInbox(ctx context.Context) (stop bool, err error) {
 			}
 			switch d {
 			case Deny:
-				a.h.publish(a.id, "turn_denied", map[string]any{"unconsumed": content})
+				reason := "denied"
+				if err != nil {
+					reason = err.Error()
+				}
+				// inputs / reason 供 protocol 2 的 turn.rejected：被拒的是哪些输入、为什么。
+				a.h.publish(a.id, "turn_denied", map[string]any{"unconsumed": content, "inputs": consume, "reason": reason})
 				if err := a.ag.Commit(ctx, consume...); err != nil {
 					return false, err
 				}
@@ -1132,7 +1137,9 @@ func (a *actor) turn(ctx context.Context, f func(context.Context) (session.EndRe
 	if a.h.Hooks.AfterTurn != nil {
 		a.h.Hooks.AfterTurn(a.id, end)
 	}
-	a.h.publish(a.id, "turn_end", map[string]any{"reason": end.String()})
+	// turn / end_kind / code / message 供 protocol 2 的结构化 turn.ended（G7）；reason 是 protocol 1 的拼好的字符串。
+	a.h.publish(a.id, "turn_end", map[string]any{"reason": end.String(), "turn": a.lastTurn(),
+		"end_kind": int(end.Kind), "code": end.Code, "message": end.Message})
 	if err := a.ag.Commit(ctx); err != nil { // span 与 after_turn 的修改落库
 		return end, err
 	}
@@ -1502,4 +1509,13 @@ func markCommitted(c Command, err error) error {
 		*c.Committed = true
 	}
 	return err
+}
+
+// lastTurn 最后一条条目所属的回合号（回合结束时就是刚结束的回合）。
+func (a *actor) lastTurn() uint32 {
+	es := a.ag.Core.Snapshot().Entries
+	if len(es) == 0 {
+		return 0
+	}
+	return es[len(es)-1].Turn
 }

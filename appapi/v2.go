@@ -621,18 +621,6 @@ func lastSummary(s session.Snapshot) string {
 	return ""
 }
 
-func intOf(v any) int {
-	switch n := v.(type) {
-	case int:
-		return n
-	case int64:
-		return int(n)
-	case float64:
-		return int(n)
-	}
-	return 0
-}
-
 // Fork 从会话分出新会话，返回新会话快照。to 缺省时由 client_id 派生（同一 client_id 重发返回已分出的会话），
 // 都缺省时生成。来源须空闲；if_cursor 不符返回 conflict（stale）；目标已存在返回 conflict（exists）。
 func (v V2) Fork(ctx context.Context, in wire.ForkArgs) (wire.SessionSnapshot, error) {

@@ -3,6 +3,7 @@ package bus
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -250,3 +251,48 @@ func TestBusClose(t *testing.T) {
 		t.Fatal("关闭后的订阅应立即结束")
 	}
 }
+
+// Live：回放完毕后也送易失事件；Tree：子会话的事件只送实时，且不推进断点（游标属于别的序列）。
+func TestFollowLiveAndTree(t *testing.T) {
+	b := New(16)
+	src := &memSource{}
+	src.add(Envelope{Session: "r", Kind: "item", Seq: 1})
+	s, err := b.Follow(context.Background(), src, Filter{Session: "r", Tree: true, Live: true}, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if e := recv(t, s); e.Seq != 1 {
+		t.Fatalf("应先回放 seq 1：%+v", e)
+	}
+	if e := recv(t, s); e.Kind != KindSynced {
+		t.Fatalf("回放后应 synced：%+v", e)
+	}
+	b.Publish(Envelope{Session: "r", Kind: "delta"})            // 易失
+	b.Publish(Envelope{Session: "r/c", Kind: "item", Seq: 99})  // 子会话持久事件
+	b.Publish(Envelope{Session: "other", Kind: "item", Seq: 5}) // 别的会话：不收
+	b.Publish(Envelope{Session: "r", Kind: "item", Seq: 2})
+	want := []string{"r:delta:0", "r/c:item:99", "r:item:2"}
+	for _, w := range want {
+		e := recv(t, s)
+		if got := e.Session + ":" + e.Kind + ":" + itoa(e.Seq); got != w {
+			t.Fatalf("应收到 %s，得到 %s", w, got)
+		}
+	}
+	s.mu.Lock()
+	last := s.last
+	s.mu.Unlock()
+	if last != 2 {
+		t.Fatalf("断点只按本会话的游标推进：%d", last)
+	}
+	// 不带 Live 的 Follow 仍只收本会话的持久事件。
+	s2, _ := b.Follow(context.Background(), src, Filter{Session: "r", Tree: true}, 2)
+	recv(t, s2) // synced
+	b.Publish(Envelope{Session: "r", Kind: "delta"})
+	b.Publish(Envelope{Session: "r/c", Kind: "item", Seq: 100})
+	b.Publish(Envelope{Session: "r", Kind: "item", Seq: 3})
+	if e := recv(t, s2); e.Seq != 3 || e.Session != "r" {
+		t.Fatalf("非 Live 只收本会话持久事件：%+v", e)
+	}
+}
+
+func itoa(n int64) string { return fmt.Sprint(n) }
