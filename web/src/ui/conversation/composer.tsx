@@ -75,6 +75,10 @@ export interface ComposerProps {
   attachments?: Attachment[];
   onAttach?: (files: File[]) => void;
   onRemoveAttachment?: (id: string) => void;
+  /** 粘贴超过 pasteFold 个字符的纯文本时调用；返回 true 表示宿主收下了（折叠成附件 chip），编辑区不再插入原文。 */
+  onLongPaste?: (text: string) => boolean;
+  /** 长粘贴的阈值（字符数），缺省 2000。 */
+  pasteFold?: number;
   queued?: QueuedItem[];
   onRetryQueued?: (id: string) => void;
   onDiscardQueued?: (id: string) => void;
@@ -262,7 +266,10 @@ export function Composer(p: ComposerProps) {
     if (files.length && p.onAttach) {
       e.preventDefault();
       p.onAttach(files);
+      return;
     }
+    const t = e.clipboardData.getData("text/plain");
+    if (p.onLongPaste && t.length > (p.pasteFold ?? 2000) && p.onLongPaste(t)) e.preventDefault();
   };
 
   const onDrop = (e: React.DragEvent) => {

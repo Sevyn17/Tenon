@@ -4,7 +4,7 @@
 // 一个 Shell 实例一组注册表（createRegistries），不是模块级单例：同一页面可以挂多个工作台互不干扰。
 
 import type { ComponentType, ReactNode } from "react";
-import type { Client, Interaction, SessionInfo } from "../client";
+import type { Client, Entry, Interaction, SessionInfo } from "../client";
 import type { DeclNode, MarkdownExtension, MentionItem, ToolView, UIAction } from "../ui";
 import { defineRegistry, type Contribution, type Registry } from "./registry";
 
@@ -168,6 +168,18 @@ export interface InteractionRenderer extends Contribution {
   render: (it: Interaction) => ReactNode;
 }
 
+/** 按条目种类（item.kind）渲染消息流里内置组件不认识的条目（后端插件的自定义条目）。没有渲染器时显示一行说明。 */
+export interface EntryRenderer extends Contribution {
+  kind: string;
+  render: (entry: Entry, cx: CommandContext & { turn: number }) => ReactNode;
+}
+
+/** 通知中心里某类通知的样式（按 ShellNotice.kind 匹配；没有 kind 或没有渲染器时用缺省行）。 */
+export interface NotificationRenderer extends Contribution {
+  kind: string;
+  render: (n: ShellNotice, cx: CommandContext) => ReactNode;
+}
+
 export interface FollowupProvider extends Contribution {
   /** 某回合结束后的建议追问。 */
   suggest: (cx: CommandContext & { turn: number }) => string[] | Promise<string[]>;
@@ -222,6 +234,10 @@ export interface ShellNotice {
   title: string;
   body?: string;
   tone: "info" | "success" | "warning" | "danger";
+  /** 通知类别（NotificationRenderer 按它匹配）：内置有 turn.done、interaction；插件自定。 */
+  kind?: string;
+  /** 附带数据（给渲染器用）。 */
+  data?: unknown;
   session?: string;
   at: number;
   read?: boolean;
@@ -267,6 +283,8 @@ export interface Registries {
   toolRenderers: Registry<ToolRenderer>;
   markdown: Registry<MarkdownExt>;
   interactionRenderers: Registry<InteractionRenderer>;
+  entryRenderers: Registry<EntryRenderer>;
+  notificationRenderers: Registry<NotificationRenderer>;
   followups: Registry<FollowupProvider>;
   composerActions: Registry<ComposerAction>;
   mentions: Registry<MentionProvider>;
@@ -287,6 +305,8 @@ export function createRegistries(): Registries {
     toolRenderers: defineRegistry("tool-renderer"),
     markdown: defineRegistry("markdown"),
     interactionRenderers: defineRegistry("interaction-renderer"),
+    entryRenderers: defineRegistry("entry-renderer"),
+    notificationRenderers: defineRegistry("notification-renderer"),
     followups: defineRegistry("followup"),
     composerActions: defineRegistry("composer-action"),
     mentions: defineRegistry("mention"),

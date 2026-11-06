@@ -22,7 +22,7 @@ export function Frame() {
   const panels = useRegistry(sh.reg.panels);
   const layout = useStore(sh.layout);
   const prefs = useStore(sh.prefs);
-  const preset = presets.find((x) => x.id === prefs.preset) ?? presets[0];
+  const preset = presets.find((x) => x.id === (sh.preset || prefs.preset)) ?? presets[0];
   const sidebar = preset?.sidebar ? regions.find((r) => r.id === preset.sidebar) : undefined;
   const main = regions.find((r) => r.id === (preset?.main ?? "main"));
   const panelMap = useMemo(() => new Map(panels.map((p) => [p.id, p])), [panels]);
@@ -93,6 +93,7 @@ export function Frame() {
 
 /** 窄屏的会话栏抽屉：模态（全局快捷键分发在模态框打开时让路），所以 Esc 由它自己处理；打开时焦点移进来，关闭时还回去。 */
 function LeftDrawer({ onClose, children }: { onClose: () => void; children: ReactNode }) {
+  const sh = useShell();
   const ref = useRef<HTMLDivElement>(null);
   const close = useRef(onClose);
   close.current = onClose;
@@ -113,7 +114,7 @@ function LeftDrawer({ onClose, children }: { onClose: () => void; children: Reac
   }, []);
   return (
     <div className={s.drawerScrim} onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div ref={ref} tabIndex={-1} className={s.drawerLeft} role="dialog" aria-modal="true" aria-label="会话栏">
+      <div ref={ref} tabIndex={-1} className={s.drawerLeft} role="dialog" aria-modal="true" aria-label={sh.t("sidebar.label")}>
         {children}
       </div>
     </div>
@@ -174,19 +175,19 @@ function Rail({ panels }: { panels: Panel[] }) {
     );
   };
   return (
-    <nav className={s.rail} aria-label="面板">
+    <nav className={s.rail} aria-label={sh.t("rail.label")}>
       {right.map(btn)}
       {bottom.length > 0 && <span className={s.railSep} />}
       {bottom.map(btn)}
       <span className={s.railGrow} />
       <Slot at="rail.bottom" />
-      <Tooltip label="底部停靠区" keybind={bindingOf(sh, "shell.toggleBottom")} side="left">
-        <button type="button" className={s.railBtn} aria-label="底部停靠区" aria-pressed={!!layout.docks.bottom && !layout.hidden.bottom} onClick={() => sh.api.run("shell.toggleBottom")}>
+      <Tooltip label={sh.t("rail.bottom")} keybind={bindingOf(sh, "shell.toggleBottom")} side="left">
+        <button type="button" className={s.railBtn} aria-label={sh.t("rail.bottom")} aria-pressed={!!layout.docks.bottom && !layout.hidden.bottom} onClick={() => sh.api.run("shell.toggleBottom")}>
           <PanelBottom size={16} />
         </button>
       </Tooltip>
-      <Tooltip label="右侧面板区" keybind={bindingOf(sh, "shell.togglePanels")} side="left">
-        <button type="button" className={s.railBtn} aria-label="右侧面板区" aria-pressed={!!layout.docks.right && !layout.hidden.right} onClick={() => sh.api.run("shell.togglePanels")}>
+      <Tooltip label={sh.t("rail.right")} keybind={bindingOf(sh, "shell.togglePanels")} side="left">
+        <button type="button" className={s.railBtn} aria-label={sh.t("rail.right")} aria-pressed={!!layout.docks.right && !layout.hidden.right} onClick={() => sh.api.run("shell.togglePanels")}>
           <PanelRight size={16} />
         </button>
       </Tooltip>
@@ -203,7 +204,7 @@ function ConnectionBanner() {
   return (
     <div className={s.banner} role="status">
       {st === "reconnecting" ? <Spinner size={12} /> : <WifiOff size={14} />}
-      {st === "reconnecting" ? sh.t("conv.reconnecting") : "连接已关闭"}
+      {st === "reconnecting" ? sh.t("conv.reconnecting") : sh.t("conn.closed")}
     </div>
   );
 }
@@ -240,7 +241,7 @@ function Palette({ mode }: { mode: "commands" | "sessions" }) {
       return sessions.items
         .filter((x) => hit(x.title, x.id, x.preview))
         .slice(0, 50)
-        .map((x) => ({ id: x.id, group: "会话", title: x.title || x.id, desc: x.preview, run: () => sh.api.openSession(x.id) }));
+        .map((x) => ({ id: x.id, group: sh.t("palette.group.sessions"), title: x.title || x.id, desc: x.preview, run: () => sh.api.openSession(x.id) }));
     }
     const out: PaletteRow[] = [];
     for (const c of cmds as Command[]) {
@@ -249,7 +250,7 @@ function Palette({ mode }: { mode: "commands" | "sessions" }) {
       if (!w.show) continue;
       out.push({
         id: c.id,
-        group: SECTION[c.section ?? "general"] ?? "通用",
+        group: sh.t(`section.${c.section ?? "general"}`),
         title: c.title,
         desc: c.description,
         keybind: bindingOf(sh, c.id),
@@ -271,12 +272,12 @@ function Palette({ mode }: { mode: "commands" | "sessions" }) {
   let lastGroup = "";
   return (
     <div className={s.palette} onMouseDown={(e) => e.target === e.currentTarget && close()}>
-      <div className={s.paletteBox} role="dialog" aria-modal="true" aria-label="命令面板">
+      <div className={s.paletteBox} role="dialog" aria-modal="true" aria-label={sh.t("palette.label")}>
         <input
           ref={input}
           className={s.paletteInput}
           value={q}
-          placeholder={m === "sessions" ? "搜索会话…（输入 > 切到命令）" : sh.t("palette.placeholder")}
+          placeholder={m === "sessions" ? sh.t("palette.sessions") : sh.t("palette.placeholder")}
           onChange={(e) => {
             const v = e.target.value;
             if (m === "sessions" && v.startsWith(">")) {
@@ -333,15 +334,6 @@ function Palette({ mode }: { mode: "commands" | "sessions" }) {
   );
 }
 
-const SECTION: Record<string, string> = {
-  general: "通用",
-  session: "会话",
-  navigation: "导航",
-  panels: "面板",
-  composer: "输入框",
-  interaction: "交互",
-};
-
 // ---- 快捷键速查（?）----
 
 function Shortcuts() {
@@ -352,12 +344,12 @@ function Shortcuts() {
   for (const c of cmds) {
     const b = binds.get(c.id);
     if (!b) continue;
-    const g = SECTION[c.section ?? "general"] ?? "通用";
+    const g = sh.t(`section.${c.section ?? "general"}`);
     groups.set(g, [...(groups.get(g) ?? []), { title: c.title, bind: b }]);
   }
   const close = () => sh.nav.update((v) => ({ ...v, shortcuts: false }));
   return (
-    <Dialog open onClose={close} title="快捷键" wide>
+    <Dialog open onClose={close} title={sh.t("shortcuts.title")} wide>
       <div className={s.shortcuts}>
         {[...groups].map(([g, rows]) => (
           <div key={g} className={s.shortcutGroup}>

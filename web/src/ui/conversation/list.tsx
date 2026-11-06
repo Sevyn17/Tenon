@@ -2,9 +2,10 @@
 // 一个回合：用户气泡 → 过程（思考、工具步骤）与正文按出现顺序交错 → 尾巴。相邻工具调用合并成一组。
 //
 // 滚动：新内容到达时贴底；用户向上滚后不再跟随，底部出现"↓ 新内容"；滚到顶部附近加载更早的条目。
-// 长会话用 content-visibility 让屏幕外的回合跳过布局与绘制（每个回合是不可变块，比虚拟列表更适合流式追加）。
+// 长会话：已结束的回合 memo（流式增量只重渲染进行中的回合），并用 content-visibility 让屏幕外的回合跳过布局与绘制。
+// 不用虚拟列表：对话内查找与回合导航按 DOM 工作，回合要一直在 DOM 里。
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ArrowDown } from "lucide-react";
 import { cx } from "../cx";
 import { Button } from "../controls";
@@ -19,7 +20,9 @@ export type Block =
   | { kind: "text"; key: string; text: string; streaming: boolean; interrupted?: boolean; entry?: UIEntry }
   | { kind: "tools"; key: string; tools: UITool[] }
   | { kind: "compaction"; entry: UIEntry }
-  | { kind: "context"; entry: UIEntry };
+  | { kind: "context"; entry: UIEntry }
+  /** 组件不认识的条目种类（后端插件的自定义条目）：宿主的 entryView 不接时显示一行说明，不会静默丢掉。 */
+  | { kind: "entry"; entry: UIEntry };
 
 export interface Turn {
   turn: number;
@@ -102,6 +105,8 @@ export function buildTurns(p: {
       case "context":
         t.blocks.push({ kind: "context", entry: e });
         break;
+      default:
+        t.blocks.push({ kind: "entry", entry: e });
     }
   }
   // 进行中：还没落库的流与工具接在最后一个回合（或新回合）后面。
@@ -140,11 +145,16 @@ export interface MessageListProps {
   slot?: (at: "user.after" | "assistant.after" | "turn.before" | "turn.after", turn: Turn, b?: Block) => ReactNode;
   /** 是否显示上下文注入条目（缺省隐藏）。 */
   showContext?: boolean;
+  /** 渲染组件不认识的条目种类（宿主从 EntryRenderer 注册表取）；返回 undefined 时显示通用的一行说明。 */
+  entryView?: (entry: UIEntry, turn: Turn) => ReactNode | undefined;
   empty?: ReactNode;
   /** 列表底部（交互记录、接管卡之外的内容）。 */
   footer?: ReactNode;
   /** 变化计数：内容增长时用来判断是否要贴底（流式增量也算）。 */
   tick?: unknown;
+  /** 影响已结束回合呈现的外部状态（偏好、注册表、最近一次回合结束……）：变了才重渲染已结束的回合。
+   *  宿主应传引用稳定的值（useMemo）；不传时已结束回合只在自身内容变化时重渲染。 */
+  revision?: unknown;
   className?: string;
 }
 
@@ -214,12 +224,7 @@ export function MessageList(p: MessageListProps) {
           )}
           {p.turns.length === 0 && p.empty}
           {p.turns.map((t, i) => (
-            <section key={t.turn + ":" + i} className={s.turn} data-turn={t.turn} data-live={t.live || undefined}>
-              {p.slot?.("turn.before", t)}
-              {t.blocks.map((b) => renderBlock(b, t, p))}
-              {p.tail?.(t, i, p.turns)}
-              {p.slot?.("turn.after", t)}
-            </section>
+            <TurnView key={t.turn + ":" + i} t={t} i={i} sig={turnSig(t, i === p.turns.length - 1)} p={p} />
           ))}
           {p.footer}
         </div>
@@ -232,6 +237,26 @@ export function MessageList(p: MessageListProps) {
     </div>
   );
 }
+
+/** 已结束回合的签名：条目数、最后一条、块数、是否最后一回合。签名与 revision 都没变就不重渲染（流式增量只重渲染进行中的回合）。 */
+function turnSig(t: Turn, last: boolean): string {
+  if (t.live) return "";
+  return `${t.turn}:${t.entries.length}:${t.entries[t.entries.length - 1]?.id ?? ""}:${t.blocks.length}:${last ? 1 : 0}`;
+}
+
+const TurnView = memo(
+  function TurnView({ t, i, p }: { t: Turn; i: number; sig: string; p: MessageListProps }) {
+    return (
+      <section className={cx(s.turn, !t.live && s.turnDone)} data-turn={t.turn} data-live={t.live || undefined}>
+        {p.slot?.("turn.before", t)}
+        {t.blocks.map((b) => renderBlock(b, t, p))}
+        {p.tail?.(t, i, p.turns)}
+        {p.slot?.("turn.after", t)}
+      </section>
+    );
+  },
+  (a, b) => a.sig !== "" && a.sig === b.sig && a.i === b.i && Object.is(a.p.revision, b.p.revision),
+);
 
 function renderBlock(b: Block, t: Turn, p: MessageListProps): ReactNode {
   switch (b.kind) {
@@ -266,5 +291,14 @@ function renderBlock(b: Block, t: Turn, p: MessageListProps): ReactNode {
           {b.entry.item.source === "snapshot" ? "上下文快照" : "状态更新"}：{b.entry.item.text}
         </div>
       );
+    case "entry": {
+      const v = p.entryView?.(b.entry, t);
+      if (v !== undefined) return <Fragment key={b.entry.id}>{v}</Fragment>;
+      return (
+        <div key={b.entry.id} className={s.contextNote} data-entry={b.entry.id}>
+          {b.entry.item.kind} 条目（这个界面没有它的渲染器）
+        </div>
+      );
+    }
   }
 }

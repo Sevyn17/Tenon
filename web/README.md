@@ -12,6 +12,8 @@ pnpm build       # 产物在 dist/，由 embed.go 嵌进 Go 二进制
 
 开发时的陈列页：`?gallery` 是基础组件（深浅主题对照），`?gallery=chat` 是会话组件（用固定数据，不连后端）。
 
+写插件时可以打开插槽高亮：地址加 `?slots`（网页服务要先用 `?token=` 登录一次，之后用 `/?token=&slots`），或在命令面板里执行"插槽高亮"。每个插槽外面画一圈虚线，标出位置、种类和已贡献的条目数。设置 › 开发者页还有原始事件流和贡献清单。
+
 ## 一、四层结构
 
 每一层只依赖它下面的层，`scripts/check-deps.mjs` 在 `typecheck` / `build` 时强制检查导入方向。
@@ -29,6 +31,13 @@ pnpm build       # 产物在 dist/，由 embed.go 嵌进 Go 二进制
 - **自己的组件库**：L0 + L1。
 - **一个简单聊天窗**：L0–L2，拼 `MessageList` + `Composer` + `InteractionCard`。L2 不依赖协议客户端，组件按 `ui/conversation/types.ts` 的最小视图类型工作。
 - **完整工作台**：`createShell()`。
+- **单会话嵌入**：`<YBaseConversation session="…" />`（`shell/embed.tsx`）：只有对话区、输入框与交互卡，面板以浮层打开，不读写地址栏，存储用独立命名空间 `ybase.embed`。和完整工作台用同一套贡献包。
+
+```tsx
+import { YBaseConversation } from "./shell/embed";
+
+<YBaseConversation session="support-42" className="chat-box" contributions={[myPack]} />
+```
 
 L0 最小用法：
 
@@ -126,6 +135,8 @@ export const myPack: ContributionPack = {
 | `toolRenderers` | 按工具名（可带 `*` 前缀匹配）给步骤行的动词短语、图标与展开详情 |
 | `markdown` | Markdown 扩展（代码块语言、链接处理等） |
 | `interactionRenderers` | 按交互 kind 替换交互卡正文 |
+| `entryRenderers` | 按条目 kind 渲染组件不认识的条目（后端插件的自定义条目；没有渲染器时显示一行说明） |
+| `notificationRenderers` | 按通知 `kind` 替换通知中心里那一行（内置 kind：`turn.done`、`interaction`） |
 | `followups` | 回合尾巴的后续建议来源 |
 | `composerActions` | 输入框 "+" 菜单（与 `/` 菜单同一份） |
 | `mentions` | 输入框 `@` 的候选来源 |
@@ -148,7 +159,7 @@ export const myPack: ContributionPack = {
 ## 四、样式与约束
 
 - CSS Modules + CSS 变量，只用类名。动态尺寸经 React `style` 属性设置，不放宽服务端的 CSP（`style-src 'self'`、`img-src 'self' data:`；所以附件预览用 data URL）。
-- 依赖只有 `react`、`lucide-react`、`@tanstack/react-virtual`，不引 UI 框架与拖拽库。
+- 依赖只有 `react`、`lucide-react`，不引 UI 框架与拖拽库。长会话不用虚拟列表：已结束的回合 memo，屏幕外的回合用 `content-visibility` 跳过布局（对话内查找与回合导航按 DOM 工作，回合要一直在 DOM 里）。
 - 文案走 `t(key)`（`shell/i18n.ts`，中 / 英两份）。
 - 尊重 `prefers-reduced-motion`；模态层有焦点陷阱与焦点归还；回合结束、新交互经 `aria-live` 播报。
 

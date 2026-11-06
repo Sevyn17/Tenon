@@ -226,6 +226,7 @@ function Layout({ sh }: { sh: ShellState }) {
   const presets = useStore(sh.reg.presets);
   const cur = presets.find((x) => x.id === p.preset) ?? presets[0];
   return (
+    <>
     <SettingsSection title="布局">
       <SettingsRow
         id="preset"
@@ -262,6 +263,43 @@ function Layout({ sh }: { sh: ShellState }) {
         }
       />
     </SettingsSection>
+    <SettingsSection title="命名布局" description="把当前面板布局存成一个名字，之后在命令面板里输入“切换布局”一键恢复。">
+      <SettingsRow
+        id="layouts"
+        title="保存当前布局"
+        control={
+          <Button size="sm" onClick={() => sh.api.run("layout.save")}>
+            保存…
+          </Button>
+        }
+      />
+      {Object.keys(p.layouts).map((n) => (
+        <SettingsRow
+          key={n}
+          id={`layouts.${n}`}
+          title={n}
+          control={
+            <>
+              <Button size="sm" onClick={() => sh.api.run(`layout.apply:${n}`)}>
+                切换
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  const rest = { ...p.layouts };
+                  delete rest[n];
+                  sh.prefs.set("layouts", rest);
+                }}
+              >
+                删除
+              </Button>
+            </>
+          }
+        />
+      ))}
+    </SettingsSection>
+    </>
   );
 }
 

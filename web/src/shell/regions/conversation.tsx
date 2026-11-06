@@ -4,7 +4,7 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Menu as Menu2, MoreHorizontal, ShieldCheck, Square } from "lucide-react";
-import type { Interaction, ToolState } from "../../client";
+import type { Entry, Interaction, ToolState } from "../../client";
 import { useInteractions, useSession, useStore } from "../../client/react";
 import {
   Badge,
@@ -52,7 +52,7 @@ export function MainArea() {
           <header className={s.head}>
             <span className={s.title}>{p.title}</span>
             <span className={s.grow} />
-            <IconButton label="返回对话" size="sm" onClick={() => sh.api.openPage(null)}>
+            <IconButton label={sh.t("conv.back")} size="sm" onClick={() => sh.api.openPage(null)}>
               ✕
             </IconButton>
           </header>
@@ -71,7 +71,7 @@ function EmptyMain() {
     <main className={s.conv}>
       {vp === "sm" && (
         <header className={s.head}>
-          <IconButton label="会话栏" size="sm" onClick={() => sh.api.run("shell.toggleSidebar")}>
+          <IconButton label={sh.t("sidebar.label")} size="sm" onClick={() => sh.api.run("shell.toggleSidebar")}>
             <Menu2 size={16} />
           </IconButton>
           <span className={s.title}>{sh.brand.name}</span>
@@ -145,6 +145,36 @@ function statsOf(t: Turn): TurnStats | undefined {
   return { durationMs: Math.max(0, es[es.length - 1].at - es[0].at), steps, tools, input, output, cacheRead, model };
 }
 
+/** 后续建议：只问最后一个已结束的回合（FollowupProvider 注册表合并、去重，最多 4 条）；回合中或没有来源时为空。 */
+function useFollowups(session: string, turn: number | null): string[] {
+  const sh = useShell();
+  const providers = useRegistry(sh.reg.followups);
+  const [items, setItems] = useState<string[]>([]);
+  useEffect(() => {
+    setItems([]);
+    if (turn === null || !providers.length) return;
+    let live = true;
+    const cx = { client: sh.client, session, shell: sh.api, turn };
+    void Promise.all(
+      providers.map(async (p) => {
+        try {
+          return await p.suggest(cx);
+        } catch (e) {
+          if (p.pack) sh.packs.fail(p.pack, e instanceof Error ? e.message : String(e));
+          return [];
+        }
+      }),
+    ).then((rs) => {
+      if (!live) return;
+      setItems([...new Set(rs.flat().map((x) => x.trim()).filter(Boolean))].slice(0, 4));
+    });
+    return () => {
+      live = false;
+    };
+  }, [providers, session, turn, sh]);
+  return items;
+}
+
 // ---- 对话 ----
 
 function Conversation({ id }: { id: string }) {
@@ -157,6 +187,7 @@ function Conversation({ id }: { id: string }) {
   const renderers = useRegistry(sh.reg.toolRenderers);
   const mdExts = useRegistry(sh.reg.markdown);
   const irs = useRegistry(sh.reg.interactionRenderers);
+  const entryRs = useRegistry(sh.reg.entryRenderers);
   const [draft, setDraft] = useDraft(id);
   const [ix, setIx] = useState(0);
 
@@ -232,7 +263,7 @@ function Conversation({ id }: { id: string }) {
         const u = t.blocks.find((b) => b.kind === "user");
         if (!u || u.kind !== "user") return [];
         const text = (u.entry.item.content ?? []).map((p) => p.text ?? "").join("").trim();
-        return [{ turn: t.turn, label: text.split("\n")[0].slice(0, 80) || `第 ${t.turn} 回合` }];
+        return [{ turn: t.turn, label: text.split("\n")[0].slice(0, 80) || sh.t("conv.turn", { n: t.turn }) }];
       }),
     [turns],
   );
@@ -265,7 +296,7 @@ function Conversation({ id }: { id: string }) {
     const text = back.map((o) => o.text).filter(Boolean).join("\n\n");
     for (const o of back) store.discard(o.client_id);
     if (text) setDraft((v) => (v ? text + "\n\n" + v : text));
-    sh.api.toast(`没有开始回合：${rejected.reason || "被拒绝"}${text ? "，输入已放回输入框" : ""}`, "warning");
+    sh.api.toast(sh.t("conv.rejected", { reason: rejected.reason || sh.t("conv.rejected.default") }) + (text ? sh.t("conv.rejected.back") : ""), "warning");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rejected]);
 
@@ -287,7 +318,7 @@ function Conversation({ id }: { id: string }) {
             }
           : undefined
       }
-      source={cur.session !== id ? `主会话 › ${cur.session.slice(id.length + 1)}` : undefined}
+      source={cur.session !== id ? sh.t("conv.subSource", { sub: cur.session.slice(id.length + 1) }) : undefined}
       body={irs.find((r) => r.kind === cur.kind)?.render(cur)}
       onRespond={async (r) => {
         await sh.client.interactions.respond(cur.id, r);
@@ -301,6 +332,13 @@ function Conversation({ id }: { id: string }) {
 
   const chainTakeover = useChainSlot("composer.takeover", { session: id });
   const lastIndex = turns.length - 1;
+  const lastDone = turns.length && !turns[lastIndex].live && st.runState !== "running" ? turns[lastIndex].turn : null;
+  const followups = useFollowups(id, lastDone);
+  // 已结束回合只在这些变了时重渲染（其余靠回合自身内容的签名）。
+  const revision = useMemo(
+    () => ({ showContext: prefs.showContext, actions, renderers, lastEnd: st.lastEnd, followups, entryRs }),
+    [prefs.showContext, actions, renderers, st.lastEnd, followups, entryRs],
+  );
   const content = (
     <MessageList
       turns={turns}
@@ -310,8 +348,13 @@ function Conversation({ id }: { id: string }) {
       onLoadOlder={() => void store.loadOlder()}
       actionsFor={actionsFor}
       toolView={toolView}
+      entryView={(e, t) => {
+        const r = entryRs.find((x) => x.kind === e.item.kind);
+        return r ? r.render(e as Entry, { ...cmd, session: id, turn: t.turn }) : undefined;
+      }}
       showContext={prefs.showContext}
       tick={st.streams.map((x) => x.text.length).join(",") + "|" + st.tools.length}
+      revision={revision}
       empty={st.status === "ready" ? <Hero onPick={(t) => setDraft(t)} /> : null}
       slot={(at, t) => <Slot at={`message.${at}`} props={{ session: id, turn: t.turn }} />}
       tail={(t, i) => {
@@ -323,7 +366,12 @@ function Conversation({ id }: { id: string }) {
             onOpenStats={() => sh.api.openPanel("usage", { turn: t.turn })}
             actions={toUIActions(actions, { ...cmd, session: id, target: "turn", turn: t.turn })}
             end={isLast && st.lastEnd && st.lastEnd.kind !== "done" ? st.lastEnd : null}
-            onContinue={() => void store.send("继续")}
+            followups={isLast ? followups : undefined}
+            onFollowup={(text) => {
+              setDraft(text);
+              sh.api.focusComposer();
+            }}
+            onContinue={() => void store.send(sh.t("conv.continue"))}
             extra={<Slot at="turn.tail" props={{ session: id, turn: t.turn, last: isLast }} />}
           />
         );
@@ -360,6 +408,7 @@ function Conversation({ id }: { id: string }) {
           attachments={atts.items}
           onAttach={atts.add}
           onRemoveAttachment={atts.remove}
+          onLongPaste={atts.addText}
           onHistory={history.step}
           queued={st.outbox
             .filter((o) => o.state !== "sent")
@@ -377,7 +426,12 @@ function Conversation({ id }: { id: string }) {
               <Slot at="composer.toolbar.left" props={{ session: id }} />
             </>
           }
-          toolbarRight={<Slot at="composer.toolbar.right" props={{ session: id }} />}
+          toolbarRight={
+            <>
+              <Slot at="composer.toolbar.right" props={{ session: id }} />
+              <ContextUse entries={st.entries} onOpen={() => sh.api.openPanel("usage")} />
+            </>
+          }
           below={<Slot at="composer.below" props={{ session: id }} />}
           status={st.runState === "running" ? <RunningStatus startedAt={st.turn?.startedAt} onStop={() => void store.cancel()} /> : null}
           takeover={takeover ?? chainTakeover}
@@ -389,7 +443,29 @@ function Conversation({ id }: { id: string }) {
   );
 }
 
+/** 上下文占用：上一次模型请求的输入 tokens（最后一条带 usage 的助手条目）。点了打开"上下文与用量"面板。
+ *  协议还不下发模型的上下文窗口，所以只显示数量、不画占比环（见 docs/计划/05）。 */
+function ContextUse({ entries, onOpen }: { entries: { item: { kind: string; usage?: { input: number; cache_read: number } } }[]; onOpen: () => void }) {
+  const sh = useShell();
+  let input = 0;
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const u = entries[i].item.kind === "assistant" ? entries[i].item.usage : undefined;
+    if (u) {
+      input = u.input;
+      break;
+    }
+  }
+  if (!input) return null;
+  const label = input >= 1000 ? `${(input / 1000).toFixed(1)}k` : String(input);
+  return (
+    <button type="button" className={s.ctxUse} onClick={onOpen} title={sh.t("conv.context", { n: input })} aria-label={sh.t("conv.contextLabel")}>
+      {label}
+    </button>
+  );
+}
+
 function RunningStatus({ startedAt, onStop }: { startedAt?: number; onStop: () => void }) {
+  const sh = useShell();
   const [, tick] = useState(0);
   useEffect(() => {
     const t = setInterval(() => tick((x) => x + 1), 1000);
@@ -398,8 +474,8 @@ function RunningStatus({ startedAt, onStop }: { startedAt?: number; onStop: () =
   const sec = startedAt ? Math.floor((Date.now() - startedAt) / 1000) : 0;
   return (
     <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-      <Dot state="running" /> 工作中 · {Math.floor(sec / 60)}:{String(sec % 60).padStart(2, "0")}
-      <IconButton label="停止" size="sm" onClick={onStop}>
+      <Dot state="running" /> {sh.t("conv.working")} · {Math.floor(sec / 60)}:{String(sec % 60).padStart(2, "0")}
+      <IconButton label={sh.t("conv.stop")} size="sm" onClick={onStop}>
         <Square size={12} />
       </IconButton>
     </span>
@@ -413,7 +489,7 @@ function Header({ id, title, running, mode }: { id: string; title: string; runni
   return (
     <header className={s.head}>
       {vp === "sm" && (
-        <IconButton label="会话栏" size="sm" onClick={() => sh.api.run("shell.toggleSidebar")}>
+        <IconButton label={sh.t("sidebar.label")} size="sm" onClick={() => sh.api.run("shell.toggleSidebar")}>
           <Menu2 size={16} />
         </IconButton>
       )}
@@ -424,7 +500,7 @@ function Header({ id, title, running, mode }: { id: string; title: string; runni
       <span className={s.meta}>
         {running && (
           <>
-            <Dot state="running" /> 运行中
+            <Dot state="running" /> {sh.t("conv.running")}
           </>
         )}
         {mode && !running && <span>{mode}</span>}
@@ -435,7 +511,7 @@ function Header({ id, title, running, mode }: { id: string; title: string; runni
         placement="bottom-end"
         groups={groups}
         trigger={({ ref, toggle }) => (
-          <IconButton ref={ref} label="会话菜单" size="sm" onClick={toggle}>
+          <IconButton ref={ref} label={sh.t("conv.menu")} size="sm" onClick={toggle}>
             <MoreHorizontal size={16} />
           </IconButton>
         )}

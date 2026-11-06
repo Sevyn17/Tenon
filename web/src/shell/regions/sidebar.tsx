@@ -58,7 +58,7 @@ export function Sidebar() {
     <aside
       className={cx(s.sidebar, collapsed && s.collapsed)}
       style={collapsed ? undefined : { width: prefs.sidebarWidth }}
-      aria-label="会话栏"
+      aria-label={sh.t("sidebar.label")}
     >
       <Brand collapsed={collapsed} />
       <NavMenu collapsed={collapsed} />
@@ -88,8 +88,8 @@ function Brand({ collapsed }: { collapsed: boolean }) {
         />
       )}
       <span style={{ flex: 1 }} />
-      <Tooltip label={collapsed ? "展开左栏" : "收起左栏"} keybind={bindingOf(sh, "shell.toggleSidebar")}>
-        <IconButton label="切换左栏" size="sm" onClick={() => sh.api.run("shell.toggleSidebar")}>
+      <Tooltip label={collapsed ? sh.t("sidebar.expand") : sh.t("sidebar.collapse")} keybind={bindingOf(sh, "shell.toggleSidebar")}>
+        <IconButton label={sh.t("sidebar.toggle")} size="sm" onClick={() => sh.api.run("shell.toggleSidebar")}>
           {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
         </IconButton>
       </Tooltip>
@@ -104,7 +104,7 @@ function NavMenu({ collapsed }: { collapsed: boolean }) {
   const items = useRegistry(sh.reg.menus).filter((x) => x.menu === "nav.primary");
   const cx0 = useCommandContext();
   return (
-    <nav className={s.nav} aria-label="菜单">
+    <nav className={s.nav} aria-label={t("sidebar.menu")}>
       <NavItem collapsed={collapsed} icon={<Plus size={16} />} label={t("nav.new")} keybind={bindingOf(sh, "session.new")} onClick={() => sh.api.run("session.new")} />
       <NavItem collapsed={collapsed} icon={<Search size={16} />} label={t("nav.search")} keybind={bindingOf(sh, "shell.searchSessions")} onClick={() => sh.api.run("shell.searchSessions")} />
       {items.map((it) => {
@@ -185,11 +185,11 @@ function SessionList() {
   };
 
   return (
-    <div className={s.list} role="navigation" aria-label="会话">
+    <div className={s.list} role="navigation" aria-label={t("sidebar.sessions")}>
       <div className={s.filters}>
         {(["all", "running", "pending"] as const).map((f) => (
           <button key={f} type="button" aria-pressed={filter === f} onClick={() => setFilter(f)}>
-            {f === "all" ? "全部" : f === "running" ? "运行中" : "待处理"}
+            {t(`sidebar.filter.${f}`)}
             {f === "pending" && pendingBy.size > 0 && <Count n={[...pendingBy.values()].reduce((a, b) => a + b, 0)} />}
           </button>
         ))}
@@ -242,7 +242,7 @@ function SessionRow({ row, active, pending }: { row: SessionInfo; active: boolea
           placement="bottom-end"
           groups={groups}
           trigger={({ ref, toggle }) => (
-            <IconButton ref={ref} label="更多" size="sm" onClick={toggle}>
+            <IconButton ref={ref} label={sh.t("sidebar.more")} size="sm" onClick={toggle}>
               <MoreHorizontal size={14} />
             </IconButton>
           )}
@@ -278,13 +278,13 @@ function Footer({ collapsed }: { collapsed: boolean }) {
         placement="top-start"
         groups={groups}
         trigger={({ ref, toggle }) => (
-          <button ref={ref} type="button" className={s.avatar} onClick={toggle} aria-label="账号菜单">
+          <button ref={ref} type="button" className={s.avatar} onClick={toggle} aria-label={t("avatar.menu")}>
             <span className={s.avatarImg}>{who.slice(0, 1).toUpperCase()}</span>
             <span className={s.avatarDot} data-state={dot} />
             {!collapsed && (
               <span className={s.footerText}>
                 <span>{who}</span>
-                <span className={s.footerSub}>{hello ? hello.model : "连接中…"}</span>
+                <span className={s.footerSub}>{hello ? hello.model : t("avatar.connecting")}</span>
               </span>
             )}
           </button>

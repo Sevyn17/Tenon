@@ -5,7 +5,7 @@ import { useEffect } from "react";
 import { Activity, Bell, Inbox, X } from "lucide-react";
 import type { Interaction } from "../../client";
 import { useInteractions, useSession, useStore } from "../../client/react";
-import { Button, Dot, EmptyState, IconButton } from "../../ui";
+import { Button, Dot, EmptyState, ErrorBoundary, IconButton } from "../../ui";
 import type { ContributionPack } from "../registry";
 import type { PanelCardProps, PanelProps } from "../contributions";
 import type { ShellState } from "../context";
@@ -94,6 +94,8 @@ function ago(ms: number): string {
 /** 通知中心：回合完成、需要确认、插件发的通知。面板可见时全部标为已读。 */
 function Notices({ sh, visible }: { sh: ShellState; visible: boolean }) {
   const list = useStore(sh.notices);
+  const renderers = useStore(sh.reg.notificationRenderers);
+  const cx0 = { client: sh.client, session: sh.api.current(), shell: sh.api };
   useEffect(() => {
     if (visible) sh.notices.markAllRead();
   }, [visible, list, sh.notices]);
@@ -107,7 +109,20 @@ function Notices({ sh, visible }: { sh: ShellState; visible: boolean }) {
         </Button>
       </div>
       <ul className={s.list}>
-        {list.map((n) => (
+        {list.map((n) => {
+          const r = n.kind ? renderers.find((x) => x.kind === n.kind) : undefined;
+          if (r)
+            return (
+              <li key={n.id} className={s.notice}>
+                <ErrorBoundary label={`通知 ${n.kind}`} onError={(e) => r.pack && sh.packs.fail(r.pack, e.message)}>
+                  {r.render(n, cx0)}
+                </ErrorBoundary>
+                <IconButton label="删除通知" size="sm" onClick={() => sh.notices.remove(n.id)}>
+                  <X size={12} />
+                </IconButton>
+              </li>
+            );
+          return (
           <li key={n.id} className={s.notice}>
             <button type="button" className={s.row} disabled={!n.session} onClick={() => n.session && sh.api.openSession(n.session)}>
               <Dot state={n.tone === "danger" ? "danger" : n.tone === "warning" ? "warning" : n.tone === "success" ? "success" : "idle"} />
@@ -123,7 +138,8 @@ function Notices({ sh, visible }: { sh: ShellState; visible: boolean }) {
               <X size={12} />
             </IconButton>
           </li>
-        ))}
+          );
+        })}
       </ul>
     </>
   );

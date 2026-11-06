@@ -56,11 +56,22 @@ export function useAttachments(session: string) {
     [sh.client, session],
   );
 
+  /** 超长粘贴：折叠成"粘贴的文本"chip，不上传，发送时作为 text 部件。返回 true 表示收下。 */
+  const addText = useCallback((text: string) => {
+    const id = `att${++seq.current}`;
+    const lines = text.split("\n").length;
+    setItems((xs) => [
+      ...xs,
+      { id, name: `粘贴的文本（${lines} 行）`, mime: "text/plain", size: text.length, state: "ready", part: { kind: "text", text } },
+    ]);
+    return true;
+  }, []);
+
   const remove = (id: string) => setItems((xs) => xs.filter((a) => a.id !== id));
   const parts = items.filter((a) => a.state === "ready" && a.part).map((a) => a.part!);
   const clear = () => setItems([]);
   const view: Attachment[] = items.map(({ part: _p, ...a }) => a);
-  return { items: view, parts, add, remove, clear };
+  return { items: view, parts, add, addText, remove, clear };
 }
 
 /** 输入历史：本会话用户说过的话（新的在后）。空输入框按 ↑ 往前翻、↓ 往后翻，翻过最新一条回到空。 */

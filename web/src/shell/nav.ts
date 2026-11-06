@@ -19,11 +19,14 @@ export interface NavState {
   focus: boolean;
 }
 
-export function createNav(initial: string | null = readHash()): Store<NavState> {
+/** hash 为假时不读写地址栏（嵌入到别人页面里时用）。 */
+export function createNav(initial?: string | null, opts: { hash?: boolean } = {}): Store<NavState> {
+  const hash = opts.hash !== false;
+  if (initial === undefined) initial = hash ? readHash() : null;
   const nav = createStore<NavState>({ session: initial, page: null, settings: null, palette: null, shortcuts: false, focus: false, drawer: false });
   let last = initial;
   nav.subscribe((v) => {
-    if (v.session === last) return;
+    if (!hash || v.session === last) return;
     last = v.session;
     try {
       const h = v.session ? `#s=${encodeURIComponent(v.session)}` : "";

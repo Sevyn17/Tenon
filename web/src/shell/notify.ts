@@ -35,7 +35,7 @@ export function watchActivity(sh: ShellState): () => void {
       running.set(x.id, now);
       if (was && !now) {
         const title = `回合完成：${x.title || x.id}`;
-        sh.notices.add({ title, body: x.preview || undefined, tone: "success", session: x.id }, quiet(x.id));
+        sh.notices.add({ title, body: x.preview || undefined, tone: "success", kind: "turn.done", session: x.id }, quiet(x.id));
         system(title, x.preview || undefined, x.id);
       }
     }
@@ -47,7 +47,7 @@ export function watchActivity(sh: ShellState): () => void {
       if (seen.has(it.id)) continue;
       const root = it.session.split("/")[0];
       const title = it.kind === "approval" ? `需要确认：${it.approval?.tool ?? it.title}` : `等你回答：${it.question?.text ?? it.title}`;
-      sh.notices.add({ title, tone: "warning", session: root }, quiet(root));
+      sh.notices.add({ title, tone: "warning", kind: "interaction", data: it, session: root }, quiet(root));
       system(title, it.approval?.reason, root);
     }
     seen = ids;

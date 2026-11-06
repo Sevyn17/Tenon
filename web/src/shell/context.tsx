@@ -5,7 +5,8 @@
 // 抛错只在该位置显示占位、所属包标记为 failed（设置 › 插件里能看到）。
 
 import { createContext, Fragment, useContext, useMemo, type ReactNode } from "react";
-import type { Client, Store } from "../client";
+import { createStore, type Client, type Store } from "../client";
+import sd from "./slotdebug.module.css";
 import type { NavState } from "./nav";
 import type { ShellBus } from "./bus";
 import type { NoticesStore } from "./notices";
@@ -42,6 +43,8 @@ export interface ShellState {
   /** 通知中心（回合完成、需要确认、插件的 notify）。 */
   notices: NoticesStore;
   brand: Brand;
+  /** 嵌入方强制的布局预设（createShell 的 preset）；不写进偏好，给了就不看偏好里的 preset。 */
+  preset?: string;
   /** 声明式 UI 的动作执行（按钮只能调协议命令 / 开面板 / 填输入框 / 回答交互）。 */
   runDecl: (a: DeclAction, values?: Record<string, unknown>) => Promise<void>;
 }
@@ -67,8 +70,37 @@ export function useCommandContext(): CommandContext {
   return { client: s.client, session: s.api.current(), shell: s.api };
 }
 
+/** 插槽高亮（开发者工具）：地址带 ?slots 时打开，也可用命令 dev.slots 切换。打开后每个插槽外面画一圈虚线并标出位置与贡献数。 */
+export const slotDebug: Store<boolean> = createStore<boolean>(
+  typeof location !== "undefined" && new URLSearchParams(location.search).has("slots"),
+);
+
+function SlotFrame({ at, kind, n, children }: { at: string; kind: SlotKind; n: number; children: ReactNode }) {
+  const on = useStore(slotDebug);
+  if (!on) return <>{children}</>;
+  return (
+    <span className={sd.slot} data-slot={at} data-empty={n === 0 || undefined}>
+      <span className={sd.label}>
+        {at} · {kind} · {n}
+      </span>
+      {children}
+    </span>
+  );
+}
+
 /** 一处插槽。props 原样交给每份贡献的 render。 */
-export function Slot({
+export function Slot(p: Parameters<typeof SlotInner>[0]) {
+  const s = useShell();
+  const all = useRegistry(s.reg.slots);
+  const n = all.filter((x) => x.at === p.at).length;
+  return (
+    <SlotFrame at={p.at} kind={p.kind ?? "list"} n={n}>
+      <SlotInner {...p} />
+    </SlotFrame>
+  );
+}
+
+function SlotInner({
   at,
   kind = "list",
   props = {},

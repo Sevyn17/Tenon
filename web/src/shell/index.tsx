@@ -10,10 +10,11 @@ import { ClientProvider, useStore } from "../client/react";
 import { Button, Dialog, Input, ToastProvider, applyDensity, applyTheme, isMac, useToast, type ThemePref } from "../ui";
 import { createShellBus } from "./bus";
 import { useKeybindings } from "./commands";
-import { ShellProvider, type Brand, type ShellState } from "./context";
+import { ShellProvider, slotDebug, type Brand, type ShellState } from "./context";
 import { createRegistries, type ShellApi, type ShellNotice } from "./contributions";
 import { createT, type Locale, type Messages } from "./i18n";
 import { createLayoutStore } from "./layout/store";
+import { sanitize as sanitizeLayout } from "./layout/reducer";
 import { createNav } from "./nav";
 import { createNotices } from "./notices";
 import { watchActivity } from "./notify";
@@ -23,6 +24,7 @@ import { createPackHost, type ContributionPack } from "./registry";
 import { corePack } from "./builtin/core";
 import { settingsPack } from "./builtin/settings";
 import { panelsPack } from "./builtin/panels";
+import { messagesPack } from "./builtin/messages";
 import { changesPack, tasksPack, workPanelsPack } from "./builtin/workpanels";
 import { modesPagePack, morePagesPack, watchDisabled } from "./builtin/pages";
 import { Frame } from "./regions/frame";
@@ -44,6 +46,12 @@ export interface ShellOptions {
   /** 偏好初值（用户改过的以存储为准）。 */
   prefs?: Partial<Prefs>;
   messages?: Partial<Record<Locale, Messages>>;
+  /** 初始会话（缺省读地址栏 #s=）。 */
+  session?: string | null;
+  /** 是否把当前会话写进地址栏（缺省是；嵌入到别人页面里时关掉）。 */
+  hash?: boolean;
+  /** 强制使用的布局预设（LayoutPreset id）；给了就不读偏好里的 preset。 */
+  preset?: string;
 }
 
 export interface Shell {
@@ -63,7 +71,7 @@ export function createShell(o: ShellOptions = {}): Shell {
   const packs = createPackHost();
   const prefs = createPrefs(ns, o.prefs);
   const layout = createLayoutStore(ns);
-  const nav = createNav();
+  const nav = createNav(o.session, { hash: o.hash });
   const bus = createShellBus();
   const brand: Brand = { name: "YBase", ...o.brand };
   let toastFn: (text: string, tone?: ShellNotice["tone"]) => void = () => {};
@@ -118,6 +126,7 @@ export function createShell(o: ShellOptions = {}): Shell {
     t,
     api,
     brand,
+    preset: o.preset,
     async runDecl(a, values) {
       switch (a.kind) {
         case "call":
@@ -142,6 +151,7 @@ export function createShell(o: ShellOptions = {}): Shell {
   packs.register(shellPack(state));
   packs.register(settingsPack(state));
   packs.register(panelsPack(state));
+  packs.register(messagesPack(reg));
   packs.register(workPanelsPack(state));
   packs.register(tasksPack(state));
   packs.register(changesPack(state));
@@ -338,6 +348,35 @@ function shellPack(sh: ShellState): ContributionPack {
         when: () => (sh.nav.get().session ? true : "没有打开的会话"),
         run: () => sh.bus.emit("jumpTurn", { dir: 1 }),
       });
+      // 上 / 下一个会话：按左栏列表的顺序（最近更新在前）。
+      const stepSession = (dir: -1 | 1) => {
+        const items = sh.client.sessions.get().items;
+        if (!items.length) return;
+        const i = items.findIndex((x) => x.id === sh.nav.get().session);
+        const j = i < 0 ? 0 : Math.min(Math.max(i + dir, 0), items.length - 1);
+        if (j !== i) sh.api.openSession(items[j].id);
+      };
+      cmd({ id: "session.prev", title: "上一个会话", section: "navigation", keybind: "Mod+[", global: true, run: () => stepSession(-1) });
+      cmd({ id: "session.next", title: "下一个会话", section: "navigation", keybind: "Mod+]", global: true, run: () => stepSession(1) });
+      cmd({
+        id: "interaction.next",
+        title: "下一个待确认",
+        section: "interaction",
+        keybind: "Mod+Shift+A",
+        global: true,
+        when: () => (sh.client.interactions.get().open.length ? true : "没有等你处理的事"),
+        run: () => {
+          const open = sh.client.interactions.get().open;
+          const roots = [...new Set(open.map((x) => x.session.split("/")[0]))];
+          if (!roots.length) return;
+          const cur = sh.nav.get().session;
+          // 当前会话之后的下一个；当前会话本身有待确认且只有它时聚焦输入框位置（接管卡在那里）。
+          const i = cur ? roots.indexOf(cur) : -1;
+          const next = roots[(i + 1) % roots.length];
+          if (next !== cur) sh.api.openSession(next);
+          sh.api.focusComposer();
+        },
+      });
       cmd({
         id: "shell.cycleTheme",
         title: "切换主题",
@@ -347,6 +386,13 @@ function shellPack(sh: ShellState): ContributionPack {
           const cur = sh.prefs.get().theme;
           sh.prefs.set("theme", order[(order.indexOf(cur) + 1) % order.length]);
         },
+      });
+      cmd({
+        id: "dev.slots",
+        title: "开发者：切换插槽高亮",
+        section: "general",
+        keywords: ["slot", "插槽", "调试", "开发者"],
+        run: () => slotDebug.set(!slotDebug.get()),
       });
       // 每个面板一个开关命令 panel.<id>（快捷键取面板声明的 keybind，可在设置里改绑），随面板注册增删。
       const panelCmds = new Map<string, () => void>();
@@ -381,6 +427,51 @@ function shellPack(sh: ShellState): ContributionPack {
         for (const undo of panelCmds.values()) undo();
         panelCmds.clear();
       });
+      // 命名布局：保存当前面板布局为一个名字；每个名字一条"切换布局"命令（命令面板里一键切换），随偏好增删。
+      cmd({
+        id: "layout.save",
+        title: "保存当前布局…",
+        section: "panels",
+        keywords: ["命名布局", "layout"],
+        run: async () => {
+          const name = (await sh.api.prompt({ title: "保存当前布局", label: "布局名称（同名会覆盖）" }))?.trim();
+          if (!name) return;
+          sh.prefs.set("layouts", { ...sh.prefs.get().layouts, [name]: sh.layout.get() });
+          sh.api.toast(`已保存布局：${name}`, "success");
+        },
+      });
+      const layoutCmds = new Map<string, () => void>();
+      const syncLayouts = () => {
+        const names = new Set(Object.keys(sh.prefs.get().layouts));
+        for (const [n, undo] of layoutCmds) {
+          if (!names.has(n)) {
+            undo();
+            layoutCmds.delete(n);
+          }
+        }
+        for (const n of names) {
+          if (layoutCmds.has(n)) continue;
+          layoutCmds.set(
+            n,
+            sh.reg.commands.add({
+              id: `layout.apply:${n}`,
+              title: `切换布局：${n}`,
+              section: "panels",
+              keywords: ["命名布局", "layout"],
+              pack: "shell",
+              run: () => {
+                if (!applyLayout(sh, n)) sh.api.toast(`布局 ${n} 已不存在`, "warning");
+              },
+            }),
+          );
+        }
+      };
+      syncLayouts();
+      ctx.onDispose(sh.prefs.subscribe(syncLayouts));
+      ctx.onDispose(() => {
+        for (const undo of layoutCmds.values()) undo();
+        layoutCmds.clear();
+      });
       cmd({
         id: "shell.escape",
         title: "关闭覆盖层",
@@ -399,3 +490,14 @@ function shellPack(sh: ShellState): ContributionPack {
     },
   };
 }
+
+/** 切到某个命名布局：按当前已注册的面板清洗快照（插件没了的面板去掉），再整体替换。 */
+export function applyLayout(sh: ShellState, name: string): boolean {
+  const saved = sh.prefs.get().layouts[name];
+  if (!saved) return false;
+  const known = new Set(sh.reg.panels.get().map((p) => p.id));
+  sh.layout.dispatch({ type: "replace", state: sanitizeLayout(saved, known) });
+  return true;
+}
+
+export { YBaseConversation, type YBaseConversationProps } from "./embed";

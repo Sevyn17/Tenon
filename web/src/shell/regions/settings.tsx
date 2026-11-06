@@ -11,9 +11,9 @@ import type { SettingsPage } from "../contributions";
 import s from "./settings.module.css";
 
 const GROUPS: { id: SettingsPage["group"]; label: string }[] = [
-  { id: "app", label: "工作台" },
-  { id: "backend", label: "后端与插件" },
-  { id: "plugin", label: "插件" },
+  { id: "app", label: "settings.group.app" },
+  { id: "backend", label: "settings.group.backend" },
+  { id: "plugin", label: "settings.group.plugin" },
   { id: "about", label: "" },
 ];
 
@@ -90,7 +90,7 @@ export function Settings() {
           </div>
           {hits ? (
             <div className={s.navList}>
-              {hits.length === 0 && <div className={s.navEmpty}>没有匹配的设置</div>}
+              {hits.length === 0 && <div className={s.navEmpty}>{sh.t("settings.noMatch")}</div>}
               {hits.map((h) => (
                 <button
                   key={h.page.id + "/" + h.id}
@@ -113,7 +113,7 @@ export function Settings() {
                 if (!ps.length) return null;
                 return (
                   <div key={g.id} className={s.navGroup}>
-                    {g.label && <div className={s.navGroupLabel}>{g.label}</div>}
+                    {g.label && <div className={s.navGroupLabel}>{sh.t(g.label)}</div>}
                     {ps.map((p) => (
                       <button
                         key={p.id}
@@ -141,7 +141,7 @@ export function Settings() {
           </header>
           <div ref={body} className={s.body}>
             {!page ? (
-              <EmptyState title="没有设置页" />
+              <EmptyState title={sh.t("settings.noPages")} />
             ) : (
               <ErrorBoundary label={`设置 ${page.title}`} resetKey={page.id} onError={(e) => page.pack && sh.packs.fail(page.pack, e.message)}>
                 {page.render?.()}
@@ -150,7 +150,7 @@ export function Settings() {
                     {sec.render()}
                   </ErrorBoundary>
                 ))}
-                {!page.render && own.length === 0 && <EmptyState title="这一页还没有内容" />}
+                {!page.render && own.length === 0 && <EmptyState title={sh.t("settings.emptyPage")} />}
               </ErrorBoundary>
             )}
           </div>
