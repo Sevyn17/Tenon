@@ -19,8 +19,11 @@ function subscribe(fn: () => void): () => void {
   if (typeof matchMedia !== "function") return () => {};
   const qs = [matchMedia(SM), matchMedia(MD)];
   for (const q of qs) q.addEventListener("change", fn);
+  // 兜底：窗口在后台或尺寸为 0 时有的浏览器不发 change，resize 时再读一次（档位没变时 React 不重渲染）。
+  addEventListener("resize", fn);
   return () => {
     for (const q of qs) q.removeEventListener("change", fn);
+    removeEventListener("resize", fn);
   };
 }
 

@@ -191,6 +191,7 @@ export function InteractionCard(p: InteractionCardProps) {
             rows={2}
             value={text}
             placeholder="告诉智能体为什么拒绝（会作为插话发送）"
+            aria-label="拒绝的理由"
             onChange={(e) => setText(e.target.value)}
           />
         )}

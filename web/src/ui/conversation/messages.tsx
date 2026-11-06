@@ -84,7 +84,8 @@ export function MessageActions({ actions, pinned }: { actions: UIAction[]; pinne
 const CLAMP = 600; // 超过这么多字符折叠
 
 export function UserMessage(p: { entry: UIEntry; actions?: UIAction[]; before?: ReactNode; after?: ReactNode }) {
-  const text = partsText(p.entry.item.content);
+  // 媒体部件在上方以 chip 显示，气泡里只放文本（否则 "[image/png]" 会重复出现）。
+  const text = partsText((p.entry.item.content ?? []).filter((x) => x.kind === "text"));
   const media = (p.entry.item.content ?? []).filter((x) => x.kind === "media");
   const [open, setOpen] = useState(false);
   const long = text.length > CLAMP;

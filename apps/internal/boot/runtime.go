@@ -198,7 +198,7 @@ func (r *Runtime) BuildApp(o AppOptions) (*Built, error) {
 	}
 	// 应用接口层：在构造器钩子上并入流式事件、把提交事件接到总线、档位变化提示发 notice。
 	ao := appapi.Options{Host: r.Host, Bus: r.Bus, DB: db, Builder: w.Builder, Model: rt.Models.Model, Workdir: r.Root,
-		Trusted: r.Trusted, Profile: r.Profile, Packages: r.Packages, UI: o.UI}
+		Trusted: r.Trusted, Profile: r.Profile, Packages: r.Packages, UI: o.UI, Artifacts: rt.Store.Blobs()}
 	if perms != nil {
 		ao.Modes = PermModes{P: perms, Workdir: o.ModesWorkdir}
 		// 项目档位当新会话缺省时，也要用户确认过放宽（与 /mode 切换共用 trust.toml 的确认记录）。
