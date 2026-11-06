@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"ybase/runtime/bus"
 	"ybase/runtime/store"
@@ -102,7 +103,7 @@ func (db *DB) ListSessions(ctx context.Context, before int64, limit int, topOnly
 	if limit <= 0 || limit > 500 {
 		limit = 50
 	}
-	q := `SELECT id, title, preview, run_state, origin, parent_id, updated_at FROM sessions
+	q := `SELECT id, title, preview, run_state, origin, parent_id, updated_at, meta FROM sessions
 		WHERE tenant = ? AND status != 'deleted'`
 	args := []any{store.Tenant}
 	if before > 0 {
@@ -118,14 +119,77 @@ func (db *DB) ListSessions(ctx context.Context, before int64, limit int, topOnly
 	if err != nil {
 		return nil, err
 	}
+	return scanInfos(rows)
+}
+
+// UpdateSessionMeta 改标题与业务键，同事务写 meta 事件（store.SessionMetaStore）。不改 updated_at。
+func (db *DB) UpdateSessionMeta(ctx context.Context, id string, title *string, set map[string]any) error {
+	now := time.Now().UnixMilli()
+	var evs []bus.Envelope
+	err := db.inTx(ctx, func(tx *sql.Tx) error {
+		var cur, metaJ string
+		var seq int
+		err := tx.QueryRowContext(ctx, `SELECT title, meta, next_sync_seq FROM sessions WHERE tenant = ? AND id = ? AND status != 'deleted'`,
+			store.Tenant, id).Scan(&cur, &metaJ, &seq)
+		if errors.Is(err, sql.ErrNoRows) {
+			return store.ErrNotFound
+		}
+		if err != nil {
+			return err
+		}
+		if title != nil {
+			cur = *title
+		}
+		meta, err := store.MergeMeta(json.RawMessage(metaJ), set)
+		if err != nil {
+			return err
+		}
+		data, _ := json.Marshal(map[string]any{"title": cur, "meta": meta})
+		if err := putEvent(ctx, tx, id, seq, store.EventMeta, string(data), now); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE sessions SET title = ?, meta = ?, next_sync_seq = ? WHERE tenant = ? AND id = ?`,
+			cur, string(meta), seq+1, store.Tenant, id); err != nil {
+			return err
+		}
+		evs = append(evs, bus.Envelope{V: bus.Version, Seq: int64(seq), At: now, Session: id, Kind: store.EventMeta, Data: json.RawMessage(data)})
+		return nil
+	})
+	if err == nil {
+		db.emit(evs)
+	}
+	return err
+}
+
+// SessionsWithMeta 业务键 key 为 true 的未删除会话（store.SessionMetaStore）。
+func (db *DB) SessionsWithMeta(ctx context.Context, key string, limit int) ([]store.SessionInfo, error) {
+	if limit <= 0 || limit > 500 {
+		limit = 50
+	}
+	rows, err := db.rq().QueryContext(ctx, `SELECT id, title, preview, run_state, origin, parent_id, updated_at, meta FROM sessions
+		WHERE tenant = ? AND status != 'deleted' AND json_extract(meta, '$.' || ?) = 1 ORDER BY updated_at DESC LIMIT ?`,
+		store.Tenant, key, limit)
+	if err != nil {
+		return nil, err
+	}
+	return scanInfos(rows)
+}
+
+func scanInfos(rows *sql.Rows) ([]store.SessionInfo, error) {
 	defer rows.Close()
 	var out []store.SessionInfo
 	for rows.Next() {
 		var s store.SessionInfo
-		if err := rows.Scan(&s.ID, &s.Title, &s.Preview, &s.RunState, &s.Origin, &s.ParentID, &s.UpdatedAt); err != nil {
+		var meta string
+		if err := rows.Scan(&s.ID, &s.Title, &s.Preview, &s.RunState, &s.Origin, &s.ParentID, &s.UpdatedAt, &meta); err != nil {
 			return nil, err
+		}
+		if meta != "" && meta != "{}" {
+			s.Meta = json.RawMessage(meta)
 		}
 		out = append(out, s)
 	}
 	return out, rows.Err()
 }
+
+var _ store.SessionMetaStore = (*DB)(nil)

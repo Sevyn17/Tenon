@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 
+	"ybase/appapi/wire"
 	"ybase/runtime/reqlog"
 	"ybase/runtime/session"
 )
@@ -63,6 +64,9 @@ type Compactor interface {
 	// At 压缩到指定位置 upto。
 	At(ctx context.Context, sessionID string, core *session.Core, upto int) (*reqlog.CompactionView, map[string]any, error)
 }
+
+// Files 列工作区文件（fs 插件的 ListFiles 适配）：遵守 .gitignore，只读，不出工作目录。
+type Files func(ctx context.Context, query string, limit int) ([]wire.FileInfo, bool, error)
 
 // topOf 顶层会话 id（子会话 id 形如 "<顶层>/<子>"）；会话规则跟随顶层会话持久化。
 func topOf(id string) string {

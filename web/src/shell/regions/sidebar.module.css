@@ -148,6 +148,11 @@
 .rowChild {
   padding-left: var(--space-6);
 }
+.rowPin {
+  flex: none;
+  color: var(--fg-3);
+}
+
 .rowTitle {
   flex: 1;
   min-width: 0;

@@ -187,12 +187,13 @@ export interface FollowupProvider extends Contribution {
 
 // ---- 输入框 ----
 
-/** "@" 提及的候选来源（会话、文件、插件给的东西）。按查询同步返回；没有候选返回空数组。 */
+/** "@" 提及的候选来源（会话、文件、插件给的东西）。按查询返回候选；要查后端的返回 Promise（宿主按查询缓存，
+ * 结果到了再刷新菜单，过期的查询结果丢弃）。没有候选返回空数组。 */
 export interface MentionProvider extends Contribution {
   /** 分组标题。 */
   group: string;
   when?: (cx: CommandContext) => boolean | string;
-  suggest: (query: string, cx: CommandContext) => MentionItem[];
+  suggest: (query: string, cx: CommandContext) => MentionItem[] | Promise<MentionItem[]>;
 }
 
 export interface ComposerAction extends Contribution {
@@ -249,6 +250,8 @@ export interface ShellApi {
   /** 当前会话 id；没有时为 null。 */
   current(): string | null;
   openSession(id: string): void;
+  /** 回到没有打开会话的空白页（当前会话被删除时用）。 */
+  closeSession(): void;
   newSession(): Promise<void>;
   openPanel(id: string, params?: unknown): void;
   togglePanel(id: string): void;

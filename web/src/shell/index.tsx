@@ -5,7 +5,7 @@
 //   - 布局：preset（或贡献自己的 LayoutPreset / Region）。
 
 import { useEffect, useState, type ReactNode } from "react";
-import { createClient, type Client } from "../client";
+import { createClient, listed, type Client } from "../client";
 import { ClientProvider, useStore } from "../client/react";
 import { Button, Dialog, Input, ToastProvider, applyDensity, applyTheme, isMac, useToast, type ThemePref } from "../ui";
 import { createShellBus } from "./bus";
@@ -81,6 +81,7 @@ export function createShell(o: ShellOptions = {}): Shell {
   const api: ShellApi = {
     current: () => nav.get().session,
     openSession: (id) => nav.update((v) => ({ ...v, session: id, page: null, palette: null, drawer: false })),
+    closeSession: () => nav.update((v) => ({ ...v, session: null, page: null })),
     async newSession() {
       const snap = await client.call("session.create", {});
       client.sessions.upsert({ id: snap.id, title: snap.title, preview: "", run_state: snap.run_state, origin: snap.origin, updated_at: Date.now() });
@@ -350,7 +351,7 @@ function shellPack(sh: ShellState): ContributionPack {
       });
       // 上 / 下一个会话：按左栏列表的顺序（最近更新在前）。
       const stepSession = (dir: -1 | 1) => {
-        const items = sh.client.sessions.get().items;
+        const items = listed(sh.client.sessions.get());
         if (!items.length) return;
         const i = items.findIndex((x) => x.id === sh.nav.get().session);
         const j = i < 0 ? 0 : Math.min(Math.max(i + dir, 0), items.length - 1);

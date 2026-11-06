@@ -2,11 +2,12 @@
 // 窗口在后台时（或偏好为 always）发系统通知；标题栏显示待处理数。只看客户端 store，不另订阅协议事件。
 
 import type { ShellState } from "./context";
+import { listed } from "../client";
 
 export function watchActivity(sh: ShellState): () => void {
   const base = document.title || sh.brand.name;
   const running = new Map<string, boolean>();
-  for (const x of sh.client.sessions.get().items) running.set(x.id, x.run_state === "running");
+  for (const x of listed(sh.client.sessions.get())) running.set(x.id, x.run_state === "running");
   let seen = new Set(sh.client.interactions.get().open.map((x) => x.id));
 
   const system = (title: string, body: string | undefined, session: string) => {
@@ -29,7 +30,7 @@ export function watchActivity(sh: ShellState): () => void {
   const quiet = (session: string) => !document.hidden && sh.nav.get().session === session;
 
   const offSessions = sh.client.sessions.subscribe((v) => {
-    for (const x of v.items) {
+    for (const x of listed(v)) {
       const now = x.run_state === "running";
       const was = running.get(x.id);
       running.set(x.id, now);

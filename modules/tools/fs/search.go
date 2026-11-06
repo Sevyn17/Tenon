@@ -656,3 +656,106 @@ func globFiles(ctx context.Context, root, pattern, p string, limit int) (string,
 	}
 	return sb.String(), nil
 }
+
+// ---------- 工作区文件列表（界面 @ 文件用，不是工具）----------
+
+// FileHit 工作区里的一个文件。
+type FileHit struct {
+	Path  string // 相对工作目录，/ 分隔
+	Size  int64
+	MTime int64 // Unix 毫秒
+}
+
+// ListFiles 列工作区文件（遵守 .gitignore，跳过 .git / node_modules / vendor 与符号链接）：query 为空时按修改时间
+// 取最新的 limit 个；否则按子序列模糊匹配路径（不区分大小写），文件名命中、连续命中、路径短的排前。
+// 最多遍历 maxScan 个文件，超出时 truncated 为真。
+func ListFiles(ctx context.Context, root, query string, limit, maxScan int) (hits []FileHit, truncated bool, err error) {
+	root, err = filepath.Abs(root)
+	if err != nil {
+		return nil, false, err
+	}
+	q := strings.ToLower(strings.TrimSpace(query))
+	type scored struct {
+		FileHit
+		score int
+	}
+	var all []scored
+	n := 0
+	_, err = walk(ctx, root, root, func(_, rel string, info fs.FileInfo) bool {
+		if listSkip(rel) {
+			return true
+		}
+		n++
+		if n > maxScan {
+			truncated = true
+			return false
+		}
+		s := 0
+		if q != "" {
+			var ok bool
+			if s, ok = fuzzyScore(strings.ToLower(rel), q); !ok {
+				return true
+			}
+		}
+		all = append(all, scored{FileHit{Path: rel, Size: info.Size(), MTime: info.ModTime().UnixMilli()}, s})
+		return true
+	})
+	if err != nil {
+		return nil, false, err
+	}
+	sort.Slice(all, func(i, j int) bool {
+		a, b := all[i], all[j]
+		if a.score != b.score {
+			return a.score > b.score
+		}
+		if q == "" && a.MTime != b.MTime {
+			return a.MTime > b.MTime
+		}
+		if len(a.Path) != len(b.Path) {
+			return len(a.Path) < len(b.Path)
+		}
+		return a.Path < b.Path
+	})
+	if len(all) > limit {
+		all = all[:limit]
+	}
+	hits = make([]FileHit, len(all))
+	for i, x := range all {
+		hits[i] = x.FileHit
+	}
+	return hits, truncated, nil
+}
+
+// listSkip 界面文件列表另外不列的：框架自己的状态目录（会话库、工件），对用户没有意义。
+func listSkip(rel string) bool {
+	return strings.HasPrefix(rel, ".ybase/")
+}
+
+// fuzzyScore query 是否为 p 的子序列；分数：每个命中字符 1 分，紧接上一个命中再加 2，落在文件名里再加 3，
+// 命中在词首（/ . _ - 之后或开头）再加 2。
+func fuzzyScore(p, q string) (int, bool) {
+	base := strings.LastIndexByte(p, '/') + 1
+	score, last, j := 0, -2, 0
+	qs := []rune(q)
+	for i, r := range p {
+		if j == len(qs) {
+			break
+		}
+		if r != qs[j] {
+			continue
+		}
+		score++
+		if i == last+1 {
+			score += 2
+		}
+		if i >= base {
+			score += 3
+		}
+		if i == 0 || strings.ContainsRune("/._-", rune(p[i-1])) {
+			score += 2
+		}
+		last = i
+		j++
+	}
+	return score, j == len(qs)
+}

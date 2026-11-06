@@ -1,0 +1,166 @@
+package appapi
+
+import (
+	"context"
+	"testing"
+
+	"ybase/appapi/wire"
+)
+
+// session.update：改标题、置顶；session.updated 持久事件与 sessions.changed；不改列表顺序。
+func TestV2UpdateTitlePin(t *testing.T) {
+	app := newApp(t)
+	for _, id := range []string{"a", "b"} {
+		if _, e := call2(t, app, "session.create", `{"session":"`+id+`"}`); e != nil {
+			t.Fatal(e)
+		}
+	}
+	c := app.NewConn(context.Background(), LocalPrincipal)
+	defer c.Close()
+	if err := c.Subscribe(context.Background(), wire.SubscribeArgs{Session: "a"}); err != nil {
+		t.Fatal(err)
+	}
+	waitKind(t, c, wire.EvSynced)
+
+	out, e := call2(t, app, "session.update", `{"session":"a","title":"  我的会话  ","pinned":true}`)
+	if e != nil {
+		t.Fatal(e)
+	}
+	snap := out.(wire.SessionSnapshot)
+	if snap.Title != "我的会话" || !snap.Pinned {
+		t.Fatalf("快照：%+v", snap)
+	}
+	// session.updated（订阅）与 sessions.changed（连接级）先后不定：两个都等到为止。
+	var up *wire.Envelope
+	var ch *wire.SessionsChanged
+	for up == nil || ch == nil {
+		evs := waitKind(t, c, map[bool]string{true: wire.EvSessionUpdated, false: wire.EvSessionsChanged}[up == nil])
+		for i := range evs {
+			switch d := evs[i].Data.(type) {
+			case wire.SessionUpdated:
+				up = &evs[i]
+			case wire.SessionsChanged:
+				ch = &d
+			}
+		}
+	}
+	if d := up.Data.(wire.SessionUpdated); d.Title != "我的会话" || !d.Pinned || up.Cursor == 0 || up.Cursor != snap.Cursor {
+		t.Fatalf("session.updated：%+v（快照 cursor %d）", up, snap.Cursor)
+	}
+	if ch.ID != "a" || ch.Title != "我的会话" || !ch.Pinned || ch.UpdatedAt != 0 {
+		t.Fatalf("sessions.changed：%+v", ch)
+	}
+
+	list, _ := call2(t, app, "sessions.list", `{}`)
+	items := list.(wire.ListResult).Items
+	if len(items) != 2 || items[0].ID != "b" || !items[1].Pinned {
+		t.Fatalf("改标题不应改顺序，行带 pinned：%+v", items)
+	}
+	pinned, _ := call2(t, app, "sessions.list", `{"pinned":true}`)
+	if p := pinned.(wire.ListResult).Items; len(p) != 1 || p[0].ID != "a" {
+		t.Fatalf("置顶列表：%+v", p)
+	}
+
+	if _, e := call2(t, app, "session.update", `{"session":"a","pinned":false}`); e != nil {
+		t.Fatal(e)
+	}
+	if p, _ := call2(t, app, "sessions.list", `{"pinned":true}`); len(p.(wire.ListResult).Items) != 0 {
+		t.Fatalf("取消置顶后：%+v", p)
+	}
+	if s, _ := call2(t, app, "session.get", `{"session":"a"}`); s.(wire.SessionSnapshot).Title != "我的会话" {
+		t.Fatal("只改 pinned 不应动标题")
+	}
+
+	_, e = call2(t, app, "session.update", `{"session":"a","title":"x\ny"}`)
+	wantCode(t, e, wire.CodeInvalid, "")
+	_, e = call2(t, app, "session.update", `{"session":"none","title":"x"}`)
+	wantCode(t, e, wire.CodeNotFound, "")
+}
+
+// session.delete：删除顶层与子会话；订阅方收到 session.closed {deleted}，列表收到 sessions.changed {deleted}；重删 not_found。
+func TestV2Delete(t *testing.T) {
+	app := newApp(t)
+	if _, e := call2(t, app, "session.create", `{"session":"d"}`); e != nil {
+		t.Fatal(e)
+	}
+	sendWait(t, app, "d", "hi", "c1")
+	if _, err := app.Host().Spawn(context.Background(), "d", "d/sub", "", app.Host().New, "子任务"); err != nil {
+		t.Fatal(err)
+	}
+	if _, e := call2(t, app, "session.fork", `{"session":"d","to":"d-fork"}`); e != nil {
+		t.Fatal(e)
+	}
+	c := app.NewConn(context.Background(), LocalPrincipal)
+	defer c.Close()
+	if err := c.Subscribe(context.Background(), wire.SubscribeArgs{Session: "d"}); err != nil {
+		t.Fatal(err)
+	}
+	waitKind(t, c, wire.EvSynced)
+
+	if _, e := call2(t, app, "session.delete", `{"session":"d/sub"}`); e == nil || e.Code != wire.CodeInvalid {
+		t.Fatalf("单删子会话应 invalid：%+v", e)
+	}
+	if _, e := call2(t, app, "session.delete", `{"session":"d"}`); e != nil {
+		t.Fatal(e)
+	}
+	got := waitKind(t, c, wire.EvSessionClosed)
+	if d := got[len(got)-1].Data.(wire.SessionClosed); d.Reason != "deleted" {
+		t.Fatalf("session.closed：%+v", d)
+	}
+	deleted := map[string]bool{}
+	note := func(evs []wire.Envelope) {
+		for _, e := range evs {
+			if d, ok := e.Data.(wire.SessionsChanged); ok && d.Deleted {
+				deleted[d.ID] = true
+			}
+		}
+	}
+	note(got) // 连接级事件可能先于 session.closed 到达
+	for len(deleted) < 2 {
+		note(waitKind(t, c, wire.EvSessionsChanged))
+	}
+	if !deleted["d"] || !deleted["d/sub"] {
+		t.Fatalf("sessions.changed deleted：%v", deleted)
+	}
+	for _, id := range []string{"d", "d/sub"} {
+		_, e := call2(t, app, "session.get", `{"session":"`+id+`"}`)
+		wantCode(t, e, wire.CodeNotFound, "")
+		if _, ok := app.Host().Get(id); ok {
+			t.Fatalf("%s 应已关闭", id)
+		}
+	}
+	if _, e := call2(t, app, "session.get", `{"session":"d-fork"}`); e != nil {
+		t.Fatalf("分叉出去的会话不应删：%v", e)
+	}
+	_, e := call2(t, app, "session.delete", `{"session":"d"}`)
+	wantCode(t, e, wire.CodeNotFound, "")
+}
+
+// workspace.files：未装配时 unsupported；装配后按 limit 返回，能力清单带 files。
+func TestV2WorkspaceFiles(t *testing.T) {
+	app := newApp(t)
+	_, e := call2(t, app, "workspace.files", `{}`)
+	wantCode(t, e, wire.CodeUnsupported, "")
+	var gotQ string
+	var gotLimit int
+	app.o.Files = func(_ context.Context, q string, limit int) ([]wire.FileInfo, bool, error) {
+		gotQ, gotLimit = q, limit
+		return []wire.FileInfo{{Path: "a.go", Size: 1, MTime: 2}}, true, nil
+	}
+	out, e := call2(t, app, "workspace.files", `{"query":"a","limit":9999}`)
+	if e != nil {
+		t.Fatal(e)
+	}
+	r := out.(wire.FilesResult)
+	if len(r.Files) != 1 || r.Files[0].Path != "a.go" || !r.Truncated || gotQ != "a" || gotLimit != 50 {
+		t.Fatalf("结果 %+v q=%q limit=%d", r, gotQ, gotLimit)
+	}
+	h, _ := call2(t, app, "hello", `{"client":"t"}`)
+	found := false
+	for _, c := range h.(wire.HelloResult).Capabilities {
+		found = found || c == "files"
+	}
+	if !found {
+		t.Fatal("capabilities 应带 files")
+	}
+}

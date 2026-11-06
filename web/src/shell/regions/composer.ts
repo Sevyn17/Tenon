@@ -1,7 +1,7 @@
 // 输入框的宿主逻辑（前端方案第九节）：附件上传（artifact.put → MediaRef）、输入历史（空输入框按 ↑ / ↓）、
 // "@" 提及（MentionProvider 注册表合并）。L2 的 Composer 只管呈现，这些都经 props 接进去。
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Part } from "../../client";
 import type { Attachment, MentionItem, UIEntry } from "../../ui";
 import { useCommandContext, useRegistry, useShell, whenState } from "../context";
@@ -97,11 +97,17 @@ export function useHistory(entries: UIEntry[]) {
   return { step, reset };
 }
 
-/** "@" 候选：合并各 MentionProvider（when 不满足的不出现，停用的给原因）。 */
+/** "@" 候选：合并各 MentionProvider（when 不满足的不出现，停用的给原因）。异步来源按（来源, 查询）缓存：
+ * 第一次查询先给其余来源的结果，异步结果到了换一个新的函数引用让输入框重算；缓存只留最近 MENTION_CACHE 个查询。 */
+const MENTION_CACHE = 32;
+
 export function useMentions(): ((q: string) => MentionItem[]) | undefined {
   const sh = useShell();
   const providers = useRegistry(sh.reg.mentions);
   const cx0 = useCommandContext();
+  const cache = useRef(new Map<string, MentionItem[] | "pending">());
+  const [ver, setVer] = useState(0);
+  useEffect(() => cache.current.clear(), [providers, cx0.session]);
   return useMemo(() => {
     if (!providers.length) return undefined;
     return (q: string) => {
@@ -109,16 +115,39 @@ export function useMentions(): ((q: string) => MentionItem[]) | undefined {
       for (const p of providers) {
         const w = whenState(p.when?.(cx0));
         if (!w.show) continue;
+        const fail = (e: unknown) => p.pack && sh.packs.fail(p.pack, e instanceof Error ? e.message : String(e));
         let xs: MentionItem[] = [];
-        try {
-          xs = p.suggest(q, cx0);
-        } catch (e) {
-          if (p.pack) sh.packs.fail(p.pack, e instanceof Error ? e.message : String(e));
-          continue;
+        const key = `${p.id}|${q}`;
+        const hit = cache.current.get(key);
+        if (hit === "pending") continue;
+        if (hit) xs = hit;
+        else {
+          let r: MentionItem[] | Promise<MentionItem[]>;
+          try {
+            r = p.suggest(q, cx0);
+          } catch (e) {
+            fail(e);
+            continue;
+          }
+          if (r instanceof Promise) {
+            cache.current.set(key, "pending");
+            r.then(
+              (v) => cache.current.set(key, v),
+              (e) => {
+                cache.current.set(key, []);
+                fail(e);
+              },
+            ).finally(() => {
+              while (cache.current.size > MENTION_CACHE) cache.current.delete(cache.current.keys().next().value!);
+              setVer((n) => n + 1);
+            });
+            continue;
+          }
+          xs = r;
         }
         for (const x of xs) out.push({ ...x, group: x.group || p.group, disabled: x.disabled || w.disabled, reason: x.reason ?? w.reason });
       }
       return out;
     };
-  }, [providers, cx0.session, sh.packs]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [providers, cx0.session, sh.packs, ver]); // eslint-disable-line react-hooks/exhaustive-deps
 }

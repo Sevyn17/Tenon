@@ -3,6 +3,7 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { PanelRight, PanelBottom, WifiOff } from "lucide-react";
+import { listed } from "../../client";
 import { useConnection, useSessions, useStore } from "../../client/react";
 import { Count, Dialog, EmptyState, ErrorBoundary, Kbd, Spinner, Tooltip } from "../../ui";
 import { Slot, useCommandContext, useRegistry, useShell, whenState } from "../context";
@@ -238,7 +239,7 @@ function Palette({ mode }: { mode: "commands" | "sessions" }) {
     const needle = q.trim().toLowerCase();
     const hit = (...xs: (string | undefined)[]) => !needle || xs.some((x) => x?.toLowerCase().includes(needle));
     if (m === "sessions") {
-      return sessions.items
+      return listed(sessions)
         .filter((x) => hit(x.title, x.id, x.preview))
         .slice(0, 50)
         .map((x) => ({ id: x.id, group: sh.t("palette.group.sessions"), title: x.title || x.id, desc: x.preview, run: () => sh.api.openSession(x.id) }));
@@ -260,7 +261,7 @@ function Palette({ mode }: { mode: "commands" | "sessions" }) {
       });
     }
     return out;
-  }, [q, m, cmds, sessions.items, cx0, sh]);
+  }, [q, m, cmds, sessions, cx0, sh]);
 
   useEffect(() => setActive(0), [q, m]);
   const pick = (r: PaletteRow | undefined) => {

@@ -47,6 +47,10 @@ type Options struct {
 	UI        *UI                // ask 的回答经 session.answer 送回；nil = 应用自己实现 assemble.UI
 	// Artifacts 工件存储（protocol 2 artifact.get / put、超长工具结果的全文引用）；nil = 不提供。
 	Artifacts toolhub.Artifacts
+	// Files 列工作区文件（workspace.files，界面 @ 文件用）；nil = 不提供。
+	Files Files
+	// Cleaners 删除会话时依次调用的插件清理回调（on_session_delete 点位）；可空。
+	Cleaners []store.Cleaner
 }
 
 // App 一个进程一个：持有装配结果，对外提供命令与事件。方法并发安全。

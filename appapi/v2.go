@@ -23,6 +23,7 @@ import (
 
 	"ybase/appapi/wire"
 	"ybase/runtime/agentdef"
+	"ybase/runtime/bus"
 	"ybase/runtime/component"
 	"ybase/runtime/host"
 	"ybase/runtime/reqlog"
@@ -69,6 +70,8 @@ var commands = map[string]handler{
 	"hello":               bind((*App).Hello),
 	"sessions.list":       bind((*App).SessionsList),
 	"session.create":      bind((*App).Create),
+	"session.update":      bind((*App).Update),
+	"session.delete":      bind((*App).Delete),
 	"session.get":         bind((*App).Get),
 	"session.entries":     bind((*App).Entries),
 	"session.send":        bind((*App).Send),
@@ -91,6 +94,7 @@ var commands = map[string]handler{
 	"plugins.list":        bind((*App).PluginsList),
 	"packages.list":       bind((*App).PackagesList),
 	"plugins.set":         bind((*App).PluginsSet),
+	"workspace.files":     bind((*App).WorkspaceFiles),
 }
 
 // Commands protocol 2 支持的命令名（排序后）。
@@ -199,6 +203,9 @@ func (v *App) capabilities() []string {
 	if o.Profile != nil {
 		out = append(out, "plugins")
 	}
+	if o.Files != nil {
+		out = append(out, "files")
+	}
 	return out
 }
 
@@ -207,6 +214,23 @@ func (v *App) SessionsList(ctx context.Context, in wire.ListArgs) (wire.ListResu
 	limit := in.Limit
 	if limit <= 0 || limit > 500 {
 		limit = 50
+	}
+	if in.Pinned { // 置顶的会话：单独一页，不分页
+		ms, ok := v.o.DB.(store.SessionMetaStore)
+		if !ok {
+			return wire.ListResult{Items: []wire.SessionInfo{}}, nil
+		}
+		items, err := ms.SessionsWithMeta(ctx, metaPinned, limit)
+		if err != nil {
+			return wire.ListResult{}, err
+		}
+		out := wire.ListResult{Items: []wire.SessionInfo{}}
+		for _, s := range items {
+			if in.All || s.ParentID == "" {
+				out.Items = append(out.Items, wireInfo(s))
+			}
+		}
+		return out, nil
 	}
 	items, err := v.o.DB.ListSessions(ctx, in.Cursor, limit, !in.All)
 	if err != nil {
@@ -217,10 +241,127 @@ func (v *App) SessionsList(ctx context.Context, in wire.ListArgs) (wire.ListResu
 		out.Next = items[len(items)-1].UpdatedAt
 	}
 	for i, s := range items {
-		out.Items[i] = wire.SessionInfo{ID: s.ID, Title: s.Title, Preview: s.Preview, RunState: wireRun(s.RunState),
-			Origin: s.Origin, Parent: s.ParentID, UpdatedAt: s.UpdatedAt}
+		out.Items[i] = wireInfo(s)
 	}
 	return out, nil
+}
+
+// metaPinned 会话行业务键里的置顶标记（session.update {pinned}）。
+const metaPinned = "pinned"
+
+// pinnedOf 业务键里是否置顶。
+func pinnedOf(meta json.RawMessage) bool {
+	var m map[string]any
+	_ = json.Unmarshal(meta, &m)
+	return m[metaPinned] == true
+}
+
+func wireInfo(s store.SessionInfo) wire.SessionInfo {
+	return wire.SessionInfo{ID: s.ID, Title: s.Title, Preview: s.Preview, RunState: wireRun(s.RunState),
+		Origin: s.Origin, Parent: s.ParentID, UpdatedAt: s.UpdatedAt, Pinned: pinnedOf(s.Meta)}
+}
+
+// MaxTitle 会话标题上限（字节）。
+const MaxTitle = 200
+
+// Update 改会话标题、置顶（会话行，不碰日志，回合中也能改）。落库后发 session.updated（持久）与 sessions.changed。
+func (v *App) Update(ctx context.Context, in wire.UpdateArgs) (wire.SessionSnapshot, error) {
+	if err := need(in.Session); err != nil {
+		return wire.SessionSnapshot{}, err
+	}
+	ms, ok := v.o.DB.(store.SessionMetaStore)
+	if !ok {
+		return wire.SessionSnapshot{}, Errorf(wire.CodeUnsupported, "存储不支持改会话元数据")
+	}
+	var title *string
+	if in.Title != nil {
+		t := strings.TrimSpace(*in.Title)
+		if len(t) > MaxTitle {
+			return wire.SessionSnapshot{}, invalid("标题超过 %d 字节", MaxTitle)
+		}
+		for _, r := range t {
+			if r < 0x20 || r == 0x7f {
+				return wire.SessionSnapshot{}, invalid("标题不能含换行或控制字符")
+			}
+		}
+		title = &t
+	}
+	set := map[string]any{}
+	if in.Pinned != nil {
+		if *in.Pinned {
+			set[metaPinned] = true
+		} else {
+			set[metaPinned] = nil
+		}
+	}
+	if title == nil && len(set) == 0 {
+		return v.snapshot(ctx, in.Session)
+	}
+	if err := ms.UpdateSessionMeta(ctx, in.Session, title, set); err != nil {
+		return wire.SessionSnapshot{}, err
+	}
+	return v.snapshot(ctx, in.Session)
+}
+
+// EventDeleted 会话删除后的易失总线事件：连接据此发 sessions.changed {deleted}，订阅了它的连接收到 session.closed {reason: deleted}。
+const EventDeleted = "session_deleted"
+
+// Delete 删除会话及其子会话（id 以 "<session>/" 开头的子智能体、工作组成员）；分叉出去的会话是独立会话，不删。
+// 有进行中的回合返回 not_idle（先 session.cancel）。重发：已删除返回 not_found。
+func (v *App) Delete(ctx context.Context, in wire.SessionArgs) (wire.Empty, error) {
+	if err := v.exists(ctx, in.Session); err != nil {
+		return wire.Empty{}, err
+	}
+	if strings.Contains(in.Session, "/") {
+		return wire.Empty{}, invalid("子会话随顶层会话一起删除")
+	}
+	ids, err := v.tree(ctx, in.Session)
+	if err != nil {
+		return wire.Empty{}, err
+	}
+	for _, id := range ids {
+		if hd, ok := v.o.Host.Get(id); ok && hd.InTurn() {
+			return wire.Empty{}, fmt.Errorf("%w: 会话 %s 有进行中的回合", session.ErrNotIdle, id)
+		}
+	}
+	// 子会话先删：顶层删到一半失败时，重试还能找到剩下的子会话。
+	for i := len(ids) - 1; i >= 0; i-- {
+		id := ids[i]
+		if hd, ok := v.o.Host.Get(id); ok {
+			if err := hd.Do(host.Command{Kind: host.Close, Text: "deleted"}); err != nil && !errors.Is(err, host.ErrClosed) {
+				return wire.Empty{}, err
+			}
+			<-hd.Done()
+		}
+		if err := v.o.DB.DeleteSession(ctx, id, v.o.Cleaners); err != nil && !errors.Is(err, store.ErrNotFound) {
+			return wire.Empty{}, err
+		}
+		v.streams.Delete(id)
+		v.lives.Delete(id)
+		v.o.Bus.Publish(bus.Envelope{Session: id, Kind: EventDeleted})
+	}
+	return wire.Empty{}, nil
+}
+
+// tree 顶层会话与它的子会话 id（顶层在前）。
+func (v *App) tree(ctx context.Context, top string) ([]string, error) {
+	out := []string{top}
+	var before int64
+	for {
+		page, err := v.o.DB.ListSessions(ctx, before, 500, false)
+		if err != nil {
+			return nil, err
+		}
+		for _, s := range page {
+			if strings.HasPrefix(s.ID, top+"/") {
+				out = append(out, s.ID)
+			}
+		}
+		if len(page) < 500 {
+			return out, nil
+		}
+		before = page[len(page)-1].UpdatedAt
+	}
 }
 
 // wireRun 会话行的 run_state（idle / running / suspended）→ 线上只有 idle / running。
@@ -317,7 +458,7 @@ func (v *App) snapshot(ctx context.Context, id string) (wire.SessionSnapshot, er
 			modeHdr = tl.Snapshot.Header
 		}
 	}
-	return wire.SessionSnapshot{ID: id, Parent: l.Meta.ParentID, Origin: l.Meta.Origin, Title: l.Meta.Title,
+	return wire.SessionSnapshot{ID: id, Parent: l.Meta.ParentID, Origin: l.Meta.Origin, Title: l.Meta.Title, Pinned: pinnedOf(l.Meta.Meta),
 		RunState: WireRunState(h.Status), Mode: v.committedMode(id, modeHdr), Settings: wire.Settings{MaxSteps: maxSteps(h)},
 		Log: wire.LogPos{Base: h.CompactionBase, Len: h.LogLen}, Interactions: v.openInteractions(ctx, id), Cursor: l.Cursor,
 		Live: v.live(id, h)}, nil
@@ -975,6 +1116,31 @@ func (v *App) PackagesList(_ context.Context, _ wire.Empty) (wire.PackagesListRe
 // PluginsSet 改插件开关 / 配置：未实现（需写 profile 文件），返回 unsupported。
 func (v *App) PluginsSet(_ context.Context, _ wire.PluginsSetArgs) (wire.Empty, error) {
 	return wire.Empty{}, Errorf(wire.CodeUnsupported, "plugins.set 未实现：请编辑 profile.toml 后重启")
+}
+
+// MaxFiles workspace.files 单次最多返回的文件数。
+const MaxFiles = 200
+
+// WorkspaceFiles 列工作区文件（界面 @ 文件的候选）。没有装配时返回 unsupported。
+func (v *App) WorkspaceFiles(ctx context.Context, in wire.FilesArgs) (wire.FilesResult, error) {
+	if v.o.Files == nil {
+		return wire.FilesResult{}, Errorf(wire.CodeUnsupported, "未提供工作区文件列表")
+	}
+	limit := in.Limit
+	if limit <= 0 || limit > MaxFiles {
+		limit = 50
+	}
+	if len(in.Query) > 256 {
+		return wire.FilesResult{}, invalid("query 超过 256 字节")
+	}
+	fs, trunc, err := v.o.Files(ctx, in.Query, limit)
+	if err != nil {
+		return wire.FilesResult{}, err
+	}
+	if fs == nil {
+		fs = []wire.FileInfo{}
+	}
+	return wire.FilesResult{Files: fs, Truncated: trunc}, nil
 }
 
 // need 会话 id 必填。

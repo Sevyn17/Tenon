@@ -1,12 +1,48 @@
 // 内置贡献包 core：工作台自己的命令（带缺省快捷键）、区域、布局预设、消息操作。
 // 与插件贡献走同一组注册表：嵌入方用同 id、更小的 priority 替换，或 createShell({ disable: ["core.xxx"] }) 关掉。
 
-import { MessageSquareQuote, Copy, CornerUpLeft, GitBranch, MessagesSquare, Paperclip, Pencil, Quote, RotateCcw } from "lucide-react";
+import { MessageSquareQuote, Copy, CornerUpLeft, FileText, GitBranch, MessagesSquare, Paperclip, Pencil, Pin, PinOff, Quote, RotateCcw, Trash2 } from "lucide-react";
 import { copyText } from "../../ui";
+import { listed } from "../../client";
 import type { ContributionPack } from "../registry";
 import type { Registries } from "../contributions";
 import { Sidebar } from "../regions/sidebar";
 import { MainArea } from "../regions/conversation";
+
+/** 会话管理（session.update / session.delete）：命令与左栏行菜单共用。 */
+async function renameSession(x: { client: import("../../client").Client; shell: import("../contributions").ShellApi }, id: string) {
+  const cur = x.client.sessions.find(id)?.title ?? "";
+  const v = await x.shell.prompt({ title: "重命名会话", label: "留空则显示会话 id", initial: cur });
+  if (v === null) return;
+  const snap = await x.client.call("session.update", { session: id, title: v });
+  x.client.sessions.upsert({ ...(x.client.sessions.find(id) ?? { id, preview: "", origin: snap.origin, run_state: snap.run_state, updated_at: Date.now() }), title: snap.title, pinned: snap.pinned || undefined });
+}
+
+async function pinSession(x: { client: import("../../client").Client }, id: string, pinned: boolean) {
+  const snap = await x.client.call("session.update", { session: id, pinned });
+  const row = x.client.sessions.find(id);
+  if (row) x.client.sessions.upsert({ ...row, title: snap.title, pinned: snap.pinned || undefined });
+}
+
+async function deleteSession(x: { client: import("../../client").Client; shell: import("../contributions").ShellApi }, id: string) {
+  const name = x.client.sessions.find(id)?.title || id;
+  const ok = await x.shell.confirm({
+    title: "删除会话",
+    body: `删除「${name}」及它派生的子会话，记录全部清除、不能恢复。分叉出去的会话不受影响。`,
+    confirm: "删除",
+    danger: true,
+  });
+  if (!ok) return;
+  await x.client.call("session.delete", { session: id });
+  x.client.sessions.remove(id);
+  if (x.shell.current() === id || x.shell.current()?.startsWith(id + "/")) {
+    x.shell.openPage(null);
+    const next = listed(x.client.sessions.get())[0];
+    if (next) x.shell.openSession(next.id);
+    else x.shell.closeSession();
+  }
+  x.shell.toast("已删除", "success");
+}
 
 /** 会话里某回合的起点：rewind {to_turn} 用回合号（绝对目标，重发无害）。 */
 async function rewindTo(cx: { client: import("../../client").Client; session: string | null }, turn: number) {
@@ -34,6 +70,77 @@ export function corePack(reg: Registries): ContributionPack {
       cmd({ id: "shell.searchSessions", title: "搜索会话", section: "navigation", keybind: "Mod+P", global: true, run: (x) => x.shell.openPalette("sessions") });
       cmd({ id: "shell.settings", title: "打开设置", section: "general", keybind: "Mod+,", global: true, run: (x) => x.shell.openSettings() });
       cmd({ id: "shell.focusComposer", title: "聚焦输入框", section: "composer", keybind: "Mod+L", global: true, run: (x) => x.shell.focusComposer() });
+      const top = (x: { session: string | null }) => (x.session ? x.session.split("/")[0] : null);
+      cmd({
+        id: "session.rename",
+        title: "重命名会话",
+        section: "session",
+        slash: "rename",
+        when: (x) => (x.session ? true : "没有打开的会话"),
+        run: async (x) => {
+          if (x.session) await renameSession(x, x.session);
+        },
+      });
+      cmd({
+        id: "session.togglePin",
+        title: "置顶 / 取消置顶会话",
+        section: "session",
+        when: (x) => (!x.session ? "没有打开的会话" : x.session.includes("/") ? "子会话不能置顶" : true),
+        run: async (x) => {
+          const id = top(x);
+          if (id) await pinSession(x, id, !x.client.sessions.find(id)?.pinned);
+        },
+      });
+      cmd({
+        id: "session.delete",
+        title: "删除会话",
+        section: "session",
+        when: (x) => (x.session ? true : "没有打开的会话"),
+        run: async (x) => {
+          const id = top(x);
+          if (id) await deleteSession(x, id);
+        },
+      });
+      // 左栏会话行菜单（session.row.menu）：作用于那一行，不是当前会话。
+      ctx.add(reg.menus, {
+        id: "row.rename",
+        menu: "session.row.menu",
+        title: "重命名",
+        icon: <Pencil size={14} />,
+        group: "manage",
+        run: (x) => void (x.row && renameSession(x, x.row.id)),
+      });
+      ctx.add(reg.menus, {
+        id: "row.pin",
+        menu: "session.row.menu",
+        title: "置顶",
+        icon: <Pin size={14} />,
+        group: "manage",
+        when: (x) => !!x.row && !x.row.pinned && !x.row.parent,
+        run: (x) => void (x.row && pinSession(x, x.row.id, true)),
+      });
+      ctx.add(reg.menus, {
+        id: "row.unpin",
+        menu: "session.row.menu",
+        title: "取消置顶",
+        icon: <PinOff size={14} />,
+        group: "manage",
+        when: (x) => !!x.row?.pinned,
+        run: (x) => void (x.row && pinSession(x, x.row.id, false)),
+      });
+      ctx.add(reg.menus, {
+        id: "row.delete",
+        menu: "session.row.menu",
+        title: "删除",
+        icon: <Trash2 size={14} />,
+        group: "danger",
+        danger: true,
+        when: (x) => (!x.row ? false : x.row.parent && x.row.id.includes("/") ? "子会话随主会话一起删除" : true),
+        run: (x) => void (x.row && deleteSession(x, x.row.id)),
+      });
+      ctx.add(reg.menus, { id: "header.rename", menu: "conversation.header.menu", title: "重命名", icon: <Pencil size={14} />, command: "session.rename", group: "manage" });
+      ctx.add(reg.menus, { id: "header.pin", menu: "conversation.header.menu", title: "置顶 / 取消置顶", icon: <Pin size={14} />, command: "session.togglePin", group: "manage" });
+      ctx.add(reg.menus, { id: "header.delete", menu: "conversation.header.menu", title: "删除会话", icon: <Trash2 size={14} />, command: "session.delete", group: "danger", danger: true });
       cmd({
         id: "session.cancel",
         title: "停止当前回合",
@@ -104,15 +211,35 @@ export function corePack(reg: Registries): ContributionPack {
           el.click();
         },
       });
+      // 工作区文件（workspace.files）：插入 @path，模型用 read_file 读。路径含空格时加引号。
+      ctx.add(reg.mentions, {
+        id: "files",
+        group: "文件",
+        order: 0,
+        when: (x) => (x.client.can("files") ? true : false),
+        suggest: async (q, x) => {
+          const r = await x.client.call("workspace.files", { query: q, limit: 20 });
+          return r.files.map((f) => {
+            const slash = f.path.lastIndexOf("/");
+            return {
+              id: "file:" + f.path,
+              group: "文件",
+              title: f.path.slice(slash + 1),
+              description: slash > 0 ? f.path.slice(0, slash) : undefined,
+              icon: <FileText size={14} />,
+              insert: /\s/.test(f.path) ? `@"${f.path}"` : `@${f.path}`,
+            };
+          });
+        },
+      });
       ctx.add(reg.mentions, {
         id: "sessions",
         group: "会话",
         order: 10,
         suggest: (q, x) => {
           const needle = q.toLowerCase();
-          return x.client.sessions
-            .get()
-            .items.filter((r) => r.id !== x.session && (!needle || (r.title || r.id).toLowerCase().includes(needle) || r.id.includes(needle)))
+          return listed(x.client.sessions.get())
+            .filter((r) => r.id !== x.session && (!needle || (r.title || r.id).toLowerCase().includes(needle) || r.id.includes(needle)))
             .slice(0, 8)
             .map((r) => ({
               id: "session:" + r.id,

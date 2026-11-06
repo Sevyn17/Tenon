@@ -17,7 +17,7 @@ export type InteractionKind = (typeof InteractionKinds)[number];
 export const Outcomes = ["approved", "denied", "answered", "expired", "voided"] as const;
 export type Outcome = (typeof Outcomes)[number];
 
-export const DurableEvents = ["entry.appended", "log.rewound", "log.compacted", "session.state_changed", "session.mode_changed", "session.settings_changed", "interaction.opened", "interaction.resolved", "session.closed", "session.forked"] as const;
+export const DurableEvents = ["entry.appended", "log.rewound", "log.compacted", "session.state_changed", "session.mode_changed", "session.settings_changed", "interaction.opened", "interaction.resolved", "session.closed", "session.forked", "session.updated"] as const;
 export type DurableEvent = (typeof DurableEvents)[number];
 
 export const VolatileEvents = ["turn.started", "turn.ended", "turn.rejected", "message.started", "message.delta", "message.ended", "message.discarded", "tool.started", "tool.args_delta", "tool.running", "tool.progress", "tool.ended", "notice", "session.synced", "session.lagged", "sessions.changed"] as const;
@@ -158,6 +158,7 @@ export interface SessionSnapshot {
   parent?: string;
   origin: string;
   title: string;
+  pinned?: boolean;
   run_state: string;
   mode?: Mode;
   settings: Settings;
@@ -175,6 +176,7 @@ export interface SessionInfo {
   origin: string;
   parent?: string;
   updated_at: number;
+  pinned?: boolean;
 }
 
 export interface Principal {
@@ -244,6 +246,11 @@ export interface SessionClosed {
 export interface SessionForked {
   from: string;
   upto: number;
+}
+
+export interface SessionUpdated {
+  title: string;
+  pinned: boolean;
 }
 
 export interface TurnStarted {
@@ -323,6 +330,8 @@ export interface SessionsChanged {
   run_state: string;
   title: string;
   updated_at: number;
+  pinned: boolean;
+  deleted?: boolean;
 }
 
 export interface ProtocolRange {
@@ -354,11 +363,18 @@ export interface ListArgs {
   cursor?: number;
   limit?: number;
   all?: boolean;
+  pinned?: boolean;
 }
 
 export interface ListResult {
   items: SessionInfo[];
   next: number;
+}
+
+export interface UpdateArgs {
+  session: string;
+  title?: string;
+  pinned?: boolean;
 }
 
 export interface CreateArgs {
@@ -538,6 +554,22 @@ export interface TraceArgs {
 
 export interface TraceResult {
   text: string;
+}
+
+export interface FilesArgs {
+  query?: string;
+  limit?: number;
+}
+
+export interface FileInfo {
+  path: string;
+  size: number;
+  mtime: number;
+}
+
+export interface FilesResult {
+  files: FileInfo[];
+  truncated: boolean;
 }
 
 export interface ConfigField {

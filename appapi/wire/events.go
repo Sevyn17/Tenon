@@ -25,6 +25,7 @@ const (
 	EvInteractionDone = "interaction.resolved"
 	EvSessionClosed   = "session.closed"
 	EvSessionForked   = "session.forked"
+	EvSessionUpdated  = "session.updated"
 )
 
 // 易失事件（表二）。
@@ -51,7 +52,7 @@ const (
 func Durable(kind string) bool {
 	switch kind {
 	case EvEntryAppended, EvLogRewound, EvLogCompacted, EvStateChanged, EvModeChanged, EvSettingsChanged,
-		EvInteractionOpen, EvInteractionDone, EvSessionClosed, EvSessionForked:
+		EvInteractionOpen, EvInteractionDone, EvSessionClosed, EvSessionForked, EvSessionUpdated:
 		return true
 	}
 	return false
@@ -111,6 +112,12 @@ type SessionClosed struct {
 type SessionForked struct {
 	From string `json:"from"`
 	Upto int    `json:"upto"`
+}
+
+// SessionUpdated session.update 落库（标题、置顶）。
+type SessionUpdated struct {
+	Title  string `json:"title"`
+	Pinned bool   `json:"pinned"`
 }
 
 // —— 易失事件载荷 ——
@@ -188,9 +195,12 @@ type CursorRef struct {
 	Cursor int64 `json:"cursor"`
 }
 
+// SessionsChanged 列表里一行的变化。deleted 为真时这一行已删除，其余字段无意义。
 type SessionsChanged struct {
 	ID        string `json:"id"`
 	RunState  string `json:"run_state"`
 	Title     string `json:"title"`
 	UpdatedAt int64  `json:"updated_at"`
+	Pinned    bool   `json:"pinned"`
+	Deleted   bool   `json:"deleted,omitempty"`
 }

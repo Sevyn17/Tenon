@@ -1,5 +1,6 @@
 // 会话列表（protocol 2，docs/06 - 应用协议契约.md 10.4 sessions.list、10.5 sessions.changed）。
-// sessions.list 是分页查询；连接级的 sessions.changed（易失）刷新列表里的一行；重连后重新查第一页。
+// sessions.list 是分页查询；置顶的会话另查一次（sessions.list {pinned}，不分页），排在最前。
+// 连接级的 sessions.changed（易失）刷新列表里的一行（含删除）；重连后重新查第一页。
 
 import type { Connection } from "./transport";
 import { LOCAL_RECONNECTED } from "./commands";
@@ -7,7 +8,10 @@ import { createStore, type ReadStore } from "./store";
 import type { Envelope, SessionInfo, SessionsChanged } from "./wire.gen";
 
 export interface SessionsView {
+  /** 按更新时间分页的会话（不含置顶的）。 */
   items: SessionInfo[];
+  /** 置顶的会话（按更新时间）。 */
+  pinned: SessionInfo[];
   next: number; // 0 = 没有下一页
   loading: boolean;
   error?: string;
@@ -20,25 +24,32 @@ export interface SessionsStore extends ReadStore<SessionsView> {
   setAll(all: boolean): Promise<void>;
   /** 本地插入（新建、分叉后立即出现在列表里，不等下一次查询）。 */
   upsert(info: SessionInfo): void;
+  /** 本地移除（删除成功后立即消失，不等 sessions.changed）。 */
+  remove(id: string): void;
+  /** 一行的信息（置顶或分页里任一处）。 */
+  find(id: string): SessionInfo | undefined;
   close(): void;
 }
 
 export function createSessionsStore(conn: Connection, limit = 50): SessionsStore {
-  const store = createStore<SessionsView>({ items: [], next: 0, loading: false, all: false });
+  const store = createStore<SessionsView>({ items: [], pinned: [], next: 0, loading: false, all: false });
   let gen = 0;
 
   const page = async (cursor: number) => {
     const g = ++gen;
     store.update((v) => ({ ...v, loading: true, error: undefined }));
     try {
-      const r = await conn.call("sessions.list", { cursor, limit, all: store.get().all });
+      const all = store.get().all;
+      const [r, p] = await Promise.all([
+        conn.call("sessions.list", { cursor, limit, all }),
+        cursor === 0 ? conn.call("sessions.list", { pinned: true, limit: 200, all }) : Promise.resolve(null),
+      ]);
       if (g !== gen) return;
-      store.update((v) => ({
-        ...v,
-        loading: false,
-        next: r.next,
-        items: cursor === 0 ? (r.items ?? []) : dedupe([...v.items, ...(r.items ?? [])]),
-      }));
+      store.update((v) => {
+        const pinned = p ? (p.items ?? []) : v.pinned;
+        const items = cursor === 0 ? (r.items ?? []) : dedupe([...v.items, ...(r.items ?? [])]);
+        return { ...v, loading: false, next: r.next, pinned, items: items.filter((x) => !x.pinned) };
+      });
     } catch (e) {
       if (g !== gen) return;
       store.update((v) => ({ ...v, loading: false, error: e instanceof Error ? e.message : String(e) }));
@@ -51,14 +62,7 @@ export function createSessionsStore(conn: Connection, limit = 50): SessionsStore
       return;
     }
     if (ev.kind !== "sessions.changed") return;
-    const d = ev.data as SessionsChanged;
-    store.update((v) => {
-      const i = v.items.findIndex((x) => x.id === d.id);
-      if (i < 0) return v; // 不在已加载的页里：等下次查询
-      const row = { ...v.items[i], run_state: d.run_state, title: d.title || v.items[i].title, updated_at: d.updated_at };
-      const rest = v.items.filter((_, j) => j !== i);
-      return { ...v, items: sortByUpdated([row, ...rest]) };
-    });
+    store.update((v) => applyChanged(v, ev.data as SessionsChanged));
   });
 
   return {
@@ -74,10 +78,48 @@ export function createSessionsStore(conn: Connection, limit = 50): SessionsStore
       await page(0);
     },
     upsert(info) {
-      store.update((v) => ({ ...v, items: sortByUpdated(dedupe([info, ...v.items])) }));
+      store.update((v) => place({ ...v, items: v.items.filter((x) => x.id !== info.id), pinned: v.pinned.filter((x) => x.id !== info.id) }, info));
+    },
+    remove(id) {
+      store.update((v) => dropTree(v, id));
+    },
+    find(id) {
+      const v = store.get();
+      return v.pinned.find((x) => x.id === id) ?? v.items.find((x) => x.id === id);
     },
     close: off,
   };
+}
+
+/** sessions.changed 合进列表（纯函数，便于测试）。不在已加载页里的行：置顶了就补进置顶区，否则等下次查询。 */
+export function applyChanged(v: SessionsView, d: SessionsChanged): SessionsView {
+  if (d.deleted) return dropTree(v, d.id);
+  const old = v.pinned.find((x) => x.id === d.id) ?? v.items.find((x) => x.id === d.id);
+  if (!old && !d.pinned) return v;
+  const row: SessionInfo = {
+    ...(old ?? { id: d.id, preview: "", origin: "new" }),
+    title: d.title,
+    run_state: d.run_state,
+    pinned: d.pinned || undefined,
+    updated_at: d.updated_at || old?.updated_at || 0, // 改标题、置顶时 updated_at = 0：不动原值
+  };
+  const rest = { ...v, items: v.items.filter((x) => x.id !== d.id), pinned: v.pinned.filter((x) => x.id !== d.id) };
+  return place(rest, row);
+}
+
+function place(v: SessionsView, row: SessionInfo): SessionsView {
+  return row.pinned ? { ...v, pinned: sortByUpdated([row, ...v.pinned]) } : { ...v, items: sortByUpdated([row, ...v.items]) };
+}
+
+/** 删掉一行及它的子会话（id 以 "<id>/" 开头）。 */
+function dropTree(v: SessionsView, id: string): SessionsView {
+  const keep = (x: SessionInfo) => x.id !== id && !x.id.startsWith(id + "/");
+  return { ...v, items: v.items.filter(keep), pinned: v.pinned.filter(keep) };
+}
+
+/** 左栏顺序：置顶在前，其余按更新时间。 */
+export function listed(v: SessionsView): SessionInfo[] {
+  return [...v.pinned, ...v.items];
 }
 
 function dedupe(xs: SessionInfo[]): SessionInfo[] {

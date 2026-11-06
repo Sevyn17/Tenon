@@ -3,7 +3,7 @@
 // 可折叠成图标条（Mod+B），宽度可拖。
 
 import { useMemo, useRef, useState, type ReactNode } from "react";
-import { MoreHorizontal, PanelLeftClose, PanelLeftOpen, Plus, Puzzle, Search, Settings, Keyboard, Sun, Info } from "lucide-react";
+import { MoreHorizontal, Pin, PanelLeftClose, PanelLeftOpen, Plus, Puzzle, Search, Settings, Keyboard, Sun, Info } from "lucide-react";
 import { groupByDate, type SessionInfo } from "../../client";
 import { useInteractions, useSessions, useStore } from "../../client/react";
 import { Count, Dot, IconButton, Kbd, Menu, Tooltip, cx, type MenuGroupSpec } from "../../ui";
@@ -173,11 +173,13 @@ function SessionList() {
     return m;
   }, [inter.open]);
 
-  const items = v.items.filter((x) =>
-    filter === "running" ? x.run_state === "running" : filter === "pending" ? pendingBy.has(x.id) : true,
-  );
-  const groups = groupByDate(items);
+  const keep = (x: SessionInfo) =>
+    filter === "running" ? x.run_state === "running" : filter === "pending" ? pendingBy.has(x.id) : true;
+  const items = v.items.filter(keep);
+  const pinned = v.pinned.filter(keep);
+  const groups = [...(pinned.length ? [{ bucket: "pinned", items: pinned }] : []), ...groupByDate(items)];
   const label: Record<string, string> = {
+    pinned: t("sessions.pinned"),
     today: t("sessions.today"),
     yesterday: t("sessions.yesterday"),
     week: t("sessions.week"),
@@ -231,6 +233,7 @@ function SessionRow({ row, active, pending }: { row: SessionInfo; active: boolea
       title={row.preview || row.id}
     >
       <Slot at="session.row.leading" props={{ row }} fallback={<Dot state={pending ? "warning" : running ? "running" : "idle"} />} />
+      {row.pinned && <Pin size={12} className={s.rowPin} aria-label={sh.t("sessions.pinned")} />}
       <span className={s.rowTitle}>{row.title || row.id}</span>
       <span className={s.rowBadges}>
         {pending > 0 && <Count n={pending} />}

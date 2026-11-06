@@ -8,6 +8,8 @@ export const COMMANDS = [
   "hello",
   "sessions.list",
   "session.create",
+  "session.update",
+  "session.delete",
   "session.get",
   "session.subscribe",
   "session.unsubscribe",
@@ -29,6 +31,7 @@ export const COMMANDS = [
   "plugins.list",
   "plugins.set",
   "packages.list",
+  "workspace.files",
   "artifact.get",
   "artifact.put",
   "trace.explain",
@@ -41,6 +44,8 @@ export interface CommandMap {
   hello: [W.HelloArgs, W.HelloResult];
   "sessions.list": [W.ListArgs, W.ListResult];
   "session.create": [W.CreateArgs, W.SessionSnapshot];
+  "session.update": [W.UpdateArgs, W.SessionSnapshot];
+  "session.delete": [W.SessionArgs, W.Empty];
   "session.get": [W.SessionArgs, W.SessionSnapshot];
   "session.subscribe": [W.SubscribeArgs, W.Empty];
   "session.unsubscribe": [W.SessionArgs, W.Empty];
@@ -62,6 +67,7 @@ export interface CommandMap {
   "plugins.list": [W.Empty, W.PluginsListResult];
   "plugins.set": [W.PluginsSetArgs, W.Empty];
   "packages.list": [W.Empty, W.PackagesListResult];
+  "workspace.files": [W.FilesArgs, W.FilesResult];
   "artifact.get": [W.ArtifactGetArgs, W.ArtifactGetResult];
   "artifact.put": [W.ArtifactPutArgs, W.ArtifactPutResult];
   "trace.explain": [W.TraceArgs, W.TraceResult];

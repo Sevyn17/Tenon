@@ -237,6 +237,16 @@ type DefinitionStore interface {
 	ListDefinitions(ctx context.Context, kind string) ([]string, error)
 }
 
+// SessionMetaStore 可选：改会话行的标题与业务键（protocol 2 session.update，会话重命名、置顶）。
+// 不碰头部与日志，回合进行中也能改；变化同事务写一条 EventMeta 持久事件。
+type SessionMetaStore interface {
+	// UpdateSessionMeta 改标题（title 非 nil 时）并把 set 合并进业务键（值为 nil 表示删除该键）。
+	// 不改 updated_at（列表顺序不变）。会话不存在返回 ErrNotFound。
+	UpdateSessionMeta(ctx context.Context, id string, title *string, set map[string]any) error
+	// SessionsWithMeta 业务键 key 为 true 的未删除会话（按更新时间倒序，最多 limit 条）。
+	SessionsWithMeta(ctx context.Context, key string, limit int) ([]SessionInfo, error)
+}
+
 // —— 共享类型 ——//
 
 // SessionMeta 会话行的非头部字段。
@@ -390,6 +400,8 @@ const (
 	// closed 由宿主在关闭会话的检查点里写。
 	EventForked = "forked" // data: {from, upto, origin}
 	EventClosed = "closed" // data: {reason}
+	// meta 由 SessionMetaStore.UpdateSessionMeta 写：改后的标题与完整业务键。
+	EventMeta = "meta" // data: {title, meta}
 )
 
 // Event 一条要写进事件表的持久事件。
@@ -407,6 +419,27 @@ type SessionInfo struct {
 	Origin    string `json:"origin"`
 	ParentID  string `json:"parent"`
 	UpdatedAt int64  `json:"updated_at"`
+	// Meta 应用写入的业务键（JSON 对象）。
+	Meta json.RawMessage `json:"meta,omitempty"`
+}
+
+// MergeMeta 把 set 合并进业务键 JSON 对象（值为 nil 删除该键），返回新对象。原对象不合法时按空对象处理。
+func MergeMeta(old json.RawMessage, set map[string]any) (json.RawMessage, error) {
+	m := map[string]any{}
+	if len(old) > 0 {
+		_ = json.Unmarshal(old, &m)
+		if m == nil {
+			m = map[string]any{}
+		}
+	}
+	for k, v := range set {
+		if v == nil {
+			delete(m, k)
+		} else {
+			m[k] = v
+		}
+	}
+	return json.Marshal(m)
 }
 
 // Stats 会话统计（投影：只读 span 与请求记录，不另存状态）。

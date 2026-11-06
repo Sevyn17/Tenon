@@ -612,8 +612,7 @@ func (s *Store) ListSessions(ctx context.Context, before int64, limit int, topOn
 		if x.status == "deleted" || (before > 0 && x.updatedAt >= before) || (topOnly && x.meta.ParentID != "") {
 			continue
 		}
-		out = append(out, store.SessionInfo{ID: x.meta.ID, Title: x.meta.Title, Preview: x.preview, RunState: x.runState,
-			Origin: x.meta.Origin, ParentID: x.meta.ParentID, UpdatedAt: x.updatedAt})
+		out = append(out, x.info())
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].UpdatedAt != out[j].UpdatedAt {
@@ -626,6 +625,79 @@ func (s *Store) ListSessions(ctx context.Context, before int64, limit int, topOn
 	}
 	return out, nil
 }
+
+func (x *sess) info() store.SessionInfo {
+	i := store.SessionInfo{ID: x.meta.ID, Title: x.meta.Title, Preview: x.preview, RunState: x.runState,
+		Origin: x.meta.Origin, ParentID: x.meta.ParentID, UpdatedAt: x.updatedAt}
+	if m := x.meta.Meta; len(m) > 0 && string(m) != "{}" {
+		i.Meta = cloneRaw(m)
+	}
+	return i
+}
+
+// UpdateSessionMeta 改标题与业务键，同时写 meta 事件（与 sqlite 同语义）。
+func (s *Store) UpdateSessionMeta(ctx context.Context, id string, title *string, set map[string]any) error {
+	if err := s.lock(); err != nil {
+		return err
+	}
+	x := s.live(id)
+	if x == nil {
+		s.mu.Unlock()
+		return store.ErrNotFound
+	}
+	meta, err := store.MergeMeta(x.meta.Meta, set)
+	if err != nil {
+		s.mu.Unlock()
+		return err
+	}
+	if title != nil {
+		x.meta.Title = *title
+	}
+	x.meta.Meta = meta
+	data, _ := json.Marshal(map[string]any{"title": x.meta.Title, "meta": meta})
+	now := s.now()
+	seq := int64(x.nextSeq)
+	x.events = append(x.events, evRow{cursor: seq, kind: store.EventMeta, data: data, at: now})
+	x.nextSeq++
+	s.mu.Unlock()
+	s.notify([]bus.Envelope{{V: bus.Version, Seq: seq, At: now, Session: id, Kind: store.EventMeta,
+		Data: json.RawMessage(append([]byte(nil), data...))}})
+	return nil
+}
+
+// SessionsWithMeta 业务键 key 为 true 的未删除会话（按更新时间倒序）。
+func (s *Store) SessionsWithMeta(ctx context.Context, key string, limit int) ([]store.SessionInfo, error) {
+	if err := s.lock(); err != nil {
+		return nil, err
+	}
+	defer s.mu.Unlock()
+	if limit <= 0 || limit > 500 {
+		limit = 50
+	}
+	var out []store.SessionInfo
+	for _, x := range s.sessions {
+		if x.status == "deleted" {
+			continue
+		}
+		var m map[string]any
+		_ = json.Unmarshal(x.meta.Meta, &m)
+		if m[key] == true {
+			out = append(out, x.info())
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].UpdatedAt != out[j].UpdatedAt {
+			return out[i].UpdatedAt > out[j].UpdatedAt
+		}
+		return out[i].ID < out[j].ID
+	})
+	if len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
+}
+
+var _ store.SessionMetaStore = (*Store)(nil)
 
 // SessionStats 汇总会话用量与最近一次请求组成。未知会话返回零值统计。
 func (s *Store) SessionStats(ctx context.Context, sessionID string) (store.Stats, error) {

@@ -58,6 +58,7 @@ func Run(t *testing.T, open func(t *testing.T) store.Store) {
 		{"CheckpointEvents", testCheckpointEvents},
 		{"EventsCursorExpired", testEventsCursorExpired},
 		{"Interactions", testInteractions},
+		{"SessionMetaUpdate", testSessionMetaUpdate},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) { c.f(t, open(t)) })
@@ -1573,5 +1574,68 @@ func testInteractions(t *testing.T, db store.Store) {
 	}
 	if err := db.OpenInteraction(ctx, store.Pending{Corr: "corr-j", SessionID: "r", InteractionID: "i2"}, 999); !errors.Is(err, store.ErrLeaseLost) {
 		t.Fatalf("纪元不符应 ErrLeaseLost：%v", err)
+	}
+}
+
+// —— 会话行元数据（session.update）——//
+
+func testSessionMetaUpdate(t *testing.T, st store.Store) {
+	ctx := context.Background()
+	db, ok := st.(store.SessionMetaStore)
+	if !ok {
+		t.Skip("存储未实现可选的 SessionMetaStore")
+	}
+	c := newCore()
+	create(t, st, store.SessionMeta{ID: "s1", Title: "旧", Meta: json.RawMessage(`{"client_id":"c"}`)}, c)
+	time.Sleep(2 * time.Millisecond)
+	create(t, st, store.SessionMeta{ID: "s2"}, newCore())
+	before, _ := st.ListSessions(ctx, 0, 10, false)
+	var got []bus.Envelope
+	st.OnCommit(func(e bus.Envelope) { got = append(got, e) })
+	title := "新标题"
+	if err := db.UpdateSessionMeta(ctx, "s1", &title, map[string]any{"pinned": true}); err != nil {
+		t.Fatal(err)
+	}
+	st.OnCommit(nil)
+	l, err := st.Load(ctx, "s1", nil)
+	if err != nil || l.Meta.Title != "新标题" {
+		t.Fatalf("标题 %+v %v", l, err)
+	}
+	var m map[string]any
+	_ = json.Unmarshal(l.Meta.Meta, &m)
+	if m["pinned"] != true || m["client_id"] != "c" {
+		t.Fatalf("业务键合并 %s", l.Meta.Meta)
+	}
+	if len(got) != 1 || got[0].Kind != store.EventMeta || got[0].Seq != l.Cursor {
+		t.Fatalf("meta 事件 %+v cursor=%d", got, l.Cursor)
+	}
+	evs, _, _ := st.Replay(ctx, "s1", 0)
+	if len(evs) != 1 || evs[0].Kind != store.EventMeta {
+		t.Fatalf("回放 %+v", evs)
+	}
+	after, _ := st.ListSessions(ctx, 0, 10, false)
+	if len(after) != 2 || after[0].ID != before[0].ID || after[1].UpdatedAt != before[1].UpdatedAt {
+		t.Fatalf("改元数据不应改变列表顺序: %+v → %+v", before, after)
+	}
+	for _, x := range after {
+		if x.ID == "s1" && !strings.Contains(string(x.Meta), `"pinned":true`) {
+			t.Fatalf("列表行带业务键: %s", x.Meta)
+		}
+	}
+	pinned, err := db.SessionsWithMeta(ctx, "pinned", 10)
+	if err != nil || len(pinned) != 1 || pinned[0].ID != "s1" || pinned[0].Title != "新标题" {
+		t.Fatalf("置顶列表 %+v %v", pinned, err)
+	}
+	if err := db.UpdateSessionMeta(ctx, "s1", nil, map[string]any{"pinned": nil}); err != nil {
+		t.Fatal(err)
+	}
+	if pinned, _ := db.SessionsWithMeta(ctx, "pinned", 10); len(pinned) != 0 {
+		t.Fatalf("取消置顶 %+v", pinned)
+	}
+	if l, _ := st.Load(ctx, "s1", nil); l.Meta.Title != "新标题" {
+		t.Fatalf("title=nil 不应改标题: %q", l.Meta.Title)
+	}
+	if err := db.UpdateSessionMeta(ctx, "none", &title, nil); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("不存在应 ErrNotFound: %v", err)
 	}
 }

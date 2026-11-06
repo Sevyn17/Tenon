@@ -12,6 +12,7 @@ import type {
   Entry,
   Envelope,
   EntryAppended,
+  SessionUpdated,
   LogCompacted,
   LogRewound,
   MessageDelta,
@@ -67,6 +68,7 @@ export interface SessionState {
   status: LoadStatus;
   error?: string;
   title: string;
+  pinned: boolean;
   origin: string;
   parent?: string;
   runState: "idle" | "running";
@@ -89,6 +91,7 @@ export function initialState(id: string): SessionState {
     id,
     status: "idle",
     title: "",
+    pinned: false,
     origin: "",
     runState: "idle",
     maxSteps: 0,
@@ -110,6 +113,7 @@ export function applySnapshot(s: SessionState, snap: SessionSnapshot, now = Date
   return {
     ...s,
     title: snap.title,
+    pinned: !!snap.pinned,
     origin: snap.origin,
     parent: snap.parent,
     runState: snap.run_state === "running" ? "running" : "idle",
@@ -183,6 +187,10 @@ export function reduce(s: SessionState, ev: Envelope, now = Date.now()): Session
       return { ...s, maxSteps: (ev.data as SettingsChanged).settings.max_steps };
     case "session.mode_changed":
       return { ...s, mode: ev.data as Mode };
+    case "session.updated": {
+      const d = ev.data as SessionUpdated;
+      return { ...s, title: d.title, pinned: d.pinned };
+    }
     case "session.closed":
       return { ...s, closed: (ev.data as { reason?: string }).reason ?? "closed" };
     case "turn.started": {

@@ -116,4 +116,10 @@ describe("session reducer", () => {
       [2, 1, false],
     ]);
   });
+  it("session.updated 改标题与置顶；快照带 pinned", () => {
+    const s0 = applySnapshot(initialState("s"), snap({ title: "旧", pinned: true }));
+    expect([s0.title, s0.pinned]).toEqual(["旧", true]);
+    const s1 = run(s0, ev("session.updated", { title: "新", pinned: false }, 6));
+    expect([s1.title, s1.pinned]).toEqual(["新", false]);
+  });
 });

@@ -149,3 +149,51 @@ func TestGlobFiles(t *testing.T) {
 		t.Fatalf("limit 未生效: %q", out)
 	}
 }
+
+func TestListFiles(t *testing.T) {
+	root := t.TempDir()
+	for _, f := range []string{"README.md", "web/src/client/sessions.ts", "web/src/shell/index.tsx", "docs/notes.md", "build/out.js", "node_modules/x/index.js", ".ybase/blobs/ab"} {
+		p := filepath.Join(root, filepath.FromSlash(f))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(root, ".gitignore"), []byte("build/\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	all, trunc, err := ListFiles(ctx, root, "", 50, 1000)
+	if err != nil || trunc {
+		t.Fatal(err, trunc)
+	}
+	for _, h := range all {
+		if strings.HasPrefix(h.Path, "build/") || strings.HasPrefix(h.Path, "node_modules/") || strings.HasPrefix(h.Path, ".ybase/") {
+			t.Fatalf("应遵守 .gitignore 与 skipDirs：%v", all)
+		}
+	}
+	if len(all) != 5 { // 4 个文件 + .gitignore
+		t.Fatalf("文件数 %d：%v", len(all), all)
+	}
+	hits, _, _ := ListFiles(ctx, root, "sess", 10, 1000)
+	if len(hits) != 1 || hits[0].Path != "web/src/client/sessions.ts" {
+		t.Fatalf("模糊匹配：%v", hits)
+	}
+	hits, _, _ = ListFiles(ctx, root, "index", 10, 1000)
+	if len(hits) != 1 || hits[0].Path != "web/src/shell/index.tsx" {
+		t.Fatalf("文件名命中：%v", hits)
+	}
+	hits, _, _ = ListFiles(ctx, root, "readme", 10, 1000)
+	if len(hits) != 1 || hits[0].Path != "README.md" {
+		t.Fatalf("不区分大小写：%v", hits)
+	}
+	hits, _, _ = ListFiles(ctx, root, "md", 10, 1000)
+	if len(hits) != 2 || hits[0].Path != "docs/notes.md" { // 扩展名连续命中、在词首的排前
+		t.Fatalf("评分：%v", hits)
+	}
+	if _, trunc, _ := ListFiles(ctx, root, "", 10, 2); !trunc {
+		t.Fatal("超过 maxScan 应 truncated")
+	}
+}

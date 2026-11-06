@@ -59,6 +59,15 @@ type ListArgs struct {
 	Cursor int64 `json:"cursor,omitempty"`
 	Limit  int   `json:"limit,omitempty"`
 	All    bool  `json:"all,omitempty"`
+	// Pinned 只列置顶的会话（不分页，最多 limit 条；含子会话与否同 all）。
+	Pinned bool `json:"pinned,omitempty"`
+}
+
+// UpdateArgs session.update：只改给了的字段。title 为空串表示清掉标题（界面回退显示 id）。
+type UpdateArgs struct {
+	Session string  `json:"session"`
+	Title   *string `json:"title,omitempty"`
+	Pinned  *bool   `json:"pinned,omitempty"`
 }
 
 type ListResult struct {
@@ -248,6 +257,23 @@ type TraceResult struct {
 }
 
 type Empty struct{}
+
+// FilesArgs workspace.files：query 为空时给最近修改的文件，否则模糊匹配路径。
+type FilesArgs struct {
+	Query string `json:"query,omitempty"`
+	Limit int    `json:"limit,omitempty"`
+}
+
+type FileInfo struct {
+	Path  string `json:"path"` // 相对工作目录，/ 分隔
+	Size  int64  `json:"size"`
+	MTime int64  `json:"mtime"` // Unix 毫秒
+}
+
+type FilesResult struct {
+	Files     []FileInfo `json:"files"`
+	Truncated bool       `json:"truncated"` // 工作区文件太多，只看了前一部分
+}
 
 // ConfigField 插件配置项的 Schema（plugins.list）。
 type ConfigField struct {

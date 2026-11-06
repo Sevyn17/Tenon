@@ -192,6 +192,7 @@ type SessionSnapshot struct {
 	Parent       string        `json:"parent,omitempty"`
 	Origin       string        `json:"origin"`
 	Title        string        `json:"title"`
+	Pinned       bool          `json:"pinned,omitempty"`
 	RunState     string        `json:"run_state"` // idle / running
 	Mode         *Mode         `json:"mode,omitempty"`
 	Settings     Settings      `json:"settings"`
@@ -216,6 +217,7 @@ type SessionInfo struct {
 	Origin    string `json:"origin"`
 	Parent    string `json:"parent,omitempty"`
 	UpdatedAt int64  `json:"updated_at"`
+	Pinned    bool   `json:"pinned,omitempty"`
 }
 
 // Principal 连接身份（10.8）。

@@ -41,7 +41,7 @@ var (
 var viewerCommands = map[string]bool{
 	"hello": true, "sessions.list": true, "session.get": true, "session.entries": true, "session.stats": true,
 	"session.subscribe": true, "session.unsubscribe": true, "mode.list": true, "mode.get": true, "mode.show": true,
-	"artifact.get": true, "trace.explain": true, "interactions.list": true, "plugins.list": true, "packages.list": true,
+	"artifact.get": true, "trace.explain": true, "interactions.list": true, "plugins.list": true, "packages.list": true, "workspace.files": true,
 }
 
 // Conn 一个客户端连接。方法并发安全；用完调用 Close。
@@ -230,6 +230,15 @@ func (c *Conn) run(ctx context.Context, id string, live *bus.Sub, replay []bus.E
 				return
 			}
 			switch {
+			case e.Session == id && e.Kind == EventDeleted: // 会话已删除：发 session.closed 并结束订阅（不再回放、不发 lagged）
+				c.push(ctx, []wire.Envelope{c.envelope(id, wire.EvSessionClosed, 0, 0, wire.SessionClosed{Reason: "deleted"})})
+				c.mu.Lock()
+				if sub := c.subs[id]; sub != nil {
+					sub.cancel()
+					delete(c.subs, id)
+				}
+				c.mu.Unlock()
+				return
 			case e.Session == id && e.Seq > 0: // 本会话的提交通知
 				if e.Seq <= last {
 					continue
@@ -313,6 +322,10 @@ func (c *Conn) translate(e bus.Envelope) []wire.Envelope {
 	case store.EventClosed:
 		reason, _ := m["reason"].(string)
 		return []wire.Envelope{c.envelope(e.Session, wire.EvSessionClosed, e.Seq, 0, wire.SessionClosed{Reason: reason})}
+	case store.EventMeta:
+		title, _ := m["title"].(string)
+		meta, _ := json.Marshal(m["meta"])
+		return []wire.Envelope{c.envelope(e.Session, wire.EvSessionUpdated, e.Seq, 0, wire.SessionUpdated{Title: title, Pinned: pinnedOf(meta)})}
 	case store.EventExt:
 		if md := c.modeOf(e.Session, m); md != nil {
 			return []wire.Envelope{c.envelope(e.Session, wire.EvModeChanged, e.Seq, 0, *md)}
@@ -358,17 +371,30 @@ func (c *Conn) modeOf(id string, m map[string]any) *wire.Mode {
 	return out
 }
 
-// watchSessions 连接级 sessions.changed：本进程任一会话的运行状态变化时刷新列表里的一行（易失，重连后重新查列表）。
+// watchSessions 连接级 sessions.changed：本进程任一会话的运行状态、标题与置顶变化或删除时刷新列表里的一行
+// （易失，重连后重新查列表）。
 func (c *Conn) watchSessions() {
-	sub := c.a.o.Bus.Subscribe(c.ctx, bus.Filter{Kinds: []string{store.EventRunState}})
+	sub := c.a.o.Bus.Subscribe(c.ctx, bus.Filter{Kinds: []string{store.EventRunState, store.EventMeta, EventDeleted}})
 	for e := range sub.C() {
-		if e.Kind != store.EventRunState || e.Seq == 0 {
+		var row wire.SessionsChanged
+		switch {
+		case e.Kind == EventDeleted:
+			row = wire.SessionsChanged{ID: e.Session, RunState: wire.RunIdle, UpdatedAt: e.At, Deleted: true}
+		case (e.Kind == store.EventRunState || e.Kind == store.EventMeta) && e.Seq > 0:
+			l, err := host.LoadHead(c.ctx, c.a.o.DB, e.Session)
+			if err != nil {
+				continue
+			}
+			row = wire.SessionsChanged{ID: e.Session, RunState: wireRun(l.RunState), Title: l.Meta.Title,
+				Pinned: pinnedOf(l.Meta.Meta), UpdatedAt: e.At}
+			if e.Kind == store.EventRunState {
+				s, _ := dataMap(e.Data)["run_state"].(string)
+				row.RunState = wireRun(s)
+			} else {
+				row.UpdatedAt = 0 // 改标题、置顶不改更新时间：客户端保留原值
+			}
+		default:
 			continue
-		}
-		s, _ := dataMap(e.Data)["run_state"].(string)
-		row := wire.SessionsChanged{ID: e.Session, RunState: wireRun(s), UpdatedAt: e.At}
-		if l, err := host.LoadHead(c.ctx, c.a.o.DB, e.Session); err == nil {
-			row.Title = l.Meta.Title
 		}
 		c.push(c.ctx, []wire.Envelope{c.envelope("", wire.EvSessionsChanged, 0, 0, row)})
 	}

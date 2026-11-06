@@ -12,7 +12,9 @@ import (
 	"time"
 
 	"ybase/appapi"
+	"ybase/appapi/wire"
 	"ybase/modules/security/permission"
+	"ybase/modules/tools/fs"
 	"ybase/runtime/agent"
 	"ybase/runtime/assemble"
 	"ybase/runtime/bus"
@@ -178,6 +180,9 @@ type Built struct {
 // Ready 跑 ready 点位（构造器就绪后再跑：如工作组补投会打开领导会话），返回各自的错误。
 func (b *Built) Ready(ctx context.Context) []error { return b.wired.Ready(ctx) }
 
+// MaxScanFiles workspace.files 最多遍历的文件数（大仓库里 @ 文件只看前这么多个）。
+const MaxScanFiles = 20000
+
 // BuildApp 接线（assemble.Wire：会话构造器与 [kernel] 宿主参数）、构造应用接口层，再启动后台循环。
 // 不跑 ready，调用方在接好输出后调 Built.Ready。只跑一次性子命令（export / explain）的不调它，也就不起后台循环。
 func (r *Runtime) BuildApp(o AppOptions) (*Built, error) {
@@ -199,6 +204,22 @@ func (r *Runtime) BuildApp(o AppOptions) (*Built, error) {
 	// 应用接口层：在构造器钩子上并入流式事件、把提交事件接到总线、档位变化提示发 notice。
 	ao := appapi.Options{Host: r.Host, Bus: r.Bus, DB: db, Builder: w.Builder, Model: rt.Models.Model, Workdir: r.Root,
 		Trusted: r.Trusted, Profile: r.Profile, Packages: r.Packages, UI: o.UI, Artifacts: rt.Store.Blobs()}
+	root := r.Root
+	ao.Files = func(ctx context.Context, q string, limit int) ([]wire.FileInfo, bool, error) { // 界面 @ 文件（workspace.files）
+		hits, trunc, err := fs.ListFiles(ctx, root, q, limit, MaxScanFiles)
+		out := make([]wire.FileInfo, len(hits))
+		for i, h := range hits {
+			out[i] = wire.FileInfo{Path: h.Path, Size: h.Size, MTime: h.MTime}
+		}
+		return out, trunc, err
+	}
+	for _, it := range rt.Asm.Items(assemble.PointOnSessionDelete) { // 删除会话时的插件清理回调（session.delete）
+		c, ok := it.Impl.(store.Cleaner)
+		if !ok {
+			return nil, fmt.Errorf("插件 %s 的 %s 类型不符（%T）", it.Plugin, assemble.PointOnSessionDelete, it.Impl)
+		}
+		ao.Cleaners = append(ao.Cleaners, c)
+	}
 	if perms != nil {
 		ao.Modes = PermModes{P: perms, Workdir: o.ModesWorkdir}
 		// 项目档位当新会话缺省时，也要用户确认过放宽（与 /mode 切换共用 trust.toml 的确认记录）。
