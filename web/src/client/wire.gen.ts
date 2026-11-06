@@ -589,10 +589,28 @@ export interface PluginInfo {
   source: string;
   effects: string[];
   schema: ConfigField[];
+  config: Record<string, unknown>;
+  mandatory?: boolean;
+  pending?: PluginPending;
+}
+
+export interface PluginPending {
+  on: boolean;
+  config: Record<string, unknown>;
+}
+
+export interface ProfileScope {
+  scope: string;
+  path: string;
+  revision: string;
+  writable: boolean;
+  reason?: string;
 }
 
 export interface PluginsListResult {
   plugins: PluginInfo[];
+  scopes: ProfileScope[];
+  denied?: Record<string, string[]>;
 }
 
 export interface PluginsSetArgs {
@@ -600,6 +618,13 @@ export interface PluginsSetArgs {
   enabled?: boolean;
   config?: Record<string, unknown>;
   scope: string;
+  if_revision?: string;
+}
+
+export interface PluginsSetResult {
+  revision: string;
+  restart: boolean;
+  plugin: PluginInfo;
 }
 
 export interface PackageInfo {

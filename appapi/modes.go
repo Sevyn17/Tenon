@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 
 	"ybase/appapi/wire"
+	"ybase/runtime/component"
 	"ybase/runtime/reqlog"
 	"ybase/runtime/session"
 )
@@ -63,6 +64,18 @@ type Compactor interface {
 	Plan(ctx context.Context, sessionID string, core *session.Core, force bool) (*reqlog.CompactionView, map[string]any, error)
 	// At 压缩到指定位置 upto。
 	At(ctx context.Context, sessionID string, core *session.Core, upto int) (*reqlog.CompactionView, map[string]any, error)
+}
+
+// Profiles 可写的 profile 层（plugins.set）：boot 适配，appapi 不知道文件在哪。
+type Profiles interface {
+	// Scopes 可写的层（user 在前）。
+	Scopes() []wire.ProfileScope
+	// Edit 改写一层里某插件的开关与配置，返回新 revision；revision 不符返回 component.ErrRevision。
+	Edit(scope string, e component.PluginEdit, ifRevision *string) (string, error)
+	// Reload 按磁盘上的文件重新合并（重启后的样子）。
+	Reload() (*component.Profile, error)
+	// Denied 项目层不能设的键。
+	Denied() map[string][]string
 }
 
 // Files 列工作区文件（fs 插件的 ListFiles 适配）：遵守 .gitignore，只读，不出工作目录。

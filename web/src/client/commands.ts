@@ -65,7 +65,7 @@ export interface CommandMap {
   "mode.set": [W.ModeSetArgs, W.ModeSetResult];
   "mode.show": [W.ModeShowArgs, W.ModeShowResult];
   "plugins.list": [W.Empty, W.PluginsListResult];
-  "plugins.set": [W.PluginsSetArgs, W.Empty];
+  "plugins.set": [W.PluginsSetArgs, W.PluginsSetResult];
   "packages.list": [W.Empty, W.PackagesListResult];
   "workspace.files": [W.FilesArgs, W.FilesResult];
   "artifact.get": [W.ArtifactGetArgs, W.ArtifactGetResult];

@@ -61,6 +61,38 @@ func structType(proto any) reflect.Type {
 	return t
 }
 
+// CheckConfig 按已登记插件 name 的配置 Schema 校验一组配置值（未知键、类型不符报错），不实例化插件；
+// 通过时返回按字段类型规整后的值（JSON 来的整数 float64 → int64，写回 TOML 时不带 .0）。插件不存在返回错误。
+func CheckConfig(name string, given map[string]any) (map[string]any, error) {
+	m, ok := MetaOf(name)
+	if !ok {
+		return nil, fmt.Errorf("插件 %s 未登记", name)
+	}
+	if _, _, err := decodeConfig(m.Config, given); err != nil {
+		return nil, err
+	}
+	out := make(map[string]any, len(given))
+	kinds := map[string]reflect.Kind{}
+	if t := structType(m.Config); t != nil {
+		for i := 0; i < t.NumField(); i++ {
+			if key := t.Field(i).Tag.Get("cfg"); key != "" {
+				kinds[key] = t.Field(i).Type.Kind()
+			}
+		}
+	}
+	for k, v := range given {
+		if x, ok := v.(float64); ok && x == float64(int64(x)) {
+			switch kinds[k] {
+			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+				reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+				v = int64(x)
+			}
+		}
+		out[k] = v
+	}
+	return out, nil
+}
+
 // decodeConfig 用默认值填一个新的配置实例，再用 profile 给出的值覆盖；返回各键来源。
 // 未知键报错（防拼写错误静默失效）。
 func decodeConfig(proto any, given map[string]any) (any, map[string]string, error) {

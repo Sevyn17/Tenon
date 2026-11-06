@@ -226,7 +226,7 @@ type askReq struct {
 // （定义来源、状态提交、守卫规则等不会在 CLI 里漏接）。
 func buildChat(o opts, a *app) (*boot.Built, error) {
 	br := &boot.Runtime{Rt: a.rt, Profile: a.profile, Root: a.root, Bus: a.bus, Host: a.h,
-		Trusted: a.trusted, TrustWhy: a.trustWhy, Notes: a.notes, Packages: a.packages}
+		Trusted: a.trusted, TrustWhy: a.trustWhy, Notes: a.notes, Packages: a.packages, ExtraProfile: o.profile}
 	return br.BuildApp(boot.AppOptions{
 		MaxSteps:     o.maxSteps,
 		ModesWorkdir: o.workdir,

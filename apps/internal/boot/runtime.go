@@ -80,6 +80,8 @@ type Runtime struct {
 	Notes    []string
 	// Packages 已加载的插件包（用户级在前、项目级在后）。
 	Packages []*pkgs.Package
+	// ExtraProfile -profile 指定的文件（plugins.set 重新合并时用）。
+	ExtraProfile string
 
 	proc       *component.Scope
 	kern       assemble.Kernel
@@ -114,7 +116,7 @@ func Start(o StartOptions) (*Runtime, error) {
 	}
 	b := bus.New(0)
 	r := &Runtime{Profile: p, Root: root, Bus: b, Host: &host.Host{Bus: b}, UI: o.UI(b),
-		Trusted: trusted, TrustWhy: why, Notes: notes, Packages: ps}
+		Trusted: trusted, TrustWhy: why, Notes: notes, Packages: ps, ExtraProfile: o.Flags.Profile}
 	r.Rt, err = Assemble(p, Overrides(o.Flags, root), map[string]any{
 		assemble.ServiceWorkdir: root,
 		assemble.ServiceHost:    r.Host,
@@ -205,6 +207,7 @@ func (r *Runtime) BuildApp(o AppOptions) (*Built, error) {
 	ao := appapi.Options{Host: r.Host, Bus: r.Bus, DB: db, Builder: w.Builder, Model: rt.Models.Model, Workdir: r.Root,
 		Trusted: r.Trusted, Profile: r.Profile, Packages: r.Packages, UI: o.UI, Artifacts: rt.Store.Blobs()}
 	root := r.Root
+	ao.Profiles = Profiles{Extra: r.ExtraProfile, Root: root, Trusted: r.Trusted}
 	ao.Files = func(ctx context.Context, q string, limit int) ([]wire.FileInfo, bool, error) { // 界面 @ 文件（workspace.files）
 		hits, trunc, err := fs.ListFiles(ctx, root, q, limit, MaxScanFiles)
 		out := make([]wire.FileInfo, len(hits))

@@ -1,10 +1,11 @@
 // 内置设置页之二（前端方案第十二节）：快捷键、通知、布局（工作台偏好），权限档位、插件、插件包（后端），开发者。
-// 后端插件的配置一律在"插件"页它自己名下：L1 由 plugins.list 的配置 schema 生成表单（plugins.set 未实现时只读并说明），
+// 后端插件的配置一律在"插件"页它自己名下：L1 由 plugins.list 的配置 schema 生成表单，plugins.set 写进用户或项目 profile
+// （按 revision 条件写，重启生效；后端没提供可写的层时只读并说明），
 // 第一方插件可再往 "plugin:<名字>" 页贡献 SettingsSection。前端贡献包也在"插件"页列出，可单独关掉（core 等不可关）。
 
 import { useEffect, useMemo, useState } from "react";
 import { Bell, Code, Keyboard, LayoutGrid, Package, Puzzle, ShieldCheck } from "lucide-react";
-import { ApiError, type Envelope, type ModeInfo, type PackageInfo, type PluginInfo } from "../../client";
+import { ApiError, type Envelope, type ModeInfo, type PackageInfo, type PluginInfo, type PluginsListResult } from "../../client";
 import { useStore } from "../../client/react";
 import {
   Badge,
@@ -399,6 +400,98 @@ export function schemaOf(fields: PluginInfo["schema"]): JSONSchema {
   return { type: "object", properties: props };
 }
 
+/** 一个后端插件的开关与配置：写进选定的一层 profile（plugins.set，按 revision 条件写），重启后生效。 */
+function PluginDetail({ sh, sel, list, reload }: { sh: ShellState; sel: PluginInfo; list: PluginsListResult; reload: () => void }) {
+  const writable = list.scopes.filter((x) => x.writable);
+  const [scope, setScope] = useState(writable[0]?.scope ?? "user");
+  const cur = list.scopes.find((x) => x.scope === scope);
+  const base = sel.pending?.config ?? sel.config;
+  const [draft, setDraft] = useState<Record<string, unknown>>(base);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => setDraft(base), [JSON.stringify(base)]); // eslint-disable-line react-hooks/exhaustive-deps
+  const denied = scope === "project" ? (list.denied?.[sel.name] ?? []) : [];
+  const nextOn = sel.pending ? sel.pending.on : sel.on;
+  const changed = Object.keys({ ...base, ...draft }).filter((k) => JSON.stringify(base[k]) !== JSON.stringify(draft[k]));
+  const ro = !cur?.writable;
+
+  const save = async (args: { enabled?: boolean; config?: Record<string, unknown> }) => {
+    if (!cur) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      await sh.client.call("plugins.set", { name: sel.name, scope, if_revision: cur.revision, ...args });
+      sh.api.toast("已保存，重启后生效", "success");
+      reload();
+    } catch (e) {
+      if (e instanceof ApiError && e.code === "conflict") {
+        setErr("profile 已被别处修改，已重新读取，请再改一次");
+        reload();
+      } else setErr(errText(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onText = sel.mandatory
+    ? "强制插件，不能停用"
+    : sel.pending && sel.pending.on !== sel.on
+      ? `重启后${sel.pending.on ? "启用" : "停用"}（当前${sel.on ? "已启用" : "未启用"}）`
+      : sel.on
+        ? "已启用"
+        : "未启用";
+
+  return (
+    <>
+      <SettingsSection title={sel.name} description={`当前来源：${sel.source || "插件缺省"}${sel.default ? " · 缺省启用" : ""}`}>
+        <SettingsRow title="作用" description={sel.effects.join("、") || "—"} />
+        {list.scopes.length > 0 && (
+          <SettingsRow
+            title="写到"
+            description={cur ? (cur.writable ? cur.path : cur.reason) : undefined}
+            control={
+              <Segmented
+                value={scope}
+                options={list.scopes.map((x) => ({ value: x.scope, label: x.scope === "user" ? "用户" : "项目" }))}
+                onChange={(v) => setScope(v)}
+              />
+            }
+          />
+        )}
+        <SettingsRow title="启用" description={onText} control={<Switch label={`启用 ${sel.name}`} checked={nextOn} disabled={busy || ro || !!sel.mandatory} onChange={(v) => void save({ enabled: v })} />} />
+      </SettingsSection>
+      {sel.schema.length > 0 && (
+        <SettingsSection title="配置" description={sel.pending ? "下面是重启后的值。" : undefined}>
+          <SchemaForm schema={schemaOf(sel.schema)} value={draft} onChange={setDraft} readOnly={ro || busy} />
+          {denied.length > 0 && <SettingsNote>项目 profile 不能设 {denied.join("、")}（端点、凭据、存储位置只能写在用户级）。</SettingsNote>}
+          {list.scopes.length === 0 && <SettingsNote>后端没有提供可写的 profile：编辑 profile.toml 里 [{sel.name}] 一节后重启。</SettingsNote>}
+          {!ro && (
+            <SettingsRow
+              title={changed.length ? `改了 ${changed.length} 项` : "没有改动"}
+              description="保存后重启生效"
+              control={
+                <span style={{ display: "flex", gap: 8 }}>
+                  <Button size="sm" variant="ghost" disabled={!changed.length || busy} onClick={() => setDraft(base)}>
+                    还原
+                  </Button>
+                  <Button
+                    size="sm"
+                    disabled={!changed.length || busy || changed.some((k) => denied.includes(k))}
+                    onClick={() => void save({ config: Object.fromEntries(changed.map((k) => [k, draft[k] === undefined ? null : draft[k]])) })}
+                  >
+                    保存
+                  </Button>
+                </span>
+              }
+            />
+          )}
+        </SettingsSection>
+      )}
+      {err && <SettingsNote>{err}</SettingsNote>}
+    </>
+  );
+}
+
 const STATE_TEXT: Record<PackInfo["status"]["state"], string> = { pending: "加载中", active: "已启用", disabled: "已停用", failed: "出错" };
 const STATE_TONE = { pending: "neutral", active: "success", disabled: "neutral", failed: "danger" } as const;
 
@@ -411,7 +504,7 @@ function Plugins({ sh }: { sh: ShellState }) {
   const plugins = r.data?.plugins ?? [];
   const sel = plugins.find((p) => p.name === open);
 
-  if (sel) {
+  if (sel && r.data) {
     const mine = sections.filter((x) => x.page === `plugin:${sel.name}`);
     const fronts = packs.filter((p) => p.requires?.plugin === sel.name);
     return (
@@ -421,15 +514,10 @@ function Plugins({ sh }: { sh: ShellState }) {
             ‹ 全部插件
           </Button>
         </div>
-        <SettingsSection title={sel.name} description={`来源：${sel.source}${sel.default ? " · 缺省启用" : ""}`}>
-          <SettingsRow title="状态" control={<Badge tone={sel.on ? "success" : "neutral"}>{sel.on ? "已启用" : "未启用"}</Badge>} />
-          <SettingsRow title="作用" description={sel.effects.join("、") || "—"} />
-          {fronts.length > 0 && <SettingsRow title="界面贡献" description={fronts.map((p) => `${p.title}（${p.contributes.length} 项）`).join("、")} />}
-        </SettingsSection>
-        {sel.schema.length > 0 && (
-          <SettingsSection title="配置">
-            <SchemaForm schema={schemaOf(sel.schema)} value={{}} onChange={() => {}} readOnly />
-            <SettingsNote>运行中不能改：编辑 profile.toml 里 [{sel.name}] 一节后重启（plugins.set 暂未实现）。</SettingsNote>
+        <PluginDetail key={sel.name} sh={sh} sel={sel} list={r.data} reload={r.reload} />
+        {fronts.length > 0 && (
+          <SettingsSection title="界面贡献">
+            <SettingsRow title="前端贡献包" description={fronts.map((p) => `${p.title}（${p.contributes.length} 项）`).join("、")} />
           </SettingsSection>
         )}
         {mine.map((sec) => (
@@ -450,7 +538,7 @@ function Plugins({ sh }: { sh: ShellState }) {
 
   return (
     <>
-      <SettingsSection title="后端插件" description="由服务端的装配决定（profile.toml）。点开看说明与配置。">
+      <SettingsSection title="后端插件" description="由服务端的装配决定（profile.toml）。点开看说明、开关与配置；改动写进 profile，重启后生效。">
         {r.loading && <SettingsRow title={<Skeleton w={200} />} />}
         {r.error && <SettingsNote>{r.error}</SettingsNote>}
         {plugins.map((p) => (
@@ -460,6 +548,7 @@ function Plugins({ sh }: { sh: ShellState }) {
             title={
               <>
                 {p.name} {p.on ? <Badge tone="success">启用</Badge> : <Badge>未启用</Badge>}
+                {p.pending && <Badge tone="warning">重启后生效</Badge>}
               </>
             }
             description={p.effects.join("、") || p.source}

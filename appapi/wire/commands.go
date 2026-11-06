@@ -293,17 +293,53 @@ type PluginInfo struct {
 	Source  string        `json:"source"`
 	Effects []string      `json:"effects"`
 	Schema  []ConfigField `json:"schema"`
+	// Config 当前进程生效的配置值（profile 合并后，未写的键不出现）。
+	Config map[string]any `json:"config"`
+	// Mandatory 强制插件：不能停用。
+	Mandatory bool `json:"mandatory,omitempty"`
+	// Pending 改过、要重启才生效（按 plugins.set 写入的文件重新合并的结果与当前进程不同）。
+	Pending *PluginPending `json:"pending,omitempty"`
+}
+
+// PluginPending 重启后的开关与配置。
+type PluginPending struct {
+	On     bool           `json:"on"`
+	Config map[string]any `json:"config"`
+}
+
+// ProfileScope 可写的一层 profile。
+type ProfileScope struct {
+	Scope    string `json:"scope"` // user / project
+	Path     string `json:"path"`
+	Revision string `json:"revision"` // 文件内容哈希；文件不存在为空串
+	// Writable 为假时 plugins.set 不能写这一层（项目未受信），Reason 说明原因。
+	Writable bool   `json:"writable"`
+	Reason   string `json:"reason,omitempty"`
 }
 
 type PluginsListResult struct {
 	Plugins []PluginInfo `json:"plugins"`
+	// Scopes 可写的 profile 层（没有时 plugins.set 返回 unsupported）。
+	Scopes []ProfileScope `json:"scopes"`
+	// Denied 项目层不能设的键（插件名 → 键），写项目层时会被拒绝。
+	Denied map[string][]string `json:"denied,omitempty"`
 }
 
+// PluginsSetArgs 改一层 profile 里某插件的开关与配置：enabled 缺省不改；config 的键合并（值为 null 删除该键，
+// 回到下层或缺省）。if_revision 是读到的那一层 revision，文件之后被改过返回 conflict（stale）。重启后生效。
 type PluginsSetArgs struct {
-	Name    string         `json:"name"`
-	Enabled *bool          `json:"enabled,omitempty"`
-	Config  map[string]any `json:"config,omitempty"`
-	Scope   string         `json:"scope"` // user / project
+	Name       string         `json:"name"`
+	Enabled    *bool          `json:"enabled,omitempty"`
+	Config     map[string]any `json:"config,omitempty"`
+	Scope      string         `json:"scope"` // user / project
+	IfRevision *string        `json:"if_revision,omitempty"`
+}
+
+type PluginsSetResult struct {
+	Revision string `json:"revision"`
+	// Restart 恒为真：插件在进程启动时装配，改动重启后生效。
+	Restart bool       `json:"restart"`
+	Plugin  PluginInfo `json:"plugin"`
 }
 
 type PackageInfo struct {

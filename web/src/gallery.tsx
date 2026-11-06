@@ -270,7 +270,7 @@ function GalleryBody() {
               onChange={setForm}
             />
           </SettingsSection>
-          <SettingsNote>当前版本不支持在界面保存插件配置：请编辑 profile.toml 后重启。</SettingsNote>
+          <SettingsNote>示例表单：真实的插件配置在设置 › 插件里保存（写进 profile，重启后生效）。</SettingsNote>
         </Card>
 
         <Card title="声明式视图（后端插件贡献）" className={s.wide}>

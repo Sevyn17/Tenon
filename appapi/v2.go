@@ -15,7 +15,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
+	"os"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -1083,22 +1086,142 @@ func (v *App) Trace(ctx context.Context, in wire.TraceArgs) (wire.TraceResult, e
 
 // —— 插件 ——
 
-// PluginsList 全部已登记插件的开关状态与配置 Schema（改开关需重启，见 PluginsSet）。
+// PluginsList 全部已登记插件的开关状态、当前配置与配置 Schema；装配了 Profiles 时还给可写的层，
+// 以及改过、重启后才生效的状态（pending）。
 func (v *App) PluginsList(_ context.Context, _ wire.Empty) (wire.PluginsListResult, error) {
 	if v.o.Profile == nil {
 		return wire.PluginsListResult{}, Errorf(wire.CodeUnsupported, "未提供插件信息")
 	}
-	out := wire.PluginsListResult{Plugins: []wire.PluginInfo{}}
+	var next *component.Profile
+	out := wire.PluginsListResult{Plugins: []wire.PluginInfo{}, Scopes: []wire.ProfileScope{}}
+	if pr := v.o.Profiles; pr != nil {
+		out.Scopes = pr.Scopes()
+		out.Denied = pr.Denied()
+		next, _ = pr.Reload() // 文件读不出来就不报 pending（plugins.set 时会报错）
+	}
 	for _, st := range v.o.Profile.States() {
-		wp := wire.PluginInfo{Name: st.Name, On: st.On, Default: st.Default, Source: st.Source,
-			Effects: append([]string{}, st.Effects...), Schema: []wire.ConfigField{}}
-		if m, ok := component.MetaOf(st.Name); ok {
-			for _, f := range component.SchemaOf(m.Config) {
-				wp.Schema = append(wp.Schema, wire.ConfigField{Key: f.Key, Type: f.Type, Default: f.Default, Title: f.Title,
-					Description: f.Description, Group: f.Group, Widget: f.Widget})
+		out.Plugins = append(out.Plugins, v.pluginInfo(st, v.o.Profile, next))
+	}
+	return out, nil
+}
+
+// pluginInfo 一个插件的线上信息；next 非空时与它比较得出 pending。
+func (v *App) pluginInfo(st component.State, cur, next *component.Profile) wire.PluginInfo {
+	wp := wire.PluginInfo{Name: st.Name, On: st.On, Default: st.Default, Source: st.Source,
+		Effects: append([]string{}, st.Effects...), Schema: []wire.ConfigField{}, Config: configOf(cur, st.Name),
+		Mandatory: slices.Contains(cur.Mandatory, st.Name)}
+	if m, ok := component.MetaOf(st.Name); ok {
+		for _, f := range component.SchemaOf(m.Config) {
+			wp.Schema = append(wp.Schema, wire.ConfigField{Key: f.Key, Type: f.Type, Default: f.Default, Title: f.Title,
+				Description: f.Description, Group: f.Group, Widget: f.Widget})
+		}
+	}
+	if next != nil {
+		on := st.On
+		for _, ns := range next.States() {
+			if ns.Name == st.Name {
+				on = ns.On
 			}
 		}
-		out.Plugins = append(out.Plugins, wp)
+		nc := configOf(next, st.Name)
+		if on != wp.On || !jsonEqual(nc, wp.Config) {
+			wp.Pending = &wire.PluginPending{On: on, Config: nc}
+		}
+	}
+	return wp
+}
+
+// configOf profile 合并后某插件写到的配置（没有时为空对象）。
+func configOf(p *component.Profile, name string) map[string]any {
+	out := map[string]any{}
+	for _, e := range p.Plugins {
+		if e.Name == name {
+			maps.Copy(out, e.Config)
+		}
+	}
+	return out
+}
+
+func jsonEqual(a, b any) bool {
+	x, _ := json.Marshal(a)
+	y, _ := json.Marshal(b)
+	return bytes.Equal(x, y)
+}
+
+// PluginsSet 改一层 profile 里某插件的开关与配置，按 if_revision 条件写，重启后生效。
+// 校验：插件已登记、配置键与类型合 Schema、强制插件不能停用、项目层不能设 Denied 的键、项目未受信时项目层不可写。
+// 写完按全部层重新合并一次，合并失败（如关掉了下层设成强制的插件）时还原文件并返回 invalid。
+func (v *App) PluginsSet(_ context.Context, in wire.PluginsSetArgs) (wire.PluginsSetResult, error) {
+	pr := v.o.Profiles
+	if pr == nil || v.o.Profile == nil {
+		return wire.PluginsSetResult{}, Errorf(wire.CodeUnsupported, "plugins.set 未提供：请编辑 profile.toml 后重启")
+	}
+	var scope *wire.ProfileScope
+	for _, s := range pr.Scopes() {
+		if s.Scope == in.Scope {
+			scope = &s
+		}
+	}
+	if scope == nil {
+		return wire.PluginsSetResult{}, invalid("scope 只能是 user / project，得到 %q", in.Scope)
+	}
+	if !scope.Writable {
+		return wire.PluginsSetResult{}, Errorf(wire.CodeDenied, "%s", scope.Reason)
+	}
+	if _, ok := component.MetaOf(in.Name); !ok {
+		return wire.PluginsSetResult{}, Errorf(wire.CodeNotFound, "插件 %s 未登记", in.Name)
+	}
+	if in.Enabled != nil && !*in.Enabled && slices.Contains(v.o.Profile.Mandatory, in.Name) {
+		return wire.PluginsSetResult{}, invalid("%s 是强制插件，不能停用", in.Name)
+	}
+	if in.Scope == "project" {
+		for _, k := range pr.Denied()[in.Name] {
+			if _, ok := in.Config[k]; ok {
+				return wire.PluginsSetResult{}, Errorf(wire.CodeDenied, "项目 profile 不能设 %s.%s（端点、凭据、存储位置只能写在用户级）", in.Name, k)
+			}
+		}
+	}
+	set := map[string]any{}
+	for k, val := range in.Config {
+		if val != nil {
+			set[k] = val
+		}
+	}
+	set, err := component.CheckConfig(in.Name, set)
+	if err != nil {
+		return wire.PluginsSetResult{}, invalid("%s 的配置不合法：%v", in.Name, err)
+	}
+	edit := map[string]any{}
+	for k, val := range in.Config {
+		if val == nil {
+			edit[k] = nil // 删除该键
+		} else {
+			edit[k] = set[k]
+		}
+	}
+	backup, _ := os.ReadFile(scope.Path)
+	existed := backup != nil
+	rev, err := pr.Edit(in.Scope, component.PluginEdit{Name: in.Name, Enabled: in.Enabled, Config: edit}, in.IfRevision)
+	if errors.Is(err, component.ErrRevision) {
+		return wire.PluginsSetResult{}, conflict(wire.ConflictStale, "%s 已被别处修改，请刷新后再改", scope.Path)
+	}
+	if err != nil {
+		return wire.PluginsSetResult{}, err
+	}
+	next, err := pr.Reload()
+	if err != nil { // 合并不过：还原，免得下次启动失败
+		if existed {
+			_ = os.WriteFile(scope.Path, backup, 0o600)
+		} else {
+			_ = os.Remove(scope.Path)
+		}
+		return wire.PluginsSetResult{}, invalid("改完后 profile 合并失败，已还原：%v", err)
+	}
+	out := wire.PluginsSetResult{Revision: rev, Restart: true}
+	for _, st := range v.o.Profile.States() {
+		if st.Name == in.Name {
+			out.Plugin = v.pluginInfo(st, v.o.Profile, next)
+		}
 	}
 	return out, nil
 }
@@ -1111,11 +1234,6 @@ func (v *App) PackagesList(_ context.Context, _ wire.Empty) (wire.PackagesListRe
 			Scope: k.Scope, Source: k.File, Contents: k.Contents()})
 	}
 	return out, nil
-}
-
-// PluginsSet 改插件开关 / 配置：未实现（需写 profile 文件），返回 unsupported。
-func (v *App) PluginsSet(_ context.Context, _ wire.PluginsSetArgs) (wire.Empty, error) {
-	return wire.Empty{}, Errorf(wire.CodeUnsupported, "plugins.set 未实现：请编辑 profile.toml 后重启")
 }
 
 // MaxFiles workspace.files 单次最多返回的文件数。
