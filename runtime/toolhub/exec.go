@@ -122,6 +122,9 @@ func (h *Hub) one(ctx context.Context, ts *Toolset, k *callctx.Ctx, call session
 	}
 	ev.Risk = t.Risk.String()
 	cx := &Cx{Ctx: k, Hub: h, SessionID: sessionID, CallID: call.ID, Tool: t, Toolset: ts, Args: call.Args, Items: h.ItemsOf(t)}
+	if f := h.onProgress; f != nil {
+		cx.Progress = func(text string) { f(call.ID, text) }
+	}
 	defer func() { ev.ChildSessionID = cx.ChildSessionID }()
 
 	// —— 入口：幂等 ——

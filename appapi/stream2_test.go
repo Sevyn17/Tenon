@@ -2,10 +2,14 @@ package appapi
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
+	"time"
 
 	"ybase/appapi/wire"
 	"ybase/runtime/agent"
+	"ybase/runtime/bus"
+	"ybase/runtime/session"
 )
 
 // 流式与条目的关联（10.5）：turn.started 带吃进的 client_id；message.started 的 entry_id 等于随后 entry.appended 的
@@ -121,4 +125,28 @@ func agentTool(id, name, args string) agent.StreamEvent {
 }
 func agentReset(attempt int) agent.StreamEvent {
 	return agent.StreamEvent{Kind: agent.StreamReset, Attempt: attempt}
+}
+
+// 工具执行中的输出 → tool.progress；工具结束后（或不认识的调用）到达的丢掉。
+func TestToolProgress(t *testing.T) {
+	app := newApp(t)
+	sub := app.o.Bus.Subscribe(context.Background(), bus.Filter{Session: "s", Kinds: []string{wire.EvToolProgress, wire.EvToolEnded}})
+	defer sub.Close()
+	l := newLiveState(app.o.Bus, "s")
+	l.onStream(agentStep(1, "e1", 1))
+	l.onStream(agent.StreamEvent{Kind: agent.StreamProgress, CallID: "nope", Text: "x"}) // 不认识：丢
+	l.onToolCall(session.ToolCall{ID: "c1", Name: "shell", Args: json.RawMessage(`{}`)})
+	l.onStream(agent.StreamEvent{Kind: agent.StreamProgress, CallID: "c1", Text: "line 1\nline 2"})
+	l.onToolResult(session.ToolCall{ID: "c1", Name: "shell"}, "done", false)
+	l.onStream(agent.StreamEvent{Kind: agent.StreamProgress, CallID: "c1", Text: "late"}) // 已结束：丢
+	ev := next(t, sub, wire.EvToolProgress)
+	if p := ev.Data.(v2Event).Payload.(wire.ToolProgress); p.CallID != "c1" || p.Text != "line 1\nline 2" {
+		t.Fatalf("tool.progress：%+v", p)
+	}
+	next(t, sub, wire.EvToolEnded)
+	select {
+	case e := <-sub.C():
+		t.Fatalf("结束后不应再有事件：%+v", e)
+	case <-time.After(100 * time.Millisecond):
+	}
 }

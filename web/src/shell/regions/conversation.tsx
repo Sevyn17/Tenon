@@ -117,7 +117,7 @@ function Hero({ onPick }: { onPick: (t: string) => void }) {
 function toUITool(t: ToolState): UITool {
   const phase: UITool["phase"] =
     t.phase === "ended" ? (t.status === "ok" ? "ok" : t.status === "cancelled" ? "cancelled" : "error") : t.phase;
-  return { call_id: t.call_id, name: t.name, args: t.args, phase, output: t.preview, output_ref: t.output_ref, startedAt: t.startedAt, endedAt: t.endedAt };
+  return { call_id: t.call_id, name: t.name, args: t.args, phase, output: t.preview, output_ref: t.output_ref, live: t.phase === "running" ? t.live : undefined, startedAt: t.startedAt, endedAt: t.endedAt };
 }
 
 /** 回合统计：耗时、步数、工具数、tokens（来自回合内 assistant 条目的 usage）。 */

@@ -73,6 +73,13 @@ func (b *tailBuf) Write(p []byte) (int, error) {
 }
 
 // since 返回自累计偏移 off 起的输出、新偏移、被丢弃的字节数。
+// size 累计写入的字节数。
+func (b *tailBuf) size() int64 {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.total
+}
+
 func (b *tailBuf) since(off int64) (string, int64, int64) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -260,7 +267,9 @@ func (s *Shell) callShell(ctx context.Context, cx *toolhub.Cx, raw json.RawMessa
 		return toolhub.Failf("无法执行命令：%v", err), nil
 	}
 	cleanup()
+	stop := s.watch(cx, buf)
 	code, err := exitCode(cmd.Wait())
+	stop()
 	text, total, dropped := buf.since(0)
 	_ = total
 	text = s.clean(text)
@@ -280,6 +289,54 @@ func (s *Shell) callShell(ctx context.Context, cx *toolhub.Cx, raw json.RawMessa
 		return failText(text + s.hint(cx, raw, text)), nil
 	}
 	return toolhub.Text(text), nil
+}
+
+// 执行中输出的采样（界面实时显示，F12）：每 ProgressEvery 取一次缓冲尾部，变了才报。
+var (
+	ProgressEvery = 500 * time.Millisecond
+	ProgressBytes = 2 << 10
+	ProgressLines = 20
+)
+
+// watch 前台命令运行期间定时把输出尾部交给 cx.Progress；返回的函数停止采样并等它退出。没人看时什么都不做。
+func (s *Shell) watch(cx *toolhub.Cx, buf *tailBuf) func() {
+	if cx == nil || cx.Progress == nil {
+		return func() {}
+	}
+	done, exited := make(chan struct{}), make(chan struct{})
+	go func() {
+		defer close(exited)
+		t := time.NewTicker(ProgressEvery)
+		defer t.Stop()
+		var seen int64
+		for {
+			select {
+			case <-done:
+				return
+			case <-t.C:
+				text, total, _ := buf.since(max(buf.size()-int64(ProgressBytes), 0))
+				if total == seen {
+					continue
+				}
+				seen = total
+				cx.Progress(tailLines(s.clean(text), ProgressLines))
+			}
+		}
+	}()
+	return func() {
+		close(done)
+		<-exited
+	}
+}
+
+// tailLines 最后 n 行（统一换行、去掉末尾空行）。
+func tailLines(t string, n int) string {
+	t = strings.TrimRight(strings.ReplaceAll(t, "\r\n", "\n"), "\n")
+	lines := strings.Split(t, "\n")
+	if len(lines) > n {
+		lines = lines[len(lines)-n:]
+	}
+	return strings.Join(lines, "\n")
 }
 
 // denyHint 沙箱内命令输出像“拒绝访问”时，提示模型可申请一次更宽的沙箱（需用户批准）。

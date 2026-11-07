@@ -24,6 +24,7 @@ import type {
   StreamRef,
   ToolArgsDelta,
   ToolEnded,
+  ToolProgress,
   ToolRunning,
   ToolStarted,
   TurnEnded,
@@ -51,6 +52,8 @@ export interface ToolState {
   status?: string; // ended：ok / error / cancelled
   preview?: string;
   output_ref?: string;
+  /** 执行中的输出尾部（tool.progress，最新一段，替换显示）；结束后清掉。 */
+  live?: string;
   startedAt: number;
   endedAt?: number;
 }
@@ -243,13 +246,18 @@ export function reduce(s: SessionState, ev: Envelope, now = Date.now()): Session
         : [...s.tools, { call_id: d.call_id, name: "", entry_id: "", args, phase: "running" as const, startedAt: now }];
       return { ...s, tools };
     }
+    case "tool.progress": {
+      const d = ev.data as ToolProgress;
+      if (d.text === undefined) return s;
+      return { ...s, tools: s.tools.map((t) => (t.call_id === d.call_id && t.phase === "running" ? { ...t, live: d.text } : t)) };
+    }
     case "tool.ended": {
       const d = ev.data as ToolEnded;
       return {
         ...s,
         tools: s.tools.map((t) =>
           t.call_id === d.call_id
-            ? { ...t, phase: "ended", status: d.status, preview: d.preview, output_ref: d.output_ref, endedAt: now }
+            ? { ...t, phase: "ended", status: d.status, preview: d.preview, output_ref: d.output_ref, endedAt: now, live: undefined }
             : t,
         ),
       };

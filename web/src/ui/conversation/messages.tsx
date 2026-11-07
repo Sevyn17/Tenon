@@ -208,6 +208,17 @@ export function ToolStep(p: { tool: UITool; view?: ToolView; actions?: UIAction[
         {p.trailing}
         <ChevronRight size={13} className={cx(s.chev, open && s.chevOpen)} />
       </button>
+      {!open && t.live && (
+        <pre className={s.stepLive} aria-live="off" aria-label={`${t.name} 的实时输出`}>
+          {t.live.split("\n").slice(-6).join("\n")}
+        </pre>
+      )}
+      {open && t.live && t.output === undefined && (
+        <div className={s.stepDetail}>
+          <div className={s.detailLabel}>实时输出</div>
+          <CodeBlock code={t.live} />
+        </div>
+      )}
       {open && (
         <div className={s.stepDetail}>
           {p.view?.detail ? (

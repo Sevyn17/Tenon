@@ -117,7 +117,7 @@ func (b *Builder) Build(id, defName string, child bool) (*agent.Agent, *session.
 	if b.Compactor != nil {
 		a.Compactor = b.Compactor
 	}
-	ho := toolhub.Options{Store: agent.ToolStore{DB: b.DB}, Artifacts: b.Artifacts, OnSpan: a.HubSpan}
+	ho := toolhub.Options{Store: agent.ToolStore{DB: b.DB}, Artifacts: b.Artifacts, OnSpan: a.HubSpan, OnProgress: a.HubProgress}
 	if b.Kernel != nil {
 		th := b.Kernel.Thresholds
 		ho.Thresholds, ho.ToolTimeout, ho.ConfirmDeadline = &th, b.Kernel.ToolTimeout, b.Kernel.ConfirmDeadline

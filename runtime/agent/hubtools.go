@@ -70,6 +70,13 @@ func (a *Agent) HubSpan(ev toolhub.SpanEvent) {
 	a.AddTraceEvent("tool", ev.Tool+" "+ev.Status)
 }
 
+// HubProgress 接 toolhub.Options.OnProgress：工具执行中的输出经 OnStream 交给展示层（易失）。
+func (a *Agent) HubProgress(callID, text string) {
+	if a.Hooks.OnStream != nil {
+		a.Hooks.OnStream(StreamEvent{Kind: StreamProgress, CallID: callID, Text: text})
+	}
+}
+
 // runToolsHub 一步的工具：并行执行、按序提交。
 func (a *Agent) runToolsHub(ctx context.Context, tn *session.ToolsNeed) (*session.Need, error) {
 	for _, c := range tn.Calls {

@@ -129,6 +129,9 @@ type Cx struct {
 	started        bool   // 执行器已写 started（层短路时为 false）
 	// Approved 本调用已获人工批准且参数哈希一致（由 hub 按挂起记录设置；Guard 据此免确认，拒绝类仍重判）。
 	Approved bool
+	// Progress 报告执行中的输出（易失，只给界面看，不进结果）：text 是"最新的一段"而不是增量，
+	// 界面直接替换显示。nil = 没人看，工具不必采样。
+	Progress func(text string)
 }
 
 // Next 层的下一环。
@@ -189,6 +192,7 @@ type Hub struct {
 	items       map[string]Item
 	visible     func(name string) bool // 由权限策略层注入：取值 deny 的工具不进显露集
 	onSpan      func(SpanEvent)
+	onProgress  func(callID, text string)
 	await       Await
 	timeout     time.Duration // 工具未声明 Timeout 时的缺省（[kernel] tool_timeout）
 	deadline    time.Duration // 确认截止（[kernel] confirm_deadline）
@@ -221,7 +225,9 @@ type Options struct {
 	MaxParallel int
 	Thresholds  *Thresholds
 	OnSpan      func(SpanEvent)
-	Await       Await // 可空：无人工确认时 Confirm 按拒绝处理
+	// OnProgress 工具执行中的输出（Cx.Progress 的去处）；nil = 不给工具 Progress。
+	OnProgress func(callID, text string)
+	Await      Await // 可空：无人工确认时 Confirm 按拒绝处理
 	// ToolTimeout 工具缺省超时；0 = DefaultTimeout。ConfirmDeadline 确认截止；0 = DefaultConfirmDeadline。
 	ToolTimeout     time.Duration
 	ConfirmDeadline time.Duration
@@ -230,7 +236,7 @@ type Options struct {
 // New 构造。内置 read_artifact（Artifacts 非空时）与 tool_search。
 func New(o Options) *Hub {
 	h := &Hub{tools: map[string]*Tool{}, items: map[string]Item{}, store: o.Store, art: o.Artifacts, maxParallel: o.MaxParallel,
-		thresholds: DefaultThresholds, onSpan: o.OnSpan, await: o.Await, timeout: o.ToolTimeout, deadline: o.ConfirmDeadline}
+		thresholds: DefaultThresholds, onSpan: o.OnSpan, onProgress: o.OnProgress, await: o.Await, timeout: o.ToolTimeout, deadline: o.ConfirmDeadline}
 	if h.timeout <= 0 {
 		h.timeout = DefaultTimeout
 	}

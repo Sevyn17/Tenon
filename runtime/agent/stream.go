@@ -27,6 +27,7 @@ const (
 	StreamTool      = "tool"      // 工具调用片段：CallID，Name（调用开始的片段），Args（参数增量）
 	StreamReset     = "reset"     // 模型重试：本步已发的片段作废，Attempt 加一
 	StreamEnd       = "end"       // 本步模型调用结束（成败都发）
+	StreamProgress  = "progress"  // 工具执行中的输出：CallID，Text（最新的一段，替换显示）
 )
 
 // StreamEvent 一条流式事件。

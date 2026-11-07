@@ -68,6 +68,8 @@ export interface UITool {
   output?: string; // 结果文本或预览
   truncated?: boolean;
   output_ref?: string;
+  /** 执行中的输出尾部（替换显示，结束后不再给）。 */
+  live?: string;
   startedAt?: number;
   endedAt?: number;
 }

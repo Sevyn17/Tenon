@@ -128,4 +128,13 @@ describe("session reducer", () => {
     const s1 = run(s0, ev("session.settings_changed", { settings: { max_steps: 3, model: "b" } }, 6));
     expect(s1.model).toBe("b");
   });
+  it("tool.progress：运行中替换显示的尾部，结束后清掉；未运行的不收", () => {
+    let st = run(initialState("s"), ev("tool.started", { call_id: "c1", name: "shell", entry_id: "e1" }));
+    st = run(st, ev("tool.progress", { call_id: "c1", text: "早到的" }));
+    expect(st.tools[0].live).toBeUndefined();
+    st = run(st, ev("tool.running", { call_id: "c1", args: {} }), ev("tool.progress", { call_id: "c1", text: "a" }), ev("tool.progress", { call_id: "c1", text: "a\nb" }));
+    expect(st.tools[0].live).toBe("a\nb");
+    st = run(st, ev("tool.ended", { call_id: "c1", status: "ok", preview: "done" }));
+    expect(st.tools[0].live).toBeUndefined();
+  });
 });

@@ -146,6 +146,12 @@ func (l *liveState) onStream(ev agent.StreamEvent) {
 		}
 		l.clearLocked()
 		l.attempt = ev.Attempt
+	case agent.StreamProgress:
+		if l.tools[ev.CallID] == nil { // 工具已结束（结果先到）或不认识：丢掉
+			return
+		}
+		l.flushLocked()
+		l.publishLocked(wire.EvToolProgress, wire.ToolProgress{CallID: ev.CallID, Text: ev.Text})
 	case agent.StreamEnd:
 		l.flushLocked()
 		for _, s := range l.order {
