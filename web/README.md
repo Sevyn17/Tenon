@@ -6,7 +6,7 @@ Tenon 的前端和后端 SDK 一样是框架：可以直接用内置的工作台
 pnpm install
 pnpm dev         # 开发服务器（需要后端在跑，见下文"本地运行"）
 pnpm typecheck   # 依赖方向检查 + tsc
-pnpm test        # vitest：会话 reducer、布局 reducer、快捷键、注册表
+pnpm test        # vitest：会话 reducer、布局 reducer、快捷键、注册表、传输层心跳；组件测试（happy-dom + Testing Library）：交互卡、Markdown、声明式视图
 pnpm build       # 产物在 dist/，由 embed.go 嵌进 Go 二进制
 ```
 
