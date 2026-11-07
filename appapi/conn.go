@@ -41,7 +41,7 @@ var (
 var viewerCommands = map[string]bool{
 	"hello": true, "sessions.list": true, "session.get": true, "session.entries": true, "session.stats": true,
 	"session.subscribe": true, "session.unsubscribe": true, "mode.list": true, "mode.get": true, "mode.show": true,
-	"artifact.get": true, "trace.explain": true, "interactions.list": true, "plugins.list": true, "packages.list": true, "workspace.files": true, "models.list": true,
+	"artifact.get": true, "trace.explain": true, "interactions.list": true, "plugins.list": true, "packages.list": true, "workspace.files": true, "models.list": true, "feedback.list": true,
 }
 
 // Conn 一个客户端连接。方法并发安全；用完调用 Close。
@@ -106,6 +106,10 @@ func (c *Conn) Call(ctx context.Context, cmd string, args json.RawMessage) (any,
 	case "session.subscribe":
 		return bind(func(_ *App, ctx context.Context, in wire.SubscribeArgs) (wire.Empty, error) {
 			return wire.Empty{}, c.Subscribe(ctx, in)
+		})(ctx, c.a, args)
+	case "feedback.set": // 记下是谁打的分
+		return bind(func(v *App, ctx context.Context, in wire.FeedbackArgs) (wire.Feedback, error) {
+			return v.FeedbackSet(ctx, in, c.p.ID)
 		})(ctx, c.a, args)
 	case "interaction.respond": // 回答者是连接身份（10.6）
 		return bind(func(v *App, ctx context.Context, in wire.RespondArgs) (wire.RespondResult, error) {

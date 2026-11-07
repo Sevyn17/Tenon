@@ -70,11 +70,15 @@ func bind[In, Out any](f func(*App, context.Context, In) (Out, error)) handler {
 }
 
 var commands = map[string]handler{
-	"hello":               bind((*App).Hello),
-	"sessions.list":       bind((*App).SessionsList),
-	"session.create":      bind((*App).Create),
-	"session.update":      bind((*App).Update),
-	"session.delete":      bind((*App).Delete),
+	"hello":          bind((*App).Hello),
+	"sessions.list":  bind((*App).SessionsList),
+	"session.create": bind((*App).Create),
+	"session.update": bind((*App).Update),
+	"session.delete": bind((*App).Delete),
+	"feedback.list":  bind((*App).FeedbackList),
+	"feedback.set": bind(func(v *App, ctx context.Context, in wire.FeedbackArgs) (wire.Feedback, error) {
+		return v.FeedbackSet(ctx, in, LocalPrincipal.ID) // 进程内调用按本机身份；连接上按连接身份（conn.go）
+	}),
 	"session.get":         bind((*App).Get),
 	"session.entries":     bind((*App).Entries),
 	"session.send":        bind((*App).Send),
@@ -311,6 +315,79 @@ func (v *App) Update(ctx context.Context, in wire.UpdateArgs) (wire.SessionSnaps
 		return wire.SessionSnapshot{}, err
 	}
 	return v.snapshot(ctx, in.Session)
+}
+
+// metaFeedback 会话行业务键里的反馈：条目 id → Feedback。
+const metaFeedback = "feedback"
+
+// MaxFeedbackNote 反馈附言上限（字节）。
+const MaxFeedbackNote = 2000
+
+// FeedbackSet 给 assistant 条目打分（存会话行业务键，随会话删除；回合中也能改）。by 是连接身份。
+func (v *App) FeedbackSet(ctx context.Context, in wire.FeedbackArgs, by string) (wire.Feedback, error) {
+	if err := need(in.Session); err != nil {
+		return wire.Feedback{}, err
+	}
+	ms, ok := v.o.DB.(store.SessionMetaStore)
+	if !ok {
+		return wire.Feedback{}, Errorf(wire.CodeUnsupported, "存储不支持会话元数据")
+	}
+	if in.Entry == "" || len(in.Entry) > 128 {
+		return wire.Feedback{}, Errorf(wire.CodeBadRequest, "缺少 entry 或超过 128 字节")
+	}
+	if in.Vote != "" && in.Vote != "up" && in.Vote != "down" {
+		return wire.Feedback{}, invalid("vote 只能是 up / down / 空，得到 %q", in.Vote)
+	}
+	if len(in.Note) > MaxFeedbackNote {
+		return wire.Feedback{}, invalid("附言超过 %d 字节", MaxFeedbackNote)
+	}
+	l, err := host.LoadHead(ctx, v.o.DB, in.Session)
+	if err != nil {
+		return wire.Feedback{}, err
+	}
+	all := feedbackOf(l.Meta.Meta)
+	fb := wire.Feedback{Entry: in.Entry, Vote: in.Vote, Note: in.Note, By: by, At: time.Now().UnixMilli()}
+	if in.Vote == "" {
+		delete(all, in.Entry)
+	} else {
+		all[in.Entry] = fb
+	}
+	var val any = all
+	if len(all) == 0 {
+		val = nil
+	}
+	if err := ms.UpdateSessionMeta(ctx, in.Session, nil, map[string]any{metaFeedback: val}); err != nil {
+		return wire.Feedback{}, err
+	}
+	return fb, nil
+}
+
+// FeedbackList 一个会话的全部反馈（按时间）。
+func (v *App) FeedbackList(ctx context.Context, in wire.SessionArgs) (wire.FeedbackListResult, error) {
+	if err := need(in.Session); err != nil {
+		return wire.FeedbackListResult{}, err
+	}
+	l, err := host.LoadHead(ctx, v.o.DB, in.Session)
+	if err != nil {
+		return wire.FeedbackListResult{}, err
+	}
+	out := wire.FeedbackListResult{Items: []wire.Feedback{}}
+	for _, f := range feedbackOf(l.Meta.Meta) {
+		out.Items = append(out.Items, f)
+	}
+	sort.Slice(out.Items, func(i, j int) bool { return out.Items[i].At < out.Items[j].At })
+	return out, nil
+}
+
+func feedbackOf(meta json.RawMessage) map[string]wire.Feedback {
+	var m struct {
+		F map[string]wire.Feedback `json:"feedback"`
+	}
+	_ = json.Unmarshal(meta, &m)
+	if m.F == nil {
+		m.F = map[string]wire.Feedback{}
+	}
+	return m.F
 }
 
 // EventDeleted 会话删除后的易失总线事件：连接据此发 sessions.changed {deleted}，订阅了它的连接收到 session.closed {reason: deleted}。

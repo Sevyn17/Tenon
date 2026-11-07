@@ -23,7 +23,7 @@ var tsTypes = []any{
 	InteractionResolved{}, SessionClosed{}, SessionForked{}, SessionUpdated{}, TurnStarted{}, TurnEnded{}, TurnRejected{},
 	MessageStarted{}, MessageDelta{}, StreamRef{}, ToolStarted{}, ToolArgsDelta{}, ToolRunning{}, ToolProgress{},
 	ToolEnded{}, Notice{}, CursorRef{}, SessionsChanged{},
-	ProtocolRange{}, HelloArgs{}, HelloResult{}, SessionArgs{}, ListArgs{}, ListResult{}, UpdateArgs{}, CreateArgs{},
+	ProtocolRange{}, HelloArgs{}, HelloResult{}, SessionArgs{}, ListArgs{}, ListResult{}, UpdateArgs{}, FeedbackArgs{}, Feedback{}, FeedbackListResult{}, CreateArgs{},
 	SubscribeArgs{}, EntriesArgs{}, EntriesResult{}, SendArgs{}, SendResult{}, SteerArgs{}, RewindArgs{},
 	RewindResult{}, CompactArgs{}, CompactResult{}, ForkArgs{}, SettingsArgs{}, SettingsResult{}, ModelInfo{}, ModelsListResult{}, Response{},
 	RespondArgs{}, RespondResult{}, InteractionsResult{}, ModeInfo{}, ModeListResult{}, ModeSetArgs{},

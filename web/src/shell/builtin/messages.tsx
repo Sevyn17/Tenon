@@ -1,6 +1,6 @@
 // 内置贡献包 messages（前端方案第七节）：消息上的附加操作：朗读、反馈 👍 👎、导出（回合 / 整个会话，Markdown / JSON）。
 // 都走 MessageAction / Command 注册表；嵌入方 disable: ["messages"] 整包关掉，或同 id 低 priority 替换。
-// 反馈首版存本地（localStorage，按会话），后端有反馈存储后换实现，操作 id 不变。
+// 反馈存后端（feedback.set / feedback.list，存在会话行上、随会话删除）；首版存在 localStorage 的旧反馈第一次用到时搬过去。
 
 import { Download, FileJson, ThumbsDown, ThumbsUp, Volume2 } from "lucide-react";
 import type { Client, Entry } from "../../client";
@@ -12,24 +12,36 @@ import type { Registries } from "../contributions";
 type Vote = "up" | "down";
 const fbKey = (session: string) => `ybase.feedback.${session}`;
 
-export function readFeedback(session: string): Record<string, Vote> {
+/** 首版存在本地的反馈：搬到后端后删掉本地这份（搬一次）。 */
+async function migrateLocal(client: Client, session: string) {
+  let old: Record<string, Vote> = {};
   try {
-    return JSON.parse(localStorage.getItem(fbKey(session)) ?? "{}") as Record<string, Vote>;
+    old = JSON.parse(localStorage.getItem(fbKey(session)) ?? "{}") as Record<string, Vote>;
   } catch {
-    return {};
+    return;
+  }
+  const ids = Object.keys(old);
+  if (!ids.length) return;
+  for (const entry of ids) await client.call("feedback.set", { session, entry, vote: old[entry] });
+  try {
+    localStorage.removeItem(fbKey(session));
+  } catch {
+    /* 存储不可用 */
   }
 }
 
-function vote(session: string, entry: string, v: Vote): Vote | null {
-  const all = readFeedback(session);
-  const next = all[entry] === v ? null : v;
-  if (next) all[entry] = next;
-  else delete all[entry];
-  try {
-    localStorage.setItem(fbKey(session), JSON.stringify(all));
-  } catch {
-    /* 存储不可用：只是不记 */
-  }
+/** 一个会话的反馈：条目 id → 票。 */
+export async function readFeedback(client: Client, session: string): Promise<Record<string, Vote>> {
+  await migrateLocal(client, session);
+  const r = await client.call("feedback.list", { session });
+  return Object.fromEntries(r.items.map((f) => [f.entry, f.vote as Vote]));
+}
+
+/** 同一票再点一次是撤销。 */
+async function vote(client: Client, session: string, entry: string, v: Vote): Promise<Vote | null> {
+  const cur = (await readFeedback(client, session))[entry];
+  const next = cur === v ? null : v;
+  await client.call("feedback.set", { session, entry, vote: next ?? "" });
   return next;
 }
 
@@ -128,9 +140,9 @@ export function messagesPack(reg: Registries): ContributionPack {
         placement: "hover",
         order: 5,
         when: (x) => (x.entryId ? true : false),
-        run: (x) => {
+        run: async (x) => {
           if (!x.session || !x.entryId) return;
-          const v = vote(x.session, x.entryId, "up");
+          const v = await vote(x.client, x.session, x.entryId, "up");
           x.shell.toast(v ? "已记下：有帮助" : "已取消反馈");
         },
       });
@@ -142,9 +154,9 @@ export function messagesPack(reg: Registries): ContributionPack {
         placement: "hover",
         order: 6,
         when: (x) => (x.entryId ? true : false),
-        run: (x) => {
+        run: async (x) => {
           if (!x.session || !x.entryId) return;
-          const v = vote(x.session, x.entryId, "down");
+          const v = await vote(x.client, x.session, x.entryId, "down");
           x.shell.toast(v ? "已记下：没帮助" : "已取消反馈");
         },
       });
@@ -197,7 +209,7 @@ export function messagesPack(reg: Registries): ContributionPack {
         run: async (x) => {
           if (!x.session) return;
           const snap = await x.client.call("session.get", { session: x.session });
-          const body = { session: snap, entries: await allEntries(x.client, x.session), feedback: readFeedback(x.session) };
+          const body = { session: snap, entries: await allEntries(x.client, x.session), feedback: await readFeedback(x.client, x.session) };
           download(`${safe(snap.title || x.session)}.json`, "application/json", JSON.stringify(body, null, 2));
         },
       });

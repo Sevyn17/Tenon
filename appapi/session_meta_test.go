@@ -2,6 +2,7 @@ package appapi
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -213,4 +214,50 @@ func TestV2SwitchModel(t *testing.T) {
 		t.Fatalf("快照：%+v", snap.(wire.SessionSnapshot).Settings)
 	}
 	sendWait(t, app, "m1", "hi", "c1") // 换了模型后照常能跑回合（fakeModel 不看别名）
+}
+
+// feedback.set / list：打分、改分、撤销；按连接身份记 by；不改列表顺序；随会话删除。
+func TestV2Feedback(t *testing.T) {
+	app := newApp(t)
+	if _, e := call2(t, app, "session.create", `{"session":"f"}`); e != nil {
+		t.Fatal(e)
+	}
+	c := app.NewConn(context.Background(), wire.Principal{ID: "alice", Role: wire.RoleOperator})
+	defer c.Close()
+	callC := func(cmd, args string) (any, error) { return c.Call(context.Background(), cmd, json.RawMessage(args)) }
+	if _, err := callC("feedback.set", `{"session":"f","entry":"e1","vote":"up"}`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := callC("feedback.set", `{"session":"f","entry":"e2","vote":"down","note":"答非所问"}`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := callC("feedback.set", `{"session":"f","entry":"e1","vote":"down"}`); err != nil {
+		t.Fatal(err)
+	}
+	out, _ := call2(t, app, "feedback.list", `{"session":"f"}`)
+	items := out.(wire.FeedbackListResult).Items
+	if len(items) != 2 || items[0].Entry != "e2" || items[1].Entry != "e1" || items[1].Vote != "down" || items[0].Note != "答非所问" || items[0].By != "alice" {
+		t.Fatalf("列表：%+v", items)
+	}
+	if _, err := callC("feedback.set", `{"session":"f","entry":"e1","vote":""}`); err != nil {
+		t.Fatal(err)
+	}
+	out, _ = call2(t, app, "feedback.list", `{"session":"f"}`)
+	if len(out.(wire.FeedbackListResult).Items) != 1 {
+		t.Fatalf("撤销后：%+v", out)
+	}
+	if _, err := callC("feedback.set", `{"session":"f","entry":"e1","vote":"meh"}`); AsError(err).Code != wire.CodeInvalid {
+		t.Fatalf("非法 vote：%v", err)
+	}
+	if _, err := callC("feedback.set", `{"session":"none","entry":"e1","vote":"up"}`); AsError(err).Code != wire.CodeNotFound {
+		t.Fatalf("会话不存在：%v", err)
+	}
+	v := app.NewConn(context.Background(), wire.Principal{ID: "v", Role: wire.RoleViewer})
+	defer v.Close()
+	if _, err := v.Call(context.Background(), "feedback.set", json.RawMessage(`{"session":"f","entry":"e1","vote":"up"}`)); AsError(err).Code != wire.CodeForbidden {
+		t.Fatalf("viewer 不能打分：%v", err)
+	}
+	if _, err := v.Call(context.Background(), "feedback.list", json.RawMessage(`{"session":"f"}`)); err != nil {
+		t.Fatalf("viewer 能看：%v", err)
+	}
 }

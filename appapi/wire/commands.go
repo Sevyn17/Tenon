@@ -63,6 +63,27 @@ type ListArgs struct {
 	Pinned bool `json:"pinned,omitempty"`
 }
 
+// FeedbackArgs feedback.set：给一条 assistant 条目打分（up / down），vote 为空串表示撤销；note 可选（≤ 2000 字节）。
+type FeedbackArgs struct {
+	Session string `json:"session"`
+	Entry   string `json:"entry"` // 条目 id
+	Vote    string `json:"vote"`  // up / down / ""
+	Note    string `json:"note,omitempty"`
+}
+
+// Feedback 一条反馈。
+type Feedback struct {
+	Entry string `json:"entry"`
+	Vote  string `json:"vote"`
+	Note  string `json:"note,omitempty"`
+	By    string `json:"by"`
+	At    int64  `json:"at"`
+}
+
+type FeedbackListResult struct {
+	Items []Feedback `json:"items"`
+}
+
 // UpdateArgs session.update：只改给了的字段。title 为空串表示清掉标题（界面回退显示 id）。
 type UpdateArgs struct {
 	Session string  `json:"session"`

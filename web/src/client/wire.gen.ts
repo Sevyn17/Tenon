@@ -378,6 +378,25 @@ export interface UpdateArgs {
   pinned?: boolean;
 }
 
+export interface FeedbackArgs {
+  session: string;
+  entry: string;
+  vote: string;
+  note?: string;
+}
+
+export interface Feedback {
+  entry: string;
+  vote: string;
+  note?: string;
+  by: string;
+  at: number;
+}
+
+export interface FeedbackListResult {
+  items: Feedback[];
+}
+
 export interface CreateArgs {
   session?: string;
   definition?: string;
