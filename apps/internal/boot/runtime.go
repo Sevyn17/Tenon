@@ -208,6 +208,7 @@ func (r *Runtime) BuildApp(o AppOptions) (*Built, error) {
 		Trusted: r.Trusted, Profile: r.Profile, Packages: r.Packages, UI: o.UI, Artifacts: rt.Store.Blobs()}
 	root := r.Root
 	ao.Profiles = Profiles{Extra: r.ExtraProfile, Root: root, Trusted: r.Trusted}
+	ao.Models = ModelList{M: rt.Models}
 	ao.Files = func(ctx context.Context, q string, limit int) ([]wire.FileInfo, bool, error) { // 界面 @ 文件（workspace.files）
 		hits, trunc, err := fs.ListFiles(ctx, root, q, limit, MaxScanFiles)
 		out := make([]wire.FileInfo, len(hits))

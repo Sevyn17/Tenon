@@ -74,7 +74,7 @@ func (modelsPlugin) Setup(cx *component.Registrar) error {
 	if _, err := cat.Resolve(model); err != nil {
 		return err
 	}
-	return cx.Provide("modelhub", &assemble.Models{Hub: modelhub.New(cat, sec.Resolve, nil), Model: model})
+	return cx.Provide("modelhub", &assemble.Models{Hub: modelhub.New(cat, sec.Resolve, nil), Model: model, Secrets: sec})
 }
 
 func (modelsPlugin) Start(*component.Scope) error { return nil }

@@ -78,6 +78,12 @@ type Profiles interface {
 	Denied() map[string][]string
 }
 
+// Models 可选模型（models 插件的目录适配）；Check 校验一个 id 能否设到会话上。
+type Models interface {
+	List() wire.ModelsListResult
+	Check(id string) error
+}
+
 // Files 列工作区文件（fs 插件的 ListFiles 适配）：遵守 .gitignore，只读，不出工作目录。
 type Files func(ctx context.Context, query string, limit int) ([]wire.FileInfo, bool, error)
 

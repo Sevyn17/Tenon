@@ -120,7 +120,8 @@ type Mode struct {
 
 // Settings 会话设置。
 type Settings struct {
-	MaxSteps uint32 `json:"max_steps"` // 0 = 不限
+	MaxSteps uint32 `json:"max_steps"`       // 0 = 不限
+	Model    string `json:"model,omitempty"` // 模型别名或 provider/model
 }
 
 // Interaction 一次等人回答（10.6）。

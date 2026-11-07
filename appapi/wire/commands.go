@@ -154,6 +154,27 @@ type ForkArgs struct {
 type SettingsArgs struct {
 	Session  string  `json:"session"`
 	MaxSteps *uint32 `json:"max_steps,omitempty"`
+	// Model 换模型（models.list 里的 id）；回合中到步边界生效。
+	Model *string `json:"model,omitempty"`
+}
+
+// ModelInfo models.list 的一项。
+type ModelInfo struct {
+	ID            string `json:"id"`
+	Alias         bool   `json:"alias,omitempty"`
+	Provider      string `json:"provider"`
+	Name          string `json:"name,omitempty"`
+	ContextWindow int    `json:"context_window,omitempty"`
+	Images        bool   `json:"images,omitempty"`
+	Reasoning     bool   `json:"reasoning,omitempty"`
+	// Available 提供方凭证可用；为假时 Reason 说明（如缺环境变量），选它会在调用时失败。
+	Available bool   `json:"available"`
+	Reason    string `json:"reason,omitempty"`
+}
+
+type ModelsListResult struct {
+	Models  []ModelInfo `json:"models"`
+	Default string      `json:"default"` // 新会话的缺省模型
 }
 
 type SettingsResult struct {

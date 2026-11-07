@@ -190,6 +190,7 @@ type commitBuf struct {
 	known    bool
 	run      string
 	maxSteps uint32
+	model    string
 	ext      map[string]string // 键 → 值的 JSON
 }
 
@@ -201,7 +202,7 @@ func (b *commitBuf) reset(logLen int) {
 
 // remember 记下已提交的运行状态、设置与 Ext（打开会话与每次提交后调用）。
 func (b *commitBuf) remember(run string, h session.Header) {
-	b.known, b.run, b.maxSteps, b.ext = true, run, maxStepsOf(h), extJSON(h.Ext)
+	b.known, b.run, b.maxSteps, b.model, b.ext = true, run, maxStepsOf(h), modelOf(h), extJSON(h.Ext)
 }
 
 // stateEvents 新头部相对已提交状态的变化 → 持久事件（运行状态、设置、Ext 各项）。
@@ -214,8 +215,8 @@ func (b *commitBuf) stateEvents(run string, h session.Header) []store.Event {
 		d, _ := json.Marshal(map[string]any{"run_state": run})
 		out = append(out, store.Event{Kind: store.EventRunState, Data: d})
 	}
-	if ms := maxStepsOf(h); ms != b.maxSteps {
-		d, _ := json.Marshal(map[string]any{"max_steps": ms})
+	if ms, md := maxStepsOf(h), modelOf(h); ms != b.maxSteps || md != b.model {
+		d, _ := json.Marshal(map[string]any{"max_steps": ms, "model": md})
 		out = append(out, store.Event{Kind: store.EventSettings, Data: d})
 	}
 	now := extJSON(h.Ext)
@@ -248,6 +249,13 @@ func maxStepsOf(h session.Header) uint32 {
 		return 0
 	}
 	return h.Config.Policy.MaxSteps
+}
+
+func modelOf(h session.Header) string {
+	if h.Config == nil {
+		return ""
+	}
+	return h.Config.Model
 }
 
 func extJSON(ext map[string]any) map[string]string {

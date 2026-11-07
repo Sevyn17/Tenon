@@ -98,6 +98,7 @@ var commands = map[string]handler{
 	"packages.list":       bind((*App).PackagesList),
 	"plugins.set":         bind((*App).PluginsSet),
 	"workspace.files":     bind((*App).WorkspaceFiles),
+	"models.list":         bind((*App).ModelsList),
 }
 
 // Commands protocol 2 支持的命令名（排序后）。
@@ -208,6 +209,9 @@ func (v *App) capabilities() []string {
 	}
 	if o.Files != nil {
 		out = append(out, "files")
+	}
+	if o.Models != nil {
+		out = append(out, "models")
 	}
 	return out
 }
@@ -462,7 +466,7 @@ func (v *App) snapshot(ctx context.Context, id string) (wire.SessionSnapshot, er
 		}
 	}
 	return wire.SessionSnapshot{ID: id, Parent: l.Meta.ParentID, Origin: l.Meta.Origin, Title: l.Meta.Title, Pinned: pinnedOf(l.Meta.Meta),
-		RunState: WireRunState(h.Status), Mode: v.committedMode(id, modeHdr), Settings: wire.Settings{MaxSteps: maxSteps(h)},
+		RunState: WireRunState(h.Status), Mode: v.committedMode(id, modeHdr), Settings: settingsOf(h),
 		Log: wire.LogPos{Base: h.CompactionBase, Len: h.LogLen}, Interactions: v.openInteractions(ctx, id), Cursor: l.Cursor,
 		Live: v.live(id, h)}, nil
 }
@@ -498,11 +502,11 @@ func (v *App) committedMode(id string, h session.Header) *wire.Mode {
 	return &wire.Mode{Mode: st.Mode, Label: st.Label, Sandbox: st.Sandbox}
 }
 
-func maxSteps(h session.Header) uint32 {
+func settingsOf(h session.Header) wire.Settings {
 	if h.Config == nil {
-		return 0
+		return wire.Settings{}
 	}
-	return h.Config.Policy.MaxSteps
+	return wire.Settings{MaxSteps: h.Config.Policy.MaxSteps, Model: h.Config.Model}
 }
 
 // Entries 读已提交日志，条目按 10.3 翻译；工具结果超过 MaxWireText 时截断，有工件存储时给全文引用。
@@ -877,22 +881,49 @@ func (v *App) Settings(ctx context.Context, in wire.SettingsArgs) (wire.Settings
 	if err := need(in.Session); err != nil {
 		return wire.SettingsResult{}, err
 	}
-	if in.MaxSteps == nil {
-		l, err := host.LoadHead(ctx, v.o.DB, in.Session)
-		if err != nil {
-			return wire.SettingsResult{}, err
+	l, err := host.LoadHead(ctx, v.o.DB, in.Session)
+	if err != nil {
+		return wire.SettingsResult{}, err
+	}
+	cur := settingsOf(l.Snapshot.Header)
+	if in.MaxSteps == nil && in.Model == nil {
+		return wire.SettingsResult{Settings: cur, Committed: true}, nil
+	}
+	if in.Model != nil {
+		if v.o.Models == nil {
+			return wire.SettingsResult{}, Errorf(wire.CodeUnsupported, "没有可选的模型目录")
 		}
-		return wire.SettingsResult{Settings: wire.Settings{MaxSteps: maxSteps(l.Snapshot.Header)}, Committed: true}, nil
+		if err := v.o.Models.Check(*in.Model); err != nil {
+			return wire.SettingsResult{}, invalid("模型 %q 不可用：%v", *in.Model, err)
+		}
 	}
 	hd, err := v.o.Host.OpenExisting(ctx, in.Session)
 	if err != nil {
 		return wire.SettingsResult{}, err
 	}
-	ok, err := v.apply(in.Session, hd, host.Command{Kind: host.SetConfig, MaxSteps: in.MaxSteps})
+	ok, err := v.apply(in.Session, hd, host.Command{Kind: host.SetConfig, MaxSteps: in.MaxSteps, Model: in.Model})
 	if err != nil {
 		return wire.SettingsResult{}, err
 	}
-	return wire.SettingsResult{Settings: wire.Settings{MaxSteps: *in.MaxSteps}, Committed: ok}, nil
+	if in.MaxSteps != nil {
+		cur.MaxSteps = *in.MaxSteps
+	}
+	if in.Model != nil {
+		cur.Model = *in.Model
+	}
+	return wire.SettingsResult{Settings: cur, Committed: ok}, nil
+}
+
+// ModelsList 可选模型（别名在前）与新会话的缺省模型。没有装配目录时返回 unsupported。
+func (v *App) ModelsList(_ context.Context, _ wire.Empty) (wire.ModelsListResult, error) {
+	if v.o.Models == nil {
+		return wire.ModelsListResult{}, Errorf(wire.CodeUnsupported, "没有可选的模型目录")
+	}
+	r := v.o.Models.List()
+	if r.Models == nil {
+		r.Models = []wire.ModelInfo{}
+	}
+	return r, nil
 }
 
 // apply 投递 SetExt / SetConfig 并等受理，最多等 applyWait：回合中这类命令要到步边界才受理，而这一步可能正等着

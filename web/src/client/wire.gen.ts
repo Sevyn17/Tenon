@@ -106,6 +106,7 @@ export interface Mode {
 
 export interface Settings {
   max_steps: number;
+  model?: string;
 }
 
 export interface Interaction {
@@ -455,11 +456,29 @@ export interface ForkArgs {
 export interface SettingsArgs {
   session: string;
   max_steps?: number;
+  model?: string;
 }
 
 export interface SettingsResult {
   settings: Settings;
   committed: boolean;
+}
+
+export interface ModelInfo {
+  id: string;
+  alias?: boolean;
+  provider: string;
+  name?: string;
+  context_window?: number;
+  images?: boolean;
+  reasoning?: boolean;
+  available: boolean;
+  reason?: string;
+}
+
+export interface ModelsListResult {
+  models: ModelInfo[];
+  default: string;
 }
 
 export interface Response {

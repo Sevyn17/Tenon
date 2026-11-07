@@ -2,6 +2,7 @@ package appapi
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"ybase/appapi/wire"
@@ -163,4 +164,53 @@ func TestV2WorkspaceFiles(t *testing.T) {
 	if !found {
 		t.Fatal("capabilities 应带 files")
 	}
+}
+
+type fakeModels struct{}
+
+func (fakeModels) List() wire.ModelsListResult {
+	return wire.ModelsListResult{Default: "m", Models: []wire.ModelInfo{{ID: "m", Provider: "p", Available: true}, {ID: "p/big", Provider: "p", Available: true}}}
+}
+
+func (fakeModels) Check(id string) error {
+	if id == "m" || id == "p/big" {
+		return nil
+	}
+	return errors.New("目录里没有")
+}
+
+// session.settings {model}：校验、落库、settings_changed 带 model、快照带 model。
+func TestV2SwitchModel(t *testing.T) {
+	app := newApp(t)
+	_, e := call2(t, app, "models.list", `{}`)
+	wantCode(t, e, wire.CodeUnsupported, "")
+	app.o.Models = fakeModels{}
+	if _, e := call2(t, app, "session.create", `{"session":"m1"}`); e != nil {
+		t.Fatal(e)
+	}
+	out, e := call2(t, app, "models.list", `{}`)
+	if e != nil || len(out.(wire.ModelsListResult).Models) != 2 {
+		t.Fatalf("models.list：%v %v", out, e)
+	}
+	c := app.NewConn(context.Background(), LocalPrincipal)
+	defer c.Close()
+	if err := c.Subscribe(context.Background(), wire.SubscribeArgs{Session: "m1"}); err != nil {
+		t.Fatal(err)
+	}
+	waitKind(t, c, wire.EvSynced)
+	_, e = call2(t, app, "session.settings", `{"session":"m1","model":"nope"}`)
+	wantCode(t, e, wire.CodeInvalid, "")
+	r, e := call2(t, app, "session.settings", `{"session":"m1","model":"p/big"}`)
+	if e != nil || r.(wire.SettingsResult).Settings.Model != "p/big" || !r.(wire.SettingsResult).Committed {
+		t.Fatalf("settings：%+v %v", r, e)
+	}
+	got := waitKind(t, c, wire.EvSettingsChanged)
+	if d := got[len(got)-1].Data.(wire.SettingsChanged); d.Settings.Model != "p/big" {
+		t.Fatalf("settings_changed：%+v", d)
+	}
+	snap, _ := call2(t, app, "session.get", `{"session":"m1"}`)
+	if snap.(wire.SessionSnapshot).Settings.Model != "p/big" {
+		t.Fatalf("快照：%+v", snap.(wire.SessionSnapshot).Settings)
+	}
+	sendWait(t, app, "m1", "hi", "c1") // 换了模型后照常能跑回合（fakeModel 不看别名）
 }

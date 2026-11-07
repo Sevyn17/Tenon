@@ -39,6 +39,8 @@ type DBHandle interface {
 type Models struct {
 	Hub   *modelhub.Hub
 	Model string
+	// Secrets 凭证解析（可空）：界面列模型时据此标出哪些提供方的凭证不可用。
+	Secrets Secrets
 }
 
 // Redactable 可装脱敏函数的服务（如压缩器：摘要落库前脱敏）。

@@ -41,7 +41,7 @@ var (
 var viewerCommands = map[string]bool{
 	"hello": true, "sessions.list": true, "session.get": true, "session.entries": true, "session.stats": true,
 	"session.subscribe": true, "session.unsubscribe": true, "mode.list": true, "mode.get": true, "mode.show": true,
-	"artifact.get": true, "trace.explain": true, "interactions.list": true, "plugins.list": true, "packages.list": true, "workspace.files": true,
+	"artifact.get": true, "trace.explain": true, "interactions.list": true, "plugins.list": true, "packages.list": true, "workspace.files": true, "models.list": true,
 }
 
 // Conn 一个客户端连接。方法并发安全；用完调用 Close。
@@ -69,7 +69,8 @@ func (a *App) NewConn(ctx context.Context, p wire.Principal) *Conn {
 	cctx, cancel := context.WithCancel(ctx)
 	c := &Conn{a: a, p: p, ctx: cctx, cancel: cancel, subs: map[string]*subscription{}, delivered: map[string]int64{},
 		wake: make(chan struct{}, 1), space: make(chan struct{})}
-	go c.watchSessions()
+	// 连接级订阅在返回前挂上：连接建好之后的变化一条不漏（原先在协程里订阅，刚建连接时的事件可能丢）。
+	go c.watchSessions(a.o.Bus.Subscribe(cctx, bus.Filter{Kinds: []string{store.EventRunState, store.EventMeta, EventDeleted}}))
 	context.AfterFunc(cctx, c.Close)
 	return c
 }
@@ -294,8 +295,9 @@ func (c *Conn) translate(e bus.Envelope) []wire.Envelope {
 		s, _ := m["run_state"].(string)
 		return []wire.Envelope{c.envelope(e.Session, wire.EvStateChanged, e.Seq, 0, wire.StateChanged{RunState: wireRun(s)})}
 	case store.EventSettings:
+		model, _ := m["model"].(string)
 		return []wire.Envelope{c.envelope(e.Session, wire.EvSettingsChanged, e.Seq, 0,
-			wire.SettingsChanged{Settings: wire.Settings{MaxSteps: uint32(intOf(m["max_steps"]))}})}
+			wire.SettingsChanged{Settings: wire.Settings{MaxSteps: uint32(intOf(m["max_steps"])), Model: model}})}
 	case store.EventInteractionOpened: // 载荷是宿主登记时生成的线上 Interaction；子会话的也写在根会话上
 		var it wire.Interaction
 		if raw, err := json.Marshal(m); err != nil || json.Unmarshal(raw, &it) != nil {
@@ -373,8 +375,7 @@ func (c *Conn) modeOf(id string, m map[string]any) *wire.Mode {
 
 // watchSessions 连接级 sessions.changed：本进程任一会话的运行状态、标题与置顶变化或删除时刷新列表里的一行
 // （易失，重连后重新查列表）。
-func (c *Conn) watchSessions() {
-	sub := c.a.o.Bus.Subscribe(c.ctx, bus.Filter{Kinds: []string{store.EventRunState, store.EventMeta, EventDeleted}})
+func (c *Conn) watchSessions(sub *bus.Sub) {
 	for e := range sub.C() {
 		var row wire.SessionsChanged
 		switch {

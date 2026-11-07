@@ -164,3 +164,55 @@ func (c *Catalog) Sources() []string {
 	sort.Strings(out)
 	return out
 }
+
+// Entry 目录里可选的一项（界面切换模型用）：别名或 provider/model。
+type Entry struct {
+	ID            string // 设到会话上的值（别名名或 provider/model）
+	Alias         bool
+	Provider      string // 别名：计划第一项的提供方
+	Name          string // 厂商模型名
+	ContextWindow int
+	Images        bool
+	Reasoning     bool
+}
+
+// Entries 别名在前（按名排序），模型在后（按 provider/model 排序）。
+func (c *Catalog) Entries() []Entry {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	entry := func(id string, m Model, alias bool) Entry {
+		e := Entry{ID: id, Alias: alias, Provider: m.Provider, Name: m.Name, ContextWindow: m.ContextWindow}
+		if e.Name == "" {
+			if _, n, ok := strings.Cut(id, "/"); ok && !alias {
+				e.Name = n
+			}
+		}
+		e.Images = m.Caps.Images != nil && *m.Caps.Images
+		e.Reasoning = m.Caps.Reasoning != nil && *m.Caps.Reasoning
+		return e
+	}
+	var al, ms []Entry
+	for k, a := range c.aliases {
+		var m Model
+		if len(a.v) > 0 {
+			if x, ok := c.models[a.v[0].Model]; ok {
+				m = x.v
+			}
+		}
+		al = append(al, entry(k, m, true))
+	}
+	for k, m := range c.models {
+		ms = append(ms, entry(k, m.v, false))
+	}
+	sort.Slice(al, func(i, j int) bool { return al[i].ID < al[j].ID })
+	sort.Slice(ms, func(i, j int) bool { return ms[i].ID < ms[j].ID })
+	return append(al, ms...)
+}
+
+// ProviderKey 提供方的凭证引用（不存在返回空串与 false）。
+func (c *Catalog) ProviderKey(name string) (string, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	p, ok := c.providers[name]
+	return p.v.Key, ok
+}

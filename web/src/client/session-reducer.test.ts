@@ -122,4 +122,10 @@ describe("session reducer", () => {
     const s1 = run(s0, ev("session.updated", { title: "新", pinned: false }, 6));
     expect([s1.title, s1.pinned]).toEqual(["新", false]);
   });
+  it("settings 带 model：快照与 settings_changed", () => {
+    const s0 = applySnapshot(initialState("s"), snap({ settings: { max_steps: 3, model: "a" } }));
+    expect([s0.maxSteps, s0.model]).toEqual([3, "a"]);
+    const s1 = run(s0, ev("session.settings_changed", { settings: { max_steps: 3, model: "b" } }, 6));
+    expect(s1.model).toBe("b");
+  });
 });
