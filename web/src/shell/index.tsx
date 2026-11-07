@@ -6,6 +6,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { createClient, listed, type Client } from "../client";
+import { backendPack } from "./backend-ui";
 import { ClientProvider, useStore } from "../client/react";
 import { Button, Dialog, Input, ToastProvider, applyDensity, applyTheme, isMac, useToast, type ThemePref } from "../ui";
 import { createShellBus } from "./bus";
@@ -63,6 +64,9 @@ export interface Shell {
 type Asker =
   | { kind: "confirm"; title: string; body?: ReactNode; confirm?: string; danger?: boolean; resolve: (v: boolean) => void }
   | { kind: "prompt"; title: string; label?: string; initial?: string; resolve: (v: string | null) => void };
+
+/** 声明式按钮调用前要确认的命令。 */
+const DESTRUCTIVE = new Set(["session.delete", "session.rewind", "session.compact", "plugins.set", "mode.set"]);
 
 export function createShell(o: ShellOptions = {}): Shell {
   const ns = o.ns ?? "ybase";
@@ -130,9 +134,15 @@ export function createShell(o: ShellOptions = {}): Shell {
     preset: o.preset,
     async runDecl(a, values) {
       switch (a.kind) {
-        case "call":
+        case "call": {
+          // 声明式按钮（插件包的界面贡献）能调协议命令：会删数据、改配置的先让用户确认，不让一个按钮悄悄做掉。
+          if (DESTRUCTIVE.has(a.cmd)) {
+            const ok = await api.confirm({ title: "确认操作", body: `界面贡献请求执行 ${a.cmd}。`, confirm: "执行", danger: true });
+            if (!ok) return;
+          }
           await client.call(a.cmd as never, { ...(a.args as object), ...(values ?? {}) } as never);
           return;
+        }
         case "openPanel":
           api.openPanel(a.panel, a.params);
           return;
@@ -170,6 +180,13 @@ export function createShell(o: ShellOptions = {}): Shell {
         plugins = new Set(r.plugins.filter((p) => p.on).map((p) => p.name));
       } catch {
         plugins = null;
+      }
+      // 后端插件包的界面贡献（[[ui]] 段）：每个包一个贡献包，可在设置里单独关。
+      try {
+        const r = await client.call("packages.list", {});
+        for (const pkg of r.packages) if (pkg.ui?.length) packs.register(backendPack(reg, pkg, plugins));
+      } catch {
+        /* 后端不提供插件包：没有界面贡献 */
       }
       packs.setEnvironment({ ready: true, capabilities: h.capabilities, plugins });
     })

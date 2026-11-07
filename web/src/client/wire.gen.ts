@@ -713,6 +713,22 @@ export interface PackageInfo {
   scope: string;
   source: string;
   contents: string;
+  ui?: UISlot[];
+}
+
+export interface UISlot {
+  id: string;
+  slot: string;
+  title?: string;
+  order?: number;
+  requires?: string;
+  view: unknown;
+  data?: UIData;
+}
+
+export interface UIData {
+  cmd: string;
+  args?: Record<string, unknown>;
 }
 
 export interface PackagesListResult {

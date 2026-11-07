@@ -154,7 +154,24 @@ export const myPack: ContributionPack = {
 
 **宿主接口**：命令、操作、菜单项的上下文里有 `shell`（`ShellApi`）：`openSession`、`newSession`、`openPanel(id, params)`、`togglePanel`、`openPage`、`openSettings(page, entry)`、`openPalette`、`insert(text)`、`focusComposer`、`run(commandId)`、`notify`、`toast`、`confirm`、`prompt`。
 
-**声明式 UI**：后端插件不写 TS 也能贡献界面。插槽项给 `view`（`ui/declarative.tsx` 的 `DeclNode`：stack / row / text / markdown / badge / list / table / keyValue / progress / code / diff / button / link / form），按钮的动作只能是调协议命令、打开面板、填入输入框、回答交互。后端下发通道尚未实现（见跟进清单）。
+**声明式 UI**：后端插件不写 TS 也能贡献界面。插槽项给 `view`（`ui/declarative.tsx` 的 `DeclNode`：stack / row / text / markdown / badge / list / table / keyValue / progress / code / diff / button / link / form），按钮的动作只能是调协议命令、打开面板、填入输入框、回答交互；会删数据、改配置的命令（`session.delete`、`session.rewind`、`session.compact`、`plugins.set`、`mode.set`）点了先确认。
+
+**插件包下发**：插件包清单（`ybase-plugin.toml`）的 `[[ui]]` 段经 `packages.list` 到前端，每个包变成一个贡献包 `pkg:<名>`（设置 › 插件里可单独关）：
+
+```toml
+[[ui]]
+id = "usage-card"
+slot = "conversation.card"      # 插槽位置，见上面的插槽清单
+title = "本会话用量"
+order = 90
+requires = "mcp"                # 可选：这个后端插件开着才显示
+view_file = "ui/usage.json"     # 或内联 view = { type = "text", text = "…" }
+[ui.data]                       # 可选：只读命令，结果替换视图里的 {{路径}}
+cmd = "session.stats"
+args = { session = "{{session}}" }
+```
+
+`{{session}}` 是插槽所在的会话；`data` 只能是只读命令（`runtime/pkgs/ui.go` 的 `UIReadCommands`），每 30 秒与会话变化时重取。单个视图不超过 64 KiB，一个包最多 32 条。
 
 ## 四、样式与约束
 

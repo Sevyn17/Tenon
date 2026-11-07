@@ -1464,8 +1464,16 @@ func (v *App) PluginsSet(_ context.Context, in wire.PluginsSetArgs) (wire.Plugin
 func (v *App) PackagesList(_ context.Context, _ wire.Empty) (wire.PackagesListResult, error) {
 	out := wire.PackagesListResult{Packages: []wire.PackageInfo{}}
 	for _, k := range v.o.Packages {
-		out.Packages = append(out.Packages, wire.PackageInfo{Name: k.Name, Version: k.Version, Description: k.Description,
-			Scope: k.Scope, Source: k.File, Contents: k.Contents()})
+		pi := wire.PackageInfo{Name: k.Name, Version: k.Version, Description: k.Description,
+			Scope: k.Scope, Source: k.File, Contents: k.Contents()}
+		for _, u := range k.UISlots() {
+			ws := wire.UISlot{ID: u.ID, Slot: u.Slot, Title: u.Title, Order: u.Order, Requires: u.Requires, View: u.View}
+			if u.Data != nil {
+				ws.Data = &wire.UIData{Cmd: u.Data.Cmd, Args: u.Data.Args}
+			}
+			pi.UI = append(pi.UI, ws)
+		}
+		out.Packages = append(out.Packages, pi)
 	}
 	return out, nil
 }

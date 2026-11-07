@@ -402,6 +402,26 @@ type PackageInfo struct {
 	Scope       string `json:"scope"` // user / project
 	Source      string `json:"source"`
 	Contents    string `json:"contents"`
+	// UI 包的界面贡献（[[ui]] 段）：前端按它往插槽放声明式视图。
+	UI []UISlot `json:"ui,omitempty"`
+}
+
+// UISlot 一条界面贡献：插槽位置 + 声明式视图（web/src/ui/declarative.tsx 的 DeclNode 或数组）+ 可选的数据来源。
+// 视图里的 {{路径}} 用 data 命令的结果替换（{{session}} = 插槽所在会话）。
+type UISlot struct {
+	ID       string          `json:"id"`
+	Slot     string          `json:"slot"`
+	Title    string          `json:"title,omitempty"`
+	Order    int             `json:"order,omitempty"`
+	Requires string          `json:"requires,omitempty"` // 这个后端插件开着才显示
+	View     json.RawMessage `json:"view"`
+	Data     *UIData         `json:"data,omitempty"`
+}
+
+// UIData 视图的数据来源：一条只读协议命令（args 里的 {{session}} 换成插槽所在会话）。
+type UIData struct {
+	Cmd  string         `json:"cmd"`
+	Args map[string]any `json:"args,omitempty"`
 }
 
 type PackagesListResult struct {
