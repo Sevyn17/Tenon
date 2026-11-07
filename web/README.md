@@ -1,6 +1,6 @@
-# YBase 前端
+# Tenon 前端
 
-YBase 的前端和后端 SDK 一样是框架：可以直接用内置的工作台，也可以只用其中一层，或者按[应用协议契约](<../docs/06 - 应用协议契约.md>)另写一套界面。
+Tenon 的前端和后端 SDK 一样是框架：可以直接用内置的工作台，也可以只用其中一层，或者按[应用协议契约](<../docs/06 - 应用协议契约.md>)另写一套界面。
 
 ```bash
 pnpm install
@@ -31,12 +31,12 @@ pnpm build       # 产物在 dist/，由 embed.go 嵌进 Go 二进制
 - **自己的组件库**：L0 + L1。
 - **一个简单聊天窗**：L0–L2，拼 `MessageList` + `Composer` + `InteractionCard`。L2 不依赖协议客户端，组件按 `ui/conversation/types.ts` 的最小视图类型工作。
 - **完整工作台**：`createShell()`。
-- **单会话嵌入**：`<YBaseConversation session="…" />`（`shell/embed.tsx`）：只有对话区、输入框与交互卡，面板以浮层打开，不读写地址栏，存储用独立命名空间 `ybase.embed`。和完整工作台用同一套贡献包。
+- **单会话嵌入**：`<TenonConversation session="…" />`（`shell/embed.tsx`）：只有对话区、输入框与交互卡，面板以浮层打开，不读写地址栏，存储用独立命名空间 `tenon.embed`。和完整工作台用同一套贡献包。
 
 ```tsx
-import { YBaseConversation } from "./shell/embed";
+import { TenonConversation } from "./shell/embed";
 
-<YBaseConversation session="support-42" className="chat-box" contributions={[myPack]} />
+<TenonConversation session="support-42" className="chat-box" contributions={[myPack]} />
 ```
 
 L0 最小用法：
@@ -156,7 +156,7 @@ export const myPack: ContributionPack = {
 
 **声明式 UI**：后端插件不写 TS 也能贡献界面。插槽项给 `view`（`ui/declarative.tsx` 的 `DeclNode`：stack / row / text / markdown / badge / list / table / keyValue / progress / code / diff / button / link / form），按钮的动作只能是调协议命令、打开面板、填入输入框、回答交互；会删数据、改配置的命令（`session.delete`、`session.rewind`、`session.compact`、`plugins.set`、`mode.set`）点了先确认。
 
-**插件包下发**：插件包清单（`ybase-plugin.toml`）的 `[[ui]]` 段经 `packages.list` 到前端，每个包变成一个贡献包 `pkg:<名>`（设置 › 插件里可单独关）：
+**插件包下发**：插件包清单（`tenon-plugin.toml`）的 `[[ui]]` 段经 `packages.list` 到前端，每个包变成一个贡献包 `pkg:<名>`（设置 › 插件里可单独关）：
 
 ```toml
 [[ui]]
@@ -189,8 +189,8 @@ args = { session = "{{session}}" }
 ## 六、本地运行
 
 ```bash
-go build -o bin/ybase-server.exe ./apps/server   # 在 kernel/ 下，先 pnpm build，dist/ 会嵌进去
-bin/ybase-server.exe -addr 127.0.0.1:8765 -dir <工作目录>
+go build -o bin/tenon-server.exe ./apps/server   # 在 kernel/ 下，先 pnpm build，dist/ 会嵌进去
+bin/tenon-server.exe -addr 127.0.0.1:8765 -dir <工作目录>
 ```
 
 启动后终端会打印带 `?token=` 的地址，用它打开。
