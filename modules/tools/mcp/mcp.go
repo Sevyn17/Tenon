@@ -267,19 +267,33 @@ func (c *Client) invoke(ctx context.Context, method string, params any, retry bo
 func (c *Client) call(ctx context.Context, method string, params any) (json.RawMessage, error) {
 	c.mu.Lock()
 	if c.tr == nil {
-		if err := c.connect(ctx); err != nil {
+		// 建连接（起进程 + 握手）不占这次请求的超时：负载高时起进程要几秒，否则重连后第一次调用的
+		// 预算会被建立连接吃掉，报成"调用超时"（2026-11-07：CI 全量并行下偶发）。
+		cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), c.Server.timeout())
+		err := c.connect(cctx)
+		cancel()
+		if err != nil {
 			c.mu.Unlock()
 			return nil, err
+		}
+		if ctx.Err() != nil { // 等连接期间调用方已取消：别留下这条新连接
+			_ = c.tr.close()
+			c.tr = nil
+			c.mu.Unlock()
+			return nil, ctx.Err()
 		}
 	}
 	c.next++
 	id, tr := c.next, c.tr
 	c.mu.Unlock()
-	res, err := tr.call(ctx, id, method, params)
-	if err != nil && ctx.Err() != nil {
-		// 取消：告知服务端（尽力）
+	// 单次请求的超时按请求计（调用方没给更短的期限时），重连后的重发重新计时。
+	tctx, cancel := context.WithTimeout(ctx, c.Server.timeout())
+	defer cancel()
+	res, err := tr.call(tctx, id, method, params)
+	if err != nil && tctx.Err() != nil && ctx.Err() == nil {
+		// 本次请求超时（不是调用方取消）：告知服务端（尽力）
 		nctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		_ = tr.notify(nctx, "notifications/cancelled", map[string]any{"requestId": id, "reason": "cancelled"})
+		_ = tr.notify(nctx, "notifications/cancelled", map[string]any{"requestId": id, "reason": "timeout"})
 		cancel()
 	}
 	return res, err
@@ -294,9 +308,7 @@ func (c *Client) ListTools(ctx context.Context) ([]RemoteTool, error) {
 		if cursor != "" {
 			params["cursor"] = cursor
 		}
-		cctx, cancel := context.WithTimeout(ctx, c.Server.timeout())
-		res, err := c.Call(cctx, "tools/list", params)
-		cancel()
+		res, err := c.Call(ctx, "tools/list", params)
 		if err != nil {
 			return nil, err
 		}
@@ -390,9 +402,7 @@ func (c *Client) callTool(ctx context.Context, cx *toolhub.Cx, raw string, args 
 	if len(args) == 0 {
 		args = json.RawMessage(`{}`)
 	}
-	cctx, cancel := context.WithTimeout(ctx, c.Server.timeout())
-	defer cancel()
-	res, err := c.invoke(cctx, "tools/call", map[string]any{"name": raw, "arguments": args}, readOnly)
+	res, err := c.invoke(ctx, "tools/call", map[string]any{"name": raw, "arguments": args}, readOnly)
 	if err != nil {
 		if errors.Is(err, errDead) && !errors.Is(err, errUnsent) && ctx.Err() == nil && !readOnly {
 			return toolhub.Failf("MCP 服务 %s 在调用 %s 时断开，服务端可能已经执行，结果未知。请先核对状态再决定是否重试。", c.Server.Name, raw)
@@ -400,7 +410,7 @@ func (c *Client) callTool(ctx context.Context, cx *toolhub.Cx, raw string, args 
 		if ctx.Err() != nil {
 			return toolhub.Output{Kind: toolhub.Done, Content: session.Content{session.NewTextPart("调用已取消")}, Status: session.ToolTurnCancelled}
 		}
-		if cctx.Err() != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
 			return toolhub.Failf("MCP 服务 %s 调用 %s 超时（%s）", c.Server.Name, raw, c.Server.timeout())
 		}
 		return toolhub.Failf("MCP 服务 %s 调用 %s 失败：%v", c.Server.Name, raw, err)

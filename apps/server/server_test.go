@@ -187,9 +187,10 @@ func TestWSRejected(t *testing.T) {
 }
 
 type client struct {
-	t  *testing.T
-	ws *websocket.Conn
-	ch chan map[string]json.RawMessage
+	held []map[string]json.RawMessage // 等别的帧时读到、还没被取走的帧（按到达顺序）
+	t    *testing.T
+	ws   *websocket.Conn
+	ch   chan map[string]json.RawMessage
 }
 
 func dial(t *testing.T, base string) *client {
@@ -216,6 +217,44 @@ func dial(t *testing.T, base string) *client {
 	return c
 }
 
+// next 取下一帧：先取等别的东西时攒下的帧，再从连接读。
+func (c *client) next(dl <-chan time.Time) (map[string]json.RawMessage, bool) {
+	if len(c.held) > 0 {
+		m := c.held[0]
+		c.held = c.held[1:]
+		return m, true
+	}
+	select {
+	case m, ok := <-c.ch:
+		if !ok {
+			c.t.Fatal("连接已关")
+		}
+		return m, true
+	case <-dl:
+		return nil, false
+	}
+}
+
+// take 取第一个满足 match 的帧，途中不满足的帧按原顺序攒下给后面的 call / waitEvent：服务端的响应与事件
+// 走同一条连接、先后不定（订阅回放的 session.synced 可能先于 subscribe 的响应到达），丢掉会让后面等不到
+// （2026-11-07：CI 全量并行下 TestEventPush 偶发"没等到事件 session.synced"）。
+func (c *client) take(what string, match func(map[string]json.RawMessage) bool) map[string]json.RawMessage {
+	c.t.Helper()
+	dl := time.After(5 * time.Second)
+	var skipped []map[string]json.RawMessage
+	defer func() { c.held = append(skipped, c.held...) }()
+	for {
+		m, ok := c.next(dl)
+		if !ok {
+			c.t.Fatalf("%s：5 秒内没等到", what)
+		}
+		if match(m) {
+			return m
+		}
+		skipped = append(skipped, m)
+	}
+}
+
 func (c *client) call(id int, cmd string, args any) map[string]json.RawMessage {
 	c.t.Helper()
 	b, _ := json.Marshal(map[string]any{"id": id, "cmd": cmd, "args": args})
@@ -223,42 +262,25 @@ func (c *client) call(id int, cmd string, args any) map[string]json.RawMessage {
 		c.t.Fatal(err)
 	}
 	want, _ := json.Marshal(id)
-	dl := time.After(5 * time.Second)
-	for {
-		select {
-		case m, ok := <-c.ch:
-			if !ok {
-				c.t.Fatal("连接已关")
-			}
-			if string(m["id"]) == string(want) {
-				return m
-			}
-		case <-dl:
-			c.t.Fatalf("%s 无响应", cmd)
-		}
-	}
+	return c.take(cmd+" 的响应", func(m map[string]json.RawMessage) bool { return string(m["id"]) == string(want) })
 }
 
 func (c *client) waitEvent(kind string) wire.Envelope {
 	c.t.Helper()
-	dl := time.After(5 * time.Second)
-	for {
-		select {
-		case m, ok := <-c.ch:
-			if !ok {
-				c.t.Fatal("连接已关")
-			}
-			if raw, has := m["event"]; has {
-				var e wire.Envelope
-				_ = json.Unmarshal(raw, &e)
-				if e.Kind == kind {
-					return e
-				}
-			}
-		case <-dl:
-			c.t.Fatalf("没等到事件 %s", kind)
+	var e wire.Envelope
+	c.take("事件 "+kind, func(m map[string]json.RawMessage) bool {
+		raw, has := m["event"]
+		if !has {
+			return false
 		}
-	}
+		var x wire.Envelope
+		if json.Unmarshal(raw, &x) != nil || x.Kind != kind {
+			return false
+		}
+		e = x
+		return true
+	})
+	return e
 }
 
 func TestHelloRoundtrip(t *testing.T) {

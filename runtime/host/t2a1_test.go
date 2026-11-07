@@ -212,7 +212,10 @@ func TestCancelWhileQueuedForSlot(t *testing.T) {
 	if err := b.Do(Command{Kind: Send, Text: "二"}); err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(100 * time.Millisecond) // s2 正在等槽位
+	// 等 s2 真的进了回合、正在排槽位（turn 先登记取消函数、置 inTurn，再排槽位）：原先固定睡 100ms，
+	// 负载高时 s2 还没进回合，Cancel 到达时没有可取消的回合、落空，之后 s2 照常跑了一轮
+	// （2026-11-07：CI 全量并行下偶发 calls=2）。
+	waitFor(t, b.InTurn)
 	if err := b.Do(Command{Kind: Cancel}); err != nil {
 		t.Fatal(err)
 	}

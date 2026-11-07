@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"path/filepath"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -16,11 +17,38 @@ import (
 	"ybase/runtime/toolhub"
 )
 
-// slowModel 每次回复前等 d。
-type slowModel struct{ d time.Duration }
+// overlapModel 记录同时在跑的调用数；第一次调用进来到第二个也进来（或等够 overlapWait）才一起返回。
+// 并行与否看的是"两个调用有没有同时在飞"，不是墙钟耗时——负载高时 300ms 的睡眠会被拉到 500ms 以上，
+// 按耗时断言会偶发失败。
+type overlapModel struct {
+	inFlight atomic.Int32
+	peak     atomic.Int32
+	mu       sync.Mutex
+	release  chan struct{}
+	once     sync.Once
+}
 
-func (m slowModel) Stream(ctx context.Context, req session.Request, onText func(string)) (session.AssistantItem, session.StopReason, error) {
-	time.Sleep(m.d)
+// overlapWait 等第二个调用进来的上限：串行时第一个调用等这么久后放行，断言再报失败。
+const overlapWait = 3 * time.Second
+
+func (m *overlapModel) Stream(ctx context.Context, req session.Request, onText func(string)) (session.AssistantItem, session.StopReason, error) {
+	n := m.inFlight.Add(1)
+	defer m.inFlight.Add(-1)
+	for {
+		p := m.peak.Load()
+		if n <= p || m.peak.CompareAndSwap(p, n) {
+			break
+		}
+	}
+	if n >= 2 {
+		m.once.Do(func() { close(m.release) })
+	} else {
+		select {
+		case <-m.release:
+		case <-time.After(overlapWait):
+		case <-ctx.Done():
+		}
+	}
 	return session.AssistantItem{Content: session.Content{session.NewTextPart("done")}}, session.StopReason{V: "stop"}, nil
 }
 
@@ -32,9 +60,10 @@ func TestSubagentCallsRunInParallel(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { db.Close() })
+	m := &overlapModel{release: make(chan struct{})}
 	h := &host.Host{DB: db, New: func(id, def string) (*agent.Agent, *session.Config, error) {
 		hub := toolhub.New(toolhub.Options{Store: agent.ToolStore{DB: db}})
-		a := &agent.Agent{Store: db, SessionID: id, Model: slowModel{300 * time.Millisecond}, Hub: hub}
+		a := &agent.Agent{Store: db, SessionID: id, Model: m, Hub: hub}
 		return a, &session.Config{Model: "m", Policy: session.DefaultPolicy()}, nil
 	}}
 	hub := toolhub.New(toolhub.Options{Store: agent.ToolStore{DB: db}})
@@ -45,7 +74,6 @@ func TestSubagentCallsRunInParallel(t *testing.T) {
 		{ID: "call-aaaaaaaa", Name: "subagent", Args: json.RawMessage(`{"task":"一"}`)},
 		{ID: "call-bbbbbbbb", Name: "subagent", Args: json.RawMessage(`{"task":"二"}`)},
 	}
-	start := time.Now()
 	run := hub.Execute(ctx, callctx.New(callctx.Options{SessionID: "p"}), calls, nil)
 	for {
 		res, ok := run.Next()
@@ -56,8 +84,8 @@ func TestSubagentCallsRunInParallel(t *testing.T) {
 			t.Fatalf("委派失败：%+v %v", res.Output, res.Err)
 		}
 	}
-	if d := time.Since(start); d > 550*time.Millisecond {
-		t.Fatalf("两个各 300ms 的委派应并行，用了 %s", d)
+	if p := m.peak.Load(); p < 2 {
+		t.Fatalf("两个委派应同时在跑，最多只有 %d 个（串行）", p)
 	}
 }
 

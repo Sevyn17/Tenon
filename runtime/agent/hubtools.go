@@ -17,6 +17,9 @@ import (
 // Ask 向人询问是否批准一次调用（CLI 实现）。
 type Ask func(ctx context.Context, call *toolhub.Cx, reason string, deadline time.Time) bool
 
+// askDrain 取消时等应答者收尾的上限（见 AwaitFunc）。
+const askDrain = 2 * time.Second
+
 // AwaitFunc 构造 toolhub.Await：询问 → 决定落库（pending → delivered）→ 返回。
 // 等待期间进程被杀，记录保持 pending，恢复后同一调用重新询问（session-host D3）。
 // ask 收到的 ctx 在回合取消 / 截止时结束：应答者据此停止等待并清理（不留悬挂的等待者）。
@@ -33,6 +36,14 @@ func (a *Agent) AwaitFunc(ask Ask) toolhub.Await {
 		go func() { ch <- ans{ask(ctx, cx, reason, deadline)} }()
 		select {
 		case <-ctx.Done():
+			// 等 ask 收尾再返回：ask 在 ctx 结束时立即返回，但它的清理（作废 corr、把交互结束为 voided /
+			// expired）在返回前做。不等的话回合已经结束、交互却还开着，界面与 interactions.list 会短暂看到
+			// 一条没人等的交互（2026-11-07：CI 全量并行下 TestApprovalInteractionVoidedOnCancel 偶发）。
+			// 应答者不理 ctx 时最多等 askDrain，不让回合卡住。
+			select {
+			case <-ch:
+			case <-time.After(askDrain):
+			}
 			return false, ctx.Err()
 		case r := <-ch:
 			if a.Store != nil {

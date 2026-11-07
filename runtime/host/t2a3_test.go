@@ -216,7 +216,7 @@ func TestSuspendDuringBacklog(t *testing.T) {
 	}
 	done := make(chan error, 1)
 	go func() { done <- r.h.Suspend(ctx, "s1", "budget") }()
-	time.Sleep(50 * time.Millisecond) // 让 Suspend 先进队列
+	waitFor(t, func() bool { return len(hd.a.in) > 0 }) // Suspend 已进队列（原先固定睡 50ms，负载高时不够）
 	close(m.gate)
 	select {
 	case err := <-done:
@@ -259,7 +259,7 @@ func TestFailedTurnHandsBackInterjection(t *testing.T) {
 	}
 	steered := make(chan error, 1)
 	go func() { steered <- hd.Do(Command{Kind: Steer, Text: "别忘了这个"}) }()
-	time.Sleep(50 * time.Millisecond) // 让插话先进队列，工具结束后的边界取到它
+	waitFor(t, func() bool { return len(hd.a.in) > 0 }) // 插话已进队列，工具结束后的边界取到它
 	close(gate)
 	if err := <-steered; err != nil {
 		t.Fatal(err)
