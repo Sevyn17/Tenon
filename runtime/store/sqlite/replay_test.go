@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"ybase/runtime/bus"
-	"ybase/runtime/session"
-	"ybase/runtime/store"
+	"tenon/runtime/bus"
+	"tenon/runtime/session"
+	"tenon/runtime/store"
 )
 
 func TestReplayAndList(t *testing.T) {

@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"time"
 
-	"ybase/runtime/session"
+	"tenon/runtime/session"
 )
 
 // Code 稳定失败码：上层只按 code 分支，不解析消息文本。

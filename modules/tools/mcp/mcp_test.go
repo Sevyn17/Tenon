@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	"ybase/runtime/session"
-	"ybase/runtime/toolhub"
+	"tenon/runtime/session"
+	"tenon/runtime/toolhub"
 )
 
 // 假服务：处理 initialize / tools/list / tools/call。

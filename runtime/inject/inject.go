@@ -12,8 +12,8 @@ import (
 	"sort"
 	"strings"
 
-	"ybase/runtime/callctx"
-	"ybase/runtime/session"
+	"tenon/runtime/callctx"
+	"tenon/runtime/session"
 )
 
 // Kind 片段种类（12.5）。

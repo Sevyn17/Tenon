@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"ybase/runtime/callctx"
-	"ybase/runtime/session"
-	"ybase/runtime/store"
-	"ybase/runtime/toolhub"
+	"tenon/runtime/callctx"
+	"tenon/runtime/session"
+	"tenon/runtime/store"
+	"tenon/runtime/toolhub"
 )
 
 func cx(name string, r toolhub.Risk) *toolhub.Cx {
@@ -316,12 +316,12 @@ func TestUntrustedTurnDowngradesAllow(t *testing.T) {
 // B9：受信项目的档位不能悄悄生效——同名覆盖用户档位报错；放宽档位当新会话缺省要用户确认过。
 func TestProjectModesNeedApproval(t *testing.T) {
 	home, proj := t.TempDir(), t.TempDir()
-	t.Setenv("YBASE_HOME", home)
+	t.Setenv("TENON_HOME", home)
 	mk := func(dir, name, body string) {
 		t.Helper()
 		d := filepath.Join(dir, "modes")
 		if dir == proj {
-			d = filepath.Join(dir, ".ybase", "modes")
+			d = filepath.Join(dir, ".tenon", "modes")
 		}
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			t.Fatal(err)
@@ -336,11 +336,11 @@ func TestProjectModesNeedApproval(t *testing.T) {
 	if _, err := NewRegistry(ModeDirs(proj)...); err == nil || !strings.Contains(err.Error(), "同名") {
 		t.Fatalf("项目档位与用户档位同名应报错，得 %v", err)
 	}
-	os.Remove(filepath.Join(proj, ".ybase", "modes", "strict.toml"))
+	os.Remove(filepath.Join(proj, ".tenon", "modes", "strict.toml"))
 
 	// 2. 项目放宽档位当缺省：没确认 → 退回内置缺省；确认后 → 生效。
 	mk(proj, "yolo", "base = \"full\"\n")
-	if err := os.WriteFile(filepath.Join(proj, ".ybase", "permissions.toml"), []byte("mode = \"yolo\"\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(proj, ".tenon", "permissions.toml"), []byte("mode = \"yolo\"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	s, err := Open(proj, proj, "", "", func() store.Store { return nil })

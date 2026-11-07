@@ -1,4 +1,4 @@
-package ybase_test
+package tenon_test
 
 import (
 	"context"
@@ -8,74 +8,74 @@ import (
 	"strings"
 	"testing"
 
-	"ybase"
-	"ybase/runtime/store/memstore"
-	"ybase/ybasetest"
+	"tenon"
+	"tenon/runtime/store/memstore"
+	"tenon/tenontest"
 )
 
 // base 最小可装配选项：内存存储 + 脚本模型 + 临时工作目录。
-func base(t *testing.T) []ybase.Option {
+func base(t *testing.T) []tenon.Option {
 	t.Helper()
-	return []ybase.Option{
-		ybase.Minimal(),
-		ybase.WithStore(memstore.New()),
-		ybase.WithWorkdir(t.TempDir()),
-		ybasetest.Model(ybasetest.Reply("ok")),
+	return []tenon.Option{
+		tenon.Minimal(),
+		tenon.WithStore(memstore.New()),
+		tenon.WithWorkdir(t.TempDir()),
+		tenontest.Model(tenontest.Reply("ok")),
 	}
 }
 
 func TestNewNeedsStore(t *testing.T) {
-	_, err := ybase.New(ybase.Default())
-	if !errors.Is(err, ybase.ErrInvalid) || !strings.Contains(err.Error(), "WithStore") {
+	_, err := tenon.New(tenon.Default())
+	if !errors.Is(err, tenon.ErrInvalid) || !strings.Contains(err.Error(), "WithStore") {
 		t.Fatalf("err = %v，要 ErrInvalid + WithStore", err)
 	}
 }
 
 func TestNewNeedsComponents(t *testing.T) {
-	_, err := ybase.New(ybase.WithStore(memstore.New()))
-	if !errors.Is(err, ybase.ErrInvalid) {
+	_, err := tenon.New(tenon.WithStore(memstore.New()))
+	if !errors.Is(err, tenon.ErrInvalid) {
 		t.Fatalf("err = %v，要 ErrInvalid", err)
 	}
 }
 
 func TestWithoutUnknown(t *testing.T) {
-	opts := append(base(t), ybase.Without("nope"))
-	_, err := ybase.New(opts...)
-	if !errors.Is(err, ybase.ErrInvalid) || !strings.Contains(err.Error(), "nope") {
+	opts := append(base(t), tenon.Without("nope"))
+	_, err := tenon.New(opts...)
+	if !errors.Is(err, tenon.ErrInvalid) || !strings.Contains(err.Error(), "nope") {
 		t.Fatalf("err = %v，要 ErrInvalid + nope", err)
 	}
 }
 
 func TestDuplicatePreset(t *testing.T) {
-	opts := append(base(t), ybase.Default())
-	_, err := ybase.New(opts...)
-	if !errors.Is(err, ybase.ErrInvalid) || !strings.Contains(err.Error(), "重复") {
+	opts := append(base(t), tenon.Default())
+	_, err := tenon.New(opts...)
+	if !errors.Is(err, tenon.ErrInvalid) || !strings.Contains(err.Error(), "重复") {
 		t.Fatalf("err = %v，要 ErrInvalid + 重复", err)
 	}
 }
 
 func TestAskBeforeStart(t *testing.T) {
-	app, err := ybase.New(base(t)...)
+	app, err := tenon.New(base(t)...)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	if _, err := app.Ask(context.Background(), "support", "hi", nil); !errors.Is(err, ybase.ErrNotStarted) {
+	if _, err := app.Ask(context.Background(), "support", "hi", nil); !errors.Is(err, tenon.ErrNotStarted) {
 		t.Fatalf("err = %v，要 ErrNotStarted", err)
 	}
-	if _, err := app.History(context.Background(), "x"); !errors.Is(err, ybase.ErrNotStarted) {
+	if _, err := app.History(context.Background(), "x"); !errors.Is(err, tenon.ErrNotStarted) {
 		t.Fatalf("History err = %v，要 ErrNotStarted", err)
 	}
 }
 
 func TestNewValidatesUseSection(t *testing.T) {
 	dir := t.TempDir()
-	writeAgent(t, dir, "support", `format = "ybase/v1"
+	writeAgent(t, dir, "support", `format = "tenon/v1"
 id = "support"
 [use.ghost]
 foo = "bar"
 `)
-	opts := append(base(t), ybase.WithAgents(ybase.Dir(dir)))
-	_, err := ybase.New(opts...)
+	opts := append(base(t), tenon.WithAgents(tenon.Dir(dir)))
+	_, err := tenon.New(opts...)
 	if err == nil || !strings.Contains(err.Error(), "use.ghost") {
 		t.Fatalf("err = %v，要报 [use.ghost] 未知组件", err)
 	}
@@ -83,12 +83,12 @@ foo = "bar"
 
 func TestNewAcceptsPlainDefinition(t *testing.T) {
 	dir := t.TempDir()
-	writeAgent(t, dir, "support", `format = "ybase/v1"
+	writeAgent(t, dir, "support", `format = "tenon/v1"
 id = "support"
 description = "客服"
 `)
-	opts := append(base(t), ybase.WithAgents(ybase.Dir(dir)))
-	if _, err := ybase.New(opts...); err != nil {
+	opts := append(base(t), tenon.WithAgents(tenon.Dir(dir)))
+	if _, err := tenon.New(opts...); err != nil {
 		t.Fatalf("New: %v", err)
 	}
 }
@@ -97,12 +97,12 @@ description = "客服"
 // "装配必须恰好有一个权限策略层"）；定义里的 prompt 也进了会话的系统段（P0-2）。
 func TestMinimalAsk(t *testing.T) {
 	dir := t.TempDir()
-	writeAgent(t, dir, "support", `format = "ybase/v1"
+	writeAgent(t, dir, "support", `format = "tenon/v1"
 id = "support"
 prompt = "你是售后客服"
 `)
-	opts := append(base(t), ybase.WithAgents(ybase.Dir(dir)))
-	app, err := ybase.New(opts...)
+	opts := append(base(t), tenon.WithAgents(tenon.Dir(dir)))
+	app, err := tenon.New(opts...)
 	if err != nil {
 		t.Fatal(err)
 	}

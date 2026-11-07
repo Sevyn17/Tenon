@@ -11,8 +11,8 @@ import (
 	"fmt"
 	"time"
 
-	"ybase/runtime/bus"
-	"ybase/runtime/store"
+	"tenon/runtime/bus"
+	"tenon/runtime/store"
 )
 
 const pendingCols = `corr, session_id, reply_to, trace, issued_idx, deadline, used, created_at,

@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"ybase/runtime/toolhub"
+	"tenon/runtime/toolhub"
 )
 
 // 前台命令运行期间，输出尾部经 cx.Progress 报出来（界面实时显示）；命令结束后不再报。

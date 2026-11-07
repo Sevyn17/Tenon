@@ -6,9 +6,9 @@ package shell
 import (
 	"context"
 
-	"ybase/runtime/assemble"
-	"ybase/runtime/component"
-	"ybase/runtime/toolhub"
+	"tenon/runtime/assemble"
+	"tenon/runtime/component"
+	"tenon/runtime/toolhub"
 )
 
 // Config shell 插件配置（缺省全开，与改版前行为一致）。

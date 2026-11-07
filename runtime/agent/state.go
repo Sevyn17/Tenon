@@ -8,9 +8,9 @@ import (
 	"sort"
 	"sync"
 
-	"ybase/runtime/reqlog"
-	"ybase/runtime/session"
-	"ybase/runtime/store"
+	"tenon/runtime/reqlog"
+	"tenon/runtime/session"
+	"tenon/runtime/store"
 )
 
 // capsState 本轮的授权工具范围（信封 caps 交集，T3）。host 线程写，工具 goroutine 读。

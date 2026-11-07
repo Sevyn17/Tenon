@@ -8,10 +8,10 @@ import (
 	"os"
 	"strings"
 
-	"ybase/runtime/ext"
-	"ybase/runtime/modelhub"
-	"ybase/runtime/store"
-	"ybase/runtime/toolhub"
+	"tenon/runtime/ext"
+	"tenon/runtime/modelhub"
+	"tenon/runtime/store"
+	"tenon/runtime/toolhub"
 )
 
 // SlotSecrets 凭证解析插槽（models 组件消费；缺省 EnvSecrets，应用可覆盖）。

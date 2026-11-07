@@ -5,9 +5,9 @@ import (
 	"errors"
 	"testing"
 
-	"ybase/runtime/assemble"
-	"ybase/runtime/component"
-	"ybase/runtime/modelhub"
+	"tenon/runtime/assemble"
+	"tenon/runtime/component"
+	"tenon/runtime/modelhub"
 )
 
 // guardComp 另一个组件：在 before_compact 点位登记一条拒绝。

@@ -12,13 +12,13 @@ import (
 	"strings"
 	"testing"
 
-	"ybase/runtime/agent"
-	"ybase/runtime/mail"
-	"ybase/runtime/session"
-	"ybase/runtime/store"
-	"ybase/runtime/store/memstore"
-	"ybase/runtime/store/sqlite"
-	"ybase/runtime/toolhub"
+	"tenon/runtime/agent"
+	"tenon/runtime/mail"
+	"tenon/runtime/session"
+	"tenon/runtime/store"
+	"tenon/runtime/store/memstore"
+	"tenon/runtime/store/sqlite"
+	"tenon/runtime/toolhub"
 )
 
 type acceptStore interface {

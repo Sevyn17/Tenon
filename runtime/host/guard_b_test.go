@@ -8,13 +8,13 @@ import (
 	"strings"
 	"testing"
 
-	"ybase/runtime/agent"
-	"ybase/runtime/callctx"
-	"ybase/runtime/mail"
-	"ybase/runtime/session"
-	"ybase/runtime/store"
-	"ybase/runtime/store/sqlite"
-	"ybase/runtime/toolhub"
+	"tenon/runtime/agent"
+	"tenon/runtime/callctx"
+	"tenon/runtime/mail"
+	"tenon/runtime/session"
+	"tenon/runtime/store"
+	"tenon/runtime/store/sqlite"
+	"tenon/runtime/toolhub"
 )
 
 // B4：request / notify 随便带一个 corr 不能绕过联系名单；只有回信凭 corr 进门，且要通过核对。

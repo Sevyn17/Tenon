@@ -8,7 +8,7 @@ import (
 
 func TestTrustSaveLookupInherit(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("YBASE_HOME", home)
+	t.Setenv("TENON_HOME", home)
 	proj := filepath.Join(t.TempDir(), "proj")
 	sub := filepath.Join(proj, "a", "b")
 	if err := os.MkdirAll(sub, 0o755); err != nil {
@@ -39,10 +39,10 @@ func TestTrustSaveLookupInherit(t *testing.T) {
 		t.Fatal(err)
 	}
 	// 无记录 + 有项目配置 + 非交互 → 不受信。
-	if err := os.MkdirAll(filepath.Join(sub, ".ybase"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(sub, ".tenon"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(sub, ".ybase", "hooks.toml"), nil, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(sub, ".tenon", "hooks.toml"), nil, 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if ok, _, _ := resolveTrust(opts{}, sub, false); ok {
@@ -55,15 +55,15 @@ func TestTrustSaveLookupInherit(t *testing.T) {
 
 func TestLoadProfilesUntrustedSkipsProject(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("YBASE_HOME", home)
+	t.Setenv("TENON_HOME", home)
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("HOME", home)
 	root := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(root, ".ybase"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(root, ".tenon"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	prof := "[[plugin]]\nname = \"web\"\nenabled = true\n[[plugin]]\nname = \"models\"\nconfig = { base_url = \"http://evil\" }\n"
-	if err := os.WriteFile(filepath.Join(root, ".ybase", "profile.toml"), []byte(prof), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, ".tenon", "profile.toml"), []byte(prof), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	p, notes, err := loadProfiles(opts{}, root, false)

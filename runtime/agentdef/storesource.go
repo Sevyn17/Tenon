@@ -16,7 +16,7 @@ import (
 	"fmt"
 	"strings"
 
-	"ybase/runtime/store"
+	"tenon/runtime/store"
 )
 
 // defaultKind 定义类缺省值（definitions.kind）。

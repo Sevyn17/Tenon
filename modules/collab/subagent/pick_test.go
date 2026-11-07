@@ -8,12 +8,12 @@ import (
 	"sync"
 	"testing"
 
-	"ybase/runtime/agent"
-	"ybase/runtime/callctx"
-	"ybase/runtime/host"
-	"ybase/runtime/session"
-	"ybase/runtime/store/sqlite"
-	"ybase/runtime/toolhub"
+	"tenon/runtime/agent"
+	"tenon/runtime/callctx"
+	"tenon/runtime/host"
+	"tenon/runtime/session"
+	"tenon/runtime/store/sqlite"
+	"tenon/runtime/toolhub"
 )
 
 func ctxWith(use string) *callctx.Ctx {

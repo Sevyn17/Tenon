@@ -4,10 +4,10 @@ import (
 	"context"
 	"testing"
 
-	"ybase/runtime/component"
-	"ybase/runtime/reqlog"
-	"ybase/runtime/session"
-	"ybase/runtime/store/memstore"
+	"tenon/runtime/component"
+	"tenon/runtime/reqlog"
+	"tenon/runtime/session"
+	"tenon/runtime/store/memstore"
 )
 
 type stubCompactor struct{}

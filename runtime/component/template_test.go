@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"ybase/runtime/agentdef"
+	"tenon/runtime/agentdef"
 )
 
 // defSource 造一个内存定义来源（平台命名空间，minimal manifest）。
@@ -14,7 +14,7 @@ func defSource(t *testing.T, names ...string) agentdef.Source {
 	m := agentdef.Mem()
 	for _, name := range names {
 		files := agentdef.Files{"agent.toml": []byte(
-			"format = \"ybase/v1\"\nid = \"" + name + "\"\ndescription = \"测试定义\"\n")}
+			"format = \"tenon/v1\"\nid = \"" + name + "\"\ndescription = \"测试定义\"\n")}
 		if err := m.Put(agentdef.Ref{Namespace: agentdef.Platform, Name: name}, files); err != nil {
 			t.Fatalf("Put %s：%v", name, err)
 		}

@@ -17,10 +17,10 @@ import (
 	"encoding/json"
 	"errors"
 
-	"ybase/runtime/reqlog"
-	"ybase/runtime/session"
-	"ybase/runtime/store"
-	"ybase/runtime/useconf"
+	"tenon/runtime/reqlog"
+	"tenon/runtime/session"
+	"tenon/runtime/store"
+	"tenon/runtime/useconf"
 )
 
 // Open 打开会话：存在则恢复（返回 true），不存在则用 cfg 新建。

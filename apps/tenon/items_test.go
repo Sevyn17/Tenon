@@ -1,21 +1,21 @@
 package main
 
 // 装配期校验的单元测试版：所有内置插件声明的权限项都必须通过结构校验与封顶表（§9.2），
-// 否则 ybase 启动即拒绝——这类错误要在 go test 里抓住，不要等到真机验收。
+// 否则 tenon 启动即拒绝——这类错误要在 go test 里抓住，不要等到真机验收。
 
 import (
 	"testing"
 
-	"ybase/modules/collab/subagent"
-	"ybase/modules/collab/workgroup"
-	"ybase/modules/context/skills"
-	"ybase/modules/security/permission"
-	"ybase/modules/tools/codemode"
-	"ybase/modules/tools/fs"
-	"ybase/modules/tools/mcp"
-	"ybase/modules/tools/shell"
-	"ybase/modules/tools/web"
-	"ybase/runtime/toolhub"
+	"tenon/modules/collab/subagent"
+	"tenon/modules/collab/workgroup"
+	"tenon/modules/context/skills"
+	"tenon/modules/security/permission"
+	"tenon/modules/tools/codemode"
+	"tenon/modules/tools/fs"
+	"tenon/modules/tools/mcp"
+	"tenon/modules/tools/shell"
+	"tenon/modules/tools/web"
+	"tenon/runtime/toolhub"
 )
 
 func TestPluginItemsWithinCaps(t *testing.T) {

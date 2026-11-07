@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"ybase/runtime/agent"
-	"ybase/runtime/session"
+	"tenon/runtime/agent"
+	"tenon/runtime/session"
 )
 
 // 成员结果投递失败后在后台退避重试，长驻进程里不必等重启 Recover（2026-11-04 审查 P1-27）。

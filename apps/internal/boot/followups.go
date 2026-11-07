@@ -10,8 +10,8 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"ybase/runtime/assemble"
-	"ybase/runtime/session"
+	"tenon/runtime/assemble"
+	"tenon/runtime/session"
 )
 
 // FollowupTimeout 一次生成最多等多久。

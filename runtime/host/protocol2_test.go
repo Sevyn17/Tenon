@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"ybase/runtime/session"
-	"ybase/runtime/store"
+	"tenon/runtime/session"
+	"tenon/runtime/store"
 )
 
 // protocol 2 G1：OpenExisting 不隐式新建；Create 已存在返回 ErrConflict。

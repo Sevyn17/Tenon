@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"strings"
 
-	"ybase/runtime/session"
+	"tenon/runtime/session"
 )
 
 // MaxImageBytes 单张图片发给模型的上限，超出留占位文字。

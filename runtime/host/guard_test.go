@@ -8,12 +8,12 @@ import (
 	"testing"
 	"time"
 
-	"ybase/runtime/agent"
-	"ybase/runtime/bus"
-	"ybase/runtime/component"
-	"ybase/runtime/mail"
-	"ybase/runtime/session"
-	"ybase/runtime/store"
+	"tenon/runtime/agent"
+	"tenon/runtime/bus"
+	"tenon/runtime/component"
+	"tenon/runtime/mail"
+	"tenon/runtime/session"
+	"tenon/runtime/store"
 )
 
 // creatorRig 建一个创建者为 u1 的会话 s1。

@@ -3,8 +3,8 @@ package sqlite
 import (
 	"testing"
 
-	"ybase/runtime/store"
-	"ybase/runtime/store/storetest"
+	"tenon/runtime/store"
+	"tenon/runtime/store/storetest"
 )
 
 func TestConformance(t *testing.T) {

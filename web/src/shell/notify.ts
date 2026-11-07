@@ -15,7 +15,7 @@ export function watchActivity(sh: ShellState): () => void {
     if (mode === "never" || typeof Notification === "undefined") return;
     if (mode === "background" && !document.hidden) return;
     const fire = () => {
-      const n = new Notification(title, { body, tag: `ybase:${session}` });
+      const n = new Notification(title, { body, tag: `tenon:${session}` });
       n.onclick = () => {
         window.focus();
         sh.api.openSession(session);

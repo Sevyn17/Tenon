@@ -8,9 +8,9 @@ import (
 	"errors"
 	"time"
 
-	"ybase/runtime/mail"
-	"ybase/runtime/session"
-	"ybase/runtime/store"
+	"tenon/runtime/mail"
+	"tenon/runtime/session"
+	"tenon/runtime/store"
 )
 
 // SendContent 用给定内容与 meta 开回合；consume 为本回合消费的 inbox 项，随回合开始的 checkpoint 同事务删除（H7）。

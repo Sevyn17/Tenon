@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"ybase/runtime/session"
+	"tenon/runtime/session"
 )
 
 func itemTool(name string, ids ...string) *Tool {

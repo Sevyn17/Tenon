@@ -1,13 +1,13 @@
-package ybase_test
+package tenon_test
 
 import (
 	"context"
 	"errors"
 	"testing"
 
-	"ybase"
-	"ybase/runtime/assemble"
-	"ybase/runtime/component"
+	"tenon"
+	"tenon/runtime/assemble"
+	"tenon/runtime/component"
 )
 
 // flaky 第一次 ready 失败；记录 Start 次数与作用域是否被关。
@@ -35,7 +35,7 @@ func (f *flaky) Start(sc *component.Scope) error {
 // Start 中途失败要回滚：组件作用域关闭，再 Start 从头来（审查 P1-23：原先第一次的作用域留着，组件启动两次不关）。
 func TestStartFailureRollsBack(t *testing.T) {
 	f := &flaky{}
-	app, err := ybase.New(append(base(t), ybase.With(f))...)
+	app, err := tenon.New(append(base(t), tenon.With(f))...)
 	if err != nil {
 		t.Fatal(err)
 	}

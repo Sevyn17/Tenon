@@ -6,12 +6,12 @@ import (
 	"strings"
 	"testing"
 
-	"ybase/runtime/agentdef"
-	"ybase/runtime/assemble"
-	"ybase/runtime/component"
-	"ybase/runtime/session"
-	"ybase/runtime/store/memstore"
-	"ybase/runtime/toolhub"
+	"tenon/runtime/agentdef"
+	"tenon/runtime/assemble"
+	"tenon/runtime/component"
+	"tenon/runtime/session"
+	"tenon/runtime/store/memstore"
+	"tenon/runtime/toolhub"
 )
 
 // authLayer 测试用的授权层（toolhub 要求恰好一个）。
@@ -36,7 +36,7 @@ func TestDefinitionPromptJoinsSystem(t *testing.T) {
 	}
 	defs := agentdef.Mem()
 	if err := defs.Put(agentdef.Ref{Namespace: agentdef.Platform, Name: "support"}, agentdef.Files{
-		"agent.toml": []byte("format = \"ybase/v1\"\nid = \"support\"\nprompt = \"@AGENT.md\"\n"),
+		"agent.toml": []byte("format = \"tenon/v1\"\nid = \"support\"\nprompt = \"@AGENT.md\"\n"),
 		"AGENT.md":   []byte("你是售后客服，只回答订单问题。"),
 	}); err != nil {
 		t.Fatal(err)

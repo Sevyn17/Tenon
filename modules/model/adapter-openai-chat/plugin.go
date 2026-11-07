@@ -3,8 +3,8 @@ package openaichat
 // 插件登记：adapter-openai-chat（标准模块，缺省开）。在 Setup 里向 service:modelhub 的 Hub 登记 openai-chat 协议适配器。
 
 import (
-	"ybase/runtime/assemble"
-	"ybase/runtime/component"
+	"tenon/runtime/assemble"
+	"tenon/runtime/component"
 )
 
 type adapterPlugin struct{}

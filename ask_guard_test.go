@@ -1,13 +1,13 @@
-package ybase_test
+package tenon_test
 
 import (
 	"context"
 	"errors"
 	"testing"
 
-	"ybase"
-	"ybase/runtime/component"
-	"ybase/runtime/host"
+	"tenon"
+	"tenon/runtime/component"
+	"tenon/runtime/host"
 )
 
 // denyOpen 应用组件：拒绝一切新建会话（会话打开守卫）。
@@ -24,9 +24,9 @@ func (denyOpen) Start(*component.Scope) error { return nil }
 // Ask 走信封投递，经过会话打开守卫（审查 P1-24：原先 Ask 自己建会话，守卫拦不住）。
 func TestAskGoesThroughGuards(t *testing.T) {
 	dir := t.TempDir()
-	writeAgent(t, dir, "support", "format = \"ybase/v1\"\nid = \"support\"\n")
-	opts := append(base(t), ybase.WithAgents(ybase.Dir(dir)), ybase.With(denyOpen{}))
-	app, err := ybase.New(opts...)
+	writeAgent(t, dir, "support", "format = \"tenon/v1\"\nid = \"support\"\n")
+	opts := append(base(t), tenon.WithAgents(tenon.Dir(dir)), tenon.With(denyOpen{}))
+	app, err := tenon.New(opts...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,7 +42,7 @@ func TestAskGoesThroughGuards(t *testing.T) {
 
 // 定义不存在时 Ask 返回可判的 ErrNotFound。
 func TestAskUnknownDefinition(t *testing.T) {
-	app, err := ybase.New(base(t)...)
+	app, err := tenon.New(base(t)...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,7 +51,7 @@ func TestAskUnknownDefinition(t *testing.T) {
 	if err := app.Start(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := app.Ask(ctx, "nope", "hi", nil); !errors.Is(err, ybase.ErrNotFound) {
+	if _, err := app.Ask(ctx, "nope", "hi", nil); !errors.Is(err, tenon.ErrNotFound) {
 		t.Fatalf("未知定义应 ErrNotFound：%v", err)
 	}
 }

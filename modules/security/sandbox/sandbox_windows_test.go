@@ -37,8 +37,8 @@ func TestWorkspaceWrite(t *testing.T) {
 	if tryWrite(t, s, WorkspaceWrite, filepath.Join(outside, "out.txt")) {
 		t.Fatal("workspace-write 不应能写工作区外")
 	}
-	if tryWrite(t, s, WorkspaceWrite, filepath.Join(root, ".ybase", "x.txt")) {
-		t.Fatal("workspace-write 不应能写 .ybase")
+	if tryWrite(t, s, WorkspaceWrite, filepath.Join(root, ".tenon", "x.txt")) {
+		t.Fatal("workspace-write 不应能写 .tenon")
 	}
 	if !tryWrite(t, s, Full, filepath.Join(outside, "full.txt")) {
 		t.Fatal("danger-full-access 应不受限")
@@ -46,7 +46,7 @@ func TestWorkspaceWrite(t *testing.T) {
 }
 
 // workspace-write 不能写 .git（钩子、配置会在沙箱外以完整权限执行）；没有 .git 的工作区不新建它
-// （审查 P0-14：原先只保护 .ybase，沙箱进程能写 .git/hooks 逃出沙箱）。
+// （审查 P0-14：原先只保护 .tenon，沙箱进程能写 .git/hooks 逃出沙箱）。
 func TestWorkspaceWriteProtectsGit(t *testing.T) {
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, ".git", "hooks"), 0o755); err != nil {

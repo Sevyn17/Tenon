@@ -3,9 +3,9 @@ package assemble
 import (
 	"testing"
 
-	"ybase/runtime/callctx"
-	"ybase/runtime/inject"
-	"ybase/runtime/store/memstore"
+	"tenon/runtime/callctx"
+	"tenon/runtime/inject"
+	"tenon/runtime/store/memstore"
 )
 
 // Builder.Statuses 透传到会话：插件登记的状态提交在调模型前被 agent 收集。

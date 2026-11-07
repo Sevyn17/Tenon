@@ -4,7 +4,7 @@ package agent
 // 渲染成 status 条目追加在本次请求末尾；压缩后另写一条 L2 快照条目并重置哈希。
 // 写什么由 inject.Plan 算（纯函数，审查 P1-59），这里只收集和写入。
 
-import "ybase/runtime/inject"
+import "tenon/runtime/inject"
 
 // injectStatuses 收集并写入注入条目。reset=true 用于压缩之后（见 inject.Plan）。
 // 返回是否追加了条目（调用方据此重建请求）。

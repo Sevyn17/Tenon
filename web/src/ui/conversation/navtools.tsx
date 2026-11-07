@@ -131,10 +131,10 @@ export function FindBar({ root, onClose, focusSignal }: { root: RefObject<HTMLEl
     const reg = registry();
     const rs = ranges.current;
     if (reg) {
-      if (rs.length) reg.set("ybase-find", new Highlight!(...rs));
-      else reg.delete("ybase-find");
-      if (rs[at]) reg.set("ybase-find-current", new Highlight!(rs[at]));
-      else reg.delete("ybase-find-current");
+      if (rs.length) reg.set("tenon-find", new Highlight!(...rs));
+      else reg.delete("tenon-find");
+      if (rs[at]) reg.set("tenon-find-current", new Highlight!(rs[at]));
+      else reg.delete("tenon-find-current");
     }
     if (scroll && rs[at]) rs[at].startContainer.parentElement?.scrollIntoView({ block: "center" });
   }, []);
@@ -173,8 +173,8 @@ export function FindBar({ root, onClose, focusSignal }: { root: RefObject<HTMLEl
 
   useEffect(
     () => () => {
-      registry()?.delete("ybase-find");
-      registry()?.delete("ybase-find-current");
+      registry()?.delete("tenon-find");
+      registry()?.delete("tenon-find-current");
     },
     [],
   );

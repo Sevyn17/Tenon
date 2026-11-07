@@ -3,11 +3,11 @@ package skills
 // 插件登记（thin-kernel-plan §2.2）：skill 工具 + 技能目录系统块。会话创建时扫描一次，目录进系统块后不变。
 
 import (
-	"ybase/runtime/assemble"
-	"ybase/runtime/component"
-	"ybase/runtime/pkgs"
-	"ybase/runtime/session"
-	"ybase/runtime/toolhub"
+	"tenon/runtime/assemble"
+	"tenon/runtime/component"
+	"tenon/runtime/pkgs"
+	"tenon/runtime/session"
+	"tenon/runtime/toolhub"
 )
 
 const valueKey = "skills"

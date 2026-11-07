@@ -6,9 +6,9 @@ import (
 	"encoding/json"
 	"strings"
 
-	"ybase/appapi"
-	"ybase/modules/security/permission"
-	"ybase/runtime/toolhub"
+	"tenon/appapi"
+	"tenon/modules/security/permission"
+	"tenon/runtime/toolhub"
 )
 
 // PermModes 用 permission 插件的会话服务实现 appapi.Modes。workdir 用于项目档位的确认记录（trust.toml）。
@@ -50,7 +50,7 @@ func (m PermModes) Set(id, mode string, confirm bool) (appapi.ModeState, error) 
 	if d.Project {
 		if w := strings.Join(permission.ProjectWidened(d, m.P.Items()), "、"); w != "" && !ModeApproved(m.Workdir, mode, w) {
 			if !confirm {
-				return appapi.ModeState{}, appapi.Errorf(appapi.CodeNeedConfirm, "档位 %s 来自项目 .ybase/modes，放宽了：%s", mode, w)
+				return appapi.ModeState{}, appapi.Errorf(appapi.CodeNeedConfirm, "档位 %s 来自项目 .tenon/modes，放宽了：%s", mode, w)
 			}
 			if err := ApproveMode(m.Workdir, mode, w); err != nil {
 				return appapi.ModeState{}, err

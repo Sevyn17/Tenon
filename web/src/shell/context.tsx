@@ -55,7 +55,7 @@ export const ShellProvider = Ctx.Provider;
 
 export function useShell(): ShellState {
   const s = useContext(Ctx);
-  if (!s) throw new Error("@ybase/shell：组件必须在 Shell 里使用");
+  if (!s) throw new Error("@tenon/shell：组件必须在 Shell 里使用");
   return s;
 }
 

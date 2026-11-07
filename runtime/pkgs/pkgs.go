@@ -1,6 +1,6 @@
 // Package pkgs 插件包（外置插件第一级，见 docs/90 - 归档/10 - 框架模块/15 - 插件包.md）。
 //
-// 插件包是一个带清单 ybase-plugin.toml 的目录，打包 MCP 服务、用户钩子、技能、提示词片段与内置插件的缺省配置。
+// 插件包是一个带清单 tenon-plugin.toml 的目录，打包 MCP 服务、用户钩子、技能、提示词片段与内置插件的缺省配置。
 // 不引入新协议：包里的内容交给对应的内置插件（mcp / hooks / skills / prompt）按原有规则生效，
 // 缺省配置作为一层 profile（内置 < 插件包 < 用户 profile < 项目 profile < -profile）。
 //
@@ -19,16 +19,16 @@ import (
 
 	"github.com/BurntSushi/toml"
 
-	"ybase/runtime/component"
-	"ybase/runtime/ext"
+	"tenon/runtime/component"
+	"tenon/runtime/ext"
 )
 
 // ManifestName 清单文件名。
-const ManifestName = "ybase-plugin.toml"
+const ManifestName = "tenon-plugin.toml"
 
 // DirVar 包目录占位符：MCP 服务的 command / args / cwd / env 与钩子的 command 里出现时替换为包目录绝对路径；
 // MCP stdio 子进程还会收到同名环境变量。
-const DirVar = "YBASE_PLUGIN_DIR"
+const DirVar = "TENON_PLUGIN_DIR"
 
 // 来源。
 const (
@@ -38,12 +38,12 @@ const (
 
 var nameRe = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
 
-// Manifest ybase-plugin.toml 的内容。
+// Manifest tenon-plugin.toml 的内容。
 type Manifest struct {
 	Name        string   `toml:"name"`
 	Version     string   `toml:"version"`
 	Description string   `toml:"description"`
-	Skills      string   `toml:"skills"` // 技能目录（相对包目录），格式同 ~/.ybase/skills
+	Skills      string   `toml:"skills"` // 技能目录（相对包目录），格式同 ~/.tenon/skills
 	Prompt      []string `toml:"prompt"` // 提示词片段文件（相对包目录），按顺序拼成一个系统块
 	// Config 内置插件的缺省配置：[config.<插件名>] 键 = 值。不能开关插件。
 	Config map[string]map[string]any `toml:"config"`
@@ -198,7 +198,7 @@ func HasAny(root string) bool {
 	return false
 }
 
-// Load 用户级 <home>/plugins 与项目级 <dir>/.ybase/plugins（只在受信时）。
+// Load 用户级 <home>/plugins 与项目级 <dir>/.tenon/plugins（只在受信时）。
 // 同名包项目级覆盖用户级（记一条提示）；段内容之间的冲突（如 MCP 服务重名）由处理该段的组件检查。顺序：用户级在前、项目级在后，各按名字排序。
 func Load(home, root string, trusted bool) ([]*Package, []string, error) {
 	var all []*Package
@@ -210,7 +210,7 @@ func Load(home, root string, trusted bool) ([]*Package, []string, error) {
 		}
 		all, notes = append(all, ps...), append(notes, ns...)
 	}
-	projDir := filepath.Join(root, ".ybase", "plugins")
+	projDir := filepath.Join(root, ".tenon", "plugins")
 	if trusted {
 		ps, ns, err := Discover(projDir, ScopeProject)
 		if err != nil {
@@ -228,7 +228,7 @@ func Load(home, root string, trusted bool) ([]*Package, []string, error) {
 			all = append(all, p)
 		}
 	} else if HasAny(projDir) {
-		notes = append(notes, "项目未受信，跳过项目插件包 "+projDir+"（ybase trust 可信任）")
+		notes = append(notes, "项目未受信，跳过项目插件包 "+projDir+"（tenon trust 可信任）")
 	}
 	return all, notes, nil
 }
@@ -286,7 +286,7 @@ func (p *Package) Contents() string {
 	return strings.Join(out, "；")
 }
 
-// Expand 把字符串里的 ${YBASE_PLUGIN_DIR} 换成包目录。
+// Expand 把字符串里的 ${TENON_PLUGIN_DIR} 换成包目录。
 func Expand(s, dir string) string { return strings.ReplaceAll(s, "${"+DirVar+"}", dir) }
 
 // Service 应用把已加载的插件包（[]*Package）以这个键预置给插件；mcp / hooks / skills / prompt 插件在
@@ -323,13 +323,13 @@ name = "%s"
 version = "0.1.0"
 description = ""
 
-# 技能目录（相对包目录），格式同 ~/.ybase/skills：<名字>/SKILL.md 或 <名字>.md。需开 skills 插件。
+# 技能目录（相对包目录），格式同 ~/.tenon/skills：<名字>/SKILL.md 或 <名字>.md。需开 skills 插件。
 skills = "skills"
 
 # 提示词片段（相对包目录），按顺序拼成一个系统块。需开 prompt 插件（缺省开）。
 prompt = ["prompt.md"]
 
-# MCP 服务，字段同 mcp.toml 的 [[server]]。需开 mcp 插件。${YBASE_PLUGIN_DIR} = 包目录。
+# MCP 服务，字段同 mcp.toml 的 [[server]]。需开 mcp 插件。${TENON_PLUGIN_DIR} = 包目录。
 # [[server]]
 # name = "fs"
 # command = "npx"
@@ -342,7 +342,7 @@ prompt = ["prompt.md"]
 # matcher = "shell"
 # command = "echo ok"
 
-# 内置插件的缺省配置（低于 ~/.ybase/profile.toml）。不能开关插件。
+# 内置插件的缺省配置（低于 ~/.tenon/profile.toml）。不能开关插件。
 # [config.compact-basic]
 # keep_ratio = 0.2
 `

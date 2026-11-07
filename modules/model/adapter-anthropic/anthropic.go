@@ -18,8 +18,8 @@ import (
 	"net/http"
 	"strings"
 
-	"ybase/runtime/modelhub"
-	"ybase/runtime/session"
+	"tenon/runtime/modelhub"
+	"tenon/runtime/session"
 )
 
 // AnthropicVersion 请求头 anthropic-version。

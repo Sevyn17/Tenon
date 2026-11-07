@@ -23,11 +23,11 @@ import (
 	"sync"
 	"time"
 
-	"ybase/appapi/wire"
-	"ybase/runtime/bus"
-	"ybase/runtime/host"
-	"ybase/runtime/session"
-	"ybase/runtime/store"
+	"tenon/appapi/wire"
+	"tenon/runtime/bus"
+	"tenon/runtime/host"
+	"tenon/runtime/session"
+	"tenon/runtime/store"
 )
 
 // 连接参数。

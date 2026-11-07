@@ -1,6 +1,6 @@
 package assemble
 
-// 共同装配核心（2026-11-04 审查 P1-51）：SDK（ybase.App.Start）与应用（apps/internal/boot）原先各写一份
+// 共同装配核心（2026-11-04 审查 P1-51）：SDK（tenon.App.Start）与应用（apps/internal/boot）原先各写一份
 // "收集点位 → 建会话构造器 → 接宿主参数 → 起后台循环"，已经分叉（SDK 不设并发上限 / 所属树策略 / 保留期），
 // 会话构造器还藏在 appapi.New 的副作用里，后台派发可能在构造器接上之前就跑起来。两边都改走这里。
 
@@ -8,14 +8,14 @@ import (
 	"context"
 	"time"
 
-	"ybase/runtime/agent"
-	"ybase/runtime/agentdef"
-	"ybase/runtime/bus"
-	"ybase/runtime/component"
-	"ybase/runtime/host"
-	"ybase/runtime/session"
-	"ybase/runtime/store"
-	"ybase/runtime/toolhub"
+	"tenon/runtime/agent"
+	"tenon/runtime/agentdef"
+	"tenon/runtime/bus"
+	"tenon/runtime/component"
+	"tenon/runtime/host"
+	"tenon/runtime/session"
+	"tenon/runtime/store"
+	"tenon/runtime/toolhub"
 )
 
 // BlobGrace 工件回收的宽限期：没有引用的文件超过这么久未被触碰才删（约束清单「存储」）。

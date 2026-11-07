@@ -10,10 +10,10 @@ import (
 
 	"github.com/BurntSushi/toml"
 
-	"ybase/runtime/toolhub"
+	"tenon/runtime/toolhub"
 )
 
-// Config 权限配置文件（用户级 ~/.ybase/permissions.toml、项目级 <dir>/.ybase/permissions.toml）。
+// Config 权限配置文件（用户级 ~/.tenon/permissions.toml、项目级 <dir>/.tenon/permissions.toml）。
 //
 //	mode  = "workspace"                    # 新会话缺省档位
 //	ask   = ["shell(git push:*)"]
@@ -45,7 +45,7 @@ func LoadConfig(path string) (Config, error) {
 	}
 	// §9.7 公共规则只能加严：放宽一律写进有名字的档位。
 	if len(c.Allow) > 0 {
-		return c, fmt.Errorf("permission: %s：公共规则只认 deny / ask，allow 请写进自定义档位的 [items]（ybase mode copy <基础档位> <新名>）", path)
+		return c, fmt.Errorf("permission: %s：公共规则只认 deny / ask，allow 请写进自定义档位的 [items]（tenon mode copy <基础档位> <新名>）", path)
 	}
 	if _, err := c.Parsed(); err != nil {
 		return c, fmt.Errorf("permission: %s: %w", path, err)

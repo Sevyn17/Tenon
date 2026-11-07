@@ -16,8 +16,8 @@ import (
 	"strings"
 	"time"
 
-	"ybase/runtime/session"
-	"ybase/runtime/toolhub"
+	"tenon/runtime/session"
+	"tenon/runtime/toolhub"
 )
 
 // Placeholder 替换文本。

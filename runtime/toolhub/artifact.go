@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"strings"
 
-	"ybase/runtime/session"
+	"tenon/runtime/session"
 )
 
 // ArtifactPrefix 工件引用前缀。

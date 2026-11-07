@@ -13,7 +13,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"ybase/runtime/session"
+	"tenon/runtime/session"
 )
 
 var update = flag.Bool("update", false, "重录回归快照")

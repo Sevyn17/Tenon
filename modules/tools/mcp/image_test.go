@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"ybase/runtime/session"
+	"tenon/runtime/session"
 )
 
 // MCP 返回的图片存成工件、以媒体片段进工具结果（2026-11-04 审查 P2：原先只留"未显示"）；存不了时留占位。

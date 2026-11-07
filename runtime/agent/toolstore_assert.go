@@ -1,5 +1,5 @@
 package agent
 
-import "ybase/runtime/toolhub"
+import "tenon/runtime/toolhub"
 
 var _ toolhub.Store = ToolStore{}

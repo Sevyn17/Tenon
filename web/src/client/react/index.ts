@@ -1,4 +1,4 @@
-// @ybase/client/react：无样式的 React hooks。只依赖 client 与 react，可以配任何组件库使用。
+// @tenon/client/react：无样式的 React hooks。只依赖 client 与 react，可以配任何组件库使用。
 
 import { createContext, createElement, useContext, useEffect, useSyncExternalStore, type ReactNode } from "react";
 import type { Client } from "../index";

@@ -13,7 +13,7 @@ import (
 	"fmt"
 	"sort"
 
-	"ybase/runtime/toolhub"
+	"tenon/runtime/toolhub"
 )
 
 // Caps 封顶表：档位 → 类别 → 最宽取值。

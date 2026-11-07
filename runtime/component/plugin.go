@@ -12,10 +12,10 @@ import (
 	"strings"
 	"sync"
 
-	"ybase/runtime/agentdef"
-	"ybase/runtime/ext"
-	"ybase/runtime/inject"
-	"ybase/runtime/useconf"
+	"tenon/runtime/agentdef"
+	"tenon/runtime/ext"
+	"tenon/runtime/inject"
+	"tenon/runtime/useconf"
 )
 
 // Meta 插件元数据。Requires / Provides 用 "slot:<名>" / "service:<名>"。

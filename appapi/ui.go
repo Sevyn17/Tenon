@@ -11,10 +11,10 @@ import (
 	"context"
 	"sync"
 
-	"ybase/runtime/assemble"
-	"ybase/runtime/bus"
-	"ybase/runtime/host"
-	"ybase/runtime/store"
+	"tenon/runtime/assemble"
+	"tenon/runtime/bus"
+	"tenon/runtime/host"
+	"tenon/runtime/store"
 )
 
 // UI 事件化界面。零值不可用，用 NewUI 构造。

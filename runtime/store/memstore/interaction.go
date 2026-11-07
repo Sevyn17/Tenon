@@ -9,8 +9,8 @@ import (
 	"fmt"
 	"sort"
 
-	"ybase/runtime/bus"
-	"ybase/runtime/store"
+	"tenon/runtime/bus"
+	"tenon/runtime/store"
 )
 
 // OpenInteraction 登记一次交互并写 interaction_opened 事件。

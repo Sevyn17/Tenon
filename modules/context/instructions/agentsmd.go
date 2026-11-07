@@ -10,9 +10,9 @@ import (
 	"sync"
 	"time"
 
-	"ybase/modules/internal/workspace"
-	"ybase/runtime/session"
-	"ybase/runtime/toolhub"
+	"tenon/modules/internal/workspace"
+	"tenon/runtime/session"
+	"tenon/runtime/toolhub"
 )
 
 // AGENTS.md 默认预算（docs/90 - 归档/20 - 插件/01 - AGENTS.md 指令.md）。
@@ -97,13 +97,13 @@ func (in *Instructions) sync() {
 	}
 }
 
-// NewInstructions 以工作目录构造；Home 取 $YBASE_HOME 或 ~/.ybase。
+// NewInstructions 以工作目录构造；Home 取 $TENON_HOME 或 ~/.tenon。
 func NewInstructions(workdir string) *Instructions {
 	workdir, _ = filepath.Abs(workdir)
-	home := os.Getenv("YBASE_HOME")
+	home := os.Getenv("TENON_HOME")
 	if home == "" {
 		if h, err := os.UserHomeDir(); err == nil {
-			home = filepath.Join(h, ".ybase")
+			home = filepath.Join(h, ".tenon")
 		}
 	}
 	return &Instructions{Workdir: workdir, Home: home}

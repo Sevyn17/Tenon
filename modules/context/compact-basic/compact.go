@@ -12,9 +12,9 @@ import (
 	"fmt"
 	"strings"
 
-	"ybase/runtime/modelhub"
-	"ybase/runtime/reqlog"
-	"ybase/runtime/session"
+	"tenon/runtime/modelhub"
+	"tenon/runtime/reqlog"
+	"tenon/runtime/session"
 )
 
 // 默认值（DSH dsh-compaction-basic / pi-mono 对照见 kernel/docs/90 - 归档/20 - 插件/02 - 上下文压缩.md）。

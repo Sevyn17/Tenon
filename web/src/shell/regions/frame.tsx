@@ -165,7 +165,7 @@ function Rail({ panels }: { panels: Panel[] }) {
           onClick={() => sh.api.togglePanel(p.id)}
           draggable
           onDragStart={(e) => {
-            e.dataTransfer.setData("application/x-ybase-panel", p.id);
+            e.dataTransfer.setData("application/x-tenon-panel", p.id);
             e.dataTransfer.effectAllowed = "move";
           }}
         >

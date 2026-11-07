@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"ybase/runtime/callctx"
-	"ybase/runtime/session"
-	"ybase/runtime/toolhub"
+	"tenon/runtime/callctx"
+	"tenon/runtime/session"
+	"tenon/runtime/toolhub"
 )
 
 func TestString(t *testing.T) {
@@ -18,7 +18,7 @@ func TestString(t *testing.T) {
 		{"Authorization: Bearer abcdefghijklmnop0123", "Authorization: Bearer " + Placeholder},
 		{"sk-abcdefghijklmnopqrstuvwx", Placeholder},
 		{"AKIAABCDEFGHIJKLMNOP", Placeholder},
-		{"YBASE_API_KEY=abcd1234efgh", "YBASE_API_KEY=" + Placeholder},
+		{"TENON_API_KEY=abcd1234efgh", "TENON_API_KEY=" + Placeholder},
 		{`password: "hunter2hunter2"`, `password: "` + Placeholder + `"`},
 		{"DATABASE_URL postgresql://bus:Pa55w0rd!x@localhost:5432/bus", "DATABASE_URL postgresql://bus:" + Placeholder + "@localhost:5432/bus"},
 		{"redis://:s3cretpass@127.0.0.1:6379", "redis://:" + Placeholder + "@127.0.0.1:6379"},
@@ -80,7 +80,7 @@ func TestLayerPersistsRedacted(t *testing.T) {
 		Spec: session.ToolSpec{Name: "leak", Schema: json.RawMessage(`{"type":"object"}`)},
 		Risk: toolhub.Read,
 		Call: func(ctx context.Context, cx *toolhub.Cx, args json.RawMessage) (toolhub.Output, error) {
-			return toolhub.Text("env: YBASE_API_KEY=sk-abcdefghijklmnopqrstuvwx"), nil
+			return toolhub.Text("env: TENON_API_KEY=sk-abcdefghijklmnopqrstuvwx"), nil
 		},
 	})
 	h.AddLayer(Layer(New()))

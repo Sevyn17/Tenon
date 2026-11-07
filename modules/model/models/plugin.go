@@ -6,16 +6,16 @@ import (
 	"fmt"
 	"os"
 
-	"ybase/runtime/assemble"
-	"ybase/runtime/component"
-	"ybase/runtime/modelhub"
+	"tenon/runtime/assemble"
+	"tenon/runtime/component"
+	"tenon/runtime/modelhub"
 )
 
 // Config models 插件配置。
 type Config struct {
 	Model    string `cfg:"model" default:"deepseek-chat" title:"模型或别名"`
 	Catalog  string `cfg:"catalog" title:"用户目录 models.toml" description:"整条覆盖内置目录（model-hub D3）" widget:"file"`
-	BaseURL  string `cfg:"base_url" title:"临时 OpenAI 兼容端点" description:"非空时注册提供方 cli（key = env:YBASE_API_KEY）"`
+	BaseURL  string `cfg:"base_url" title:"临时 OpenAI 兼容端点" description:"非空时注册提供方 cli（key = env:TENON_API_KEY）"`
 	Discover bool   `cfg:"discover_ollama" title:"发现本地 Ollama 模型" widget:"switch"`
 }
 
@@ -63,7 +63,7 @@ func (modelsPlugin) Setup(cx *component.Registrar) error {
 	model := cfg.Model
 	if cfg.BaseURL != "" {
 		f := modelhub.CatalogFile{
-			Provider: map[string]modelhub.Provider{"cli": {Protocol: "openai-chat", BaseURL: cfg.BaseURL, Key: "env:YBASE_API_KEY"}},
+			Provider: map[string]modelhub.Provider{"cli": {Protocol: "openai-chat", BaseURL: cfg.BaseURL, Key: "env:TENON_API_KEY"}},
 			Model:    map[string]modelhub.Model{"cli/" + model: {Provider: "cli", Name: model}},
 		}
 		if err := cat.Add(modelhub.LayerUser, "cli", f); err != nil {

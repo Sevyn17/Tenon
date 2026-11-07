@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"ybase/runtime/mail"
-	"ybase/runtime/store"
+	"tenon/runtime/mail"
+	"tenon/runtime/store"
 )
 
 // 回合提交后 actor 自己派发发件箱：发给本会话的 control（close / interrupt）不能在 actor 协程里

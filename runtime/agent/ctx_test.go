@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	"ybase/runtime/callctx"
-	"ybase/runtime/store"
+	"tenon/runtime/callctx"
+	"tenon/runtime/store"
 )
 
 // 会话行（定义名与哈希、创建者、父会话、会话键、meta、使用配置）要落到 Ctx 上：

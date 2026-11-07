@@ -7,13 +7,13 @@
   background: var(--bg-app);
   color: var(--fg);
 }
-/* 嵌入（<YBaseConversation>）：填满嵌入方给的容器，不占整个视口。 */
-[data-ybase-embed] {
+/* 嵌入（<TenonConversation>）：填满嵌入方给的容器，不占整个视口。 */
+[data-tenon-embed] {
   position: relative;
   display: flex;
   min-height: 0;
 }
-[data-ybase-embed] > .frame {
+[data-tenon-embed] > .frame {
   height: 100%;
   width: 100%;
 }

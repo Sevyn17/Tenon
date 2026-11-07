@@ -1,12 +1,12 @@
 package main
 
-// 权限档位的查看与复制：/mode、/mode copy 与子命令 ybase mode list|copy。
+// 权限档位的查看与复制：/mode、/mode copy 与子命令 tenon mode list|copy。
 
 import (
 	"fmt"
 	"path/filepath"
 
-	"ybase/modules/security/permission"
+	"tenon/modules/security/permission"
 )
 
 // printModes 列出全部档位（内置在前，自定义按名字）。
@@ -29,7 +29,7 @@ func printModes(reg *permission.Registry) {
 	}
 }
 
-// modeCopy /mode copy <源> <新名> [-project]：缺省写到用户级目录，-project 写到项目 .ybase/modes。
+// modeCopy /mode copy <源> <新名> [-project]：缺省写到用户级目录，-project 写到项目 .tenon/modes。
 func modeCopy(reg *permission.Registry, args []string) error {
 	var pos []string
 	project := false
@@ -61,7 +61,7 @@ func modeCopy(reg *permission.Registry, args []string) error {
 	return nil
 }
 
-// modeCmd 子命令 ybase mode list | copy <源> <新名> [-project]。
+// modeCmd 子命令 tenon mode list | copy <源> <新名> [-project]。
 func modeCmd(args []string, workdir string) error {
 	root, err := filepath.Abs(workdir)
 	if err != nil {
@@ -78,5 +78,5 @@ func modeCmd(args []string, workdir string) error {
 	if args[0] == "copy" {
 		return modeCopy(reg, args[1:])
 	}
-	return fmt.Errorf("用法：ybase mode list | copy <源> <新名> [-project]")
+	return fmt.Errorf("用法：tenon mode list | copy <源> <新名> [-project]")
 }

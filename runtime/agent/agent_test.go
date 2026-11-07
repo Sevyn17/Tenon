@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"ybase/runtime/session"
-	"ybase/runtime/store/sqlite"
-	"ybase/runtime/toolhub"
+	"tenon/runtime/session"
+	"tenon/runtime/store/sqlite"
+	"tenon/runtime/toolhub"
 )
 
 // fakeModel：最后一条是工具结果时回一句文本，否则让模型调 echo 工具。

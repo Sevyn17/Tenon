@@ -53,7 +53,7 @@ func TestGlobMatch(t *testing.T) {
 	}{
 		{"**/*.go", "a.go", true},
 		{"**/*.go", "x/y/a.go", true},
-		{"cmd/**/main.go", "cmd/ybase/main.go", true},
+		{"cmd/**/main.go", "cmd/tenon/main.go", true},
 		{"cmd/**/main.go", "cmd/main.go", true},
 		{"*.go", "x/a.go", false},
 		{"x/*.go", "x/y/a.go", false},
@@ -152,7 +152,7 @@ func TestGlobFiles(t *testing.T) {
 
 func TestListFiles(t *testing.T) {
 	root := t.TempDir()
-	for _, f := range []string{"README.md", "web/src/client/sessions.ts", "web/src/shell/index.tsx", "docs/notes.md", "build/out.js", "node_modules/x/index.js", ".ybase/blobs/ab"} {
+	for _, f := range []string{"README.md", "web/src/client/sessions.ts", "web/src/shell/index.tsx", "docs/notes.md", "build/out.js", "node_modules/x/index.js", ".tenon/blobs/ab"} {
 		p := filepath.Join(root, filepath.FromSlash(f))
 		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 			t.Fatal(err)
@@ -170,7 +170,7 @@ func TestListFiles(t *testing.T) {
 		t.Fatal(err, trunc)
 	}
 	for _, h := range all {
-		if strings.HasPrefix(h.Path, "build/") || strings.HasPrefix(h.Path, "node_modules/") || strings.HasPrefix(h.Path, ".ybase/") {
+		if strings.HasPrefix(h.Path, "build/") || strings.HasPrefix(h.Path, "node_modules/") || strings.HasPrefix(h.Path, ".tenon/") {
 			t.Fatalf("应遵守 .gitignore 与 skipDirs：%v", all)
 		}
 	}

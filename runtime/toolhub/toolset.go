@@ -17,7 +17,7 @@ import (
 	"strings"
 	"sync"
 
-	"ybase/runtime/session"
+	"tenon/runtime/session"
 )
 
 // Toolset 一个会话的工具视图。并发安全（tool_search 可能并行调用）。

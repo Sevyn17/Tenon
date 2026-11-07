@@ -10,12 +10,12 @@ import (
 	"context"
 	"fmt"
 
-	"ybase/runtime/agentdef"
-	"ybase/runtime/assemble"
-	"ybase/runtime/component"
-	"ybase/runtime/host"
-	"ybase/runtime/store"
-	"ybase/runtime/toolhub"
+	"tenon/runtime/agentdef"
+	"tenon/runtime/assemble"
+	"tenon/runtime/component"
+	"tenon/runtime/host"
+	"tenon/runtime/store"
+	"tenon/runtime/toolhub"
 )
 
 // 两个内置定义名（09 9.3、计划/01 T1b-2c）：组长与成员的角色由定义判定，不再按会话 id 猜。
@@ -26,13 +26,13 @@ const (
 
 // templateManifest 组长的内置定义模板。行为不变：不带 tools / use / prompt，
 // 工具集合仍由 Visible 按定义挑（09 9.3「行为不变」）。
-const leaderManifest = `format = "ybase/v1"
+const leaderManifest = `format = "tenon/v1"
 id = "workgroup-leader"
 description = "工作组组长：派成员（team_spawn）、给成员发消息、看看板。"
 `
 
 // templateManifest 成员的内置定义模板。
-const memberManifest = `format = "ybase/v1"
+const memberManifest = `format = "tenon/v1"
 id = "workgroup-member"
 description = "工作组成员：给组长或其他成员发消息、看看板。"
 `

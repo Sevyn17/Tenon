@@ -3,7 +3,7 @@ package memstore
 import (
 	"context"
 
-	"ybase/runtime/store"
+	"tenon/runtime/store"
 )
 
 // Tx（05：与 sqlite 同形）。

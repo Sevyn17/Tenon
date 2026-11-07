@@ -25,7 +25,7 @@ import (
 const ManifestName = "agent.toml"
 
 // FormatV1 当前唯一支持的定义包格式；agent.toml 不写 format 时按它处理。
-const FormatV1 = "ybase/v1"
+const FormatV1 = "tenon/v1"
 
 // MaxPackageSize 单个定义包所有文件的总字节上限，防止误把大目录当定义包。
 const MaxPackageSize = 32 << 20
@@ -65,7 +65,7 @@ type Agent struct {
 	X map[string]map[string]any
 
 	// 由框架填写
-	Format  string // 定义包格式版本，如 "ybase/v1"
+	Format  string // 定义包格式版本，如 "tenon/v1"
 	Version string // 整包内容哈希（sha256 十六进制），见 Hash
 	Files   Files  // 定义包里除 agent.toml 外的其他文件
 }

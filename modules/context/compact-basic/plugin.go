@@ -4,8 +4,8 @@ package compactbasic
 // 开位 before_compact（乙类）：压缩时读点位上的登记，应用不必再接线（审查 P1-25：原先靠应用调 Wire，SDK 没调）。
 
 import (
-	"ybase/runtime/assemble"
-	"ybase/runtime/component"
+	"tenon/runtime/assemble"
+	"tenon/runtime/component"
 )
 
 // PointBeforeCompact 登记 BeforeCompact，返回错误即拒绝本次压缩。

@@ -7,7 +7,7 @@
 set -u
 cd "$(dirname "$0")/.."
 set -a; . ./.env; set +a
-go build -o /tmp/ybase-perm.exe ./apps/ybase || exit 1
+go build -o /tmp/tenon-perm.exe ./apps/tenon || exit 1
 W=$(mktemp -d)
 mkdir -p "$W/ws"
 printf 'hello\n' > "$W/ws/a.txt"
@@ -24,7 +24,7 @@ check() { if eval "$2"; then echo "PASS: $1"; pass=$((pass+1)); else echo "FAIL:
 feed() { for x in "$@"; do sleep "${x%%|*}"; printf '%s\n' "${x#*|}"; done; }
 run() { # $1 会话 $2.. 输入
   local s=$1; shift
-  feed "$@" | timeout 300 /tmp/ybase-perm.exe "${ARGS[@]}" -session "$s" 2>&1 | tail -c 3000
+  feed "$@" | timeout 300 /tmp/tenon-perm.exe "${ARGS[@]}" -session "$s" 2>&1 | tail -c 3000
   echo
 }
 
@@ -49,4 +49,4 @@ n=$(grep -c "允许？" "$W/p3.txt")
 check "只确认一次（实际 $n 次）" "[ '$n' = 1 ]"
 
 echo "===== 结果：$pass 通过，$fail 失败"
-/tmp/ybase-perm.exe -dir "$W/ws" sandbox-reset && echo "sandbox-reset OK"
+/tmp/tenon-perm.exe -dir "$W/ws" sandbox-reset && echo "sandbox-reset OK"

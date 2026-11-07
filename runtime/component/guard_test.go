@@ -3,7 +3,7 @@ package component
 import (
 	"testing"
 
-	"ybase/runtime/mail"
+	"tenon/runtime/mail"
 )
 
 // TestRegistrarGuard：组件通过 Registrar.Guard 登记规则，装配后按装配顺序可取回，

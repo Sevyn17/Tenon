@@ -13,8 +13,8 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"tenon/modules/internal/proc"
 	"time"
-	"ybase/modules/internal/proc"
 )
 
 // StderrTail stdio 服务 stderr 保留的尾部字节数（诊断用）。

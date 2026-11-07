@@ -9,9 +9,9 @@ import (
 	"errors"
 	"fmt"
 
-	"ybase/runtime/agent"
-	"ybase/runtime/session"
-	"ybase/runtime/store"
+	"tenon/runtime/agent"
+	"tenon/runtime/session"
+	"tenon/runtime/store"
 )
 
 // Get 返回已打开会话的句柄。

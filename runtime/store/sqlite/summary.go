@@ -3,7 +3,7 @@ package sqlite
 import (
 	"strings"
 
-	"ybase/runtime/session"
+	"tenon/runtime/session"
 )
 
 // summaryMax：条目一行预览的上限（rune）。

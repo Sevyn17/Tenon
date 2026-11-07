@@ -13,19 +13,19 @@ import (
 	"errors"
 	"sync"
 
-	"ybase/runtime/agent"
-	"ybase/runtime/assemble"
-	"ybase/runtime/bus"
-	"ybase/runtime/component"
-	"ybase/runtime/host"
-	"ybase/runtime/pkgs"
-	"ybase/runtime/session"
-	"ybase/runtime/store"
-	"ybase/runtime/toolhub"
+	"tenon/runtime/agent"
+	"tenon/runtime/assemble"
+	"tenon/runtime/bus"
+	"tenon/runtime/component"
+	"tenon/runtime/host"
+	"tenon/runtime/pkgs"
+	"tenon/runtime/session"
+	"tenon/runtime/store"
+	"tenon/runtime/toolhub"
 )
 
 // Server hello 返回的服务端名。
-const Server = "ybase-kernel"
+const Server = "tenon"
 
 // Options 应用装配好的部件。Host、Bus、DB 必填，其余可空。
 type Options struct {

@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"ybase/runtime/session"
-	"ybase/runtime/store"
-	"ybase/runtime/toolhub"
+	"tenon/runtime/session"
+	"tenon/runtime/store"
+	"tenon/runtime/toolhub"
 )
 
 // failModel 可配置前 N 次调用失败（fail < 0 表示一直失败），用于所属树策略测试。

@@ -76,7 +76,7 @@ type Item struct {
 	Suggest map[string]ItemAction
 	// SuggestLevel 仅 level 型：各内置档位的建议级别，键是内置档位 id，取值须在 Levels 内。
 	SuggestLevel map[string]string
-	// Owner 声明来源（插件名），`ybase mode show` 标注用；由注册方填写。
+	// Owner 声明来源（插件名），`tenon mode show` 标注用；由注册方填写。
 	Owner string
 	// NoSessionAllow 仅 match 型、可空：哪些匹配对象永不能被“本次会话内都允许”生成的规则放行
 	// （shell 的启动器类命令：sh / node / npm run …，放行前缀等于放行任意程序）。

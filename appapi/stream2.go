@@ -14,10 +14,10 @@ import (
 
 	"github.com/google/uuid"
 
-	"ybase/appapi/wire"
-	"ybase/runtime/agent"
-	"ybase/runtime/bus"
-	"ybase/runtime/session"
+	"tenon/appapi/wire"
+	"tenon/runtime/agent"
+	"tenon/runtime/bus"
+	"tenon/runtime/session"
 )
 
 // v2Event 总线上 protocol 2 易失事件的 data：回合号 + 线上载荷。

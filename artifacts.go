@@ -1,4 +1,4 @@
-package ybase
+package tenon
 
 import (
 	"context"
@@ -54,7 +54,7 @@ func (a *memArtifacts) Get(hash string) ([]byte, error) {
 	defer a.mu.Unlock()
 	b, ok := a.m[hash]
 	if !ok {
-		return nil, errors.New("ybase: 工件不存在")
+		return nil, errors.New("tenon: 工件不存在")
 	}
 	return append([]byte(nil), b.data...), nil
 }

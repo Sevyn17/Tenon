@@ -7,8 +7,8 @@ import (
 	"sort"
 	"strings"
 
-	"ybase/runtime/component"
-	"ybase/runtime/pkgs"
+	"tenon/runtime/component"
+	"tenon/runtime/pkgs"
 )
 
 // packageLines 已加载插件包的展示行：名字 版本（用户级 / 项目级）← 清单路径，下一行列内容。
@@ -89,7 +89,7 @@ func enabledLine(p *component.Profile) string {
 		}
 		on = append(on, n)
 	}
-	return strings.Join(on, " ") + "（* = 非缺省开启；ybase explain 看详情）"
+	return strings.Join(on, " ") + "（* = 非缺省开启；tenon explain 看详情）"
 }
 
 // extAssembly 会话头 Ext 键：上次打开会话时开启的插件名（有序）。

@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"ybase/runtime/callctx"
-	"ybase/runtime/session"
-	"ybase/runtime/toolhub"
+	"tenon/runtime/callctx"
+	"tenon/runtime/session"
+	"tenon/runtime/toolhub"
 )
 
 func setup(t *testing.T) (*toolhub.Hub, *toolhub.Toolset, *[]string) {

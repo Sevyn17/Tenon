@@ -1,12 +1,12 @@
-package ybase
+package tenon
 
 import (
 	"context"
 	"path/filepath"
 	"testing"
 
-	"ybase/runtime/store"
-	"ybase/runtime/store/sqlite"
+	"tenon/runtime/store"
+	"tenon/runtime/store/sqlite"
 )
 
 // SQLite 存储自带 SQL 出口：SDK 装配不该因为"没有 store.SQL"把要建表的组件（workgroup）悄悄去掉

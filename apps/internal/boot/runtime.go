@@ -1,6 +1,6 @@
 package boot
 
-// 进程装配与应用接口层构造（原 apps/ybase/main.go 的 withRuntime / chat 前半段），CLI 与桌面端共用。
+// 进程装配与应用接口层构造（原 apps/tenon/main.go 的 withRuntime / chat 前半段），CLI 与桌面端共用。
 // 顺序：读信任 → 读 profile → 建总线与宿主 → 装配（预置宿主 / 界面 / 工作目录 / 信任）→ 启动进程作用域
 // → 收集点位、建会话构造器 → appapi.New → 跑 ready 点位。
 
@@ -11,17 +11,17 @@ import (
 	"strings"
 	"time"
 
-	"ybase/appapi"
-	"ybase/appapi/wire"
-	"ybase/modules/security/permission"
-	"ybase/modules/tools/fs"
-	"ybase/runtime/agent"
-	"ybase/runtime/assemble"
-	"ybase/runtime/bus"
-	"ybase/runtime/component"
-	"ybase/runtime/host"
-	"ybase/runtime/pkgs"
-	"ybase/runtime/store"
+	"tenon/appapi"
+	"tenon/appapi/wire"
+	"tenon/modules/security/permission"
+	"tenon/modules/tools/fs"
+	"tenon/runtime/agent"
+	"tenon/runtime/assemble"
+	"tenon/runtime/bus"
+	"tenon/runtime/component"
+	"tenon/runtime/host"
+	"tenon/runtime/pkgs"
+	"tenon/runtime/store"
 )
 
 // Flags 命令行参数（CLI 与桌面端同名同义）。
@@ -34,7 +34,7 @@ type Flags struct {
 // Overrides 命令行参数 → 插件配置覆盖（只覆盖给了值的项）。
 func Overrides(f Flags, root string) map[string]map[string]any {
 	ov := map[string]map[string]any{
-		"store-sqlite": {"dir": filepath.Join(root, ".ybase")},
+		"store-sqlite": {"dir": filepath.Join(root, ".tenon")},
 	}
 	set := func(plugin, key string, v any) {
 		if ov[plugin] == nil {
@@ -92,7 +92,7 @@ type Runtime struct {
 // StartOptions Start 的参数。
 type StartOptions struct {
 	Flags Flags
-	// AskTrust 无信任记录且项目带 .ybase 配置时询问用户；nil = 按不受信。
+	// AskTrust 无信任记录且项目带 .tenon 配置时询问用户；nil = 按不受信。
 	AskTrust func(key string) bool
 	// UI 用总线构造界面服务（service:ui）；必填。
 	UI func(b *bus.Bus) assemble.UI

@@ -3,7 +3,7 @@ package component
 import (
 	"encoding/json"
 
-	"ybase/runtime/mail"
+	"tenon/runtime/mail"
 )
 
 // 守卫规则（04 4.2、08 8.1 / D4）。组件在 Setup 里通过 Registrar.Guard 登记，

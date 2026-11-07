@@ -6,8 +6,8 @@ import (
 	"context"
 	"time"
 
-	"ybase/runtime/store"
-	"ybase/runtime/toolhub"
+	"tenon/runtime/store"
+	"tenon/runtime/toolhub"
 )
 
 // ToolStore 把 store.ToolResultStore 包装成 toolhub.Store。

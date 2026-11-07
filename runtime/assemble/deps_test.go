@@ -2,7 +2,7 @@ package assemble
 
 // 依赖规则（docs/05 - 定位与命名方案.md 3.2）：运行时（runtime/）不得 import 标准模块（modules/）、
 // 应用接口层（appapi/）、SDK 与应用；标准模块之间不互相 import，也不 import appapi、SDK 与应用。
-// SDK（模块根 ybase）、测试套件（ybasetest/）与应用（apps/）负责装配，可以 import 任何包。规则写成测试，防止以后退化。
+// SDK（模块根 tenon）、测试套件（tenontest/）与应用（apps/）负责装配，可以 import 任何包。规则写成测试，防止以后退化。
 
 import (
 	"encoding/json"
@@ -11,7 +11,7 @@ import (
 	"testing"
 )
 
-const module = "ybase"
+const module = "tenon"
 
 // pending 暂留的例外（保持为空）。
 var pending = map[string]bool{}
@@ -24,7 +24,7 @@ func isAppAPI(p string) bool { return p == "appapi" || strings.HasPrefix(p, "app
 
 // assembler SDK、测试套件、应用与前端嵌入包：装配层，不受限制。
 func assembler(p string) bool {
-	return p == "" || p == "ybasetest" || p == "web" || strings.HasPrefix(p, "apps/")
+	return p == "" || p == "tenontest" || p == "web" || strings.HasPrefix(p, "apps/")
 }
 
 // rel 本模块内的相对路径（模块根 = ""）；不是本模块的包返回 false。

@@ -16,9 +16,9 @@ import (
 	"fmt"
 	"time"
 
-	"ybase/runtime/bus"
-	"ybase/runtime/session"
-	"ybase/runtime/store"
+	"tenon/runtime/bus"
+	"tenon/runtime/session"
+	"tenon/runtime/store"
 )
 
 func jsonObj(b json.RawMessage) string {

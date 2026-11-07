@@ -8,8 +8,8 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"ybase/runtime/session"
-	"ybase/runtime/store"
+	"tenon/runtime/session"
+	"tenon/runtime/store"
 )
 
 // inboxCounter 数信箱读取次数。

@@ -19,14 +19,14 @@ import (
 	"testing"
 	"time"
 
-	"ybase/appapi"
-	"ybase/runtime/agent"
-	"ybase/runtime/agentdef"
-	"ybase/runtime/assemble"
-	"ybase/runtime/bus"
-	"ybase/runtime/host"
-	"ybase/runtime/session"
-	"ybase/runtime/store"
+	"tenon/appapi"
+	"tenon/runtime/agent"
+	"tenon/runtime/agentdef"
+	"tenon/runtime/assemble"
+	"tenon/runtime/bus"
+	"tenon/runtime/host"
+	"tenon/runtime/session"
+	"tenon/runtime/store"
 )
 
 var update = flag.Bool("update", false, "重录回归快照")
@@ -90,9 +90,9 @@ func (s *scripted) count(r string) int {
 func TestAssembledSnapshot(t *testing.T) {
 	root := t.TempDir()
 	home := t.TempDir()
-	t.Setenv("YBASE_HOME", home)
-	t.Setenv("YBASE_BASE_URL", "")
-	t.Setenv("YBASE_MODEL", "")
+	t.Setenv("TENON_HOME", home)
+	t.Setenv("TENON_BASE_URL", "")
+	t.Setenv("TENON_MODEL", "")
 	extra := filepath.Join(home, "extra.toml")
 	if err := os.WriteFile(extra, []byte("[[plugin]]\nname = \"subagent\"\nenabled = true\n\n[[plugin]]\nname = \"workgroup\"\nenabled = true\n"), 0o644); err != nil {
 		t.Fatal(err)

@@ -8,9 +8,9 @@ import (
 	"sync"
 	"time"
 
-	"ybase/runtime/agent"
-	"ybase/runtime/bus"
-	"ybase/runtime/session"
+	"tenon/runtime/agent"
+	"tenon/runtime/bus"
+	"tenon/runtime/session"
 )
 
 // 易失事件类型（宿主发的 turn_start / turn_end / turn_denied / human_requested 之外由本层发的）。

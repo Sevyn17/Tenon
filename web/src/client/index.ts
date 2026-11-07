@@ -1,4 +1,4 @@
-// @ybase/client：YBase 应用协议（protocol 2）的客户端。不依赖 React 与任何 UI 框架，
+// @tenon/client：Tenon 应用协议（protocol 2）的客户端。不依赖 React 与任何 UI 框架，
 // 用它可以按契约另写一套界面（Vue、原生 JS、移动端……），见 client/README.md。
 
 import { autoTransport, connect, type Connection, type Transport } from "./transport";
@@ -82,7 +82,7 @@ export function createClient(opts: ClientOptions = {}): Client {
     call: conn.call,
     hello,
     async start() {
-      const r = await conn.call("hello", { client: opts.client ?? "ybase-web", protocol: { min: PROTOCOL, max: PROTOCOL } });
+      const r = await conn.call("hello", { client: opts.client ?? "tenon-web", protocol: { min: PROTOCOL, max: PROTOCOL } });
       hello.set(r);
       void sessions.refresh();
       void interactions.refresh();

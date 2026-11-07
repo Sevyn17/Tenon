@@ -8,12 +8,12 @@ import (
 	"testing"
 	"time"
 
-	"ybase/runtime/agent"
-	"ybase/runtime/bus"
-	"ybase/runtime/mail"
-	"ybase/runtime/session"
-	"ybase/runtime/store/sqlite"
-	"ybase/runtime/toolhub"
+	"tenon/runtime/agent"
+	"tenon/runtime/bus"
+	"tenon/runtime/mail"
+	"tenon/runtime/session"
+	"tenon/runtime/store/sqlite"
+	"tenon/runtime/toolhub"
 )
 
 // newHumanRig 用会触发确认的工具（Dangerous）搭一个宿主。

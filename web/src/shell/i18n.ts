@@ -5,7 +5,7 @@ export type Locale = "zh" | "en";
 export type Messages = Record<string, string>;
 
 const zh: Messages = {
-  "app.name": "YBase",
+  "app.name": "Tenon",
   "nav.new": "新建会话",
   "nav.search": "搜索",
   "nav.market": "插件市场",
@@ -89,7 +89,7 @@ const zh: Messages = {
 };
 
 const en: Messages = {
-  "app.name": "YBase",
+  "app.name": "Tenon",
   "nav.new": "New session",
   "nav.search": "Search",
   "nav.market": "Plugin market",

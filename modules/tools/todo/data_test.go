@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"ybase/runtime/toolhub"
+	"tenon/runtime/toolhub"
 )
 
 // 结果带结构化列表（Output.Data），界面不必解析文本（2026-11-04 审查 P2 工具体验）。

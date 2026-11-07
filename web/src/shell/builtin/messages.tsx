@@ -10,7 +10,7 @@ import type { Registries } from "../contributions";
 // ---- 反馈 ----
 
 type Vote = "up" | "down";
-const fbKey = (session: string) => `ybase.feedback.${session}`;
+const fbKey = (session: string) => `tenon.feedback.${session}`;
 
 /** 首版存在本地的反馈：搬到后端后删掉本地这份（搬一次）。 */
 async function migrateLocal(client: Client, session: string) {

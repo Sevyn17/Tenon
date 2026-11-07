@@ -16,8 +16,8 @@ import (
 	"strings"
 	"time"
 
-	"ybase/runtime/mail"
-	"ybase/runtime/store"
+	"tenon/runtime/mail"
+	"tenon/runtime/store"
 )
 
 // 交互结果（与线上 outcome 同值）。

@@ -12,7 +12,7 @@ import (
 	"testing"
 )
 
-const basicToml = `format      = "ybase/v1"
+const basicToml = `format      = "tenon/v1"
 id          = "support"
 description = "回答订单和售后问题"
 model       = "fast"
@@ -102,7 +102,7 @@ func TestParseRejects(t *testing.T) {
 		"缺 id":            {Files{ManifestName: []byte("model = \"fast\"\n")}, "缺少 id"},
 		"id 含斜杠":          {Files{ManifestName: []byte("id = \"a/b\"\n")}, "不合法"},
 		"缺清单":             {Files{"AGENT.md": []byte("x")}, "缺少 agent.toml"},
-		"未知 format":       {Files{ManifestName: []byte("format = \"ybase/v9\"\nid = \"a\"\n")}, "不支持"},
+		"未知 format":       {Files{ManifestName: []byte("format = \"tenon/v9\"\nid = \"a\"\n")}, "不支持"},
 		"prompt 文件缺失":     {Files{ManifestName: []byte("id = \"a\"\nprompt = \"@AGENT.md\"\n")}, "不在定义包里"},
 		"路径逃逸":            {Files{ManifestName: []byte("id = \"a\"\n"), "../x": []byte("x")}, "相对路径"},
 		"空工具名":            {Files{ManifestName: []byte("id = \"a\"\ntools = [\"\"]\n")}, "tools[0]"},

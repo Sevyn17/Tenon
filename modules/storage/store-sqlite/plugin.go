@@ -8,11 +8,11 @@ import (
 	"path/filepath"
 	"sync"
 
-	"ybase/runtime/assemble"
-	"ybase/runtime/component"
-	"ybase/runtime/store"
-	"ybase/runtime/store/sqlite"
-	"ybase/runtime/toolhub"
+	"tenon/runtime/assemble"
+	"tenon/runtime/component"
+	"tenon/runtime/store"
+	"tenon/runtime/store/sqlite"
+	"tenon/runtime/toolhub"
 )
 
 // Store 存储句柄（实现 runtime.DBHandle）：Setup 时登记，Start 时打开（plugin-manager §5.1）。
@@ -74,7 +74,7 @@ func (o sqlOut) Migrate(ctx context.Context, owner string, ms []store.Migration)
 
 // Config store-sqlite 配置。
 type Config struct {
-	Dir      string `cfg:"dir" default:".ybase" title:"存储目录" description:"state.db 与 blobs/ 所在目录"`
+	Dir      string `cfg:"dir" default:".tenon" title:"存储目录" description:"state.db 与 blobs/ 所在目录"`
 	SyncFull bool   `cfg:"sync_full" title:"每次提交 fsync" description:"synchronous=FULL：掉电也不丢最后一次提交" widget:"switch"`
 }
 

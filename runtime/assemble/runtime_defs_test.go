@@ -5,11 +5,11 @@ import (
 	"strings"
 	"testing"
 
-	"ybase/runtime/agentdef"
-	"ybase/runtime/modelhub"
-	"ybase/runtime/session"
-	"ybase/runtime/store"
-	"ybase/runtime/store/memstore"
+	"tenon/runtime/agentdef"
+	"tenon/runtime/modelhub"
+	"tenon/runtime/session"
+	"tenon/runtime/store"
+	"tenon/runtime/store/memstore"
 )
 
 // defsSource 造一个内存定义来源（平台命名空间，最小 manifest）。
@@ -18,7 +18,7 @@ func defsSource(t *testing.T, names ...string) agentdef.Source {
 	m := agentdef.Mem()
 	for _, name := range names {
 		files := agentdef.Files{"agent.toml": []byte(
-			"format = \"ybase/v1\"\nid = \"" + name + "\"\ndescription = \"测试定义\"\n")}
+			"format = \"tenon/v1\"\nid = \"" + name + "\"\ndescription = \"测试定义\"\n")}
 		if err := m.Put(agentdef.Ref{Namespace: agentdef.Platform, Name: name}, files); err != nil {
 			t.Fatalf("Put %s：%v", name, err)
 		}
@@ -109,7 +109,7 @@ func TestDefinitionModelUsed(t *testing.T) {
 	hub := modelhub.New(cat, func(string) (string, error) { return "", nil }, nil)
 	m := agentdef.Mem()
 	for name, model := range map[string]string{"quick": "fast-1", "plain": "", "typo": "nope"} {
-		toml := "format = \"ybase/v1\"\nid = \"" + name + "\"\n"
+		toml := "format = \"tenon/v1\"\nid = \"" + name + "\"\n"
 		if model != "" {
 			toml += "model = \"" + model + "\"\n"
 		}

@@ -8,15 +8,15 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"ybase/runtime/assemble"
-	"ybase/runtime/component"
-	"ybase/runtime/pkgs"
-	"ybase/runtime/toolhub"
+	"tenon/runtime/assemble"
+	"tenon/runtime/component"
+	"tenon/runtime/pkgs"
+	"tenon/runtime/toolhub"
 )
 
 // PluginConfig mcp 插件配置。
 type PluginConfig struct {
-	Config string `cfg:"config" title:"MCP 配置" description:"MCP 配置 TOML（缺省 <dir>/.ybase/mcp.toml）"`
+	Config string `cfg:"config" title:"MCP 配置" description:"MCP 配置 TOML（缺省 <dir>/.tenon/mcp.toml）"`
 }
 
 type plug struct {
@@ -45,8 +45,8 @@ func (p *plug) Setup(cx *component.Registrar) error {
 		return err
 	}
 	path := pc.Config
-	if path == "" && assemble.ProjectTrusted(cx) { // 不受信项目：不读 <dir>/.ybase/mcp.toml
-		path = filepath.Join(root, ".ybase", "mcp.toml")
+	if path == "" && assemble.ProjectTrusted(cx) { // 不受信项目：不读 <dir>/.tenon/mcp.toml
+		path = filepath.Join(root, ".tenon", "mcp.toml")
 	}
 	if path != "" {
 		if p.cfg, err = LoadConfig(path); err != nil {
@@ -123,7 +123,7 @@ func (p *plug) wireConfine(cx *component.Registrar) error {
 	return nil
 }
 
-// addPackages 追加插件包里的 MCP 服务（已由 runtime/pkgs 校验）。${YBASE_PLUGIN_DIR} 换成包目录，
+// addPackages 追加插件包里的 MCP 服务（已由 runtime/pkgs 校验）。${TENON_PLUGIN_DIR} 换成包目录，
 // 同名环境变量传给子进程，cwd 缺省为包目录。与配置文件里的服务重名时报错。
 func (p *plug) addPackages(cx *component.Registrar) error {
 	ps, err := pkgs.From(cx)

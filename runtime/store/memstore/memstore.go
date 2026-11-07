@@ -1,4 +1,4 @@
-// Package memstore：内存版 store.Store（T1a，测试与 ybasetest 用）。
+// Package memstore：内存版 store.Store（T1a，测试与 tenontest 用）。
 //
 // 语义以 runtime/store/sqlite 为准，共用 runtime/store/storetest 一致性测试：
 // 头部条件写、截断入归档、会话级单调 sync_seq、inbox 消费标记、会话键唯一、
@@ -18,9 +18,9 @@ import (
 	"sync"
 	"time"
 
-	"ybase/runtime/bus"
-	"ybase/runtime/session"
-	"ybase/runtime/store"
+	"tenon/runtime/bus"
+	"tenon/runtime/session"
+	"tenon/runtime/store"
 )
 
 // 编译期断言：*Store 实现 store.Store。

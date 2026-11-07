@@ -10,7 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"ybase/runtime/toolhub"
+	"tenon/runtime/toolhub"
 )
 
 // suggest 权限项在内置档位 root 下的建议值：插件建议值 → 类别封顶值 → 询问。

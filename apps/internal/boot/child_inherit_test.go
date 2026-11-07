@@ -11,19 +11,19 @@ import (
 	"strings"
 	"testing"
 
-	"ybase/appapi"
-	"ybase/runtime/agentdef"
-	"ybase/runtime/assemble"
-	"ybase/runtime/bus"
-	"ybase/runtime/session"
-	"ybase/runtime/store"
+	"tenon/appapi"
+	"tenon/runtime/agentdef"
+	"tenon/runtime/assemble"
+	"tenon/runtime/bus"
+	"tenon/runtime/session"
+	"tenon/runtime/store"
 )
 
 func TestChildInheritsParentLimits(t *testing.T) {
 	root := t.TempDir()
-	t.Setenv("YBASE_HOME", t.TempDir())
-	t.Setenv("YBASE_BASE_URL", "")
-	t.Setenv("YBASE_MODEL", "")
+	t.Setenv("TENON_HOME", t.TempDir())
+	t.Setenv("TENON_BASE_URL", "")
+	t.Setenv("TENON_MODEL", "")
 	var ui *appapi.UI
 	extra := root + "/extra.toml"
 	if err := os.WriteFile(extra, []byte("[[plugin]]\nname = \"subagent\"\nenabled = true\n"), 0o644); err != nil {
@@ -43,7 +43,7 @@ func TestChildInheritsParentLimits(t *testing.T) {
 	put := func(name, body string) {
 		t.Helper()
 		if err := defs.Put(agentdef.Ref{Namespace: agentdef.Platform, Name: name},
-			agentdef.Files{agentdef.ManifestName: []byte("format = \"ybase/v1\"\nid = \"" + name + "\"\ndescription = \"t\"\n" + body)}); err != nil {
+			agentdef.Files{agentdef.ManifestName: []byte("format = \"tenon/v1\"\nid = \"" + name + "\"\ndescription = \"t\"\n" + body)}); err != nil {
 			t.Fatal(err)
 		}
 	}

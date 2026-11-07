@@ -17,10 +17,10 @@ import (
 	"sync"
 	"time"
 
-	"ybase/runtime/host"
-	"ybase/runtime/session"
-	"ybase/runtime/store"
-	"ybase/runtime/toolhub"
+	"tenon/runtime/host"
+	"tenon/runtime/session"
+	"tenon/runtime/store"
+	"tenon/runtime/toolhub"
 )
 
 // MemberTimeout 单个成员回合的上限。

@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"ybase/runtime/session"
-	"ybase/runtime/store"
+	"tenon/runtime/session"
+	"tenon/runtime/store"
 )
 
 func txt(s string) session.Content { return session.Content{session.NewTextPart(s)} }

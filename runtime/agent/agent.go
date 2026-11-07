@@ -11,15 +11,15 @@ import (
 
 	"time"
 
-	"ybase/runtime/agentdef"
-	"ybase/runtime/callctx"
-	"ybase/runtime/inject"
-	"ybase/runtime/modelhub"
-	"ybase/runtime/reqlog"
-	"ybase/runtime/session"
-	"ybase/runtime/store"
-	"ybase/runtime/toolhub"
-	"ybase/runtime/useconf"
+	"tenon/runtime/agentdef"
+	"tenon/runtime/callctx"
+	"tenon/runtime/inject"
+	"tenon/runtime/modelhub"
+	"tenon/runtime/reqlog"
+	"tenon/runtime/session"
+	"tenon/runtime/store"
+	"tenon/runtime/toolhub"
+	"tenon/runtime/useconf"
 )
 
 // Model 模型调用接口（modelhub.Session 实现；测试用假实现）。

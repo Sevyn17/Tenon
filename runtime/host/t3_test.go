@@ -10,13 +10,13 @@ import (
 	"testing"
 	"time"
 
-	"ybase/runtime/agent"
-	"ybase/runtime/bus"
-	"ybase/runtime/mail"
-	"ybase/runtime/session"
-	"ybase/runtime/store"
-	"ybase/runtime/store/sqlite"
-	"ybase/runtime/toolhub"
+	"tenon/runtime/agent"
+	"tenon/runtime/bus"
+	"tenon/runtime/mail"
+	"tenon/runtime/session"
+	"tenon/runtime/store"
+	"tenon/runtime/store/sqlite"
+	"tenon/runtime/toolhub"
 )
 
 // admitEnvelope 直接往 inbox 写一封信封（绕过投递守卫，测信箱合并语义）。

@@ -6,8 +6,8 @@ package sqlite
 
 import (
 	"context"
+	"tenon/runtime/store"
 	"time"
-	"ybase/runtime/store"
 )
 
 // Admit 准入一条输入。返回 true 表示新写入；false 表示同 id 已存在（重放，忽略）。

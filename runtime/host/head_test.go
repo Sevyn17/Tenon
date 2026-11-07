@@ -6,8 +6,8 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"ybase/runtime/mail"
-	"ybase/runtime/store"
+	"tenon/runtime/mail"
+	"tenon/runtime/store"
 )
 
 // fullLoadCounter 数整份日志的 Load（base == nil：要读并反序列化全部条目）。

@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"ybase/runtime/session"
-	"ybase/runtime/toolhub"
+	"tenon/runtime/session"
+	"tenon/runtime/toolhub"
 )
 
 func TestAssignSkipsCode(t *testing.T) {

@@ -14,8 +14,8 @@ import (
 	"sort"
 	"strings"
 
-	"ybase/runtime/modelhub"
-	"ybase/runtime/session"
+	"tenon/runtime/modelhub"
+	"tenon/runtime/session"
 )
 
 // ProtocolResponses 协议名。

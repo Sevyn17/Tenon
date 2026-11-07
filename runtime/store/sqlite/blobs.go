@@ -11,8 +11,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"tenon/runtime/store"
 	"time"
-	"ybase/runtime/store"
 )
 
 // Blobs 工件存储。
@@ -21,7 +21,7 @@ type Blobs struct {
 	root string
 }
 
-// NewBlobs 以 root 为文件目录（通常是 .ybase/blobs）。
+// NewBlobs 以 root 为文件目录（通常是 .tenon/blobs）。
 func (db *DB) NewBlobs(root string) (*Blobs, error) {
 	if err := os.MkdirAll(root, 0o755); err != nil {
 		return nil, err

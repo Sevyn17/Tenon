@@ -11,12 +11,12 @@ import (
 	"sort"
 	"time"
 
-	"ybase/runtime/agent"
-	"ybase/runtime/component"
-	"ybase/runtime/ext"
-	"ybase/runtime/inject"
-	"ybase/runtime/session"
-	"ybase/runtime/toolhub"
+	"tenon/runtime/agent"
+	"tenon/runtime/component"
+	"tenon/runtime/ext"
+	"tenon/runtime/inject"
+	"tenon/runtime/session"
+	"tenon/runtime/toolhub"
 )
 
 // 点位名与实现类型。
@@ -36,7 +36,7 @@ const (
 	ServiceHost    = ext.ServiceHost    // *host.Host（DB / New / Child 在装配后由应用填好）
 	ServiceUI      = ext.ServiceUI      // UI
 	ServiceWorkdir = ext.ServiceWorkdir // string：工作目录绝对路径
-	// ServiceTrust bool：项目是否受信（plugin-switch-plan §3.3）。不受信时插件不读项目 .ybase 下的配置；
+	// ServiceTrust bool：项目是否受信（plugin-switch-plan §3.3）。不受信时插件不读项目 .tenon 下的配置；
 	// 未预置时按受信处理（测试 / 嵌入方）。
 	ServiceTrust = ext.ServiceTrust
 )

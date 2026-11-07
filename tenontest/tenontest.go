@@ -1,13 +1,13 @@
-// Package ybasetest 底座测试套件（框架设计 10 10.3，T1b-2d 最小版）：
+// Package tenontest 底座测试套件（框架设计 10 10.3，T1b-2d 最小版）：
 // 内存存储 + 脚本模型 + 断言。用法见 10.3：
 //
-//	app := ybasetest.New(t, ybasetest.Model(
-//	    ybasetest.Reply("先查订单").CallTool("order_query", `{"id":"A1"}`),
-//	    ybasetest.Reply("已发货，明天到"),
+//	app := tenontest.New(t, tenontest.Model(
+//	    tenontest.Reply("先查订单").CallTool("order_query", `{"id":"A1"}`),
+//	    tenontest.Reply("已发货，明天到"),
 //	))
 //	reply, err := app.Ask(ctx, "support", "A1 到哪了", nil)
 //	app.AssertToolCalled("order_query")
-package ybasetest
+package tenontest
 
 import (
 	"context"
@@ -17,12 +17,12 @@ import (
 	"sync"
 	"testing"
 
-	"ybase"
-	"ybase/runtime/modelhub"
-	"ybase/runtime/session"
-	"ybase/runtime/store"
-	"ybase/runtime/store/memstore"
-	"ybase/runtime/store/sqlite"
+	"tenon"
+	"tenon/runtime/modelhub"
+	"tenon/runtime/session"
+	"tenon/runtime/store"
+	"tenon/runtime/store/memstore"
+	"tenon/runtime/store/sqlite"
 )
 
 const (
@@ -49,10 +49,10 @@ func (s Step) CallTool(name, args string) Step {
 }
 
 // Model 脚本模型选项：按顺序返回预设；被调用次数超过脚本步数即失败。
-func Model(steps ...Step) ybase.Option {
+func Model(steps ...Step) tenon.Option {
 	ad := &scriptAdapter{steps: steps}
 	cat := modelhub.NewCatalog()
-	if err := cat.Add(modelhub.LayerUser, "ybasetest", modelhub.CatalogFile{
+	if err := cat.Add(modelhub.LayerUser, "tenontest", modelhub.CatalogFile{
 		Provider: map[string]modelhub.Provider{provider: {Protocol: protocol}},
 		Model: map[string]modelhub.Model{
 			modelName: {Provider: provider, ContextWindow: 100000, MaxOutput: 8192},
@@ -64,12 +64,12 @@ func Model(steps ...Step) ybase.Option {
 	if err := hub.RegisterAdapter(ad); err != nil {
 		panic(err)
 	}
-	return ybase.WithModels(hub, modelName)
+	return tenon.WithModels(hub, modelName)
 }
 
 // App 测试用的应用：开始运行后由 Cleanup 关闭。
 type App struct {
-	*ybase.App
+	*tenon.App
 	t  *testing.T
 	mu sync.Mutex
 	// ids 经本包装 Ask 的会话，断言用。
@@ -77,7 +77,7 @@ type App struct {
 }
 
 // New 用内存存储 + 脚本模型装配并启动应用；opts 覆盖缺省项。
-func New(t *testing.T, opts ...ybase.Option) *App {
+func New(t *testing.T, opts ...tenon.Option) *App {
 	t.Helper()
 	return NewOn(t, memstore.New(), opts...)
 }
@@ -90,8 +90,8 @@ type Backend struct {
 
 // Stores 验收用例要在两种存储上都跑（计划/01 第三节 v1 验收第 1 条）：
 //
-//	for _, b := range ybasetest.Stores() {
-//		t.Run(b.Name, func(t *testing.T) { app := ybasetest.NewOn(t, b.Open(t), ...) })
+//	for _, b := range tenontest.Stores() {
+//		t.Run(b.Name, func(t *testing.T) { app := tenontest.NewOn(t, b.Open(t), ...) })
 //	}
 func Stores() []Backend {
 	return []Backend{
@@ -108,18 +108,18 @@ func Stores() []Backend {
 }
 
 // NewOn 同 New，存储由调用方给（Stores 里的一种）。
-func NewOn(t *testing.T, st store.Store, opts ...ybase.Option) *App {
+func NewOn(t *testing.T, st store.Store, opts ...tenon.Option) *App {
 	t.Helper()
-	all := []ybase.Option{
-		ybase.Default(),
-		ybase.WithStore(st),
-		ybase.WithWorkdir(t.TempDir()),
+	all := []tenon.Option{
+		tenon.Default(),
+		tenon.WithStore(st),
+		tenon.WithWorkdir(t.TempDir()),
 		Model(), // 缺省空脚本：没写 Model(...) 时调用即失败
 	}
 	all = append(all, opts...)
-	app, err := ybase.New(all...)
+	app, err := tenon.New(all...)
 	if err != nil {
-		t.Fatalf("ybase.New: %v", err)
+		t.Fatalf("tenon.New: %v", err)
 	}
 	if err := app.Start(context.Background()); err != nil {
 		t.Fatalf("Start: %v", err)
@@ -129,7 +129,7 @@ func NewOn(t *testing.T, st store.Store, opts ...ybase.Option) *App {
 }
 
 // Ask 跑一轮并记录会话 id。
-func (a *App) Ask(ctx context.Context, agentName, text string, meta ybase.Meta) (*ybase.Reply, error) {
+func (a *App) Ask(ctx context.Context, agentName, text string, meta tenon.Meta) (*tenon.Reply, error) {
 	a.t.Helper()
 	r, err := a.App.Ask(ctx, agentName, text, meta)
 	if err != nil {

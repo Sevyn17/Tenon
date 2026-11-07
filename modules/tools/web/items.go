@@ -11,7 +11,7 @@ import (
 	"net/url"
 	"strings"
 
-	"ybase/runtime/toolhub"
+	"tenon/runtime/toolhub"
 )
 
 // 权限项 id。

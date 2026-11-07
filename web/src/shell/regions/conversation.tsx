@@ -1,5 +1,5 @@
 // ③ 对话区（前端方案第五、六之二、七至十节）：头部、消息流、回合尾巴、输入框与交互接管、④ 对话内小卡片。
-// 数据全部来自 @ybase/client 的 SessionStore 与 InteractionsStore；呈现用 @ybase/ui 的会话组件；
+// 数据全部来自 @tenon/client 的 SessionStore 与 InteractionsStore；呈现用 @tenon/ui 的会话组件；
 // 可插入的位置都经插槽与注册表（消息操作、工具渲染、交互渲染、输入框动作、尾巴建议）。
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -574,7 +574,7 @@ export function PanelCard(p: { icon?: ReactNode; title: ReactNode; onOpen: () =>
 
 /** 草稿按会话保存在 sessionStorage（刷新不丢，切会话各自保留）。 */
 function useDraft(id: string): [string, (v: string | ((x: string) => string)) => void] {
-  const key = `ybase.draft.${id}`;
+  const key = `tenon.draft.${id}`;
   const [v, setV] = useState(() => {
     try {
       return sessionStorage.getItem(key) ?? "";

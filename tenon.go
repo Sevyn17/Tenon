@@ -1,9 +1,9 @@
-// Package ybase 底座对外的 SDK 入口（框架设计 07 - SDK 接口，T1b-2d）。
+// Package tenon 底座对外的 SDK 入口（框架设计 07 - SDK 接口，T1b-2d）。
 //
 // 一个应用 = 组件清单 + 存储 + 模型 + 定义来源：
 //
-//	app, err := ybase.New(ybase.Default(),
-//	    ybase.WithStore(db), ybase.WithAgents(ybase.Dir("./agents")))
+//	app, err := tenon.New(tenon.Default(),
+//	    tenon.WithStore(db), tenon.WithAgents(tenon.Dir("./agents")))
 //	if err != nil { ... }
 //	defer app.Close(context.Background())
 //	if err := app.Start(ctx); err != nil { ... }
@@ -12,8 +12,8 @@
 // New 只装配与校验，不启动后台工作；未 Start 调用运行接口返回 ErrNotStarted。
 // 校验错误（未知组件、重复组件、定义 [use.*] 写错……）在 New 里一次报完。
 //
-// 组件配置走代码（06 - 配置）：本包不读 ybase.toml，也不做环境变量覆盖。
-package ybase
+// 组件配置走代码（06 - 配置）：本包不读 tenon.toml，也不做环境变量覆盖。
+package tenon
 
 import (
 	"context"
@@ -25,14 +25,14 @@ import (
 	"sync"
 	"time"
 
-	"ybase/runtime/agentdef"
-	"ybase/runtime/assemble"
-	"ybase/runtime/bus"
-	"ybase/runtime/component"
-	"ybase/runtime/host"
-	"ybase/runtime/store"
-	"ybase/runtime/toolhub"
-	"ybase/runtime/useconf"
+	"tenon/runtime/agentdef"
+	"tenon/runtime/assemble"
+	"tenon/runtime/bus"
+	"tenon/runtime/component"
+	"tenon/runtime/host"
+	"tenon/runtime/store"
+	"tenon/runtime/toolhub"
+	"tenon/runtime/useconf"
 )
 
 // Component 应用自带的组件（04 4.2：Name + Setup），需要后台工作的实现 Start。
@@ -191,7 +191,7 @@ func WithSleepAfter(d time.Duration) Option {
 	}
 }
 
-// WithProjectTrust 声明工作目录受信：受信时才读其中的 .ybase/hooks.toml、mcp.toml、项目权限档位、
+// WithProjectTrust 声明工作目录受信：受信时才读其中的 .tenon/hooks.toml、mcp.toml、项目权限档位、
 // AGENTS.md 与项目技能。缺省不受信——嵌入方指向任意目录时不执行目录里的钩子与 MCP 命令
 // （2026-11-04 审查 P1-5：原先写死受信）。
 func WithProjectTrust(trusted bool) Option {
@@ -371,11 +371,11 @@ func build(c *config) (*App, error) {
 	}
 	asm, err := component.Assemble(spec)
 	if err != nil {
-		return nil, fmt.Errorf("ybase: 装配: %w", err)
+		return nil, fmt.Errorf("tenon: 装配: %w", err)
 	}
 	defs, err := asm.Definitions(appDefs)
 	if err != nil {
-		return nil, fmt.Errorf("ybase: 定义: %w", err)
+		return nil, fmt.Errorf("tenon: 定义: %w", err)
 	}
 	app := &App{asm: asm, defs: defs, host: h, bus: b, handle: st, workdir: workdir, ui: ui, kern: kern}
 	if v, ok := asm.Value(assemble.ServiceModelhub); ok {
@@ -395,21 +395,21 @@ func build(c *config) (*App, error) {
 func validateDefinitions(asm *component.Assembly, defs agentdef.Source) error {
 	refs, err := agentdef.Visible(context.Background(), defs, agentdef.Scope{Tenant: store.Tenant})
 	if err != nil {
-		return fmt.Errorf("ybase: 列定义: %w", err)
+		return fmt.Errorf("tenon: 列定义: %w", err)
 	}
 	schemas := asm.AgentSchemas()
 	var errs []error
 	for _, ref := range refs {
 		def, err := defs.Load(context.Background(), ref)
 		if err != nil {
-			errs = append(errs, fmt.Errorf("ybase: 定义 %s: %w", ref, err))
+			errs = append(errs, fmt.Errorf("tenon: 定义 %s: %w", ref, err))
 			continue
 		}
 		if len(def.Use) == 0 {
 			continue
 		}
 		if _, err := useconf.ResolveAll(context.Background(), schemas, def.Use, nil, store.Tenant, ""); err != nil {
-			errs = append(errs, fmt.Errorf("ybase: 定义 %s: %w", ref, err))
+			errs = append(errs, fmt.Errorf("tenon: 定义 %s: %w", ref, err))
 		}
 	}
 	return errors.Join(errs...)

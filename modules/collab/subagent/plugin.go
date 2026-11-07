@@ -4,11 +4,11 @@ package subagent
 // 子会话经 service:host 的 Child 构造（可空 = New）。
 
 import (
-	"ybase/runtime/agentdef"
-	"ybase/runtime/assemble"
-	"ybase/runtime/component"
-	"ybase/runtime/host"
-	"ybase/runtime/toolhub"
+	"tenon/runtime/agentdef"
+	"tenon/runtime/assemble"
+	"tenon/runtime/component"
+	"tenon/runtime/host"
+	"tenon/runtime/toolhub"
 )
 
 // Definition 子智能体会话的内置定义名（09 9.3、计划/01 T1b-2c）：模板归平台命名空间，
@@ -17,7 +17,7 @@ const Definition = "subagent"
 
 // templateManifest 子智能体的内置定义模板。行为不变：不带 tools / use / prompt，
 // 工具集合仍由 Host 的会话构造按 Child 决定（09 9.3「行为不变」）。
-const templateManifest = `format = "ybase/v1"
+const templateManifest = `format = "tenon/v1"
 id = "subagent"
 description = "子智能体：由父会话的 subagent 工具委派一个自包含子任务（深度 1）。"
 `

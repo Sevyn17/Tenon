@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"ybase/runtime/session"
+	"tenon/runtime/session"
 )
 
 // 没有模型层时不做结构校验（审查 P1-39：原先每次调模型都把整段历史序列化两遍）；有层时照常校验。

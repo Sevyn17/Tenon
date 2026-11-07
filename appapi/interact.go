@@ -11,9 +11,9 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"ybase/appapi/wire"
-	"ybase/runtime/host"
-	"ybase/runtime/store"
+	"tenon/appapi/wire"
+	"tenon/runtime/host"
+	"tenon/runtime/store"
 )
 
 // Respond 以本机身份回答交互（进程内调用；连接上的调用经 Conn.Call 带连接身份）。

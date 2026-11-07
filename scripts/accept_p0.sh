@@ -4,12 +4,12 @@
 set -u
 cd "$(dirname "$0")/.."
 set -a; . ./.env; set +a
-export DEEPSEEK_API_KEY="${DEEPSEEK_API_KEY:-$YBASE_API_KEY}"
-unset YBASE_BASE_URL YBASE_MODEL
-EXE="$LOCALAPPDATA/ybase/ybase.exe"
-go build -o "$EXE" ./apps/ybase || exit 1
+export DEEPSEEK_API_KEY="${DEEPSEEK_API_KEY:-$TENON_API_KEY}"
+unset TENON_BASE_URL TENON_MODEL
+EXE="$LOCALAPPDATA/tenon/tenon.exe"
+go build -o "$EXE" ./apps/tenon || exit 1
 W=$(mktemp -d)
-cp -r . "$W/k"; rm -rf "$W/k/.ybase" "$W/k/bin" "$W/k/.env"
+cp -r . "$W/k"; rm -rf "$W/k/.tenon" "$W/k/bin" "$W/k/.env"
 cd "$W/k" || exit 1
 # 注入 bug：Glob 末段改成前缀匹配（规则 edit(src/**.go) 之类会误判）。
 sed -i 's/\treturn strings.HasSuffix(s, last)/\treturn strings.HasPrefix(s, last)/' modules/security/permission/permission.go

@@ -1,13 +1,13 @@
-// ybase：终端里的最小智能体（M4.8：建在会话宿主 host 之上）。
+// tenon：终端里的最小智能体（M4.8：建在会话宿主 host 之上）。
 //
-//	YBASE_API_KEY=... ybase -base https://api.deepseek.com/v1 -model deepseek-chat
-//	ybase explain     显示插件组合、插件包、插槽来源、点位登记、配置来源
-//	ybase plugin list 列出已加载的插件包；ybase plugin new <名字> [-project] 生成插件包骨架
-//	ybase export      导出当前会话 JSONL
+//	TENON_API_KEY=... tenon -base https://api.deepseek.com/v1 -model deepseek-chat
+//	tenon explain     显示插件组合、插件包、插槽来源、点位登记、配置来源
+//	tenon plugin list 列出已加载的插件包；tenon plugin new <名字> [-project] 生成插件包骨架
+//	tenon export      导出当前会话 JSONL
 //
 // 交互：回合进行中输入的文字作为插话（steer）；Ctrl+C 取消当前回合；
 // /mode [档位] 查看或切换权限档位，/max-steps [n] 查看或设置单回合步数上限（0 = 不限），/plugins 查看插件开关，/rewind [n] 退回 n 个回合，/compact 压缩历史，/fork <名字> 分叉并切换，/exit 退出。
-// 会话存在 <workdir>/.ybase/state.db（SQLite），同名再次启动即续聊；上次中断的回合自动续跑。
+// 会话存在 <workdir>/.tenon/state.db（SQLite），同名再次启动即续聊；上次中断的回合自动续跑。
 package main
 
 import (
@@ -24,36 +24,36 @@ import (
 	"strconv"
 	"strings"
 
-	"ybase/appapi"
-	"ybase/appapi/wire"
-	"ybase/apps/internal/boot"
-	"ybase/modules/security/permission"
-	"ybase/modules/security/sandbox"
-	"ybase/runtime/agent"
-	"ybase/runtime/assemble"
-	"ybase/runtime/bus"
-	"ybase/runtime/component"
-	"ybase/runtime/host"
-	"ybase/runtime/pkgs"
-	"ybase/runtime/reqlog"
-	"ybase/runtime/session"
-	"ybase/runtime/store"
+	"tenon/appapi"
+	"tenon/appapi/wire"
+	"tenon/apps/internal/boot"
+	"tenon/modules/security/permission"
+	"tenon/modules/security/sandbox"
+	"tenon/runtime/agent"
+	"tenon/runtime/assemble"
+	"tenon/runtime/bus"
+	"tenon/runtime/component"
+	"tenon/runtime/host"
+	"tenon/runtime/pkgs"
+	"tenon/runtime/reqlog"
+	"tenon/runtime/session"
+	"tenon/runtime/store"
 
 	// 插件登记（init 里 component.Register）；装配哪些由 profile 决定
-	_ "ybase/modules/collab/subagent"
-	_ "ybase/modules/collab/workgroup"
-	_ "ybase/modules/context/instructions"
-	_ "ybase/modules/context/prompt"
-	_ "ybase/modules/context/redact"
-	_ "ybase/modules/context/skills"
-	_ "ybase/modules/extend/hooks"
-	_ "ybase/modules/tools/ask-user"
-	_ "ybase/modules/tools/codemode"
-	_ "ybase/modules/tools/fs"
-	_ "ybase/modules/tools/mcp"
-	_ "ybase/modules/tools/shell"
-	_ "ybase/modules/tools/todo"
-	_ "ybase/modules/tools/web"
+	_ "tenon/modules/collab/subagent"
+	_ "tenon/modules/collab/workgroup"
+	_ "tenon/modules/context/instructions"
+	_ "tenon/modules/context/prompt"
+	_ "tenon/modules/context/redact"
+	_ "tenon/modules/context/skills"
+	_ "tenon/modules/extend/hooks"
+	_ "tenon/modules/tools/ask-user"
+	_ "tenon/modules/tools/codemode"
+	_ "tenon/modules/tools/fs"
+	_ "tenon/modules/tools/mcp"
+	_ "tenon/modules/tools/shell"
+	_ "tenon/modules/tools/todo"
+	_ "tenon/modules/tools/web"
 )
 
 // 恢复会话时回显的最近消息条数。
@@ -67,17 +67,17 @@ type opts struct {
 
 func main() {
 	var o opts
-	flag.StringVar(&o.base, "base", env("YBASE_BASE_URL", ""), "OpenAI 兼容端点（覆盖 profile）")
-	flag.StringVar(&o.model, "model", env("YBASE_MODEL", ""), "模型名（覆盖 profile）")
+	flag.StringVar(&o.base, "base", env("TENON_BASE_URL", ""), "OpenAI 兼容端点（覆盖 profile）")
+	flag.StringVar(&o.model, "model", env("TENON_MODEL", ""), "模型名（覆盖 profile）")
 	flag.StringVar(&o.workdir, "dir", ".", "工作目录")
 	flag.StringVar(&o.sess, "session", "default", "会话名")
 	flag.StringVar(&o.profile, "profile", "", "profile TOML（缺省用内置 base profile）")
 	flag.StringVar(&o.mode, "mode", "", "权限档位：read-only / ask / workspace（缺省）/ full 或自定义档位名（覆盖配置与会话记录）")
 	flag.StringVar(&o.sandbox, "sandbox", "", "固定 shell 沙箱：read-only / workspace-write / danger-full-access（缺省随档位）")
-	flag.BoolVar(&o.projectHooks, "project-hooks", false, "加载 <dir>/.ybase/hooks.toml（会执行仓库里写的命令）")
-	flag.StringVar(&o.mcp, "mcp", "", "MCP 配置 TOML（缺省 <dir>/.ybase/mcp.toml）")
+	flag.BoolVar(&o.projectHooks, "project-hooks", false, "加载 <dir>/.tenon/hooks.toml（会执行仓库里写的命令）")
+	flag.StringVar(&o.mcp, "mcp", "", "MCP 配置 TOML（缺省 <dir>/.tenon/mcp.toml）")
 	flag.IntVar(&o.maxSteps, "max-steps", -1, "单回合步数上限，0 = 不限（缺省不限；指定后覆盖会话记录）")
-	flag.BoolVar(&o.trustProject, "trust-project", false, "本次运行信任项目（读 <dir>/.ybase 下的 profile / 权限 / 钩子 / MCP 配置），不保存")
+	flag.BoolVar(&o.trustProject, "trust-project", false, "本次运行信任项目（读 <dir>/.tenon 下的 profile / 权限 / 钩子 / MCP 配置），不保存")
 	flag.BoolVar(&o.yes, "yes", false, "等同 -mode full：写文件 / 执行命令不再确认")
 	flag.Parse()
 
@@ -96,9 +96,9 @@ func main() {
 				fmt.Printf("已恢复 %s 的权限设置\n", root)
 			}
 		}
-	case "trust": // ybase trust [-untrust] [dir]：保存项目信任记录
+	case "trust": // tenon trust [-untrust] [dir]：保存项目信任记录
 		err = trustCmd(flag.Args()[1:], o.workdir)
-	case "mode": // ybase mode list | copy <源> <新名> [-project]
+	case "mode": // tenon mode list | copy <源> <新名> [-project]
 		err = modeCmd(flag.Args()[1:], o.workdir)
 	case "explain":
 		if args := flag.Args(); len(args) >= 3 && args[1] == "trace" {
@@ -128,7 +128,7 @@ func main() {
 			a.rt.Asm.Explain(os.Stdout, a.profile.Sources)
 			return nil
 		})
-	case "plugin": // ybase plugin list | new <名字> [-project]
+	case "plugin": // tenon plugin list | new <名字> [-project]
 		err = pluginCmd(flag.Args()[1:], o)
 	default:
 		err = withRuntime(o, func(a *app) error { return chat(o, a) })
@@ -296,7 +296,7 @@ func chat(o opts, a *app) error {
 	if err := hd.Do(host.Command{Kind: host.SetExt, Key: extAssembly, Value: now}); err != nil {
 		return fmt.Errorf("记录插件装配：%w", err)
 	}
-	fmt.Printf("ybase · %s · %s · 会话 %s\n回车发送；回合中输入为插话；Ctrl+C 取消回合；/mode [档位] /max-steps [n] /plugins /rewind [n] /compact /fork <名字> /exit\n权限档位：%s\n",
+	fmt.Printf("tenon · %s · %s · 会话 %s\n回车发送；回合中输入为插话；Ctrl+C 取消回合；/mode [档位] /max-steps [n] /plugins /rewind [n] /compact /fork <名字> /exit\n权限档位：%s\n",
 		modelName, root, o.sess, c.modeLine(o.sess))
 	fmt.Println("插件：" + enabledLine(a.profile))
 	for _, n := range a.notes {
@@ -532,7 +532,7 @@ func (c *cli) slash(ctx context.Context, line string) error {
 		for _, l := range packageLines(c.packages) {
 			fmt.Println("  " + l)
 		}
-		fmt.Println("（改开关：编辑 ~/.ybase/profile.toml 或 <dir>/.ybase/profile.toml，重启生效）")
+		fmt.Println("（改开关：编辑 ~/.tenon/profile.toml 或 <dir>/.tenon/profile.toml，重启生效）")
 		return nil
 	}
 	if c.running {
@@ -738,7 +738,7 @@ func (c *cli) mode(args []string) error {
 	if d, ok := c.perms.Registry().Get(m); ok && d.Project {
 		if w := strings.Join(permission.ProjectWidened(d, c.perms.Items()), "、"); w != "" && !modeApproved(c.o.workdir, string(m), w) {
 			if len(args) < 2 || args[1] != "-confirm" {
-				fmt.Printf("档位 %s 来自项目 .ybase/modes，放宽了：%s\n确认使用请输入：/mode %s -confirm\n", m, w, m)
+				fmt.Printf("档位 %s 来自项目 .tenon/modes，放宽了：%s\n确认使用请输入：/mode %s -confirm\n", m, w, m)
 				return nil
 			}
 			if err := approveMode(c.o.workdir, string(m), w); err != nil {

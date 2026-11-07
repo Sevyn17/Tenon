@@ -3,12 +3,12 @@
 set -u
 cd "$(dirname "$0")/.."
 set -a; . ./.env; set +a
-export DEEPSEEK_API_KEY="${DEEPSEEK_API_KEY:-$YBASE_API_KEY}"
-unset YBASE_BASE_URL YBASE_MODEL
-EXE="$LOCALAPPDATA/ybase/ybase.exe"
-go build -o "$EXE" ./apps/ybase || exit 1
+export DEEPSEEK_API_KEY="${DEEPSEEK_API_KEY:-$TENON_API_KEY}"
+unset TENON_BASE_URL TENON_MODEL
+EXE="$LOCALAPPDATA/tenon/tenon.exe"
+go build -o "$EXE" ./apps/tenon || exit 1
 W=$(mktemp -d)
-cp -r . "$W/k"; rm -rf "$W/k/.ybase" "$W/k/bin" "$W/k/.env"
+cp -r . "$W/k"; rm -rf "$W/k/.tenon" "$W/k/bin" "$W/k/.env"
 cd "$W/k" && git init -q && git add -A && git commit -qm base
 run() {
   echo "=================== $1"
@@ -17,6 +17,6 @@ run() {
 }
 run "redact 包的 MinValueLen 是干什么的？在哪里用到？简短回答，给出文件和行号。"
 run "给 modules/tools/fs/search.go 的 globMatch 补一个表驱动测试（新文件 modules/tools/fs/glob_extra_test.go），覆盖 **、*、? 和不匹配的情况，跑 go test ./modules/tools/fs/ 确认通过。"
-run "apps/ybase/main.go 里 env 函数没有注释，给它加一行中文 doc 注释，然后 go vet ./apps/ybase 确认。"
+run "apps/tenon/main.go 里 env 函数没有注释，给它加一行中文 doc 注释，然后 go vet ./apps/tenon 确认。"
 run "刚才你一共改了哪些文件？用 git 确认后回答。"
 echo "WORKDIR $W/k"

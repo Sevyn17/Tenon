@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"ybase/runtime/session"
-	"ybase/runtime/store"
+	"tenon/runtime/session"
+	"tenon/runtime/store"
 )
 
 // status 读会话生命周期状态（测试辅助）。

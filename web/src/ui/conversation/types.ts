@@ -1,4 +1,4 @@
-// 会话组件的视图类型。@ybase/ui 不依赖协议客户端（分层规则），所以这里定义组件需要的最小形状；
+// 会话组件的视图类型。@tenon/ui 不依赖协议客户端（分层规则），所以这里定义组件需要的最小形状；
 // wire.gen.ts 的 Entry / Interaction 等在结构上满足它们，shell 直接传进来即可，别的协议也可以自己适配。
 
 import type { ReactNode } from "react";

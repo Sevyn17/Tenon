@@ -25,15 +25,15 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"ybase/appapi/wire"
-	"ybase/runtime/agentdef"
-	"ybase/runtime/bus"
-	"ybase/runtime/component"
-	"ybase/runtime/host"
-	"ybase/runtime/reqlog"
-	"ybase/runtime/session"
-	"ybase/runtime/store"
-	"ybase/runtime/toolhub"
+	"tenon/appapi/wire"
+	"tenon/runtime/agentdef"
+	"tenon/runtime/bus"
+	"tenon/runtime/component"
+	"tenon/runtime/host"
+	"tenon/runtime/reqlog"
+	"tenon/runtime/session"
+	"tenon/runtime/store"
+	"tenon/runtime/toolhub"
 )
 
 // LocalPrincipal 桌面端与单机网页服务的连接身份（10.8）。

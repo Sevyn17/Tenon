@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"ybase/runtime/modelhub"
-	"ybase/runtime/session"
+	"tenon/runtime/modelhub"
+	"tenon/runtime/session"
 )
 
 // 支持图片的端点：user 消息里的图片写成 image_url 段；tool 消息只收文本，工具结果里的图片在这一串

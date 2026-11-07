@@ -7,13 +7,13 @@ import (
 	"testing"
 	"time"
 
-	"ybase/appapi/wire"
-	"ybase/runtime/agent"
-	"ybase/runtime/bus"
-	"ybase/runtime/host"
-	"ybase/runtime/session"
-	"ybase/runtime/store/sqlite"
-	"ybase/runtime/toolhub"
+	"tenon/appapi/wire"
+	"tenon/runtime/agent"
+	"tenon/runtime/bus"
+	"tenon/runtime/host"
+	"tenon/runtime/session"
+	"tenon/runtime/store/sqlite"
+	"tenon/runtime/toolhub"
 )
 
 // waitKind 从连接取事件直到出现 kind；返回途中收到的全部事件（含它）。

@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 
-	"ybase/runtime/ext"
-	"ybase/runtime/mail"
+	"tenon/runtime/ext"
+	"tenon/runtime/mail"
 )
 
 // Sender 内核投递出口（由宿主实现）。装配期通过 service:host 注入。

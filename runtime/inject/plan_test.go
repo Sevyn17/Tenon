@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"ybase/runtime/session"
+	"tenon/runtime/session"
 )
 
 // apply 把 Plan 的输出当作已写入历史的条目追加上去（模拟 Core.Inject）。

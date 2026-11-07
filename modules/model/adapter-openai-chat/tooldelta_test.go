@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"ybase/runtime/modelhub"
-	"ybase/runtime/session"
+	"tenon/runtime/modelhub"
+	"tenon/runtime/session"
 )
 
 // 工具调用的流式片段经 StreamSink 送出（protocol 2 tool.started / tool.args_delta）：名字只在第一片，

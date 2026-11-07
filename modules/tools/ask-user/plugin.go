@@ -6,9 +6,9 @@ import (
 	"context"
 	"encoding/json"
 
-	"ybase/runtime/assemble"
-	"ybase/runtime/component"
-	"ybase/runtime/toolhub"
+	"tenon/runtime/assemble"
+	"tenon/runtime/component"
+	"tenon/runtime/toolhub"
 )
 
 type plug struct{}

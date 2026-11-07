@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strings"
 
-	"ybase/runtime/toolhub"
+	"tenon/runtime/toolhub"
 )
 
 // SetItems 记下装配汇总的权限项注册表（第一次构造会话时由权限层登记）。

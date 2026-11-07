@@ -9,19 +9,19 @@ import (
 	"strings"
 	"testing"
 
-	"ybase/appapi"
-	"ybase/runtime/agentdef"
-	"ybase/runtime/assemble"
-	"ybase/runtime/bus"
-	"ybase/runtime/session"
-	"ybase/runtime/store"
+	"tenon/appapi"
+	"tenon/runtime/agentdef"
+	"tenon/runtime/assemble"
+	"tenon/runtime/bus"
+	"tenon/runtime/session"
+	"tenon/runtime/store"
 )
 
 func TestDefinitionToolsAndUsePermissionEnforced(t *testing.T) {
 	root := t.TempDir()
-	t.Setenv("YBASE_HOME", t.TempDir())
-	t.Setenv("YBASE_BASE_URL", "")
-	t.Setenv("YBASE_MODEL", "")
+	t.Setenv("TENON_HOME", t.TempDir())
+	t.Setenv("TENON_BASE_URL", "")
+	t.Setenv("TENON_MODEL", "")
 	var ui *appapi.UI
 	rt, err := Start(StartOptions{Flags: Flags{Workdir: root, Yes: true, MaxSteps: -1}, // -yes：会话档位 full
 		UI: func(b *bus.Bus) assemble.UI { ui = appapi.NewUI(b); return ui }})
@@ -37,7 +37,7 @@ func TestDefinitionToolsAndUsePermissionEnforced(t *testing.T) {
 	put := func(name, body string) {
 		t.Helper()
 		if err := defs.Put(agentdef.Ref{Namespace: agentdef.Platform, Name: name},
-			agentdef.Files{agentdef.ManifestName: []byte("format = \"ybase/v1\"\nid = \"" + name + "\"\ndescription = \"t\"\n" + body)}); err != nil {
+			agentdef.Files{agentdef.ManifestName: []byte("format = \"tenon/v1\"\nid = \"" + name + "\"\ndescription = \"t\"\n" + body)}); err != nil {
 			t.Fatal(err)
 		}
 	}

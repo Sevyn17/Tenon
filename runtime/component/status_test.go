@@ -3,8 +3,8 @@ package component
 import (
 	"testing"
 
-	"ybase/runtime/callctx"
-	"ybase/runtime/inject"
+	"tenon/runtime/callctx"
+	"tenon/runtime/inject"
 )
 
 func TestRegistrarStatus(t *testing.T) {

@@ -16,9 +16,9 @@ import (
 	"sync"
 	"time"
 
-	"ybase/modules/internal/proc"
-	"ybase/runtime/session"
-	"ybase/runtime/toolhub"
+	"tenon/modules/internal/proc"
+	"tenon/runtime/session"
+	"tenon/runtime/toolhub"
 )
 
 // shell 相关默认值。

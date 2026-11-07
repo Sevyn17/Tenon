@@ -1,16 +1,16 @@
-package ybase
+package tenon
 
-// SDK 公开面用到的类型（2026-11-04 审查 P1-52）：签名里只出现 ybase 的名字，应用不必 import 内核包，
+// SDK 公开面用到的类型（2026-11-04 审查 P1-52）：签名里只出现 tenon 的名字，应用不必 import 内核包，
 // 07 7.6 的版本承诺按这些名字算。现在是别名（与内核类型相同，已有代码不用改）；内核类型改动时，
 // 在这里换成 SDK 自己的定义 + 转换，不影响应用。
 
 import (
-	"ybase/runtime/agentdef"
-	"ybase/runtime/assemble"
-	"ybase/runtime/component"
-	"ybase/runtime/modelhub"
-	"ybase/runtime/session"
-	"ybase/runtime/store"
+	"tenon/runtime/agentdef"
+	"tenon/runtime/assemble"
+	"tenon/runtime/component"
+	"tenon/runtime/modelhub"
+	"tenon/runtime/session"
+	"tenon/runtime/store"
 )
 
 type (

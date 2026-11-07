@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"ybase/runtime/callctx"
-	"ybase/runtime/session"
+	"tenon/runtime/callctx"
+	"tenon/runtime/session"
 )
 
 // —— 假存储 ——

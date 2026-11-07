@@ -20,12 +20,12 @@ import (
 
 	"github.com/google/uuid"
 
-	"ybase/runtime/agent"
-	"ybase/runtime/bus"
-	"ybase/runtime/component"
-	"ybase/runtime/session"
-	"ybase/runtime/store"
-	"ybase/runtime/toolhub"
+	"tenon/runtime/agent"
+	"tenon/runtime/bus"
+	"tenon/runtime/component"
+	"tenon/runtime/session"
+	"tenon/runtime/store"
+	"tenon/runtime/toolhub"
 )
 
 // 错误。

@@ -8,8 +8,8 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"errors"
+	"tenon/runtime/store"
 	"time"
-	"ybase/runtime/store"
 )
 
 // PutDefinition 写入新版本，返回版本号（从 1 起）与内容哈希。

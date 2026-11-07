@@ -16,8 +16,8 @@ import (
 	"sync"
 	"testing"
 
-	"ybase/appapi"
-	"ybase/appapi/wire"
+	"tenon/appapi"
+	"tenon/appapi/wire"
 )
 
 type memArt struct {

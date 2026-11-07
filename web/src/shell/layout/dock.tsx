@@ -13,7 +13,7 @@ import type { Panel } from "../contributions";
 import s from "./dock.module.css";
 import type { DockId, DropEdge, GroupNode, LayoutNode, LayoutState, SplitNode } from "./reducer";
 
-export const PANEL_MIME = "application/x-ybase-panel";
+export const PANEL_MIME = "application/x-tenon-panel";
 
 export interface DockProps {
   dock: DockId;

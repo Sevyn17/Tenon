@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"ybase/runtime/bus"
-	"ybase/runtime/store"
+	"tenon/runtime/bus"
+	"tenon/runtime/store"
 )
 
 // waitInteraction 等到 human_requested，返回其中的交互 id。

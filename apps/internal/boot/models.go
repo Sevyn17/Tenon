@@ -3,8 +3,8 @@ package boot
 // 切换模型（appapi.Models）：models 插件的目录 → models.list；session.settings {model} 前按目录校验。
 
 import (
-	"ybase/appapi/wire"
-	"ybase/runtime/assemble"
+	"tenon/appapi/wire"
+	"tenon/runtime/assemble"
 )
 
 // ModelList 实现 appapi.Models。

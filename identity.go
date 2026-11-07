@@ -1,12 +1,12 @@
-package ybase
+package tenon
 
 import (
 	"context"
 	"errors"
 	"fmt"
 
-	"ybase/runtime/assemble"
-	"ybase/runtime/store"
+	"tenon/runtime/assemble"
+	"tenon/runtime/store"
 )
 
 // ctxKey 身份在 context 里的键。
@@ -53,7 +53,7 @@ func (nopUI) Print(string) {}
 func (nopUI) Warn(string, string) {}
 
 func (nopUI) Ask(ctx context.Context, question string, options []string) (string, error) {
-	return "", errors.New("ybase: 没有界面可提问（WithUI 提供）")
+	return "", errors.New("tenon: 没有界面可提问（WithUI 提供）")
 }
 
 var _ assemble.UI = nopUI{}

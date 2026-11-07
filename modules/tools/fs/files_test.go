@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"ybase/runtime/session"
-	"ybase/runtime/toolhub"
+	"tenon/runtime/session"
+	"tenon/runtime/toolhub"
 )
 
 func callFileTool(t *testing.T, tl *toolhub.Tool, args string) toolhub.Output {

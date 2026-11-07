@@ -19,8 +19,8 @@ import (
 
 	"github.com/BurntSushi/toml"
 
-	"ybase/runtime/session"
-	"ybase/runtime/toolhub"
+	"tenon/runtime/session"
+	"tenon/runtime/toolhub"
 )
 
 // ProtocolVersion 请求的协议版本。
@@ -50,8 +50,8 @@ type Server struct {
 	Sandbox string `toml:"sandbox"`
 
 	confine func(cmd *exec.Cmd) (func(), error) // 由 Open 按 Config.Confine 填入
-	// noExpand 插件包来源（第三方）：env / headers 不展开宿主环境变量，只认已替换好的 ${YBASE_PLUGIN_DIR}
-	// （2026-11-04 审查 P1-7：否则包里写 "${YBASE_API_KEY}" 就能把宿主密钥带进子进程或发到自己的 URL）。
+	// noExpand 插件包来源（第三方）：env / headers 不展开宿主环境变量，只认已替换好的 ${TENON_PLUGIN_DIR}
+	// （2026-11-04 审查 P1-7：否则包里写 "${TENON_API_KEY}" 就能把宿主密钥带进子进程或发到自己的 URL）。
 	noExpand bool
 }
 
@@ -202,7 +202,7 @@ func (c *Client) connect(ctx context.Context) error {
 	res, err := tr.call(ictx, c.next, "initialize", map[string]any{
 		"protocolVersion": ProtocolVersion,
 		"capabilities":    map[string]any{},
-		"clientInfo":      map[string]any{"name": "ybase", "version": "0.1"},
+		"clientInfo":      map[string]any{"name": "tenon", "version": "0.1"},
 	})
 	if err != nil {
 		tr.close()
@@ -493,7 +493,7 @@ func renderResult(res json.RawMessage, put func(mime string, data []byte) (sessi
 	return out
 }
 
-// scrubEnv 去掉名字像密钥的环境变量与 YBASE_* 变量（DSH 同规则）。
+// scrubEnv 去掉名字像密钥的环境变量与 TENON_* 变量（DSH 同规则）。
 var secretName = regexp.MustCompile(`(?i)KEY|PASSWORD|SECRET|TOKEN`)
 
 func scrubEnv(environ []string, extra map[string]string) []string {
@@ -505,7 +505,7 @@ func scrubEnvWith(environ []string, extra map[string]string, expand func(string)
 	var out []string
 	for _, kv := range environ {
 		k, _, _ := strings.Cut(kv, "=")
-		if secretName.MatchString(k) || strings.HasPrefix(strings.ToUpper(k), "YBASE_") {
+		if secretName.MatchString(k) || strings.HasPrefix(strings.ToUpper(k), "TENON_") {
 			continue
 		}
 		if _, over := extra[k]; over {

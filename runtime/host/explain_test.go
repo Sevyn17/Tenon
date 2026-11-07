@@ -7,11 +7,11 @@ import (
 	"strings"
 	"testing"
 
-	"ybase/runtime/agent"
-	"ybase/runtime/mail"
-	"ybase/runtime/session"
-	"ybase/runtime/store/sqlite"
-	"ybase/runtime/toolhub"
+	"tenon/runtime/agent"
+	"tenon/runtime/mail"
+	"tenon/runtime/session"
+	"tenon/runtime/store/sqlite"
+	"tenon/runtime/toolhub"
 )
 
 // newExplainRig 像运行时那样接上 toolhub → agent 的 span 观测，才能记录工具 trace 事件。

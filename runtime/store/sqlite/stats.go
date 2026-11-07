@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 
-	"ybase/runtime/store"
+	"tenon/runtime/store"
 )
 
 // SessionStats 汇总一个会话的用量与最近一次请求组成（span 计数与 memstore 共用 Stats.AddSpan，口径一致）。

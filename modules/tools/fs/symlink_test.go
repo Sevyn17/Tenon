@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"ybase/runtime/session"
-	"ybase/runtime/toolhub"
+	"tenon/runtime/session"
+	"tenon/runtime/toolhub"
 )
 
 // link 在工作目录里建一个指向 target 的目录链接：Unix 用符号链接，Windows 用 junction

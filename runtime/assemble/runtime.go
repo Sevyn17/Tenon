@@ -1,6 +1,6 @@
 // Package assemble 按登记的会话贡献构造会话 agent（thin-kernel-plan S2）。
 //
-// 会话构造（建 hub、登记工具、叠层、拼系统块）原来写在 cmd/ybase 的 mk() 里；
+// 会话构造（建 hub、登记工具、叠层、拼系统块）原来写在 cmd/tenon 的 mk() 里；
 // 现在由这里统一完成，工具、层、系统块都以“每会话贡献函数”登记，
 // 后续由插件管理器的 session_tools / 会话层 / system_block 点位填入。
 package assemble
@@ -14,15 +14,15 @@ import (
 	"path"
 	"strings"
 
-	"ybase/runtime/agent"
-	"ybase/runtime/agentdef"
-	"ybase/runtime/callctx"
-	"ybase/runtime/inject"
-	"ybase/runtime/modelhub"
-	"ybase/runtime/session"
-	"ybase/runtime/store"
-	"ybase/runtime/toolhub"
-	"ybase/runtime/useconf"
+	"tenon/runtime/agent"
+	"tenon/runtime/agentdef"
+	"tenon/runtime/callctx"
+	"tenon/runtime/inject"
+	"tenon/runtime/modelhub"
+	"tenon/runtime/session"
+	"tenon/runtime/store"
+	"tenon/runtime/toolhub"
+	"tenon/runtime/useconf"
 )
 
 // SessionCx 构造一个会话时贡献函数拿到的上下文。
@@ -110,7 +110,7 @@ func (b *Builder) Build(id, defName string, child bool) (*agent.Agent, *session.
 	// 调用上下文：会话身份在 agent.Open 时由会话行填全（runtime/agent/ctx.go）。
 	kctx := callctx.New(callctx.Options{Tenant: store.Tenant, Workdir: b.Workdir, SessionID: id, Child: child})
 	a := &agent.Agent{Store: b.DB, SessionID: id, Ctx: kctx,
-		Model: &modelhub.Session{Hub: b.Models, SessionKey: "ybase-" + id}}
+		Model: &modelhub.Session{Hub: b.Models, SessionKey: "tenon-" + id}}
 	a.Def = def
 	a.Statuses = b.Statuses
 	a.Schemas = b.Schemas

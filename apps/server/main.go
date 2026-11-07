@@ -1,4 +1,4 @@
-// ybase-server：YBase 网页服务。把 kernel/web 的共享前端（嵌入）和应用接口层（appapi）
+// tenon-server：Tenon 网页服务。把 kernel/web 的共享前端（嵌入）和应用接口层（appapi）
 // 经 HTTP + WebSocket 提供给浏览器、IDE 等本机客户端。缺省只监听 127.0.0.1，启动时生成随机令牌。
 // 做成应用而非插件：appapi.App 在应用层装配（boot.BuildApp），插件拿不到 App；见 docs/90 - 归档/10 - 框架模块/14 - 网页服务.md。
 package main
@@ -18,11 +18,11 @@ import (
 	"syscall"
 	"time"
 
-	"ybase/appapi"
-	"ybase/apps/internal/boot"
-	"ybase/runtime/assemble"
-	"ybase/runtime/bus"
-	"ybase/web"
+	"tenon/appapi"
+	"tenon/apps/internal/boot"
+	"tenon/runtime/assemble"
+	"tenon/runtime/bus"
+	"tenon/web"
 )
 
 type options struct {
@@ -36,15 +36,15 @@ type options struct {
 func main() {
 	o := options{boot: boot.Flags{MaxSteps: -1}}
 	f := &o.boot
-	flag.StringVar(&f.Base, "base", os.Getenv("YBASE_BASE_URL"), "模型服务地址（覆盖 profile 的 models.base_url）")
-	flag.StringVar(&f.Model, "model", os.Getenv("YBASE_MODEL"), "模型名（覆盖 profile 的 models.model）")
+	flag.StringVar(&f.Base, "base", os.Getenv("TENON_BASE_URL"), "模型服务地址（覆盖 profile 的 models.base_url）")
+	flag.StringVar(&f.Model, "model", os.Getenv("TENON_MODEL"), "模型名（覆盖 profile 的 models.model）")
 	flag.StringVar(&f.Workdir, "dir", ".", "工作目录（项目根）")
 	flag.StringVar(&f.Profile, "profile", "", "额外的 profile.toml（最后叠加）")
 	flag.StringVar(&f.Mode, "mode", "", "强制权限档位（覆盖 permission.force_mode）")
 	flag.StringVar(&f.Sandbox, "sandbox", "", "沙箱模式（覆盖 permission.sandbox）")
 	flag.StringVar(&f.MCP, "mcp", "", "MCP 配置文件（覆盖 mcp.config）")
 	flag.IntVar(&f.MaxSteps, "max-steps", -1, "每回合最大步数（-1 = 用 profile 缺省，0 = 不限）")
-	flag.BoolVar(&f.TrustProject, "trust-project", false, "本次运行信任项目（读 <dir>/.ybase 下的配置），不保存")
+	flag.BoolVar(&f.TrustProject, "trust-project", false, "本次运行信任项目（读 <dir>/.tenon 下的配置），不保存")
 	flag.BoolVar(&f.ProjectHooks, "project-hooks", false, "本次运行启用项目钩子（隐含信任项目）")
 	flag.StringVar(&o.addr, "addr", "127.0.0.1:0", "监听地址（缺省 127.0.0.1 随机端口）；非回环地址需 -allow-remote 且给 TLS 证书")
 	flag.BoolVar(&o.allowRemote, "allow-remote", false, "允许监听非回环地址（必须同时给 -tls-cert / -tls-key）")
@@ -53,7 +53,7 @@ func main() {
 	flag.StringVar(&o.hosts, "host", "", "远程访问时额外允许的 Host 名（逗号分隔，不含端口），如 my.lan")
 	flag.Parse()
 	if err := run(o); err != nil {
-		fmt.Fprintln(os.Stderr, "ybase-server:", err)
+		fmt.Fprintln(os.Stderr, "tenon-server:", err)
 		os.Exit(1)
 	}
 }
@@ -163,7 +163,7 @@ func run(o options) error {
 		scheme = "https"
 	}
 	// 令牌只打印到本终端（stdout），不写任何文件或日志。
-	fmt.Printf("YBase 网页服务：%s\n  打开：%s://127.0.0.1:%d/?token=%s\n  按 Ctrl+C 结束\n", rt.Root, scheme, port, token)
+	fmt.Printf("Tenon 网页服务：%s\n  打开：%s://127.0.0.1:%d/?token=%s\n  按 Ctrl+C 结束\n", rt.Root, scheme, port, token)
 
 	errc := make(chan error, 1)
 	go func() { errc <- hs.Serve(ln) }()

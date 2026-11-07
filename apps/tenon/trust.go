@@ -1,7 +1,7 @@
 package main
 
 // 项目信任（plugin-switch-plan §3.3）。实现已移到 apps/internal/boot（桌面端与 CLI 共用），
-// 这里只留终端交互（首次询问、ybase trust 子命令）和原名的薄包装，CLI 行为不变。
+// 这里只留终端交互（首次询问、tenon trust 子命令）和原名的薄包装，CLI 行为不变。
 
 import (
 	"bufio"
@@ -10,8 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"ybase/apps/internal/boot"
-	"ybase/runtime/component"
+	"tenon/apps/internal/boot"
+	"tenon/runtime/component"
 )
 
 const (
@@ -29,7 +29,7 @@ func saveTrust(key, level string) error                { return boot.SaveTrust(k
 
 // askTrustStdin 在终端里问一次是否信任项目。
 func askTrustStdin(key string) bool {
-	fmt.Printf("项目 %s 带有 .ybase 配置（profile / 权限 / 钩子 / MCP，可能执行仓库里写的命令）。\n信任这个项目吗？[y/N] ", key)
+	fmt.Printf("项目 %s 带有 .tenon 配置（profile / 权限 / 钩子 / MCP，可能执行仓库里写的命令）。\n信任这个项目吗？[y/N] ", key)
 	line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
 	return strings.EqualFold(strings.TrimSpace(line), "y") || strings.EqualFold(strings.TrimSpace(line), "yes")
 }
@@ -44,7 +44,7 @@ func resolveTrust(o opts, root string, interactive bool) (bool, string, error) {
 	return boot.ResolveTrust(o.trustProject || o.projectHooks, root, ask)
 }
 
-// loadProfiles 内置 < ~/.ybase/profile.toml < <dir>/.ybase/profile.toml（受信时）< -profile。
+// loadProfiles 内置 < ~/.tenon/profile.toml < <dir>/.tenon/profile.toml（受信时）< -profile。
 func loadProfiles(o opts, root string, trusted bool) (*component.Profile, []string, error) {
 	return boot.LoadProfiles(o.profile, root, trusted)
 }
@@ -55,7 +55,7 @@ var interactive = func() bool {
 	return err == nil && fi.Mode()&os.ModeCharDevice != 0
 }()
 
-// trustCmd ybase trust [-untrust | -forget] [dir]：保存 / 撤销项目信任记录。
+// trustCmd tenon trust [-untrust | -forget] [dir]：保存 / 撤销项目信任记录。
 func trustCmd(args []string, workdir string) error {
 	level, dir := trustTrusted, workdir
 	for _, a := range args {

@@ -9,7 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"ybase/runtime/store"
+	"tenon/runtime/store"
 )
 
 // span 一个进行中的观测区间。

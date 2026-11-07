@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"ybase/runtime/session"
-	"ybase/runtime/store"
-	"ybase/runtime/toolhub"
+	"tenon/runtime/session"
+	"tenon/runtime/store"
+	"tenon/runtime/toolhub"
 )
 
 // Ask 向人询问是否批准一次调用（CLI 实现）。

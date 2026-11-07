@@ -6,7 +6,7 @@ import (
 	"errors"
 	"testing"
 
-	"ybase/appapi/wire"
+	"tenon/appapi/wire"
 )
 
 // session.update：改标题、置顶；session.updated 持久事件与 sessions.changed；不改列表顺序。

@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"ybase/modules/collab/subagent"
-	"ybase/modules/collab/workgroup"
+	"tenon/modules/collab/subagent"
+	"tenon/modules/collab/workgroup"
 )
 
 // CLI 聊天的会话构造器要和桌面端 / api-server 同一份装配：打开 subagent / workgroup 后，
@@ -14,9 +14,9 @@ import (
 func TestChatBuilderBuildsChildDefinitions(t *testing.T) {
 	root := t.TempDir()
 	home := t.TempDir()
-	t.Setenv("YBASE_HOME", home)
-	t.Setenv("YBASE_BASE_URL", "")
-	t.Setenv("YBASE_MODEL", "")
+	t.Setenv("TENON_HOME", home)
+	t.Setenv("TENON_BASE_URL", "")
+	t.Setenv("TENON_MODEL", "")
 	extra := filepath.Join(home, "extra.toml")
 	if err := os.WriteFile(extra, []byte("[[plugin]]\nname = \"subagent\"\nenabled = true\n\n[[plugin]]\nname = \"workgroup\"\nenabled = true\n"), 0o644); err != nil {
 		t.Fatal(err)

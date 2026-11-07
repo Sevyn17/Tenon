@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	"ybase/runtime/modelhub"
-	"ybase/runtime/session"
+	"tenon/runtime/modelhub"
+	"tenon/runtime/session"
 )
 
 // sinkModel：第一步先流推理、一个工具调用的片段，再回这个调用；第二步（工具结果之后）流正文。

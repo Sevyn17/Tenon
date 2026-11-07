@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	"ybase/runtime/modelhub"
-	"ybase/runtime/session"
+	"tenon/runtime/modelhub"
+	"tenon/runtime/session"
 )
 
 var _ = json.Marshal

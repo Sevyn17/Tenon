@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"ybase/runtime/assemble"
-	"ybase/runtime/bus"
+	"tenon/runtime/assemble"
+	"tenon/runtime/bus"
 )
 
 // 带会话的提问：ask 事件带 session，界面按会话路由（2026-11-04 审查 P1-28）。

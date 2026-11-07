@@ -6,10 +6,10 @@ package sandbox
 import (
 	"context"
 
-	"ybase/runtime/assemble"
-	"ybase/runtime/component"
-	"ybase/runtime/ext"
-	"ybase/runtime/toolhub"
+	"tenon/runtime/assemble"
+	"tenon/runtime/component"
+	"tenon/runtime/ext"
+	"tenon/runtime/toolhub"
 )
 
 // Service 本插件提供的服务键。
@@ -20,7 +20,7 @@ const PolicyService = ext.ServicePermission
 
 // Config sandbox 插件配置。
 type Config struct {
-	TempDir     string `cfg:"temp_dir" title:"沙箱临时目录" description:"沙箱专用 TEMP / 构建缓存的上级目录；空 = %LOCALAPPDATA%\\ybase\\sbtmp"`
+	TempDir     string `cfg:"temp_dir" title:"沙箱临时目录" description:"沙箱专用 TEMP / 构建缓存的上级目录；空 = %LOCALAPPDATA%\\tenon\\sbtmp"`
 	NoPrepare   bool   `cfg:"no_prepare" title:"不预先授权" description:"启动时不在后台为工作区做沙箱授权（改到第一次受限执行时再做）"`
 	KeepGoCache bool   `cfg:"keep_gocache" title:"保留 GOCACHE" description:"不把 GOCACHE 改到沙箱临时目录"`
 }
@@ -69,7 +69,7 @@ func (p *plug) Setup(cx *component.Registrar) error {
 }
 
 // Start 在后台预先为工作区授权（审查 P1-45）：失败只告警，第一次受限执行时会再试一次并报错。
-// 关闭时等预授权跑完：它会在工作区里建 .ybase，关闭后还在写会和调用方删除工作区抢（测试临时目录删不掉）。
+// 关闭时等预授权跑完：它会在工作区里建 .tenon，关闭后还在写会和调用方删除工作区抢（测试临时目录删不掉）。
 func (p *plug) Start(sc *component.Scope) error {
 	if p.sb == nil || p.noPrepare || !platformSupported {
 		return nil

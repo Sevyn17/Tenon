@@ -16,9 +16,9 @@ import (
 	"testing"
 	"time"
 
-	"ybase/runtime/bus"
-	"ybase/runtime/session"
-	"ybase/runtime/store"
+	"tenon/runtime/bus"
+	"tenon/runtime/session"
+	"tenon/runtime/store"
 )
 
 // Run 跑全部一致性用例。

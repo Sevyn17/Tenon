@@ -1,4 +1,4 @@
-package ybase
+package tenon
 
 // SDK 的错误（07 7.3）：内核错误在出口处包成 SDK 的哨兵，errors.Is 用 SDK 的哨兵就能判，
 // 原来的内核错误也仍然可判（双 %w）。2026-11-04 审查 P1-52：原先 History 查不到会话返回
@@ -8,21 +8,21 @@ import (
 	"errors"
 	"fmt"
 
-	"ybase/runtime/agentdef"
-	"ybase/runtime/host"
-	"ybase/runtime/mail"
-	"ybase/runtime/store"
+	"tenon/runtime/agentdef"
+	"tenon/runtime/host"
+	"tenon/runtime/mail"
+	"tenon/runtime/store"
 )
 
 // 错误（07 7.3；errors.Is 可判）。
 var (
-	ErrNotStarted = errors.New("ybase: 未 Start")
-	ErrInvalid    = errors.New("ybase: 参数不合法")
-	ErrNotFound   = errors.New("ybase: 未找到")
+	ErrNotStarted = errors.New("tenon: 未 Start")
+	ErrInvalid    = errors.New("tenon: 参数不合法")
+	ErrNotFound   = errors.New("tenon: 未找到")
 	// ErrDenied 守卫或联系名单拒绝（错误文本带原因）。
-	ErrDenied = errors.New("ybase: 被拒绝")
+	ErrDenied = errors.New("tenon: 被拒绝")
 	// ErrConflict 会话被另一写者推进或接管（条件写冲突、写租约失效）。
-	ErrConflict = errors.New("ybase: 冲突")
+	ErrConflict = errors.New("tenon: 冲突")
 )
 
 // wrapErr 把内核错误包成对应的 SDK 哨兵；认不出的原样返回。

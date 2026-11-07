@@ -1,4 +1,4 @@
-// @ybase/shell：可编排的工作台（L3）。createShell 组装一个工作台实例：客户端、注册表、贡献包、偏好、布局、导航、文案，
+// @tenon/shell：可编排的工作台（L3）。createShell 组装一个工作台实例：客户端、注册表、贡献包、偏好、布局、导航、文案，
 // 返回可挂载的 React 组件。嵌入方的定制入口都在这里（前端方案第一节"三档定制"）：
 //   - 配置：theme / brand / messages / prefs / disable；
 //   - 贡献：contributions（贡献包数组，同 id 低 priority 替换内置）；
@@ -69,7 +69,7 @@ type Asker =
 const DESTRUCTIVE = new Set(["session.delete", "session.rewind", "session.compact", "plugins.set", "mode.set"]);
 
 export function createShell(o: ShellOptions = {}): Shell {
-  const ns = o.ns ?? "ybase";
+  const ns = o.ns ?? "tenon";
   const client = o.client ?? createClient();
   const reg = createRegistries();
   const packs = createPackHost();
@@ -77,7 +77,7 @@ export function createShell(o: ShellOptions = {}): Shell {
   const layout = createLayoutStore(ns);
   const nav = createNav(o.session, { hash: o.hash });
   const bus = createShellBus();
-  const brand: Brand = { name: "YBase", ...o.brand };
+  const brand: Brand = { name: "Tenon", ...o.brand };
   let toastFn: (text: string, tone?: ShellNotice["tone"]) => void = () => {};
   let askFn: (a: Asker) => void = () => {};
   const notices = createNotices();
@@ -526,4 +526,4 @@ export function applyLayout(sh: ShellState, name: string): boolean {
   return true;
 }
 
-export { YBaseConversation, type YBaseConversationProps } from "./embed";
+export { TenonConversation, type TenonConversationProps } from "./embed";

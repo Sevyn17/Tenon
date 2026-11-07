@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"ybase/apps/internal/boot"
+	"tenon/apps/internal/boot"
 )
 
 func writePkg(t *testing.T, dir, manifest string) {
@@ -14,7 +14,7 @@ func writePkg(t *testing.T, dir, manifest string) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "ybase-plugin.toml"), []byte(manifest), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "tenon-plugin.toml"), []byte(manifest), 0o644); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -22,7 +22,7 @@ func writePkg(t *testing.T, dir, manifest string) {
 // 分层：插件包 [config.*] 低于用户 profile；未受信项目包跳过并提示；内容所属插件没开时提示。
 func TestLoadAllPackagesLayering(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("YBASE_HOME", home)
+	t.Setenv("TENON_HOME", home)
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("HOME", home)
 	writePkg(t, filepath.Join(home, "plugins", "demo"), `name = "demo"
@@ -38,7 +38,7 @@ headroom = 1000
 		t.Fatal(err)
 	}
 	root := t.TempDir()
-	writePkg(t, filepath.Join(root, ".ybase", "plugins", "proj"), `name = "proj"`)
+	writePkg(t, filepath.Join(root, ".tenon", "plugins", "proj"), `name = "proj"`)
 
 	p, ps, notes, err := boot.LoadAll("", root, false)
 	if err != nil {
@@ -80,7 +80,7 @@ headroom = 1000
 
 	// 坏清单：错误带文件名。
 	writePkg(t, filepath.Join(home, "plugins", "bad"), "name = \"bad\"\nbogus = 1\n")
-	if _, _, _, err := boot.LoadAll("", root, false); err == nil || !strings.Contains(err.Error(), "ybase-plugin.toml") {
+	if _, _, _, err := boot.LoadAll("", root, false); err == nil || !strings.Contains(err.Error(), "tenon-plugin.toml") {
 		t.Fatalf("坏清单应报错并带文件名：%v", err)
 	}
 }

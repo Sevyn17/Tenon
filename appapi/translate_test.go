@@ -13,8 +13,8 @@ import (
 	"strings"
 	"testing"
 
-	"ybase/appapi/wire"
-	"ybase/runtime/session"
+	"tenon/appapi/wire"
+	"tenon/runtime/session"
 )
 
 var updateWire = flag.Bool("update", false, "重录 testdata/wire 固定用例")

@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"ybase/runtime/session"
+	"tenon/runtime/session"
 )
 
 func TestCrashRecovery(t *testing.T) {

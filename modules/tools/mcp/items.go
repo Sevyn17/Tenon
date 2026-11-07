@@ -13,7 +13,7 @@ import (
 	"encoding/json"
 	"strings"
 
-	"ybase/runtime/toolhub"
+	"tenon/runtime/toolhub"
 )
 
 // ItemID 某个 MCP 服务的权限项 id。

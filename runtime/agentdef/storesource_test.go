@@ -6,11 +6,11 @@ import (
 	"strings"
 	"testing"
 
-	"ybase/runtime/store/memstore"
+	"tenon/runtime/store/memstore"
 )
 
 func defFiles(id string) Files {
-	return Files{ManifestName: []byte("format = \"ybase/v1\"\nid = \"" + id + "\"\ndescription = \"测试定义\"\n")}
+	return Files{ManifestName: []byte("format = \"tenon/v1\"\nid = \"" + id + "\"\ndescription = \"测试定义\"\n")}
 }
 
 // 存储定义来源：Save/Load 往返、版本递增、按 scope 列举、租户隔离。

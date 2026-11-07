@@ -1,4 +1,4 @@
-module ybase
+module tenon
 
 go 1.26.0
 

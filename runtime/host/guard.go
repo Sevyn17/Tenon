@@ -1,6 +1,6 @@
 package host
 
-import "ybase/runtime/component"
+import "tenon/runtime/component"
 
 // 守卫规则合并（04 4.2、08 D4）：任一条 Deny 即拒绝；全部 Abstain 走内核缺省；
 // Allow 只放开「往 session: 投递」的缺省限制，放不开联系名单、预算、跳数和租户边界。

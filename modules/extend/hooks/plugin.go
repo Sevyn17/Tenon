@@ -1,7 +1,7 @@
 package hooks
 
-// 插件登记（thin-kernel-plan §2.2）：用户脚本钩子。用户级 ~/.ybase/hooks.toml 总是加载；
-// 项目级 <dir>/.ybase/hooks.toml 会执行仓库里写的命令，需配置 project_hooks（命令行 -project-hooks）显式开启。
+// 插件登记（thin-kernel-plan §2.2）：用户脚本钩子。用户级 ~/.tenon/hooks.toml 总是加载；
+// 项目级 <dir>/.tenon/hooks.toml 会执行仓库里写的命令，需配置 project_hooks（命令行 -project-hooks）显式开启。
 // 前置钩子是 Guard（排在权限之后：被拒的调用不触发钩子），后置钩子是 Transform（只处理执行成功的结果）。
 
 import (
@@ -9,15 +9,15 @@ import (
 	"os"
 	"path/filepath"
 
-	"ybase/runtime/assemble"
-	"ybase/runtime/component"
-	"ybase/runtime/pkgs"
-	"ybase/runtime/toolhub"
+	"tenon/runtime/assemble"
+	"tenon/runtime/component"
+	"tenon/runtime/pkgs"
+	"tenon/runtime/toolhub"
 )
 
 // PluginConfig hooks 插件配置。
 type PluginConfig struct {
-	ProjectHooks bool `cfg:"project_hooks" title:"加载项目级钩子" description:"加载 <dir>/.ybase/hooks.toml（会执行仓库里写的命令）"`
+	ProjectHooks bool `cfg:"project_hooks" title:"加载项目级钩子" description:"加载 <dir>/.tenon/hooks.toml（会执行仓库里写的命令）"`
 }
 
 type plug struct{ r *Runner }
@@ -44,7 +44,7 @@ func (p *plug) Setup(cx *component.Registrar) error {
 	}
 	var cs []Config
 	if home, err := os.UserHomeDir(); err == nil {
-		c, err := LoadConfig(filepath.Join(home, ".ybase", "hooks.toml"))
+		c, err := LoadConfig(filepath.Join(home, ".tenon", "hooks.toml"))
 		if err != nil {
 			return err
 		}
@@ -53,7 +53,7 @@ func (p *plug) Setup(cx *component.Registrar) error {
 	// 项目级钩子：显式 project_hooks，或应用明确预置“项目受信”（未预置信任服务时不自动加载）。
 	trusted, known, _ := component.UseOptional[bool](cx, assemble.ServiceTrust)
 	if cfg.ProjectHooks || (known && trusted) {
-		c, err := LoadConfig(filepath.Join(root, ".ybase", "hooks.toml"))
+		c, err := LoadConfig(filepath.Join(root, ".tenon", "hooks.toml"))
 		if err != nil {
 			return err
 		}

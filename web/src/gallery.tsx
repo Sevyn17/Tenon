@@ -1,5 +1,5 @@
 // 组件陈列页（前端方案第四节）：地址带 ?gallery 时代替工作台渲染，深浅主题、密度可切换。
-// 只用于开发与设计审阅，不是产品功能；它只依赖 @ybase/ui，顺便验证 L2 能独立使用。
+// 只用于开发与设计审阅，不是产品功能；它只依赖 @tenon/ui，顺便验证 L2 能独立使用。
 
 import { useState } from "react";
 import { Copy, GitBranch, Plus, RotateCcw, Search, Settings, Trash2 } from "lucide-react";
@@ -89,7 +89,7 @@ function GalleryBody() {
   return (
     <div className={s.page}>
       <header className={s.head}>
-        <h1>@ybase/ui 组件陈列</h1>
+        <h1>@tenon/ui 组件陈列</h1>
         <Segmented
           value={theme}
           options={[
@@ -251,7 +251,7 @@ function GalleryBody() {
         </Card>
 
         <Card title="代码与 diff" className={s.wide}>
-          <CodeBlock code={'go test ./...\nok  ybase/appapi 1.2s'} lang="bash" />
+          <CodeBlock code={'go test ./...\nok  tenon/appapi 1.2s'} lang="bash" />
           <DiffView diff={DIFF} />
         </Card>
 

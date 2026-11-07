@@ -10,7 +10,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 
-	"ybase/runtime/component"
+	"tenon/runtime/component"
 )
 
 type nopPlugin struct{}
@@ -111,7 +111,7 @@ x = 1
 			t.Fatalf("Contents %q 缺 %q", c, w)
 		}
 	}
-	if got := Expand("${YBASE_PLUGIN_DIR}/x", dir); got != dir+"/x" {
+	if got := Expand("${TENON_PLUGIN_DIR}/x", dir); got != dir+"/x" {
 		t.Fatalf("Expand=%q", got)
 	}
 }
@@ -149,7 +149,7 @@ func TestLoadTrust(t *testing.T) {
 	mk(t, filepath.Join(home, "plugins"), "u", `name = "u"`)
 	mk(t, filepath.Join(home, "plugins"), "same", `name = "same"`)
 	os.MkdirAll(filepath.Join(home, "plugins", "not-a-package"), 0o755)
-	proj := filepath.Join(root, ".ybase", "plugins")
+	proj := filepath.Join(root, ".tenon", "plugins")
 	mk(t, proj, "p", `name = "p"`)
 	mk(t, proj, "same", "name = \"same\"\nversion = \"2\"")
 

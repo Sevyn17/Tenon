@@ -1,4 +1,4 @@
-package ybase
+package tenon
 
 // 预设组件清单（10 10.2）。名字与 plugin.Register 一致；装配顺序由 Requires 拓扑排序决定。
 //
@@ -6,27 +6,27 @@ package ybase
 // 存储（store-sqlite）不在预设里：存储由 WithStore 提供。
 
 import (
-	_ "ybase/modules/collab/subagent"
-	_ "ybase/modules/collab/workgroup"
-	_ "ybase/modules/context/compact-basic"
-	_ "ybase/modules/context/instructions"
-	_ "ybase/modules/context/prompt"
-	_ "ybase/modules/context/redact"
-	_ "ybase/modules/context/skills"
-	_ "ybase/modules/extend/hooks"
-	_ "ybase/modules/model/adapter-anthropic"
-	_ "ybase/modules/model/adapter-openai-chat"
-	_ "ybase/modules/model/adapter-openai-responses"
-	_ "ybase/modules/model/models"
-	_ "ybase/modules/security/permission"
-	_ "ybase/modules/security/sandbox"
-	_ "ybase/modules/tools/ask-user"
-	_ "ybase/modules/tools/codemode"
-	_ "ybase/modules/tools/fs"
-	_ "ybase/modules/tools/mcp"
-	_ "ybase/modules/tools/shell"
-	_ "ybase/modules/tools/todo"
-	_ "ybase/modules/tools/web"
+	_ "tenon/modules/collab/subagent"
+	_ "tenon/modules/collab/workgroup"
+	_ "tenon/modules/context/compact-basic"
+	_ "tenon/modules/context/instructions"
+	_ "tenon/modules/context/prompt"
+	_ "tenon/modules/context/redact"
+	_ "tenon/modules/context/skills"
+	_ "tenon/modules/extend/hooks"
+	_ "tenon/modules/model/adapter-anthropic"
+	_ "tenon/modules/model/adapter-openai-chat"
+	_ "tenon/modules/model/adapter-openai-responses"
+	_ "tenon/modules/model/models"
+	_ "tenon/modules/security/permission"
+	_ "tenon/modules/security/sandbox"
+	_ "tenon/modules/tools/ask-user"
+	_ "tenon/modules/tools/codemode"
+	_ "tenon/modules/tools/fs"
+	_ "tenon/modules/tools/mcp"
+	_ "tenon/modules/tools/shell"
+	_ "tenon/modules/tools/todo"
+	_ "tenon/modules/tools/web"
 )
 
 // defaultComponents 标准预设：模型、上下文、权限与沙箱、工具、协作。

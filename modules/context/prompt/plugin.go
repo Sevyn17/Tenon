@@ -9,13 +9,13 @@ import (
 	"os"
 	"path/filepath"
 
-	"ybase/runtime/assemble"
-	"ybase/runtime/component"
-	"ybase/runtime/pkgs"
-	"ybase/runtime/session"
+	"tenon/runtime/assemble"
+	"tenon/runtime/component"
+	"tenon/runtime/pkgs"
+	"tenon/runtime/session"
 )
 
-// Default 缺省系统提示词（原 cmd/ybase/main.go systemPrompt，文字不变以保持缓存）。
+// Default 缺省系统提示词（原 cmd/tenon/main.go systemPrompt，文字不变以保持缓存）。
 const Default = `你是一个在用户本机工作目录中工作的编程助手。
 需要了解代码时用 grep（搜内容）/ glob（找文件）/ list_dir 定位，再用 read_file 读（大文件按 offset/limit 分段），再动手；修改已有文件用 edit（精确替换），新建或整体重写才用 write_file；需要运行命令用 shell。
 回答简洁，完成后用一两句话说明做了什么。`

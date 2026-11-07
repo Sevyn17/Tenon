@@ -1,13 +1,13 @@
-package ybase
+package tenon
 
 import (
 	"testing"
 
-	"ybase/runtime/assemble"
-	"ybase/runtime/store/memstore"
+	"tenon/runtime/assemble"
+	"tenon/runtime/store/memstore"
 )
 
-// 工作目录缺省不受信：嵌入方指向任意目录时，不执行其中的 .ybase/hooks.toml、mcp.toml，
+// 工作目录缺省不受信：嵌入方指向任意目录时，不执行其中的 .tenon/hooks.toml、mcp.toml，
 // 不读项目档位与项目技能（2026-11-04 审查 P1-5：原先 SDK 写死受信）。
 func TestProjectTrustDefaultsFalse(t *testing.T) {
 	for _, tc := range []struct {

@@ -9,7 +9,7 @@ package shell
 import (
 	"encoding/json"
 
-	"ybase/runtime/toolhub"
+	"tenon/runtime/toolhub"
 )
 
 // 权限项 id。

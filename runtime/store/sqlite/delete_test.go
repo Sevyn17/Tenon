@@ -3,8 +3,8 @@ package sqlite
 import (
 	"context"
 	"errors"
+	"tenon/runtime/store"
 	"testing"
-	"ybase/runtime/store"
 )
 
 func TestDeleteSessionCallsCleanersAndTombstoneOnFailure(t *testing.T) {

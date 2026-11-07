@@ -5,9 +5,9 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"ybase/runtime/callctx"
-	"ybase/runtime/inject"
-	"ybase/runtime/session"
+	"tenon/runtime/callctx"
+	"tenon/runtime/inject"
+	"tenon/runtime/session"
 )
 
 func TestCollectFillsDefaults(t *testing.T) {

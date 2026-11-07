@@ -3,7 +3,7 @@ package component
 import (
 	"testing"
 
-	"ybase/runtime/ext"
+	"tenon/runtime/ext"
 )
 
 type sbx interface{ Mode() string }

@@ -11,11 +11,11 @@ import (
 	"strings"
 	"time"
 
-	"ybase/runtime/agent"
-	"ybase/runtime/component"
-	"ybase/runtime/mail"
-	"ybase/runtime/session"
-	"ybase/runtime/store"
+	"tenon/runtime/agent"
+	"tenon/runtime/component"
+	"tenon/runtime/mail"
+	"tenon/runtime/session"
+	"tenon/runtime/store"
 )
 
 // agentSessionID 不带会话键的 agent: 投递所建会话的 id：由（定义, 创建者, 信封 id）确定，重投得到同一个 id（P1-17）。

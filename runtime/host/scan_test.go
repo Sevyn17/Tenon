@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"ybase/runtime/session"
-	"ybase/runtime/store"
+	"tenon/runtime/session"
+	"tenon/runtime/store"
 )
 
 // 兜底扫描不被前面一大批没信件的休眠会话挤掉（2026-11-04 审查 P1-37：原先每次只取 id 最小的 64 个，

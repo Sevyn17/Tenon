@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"ybase/runtime/pkgs"
+	"tenon/runtime/pkgs"
 )
 
 func writePkg(t *testing.T, root, name, body string) string {
@@ -24,7 +24,7 @@ func writePkg(t *testing.T, root, name, body string) string {
 // 插件包的 [[server]] 段由本组件解码与校验（2026-11-04 审查 P1-56：原先形状写死在 runtime/pkgs）。
 func TestPackageServerSection(t *testing.T) {
 	root := t.TempDir()
-	p, err := pkgs.Parse(writePkg(t, root, "ok", "[[server]]\nname = \"fs\"\ncommand = \"${YBASE_PLUGIN_DIR}/bin/fs\"\ntrust = \"readonly\"\n"), pkgs.ScopeUser)
+	p, err := pkgs.Parse(writePkg(t, root, "ok", "[[server]]\nname = \"fs\"\ncommand = \"${TENON_PLUGIN_DIR}/bin/fs\"\ntrust = \"readonly\"\n"), pkgs.ScopeUser)
 	if err != nil {
 		t.Fatal(err)
 	}

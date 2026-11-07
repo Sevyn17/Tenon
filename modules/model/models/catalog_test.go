@@ -4,8 +4,8 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"tenon/runtime/modelhub"
 	"testing"
-	"ybase/runtime/modelhub"
 )
 
 func TestBuiltinCatalogResolves(t *testing.T) {

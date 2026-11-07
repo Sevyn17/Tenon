@@ -5,7 +5,7 @@ package sandbox
 // Windows 沙箱：写受限令牌（WRITE_RESTRICTED）+ 工作区能力 SID，不改完整性级别。
 //
 // 写访问要通过两轮检查：普通 SID 一轮（同用户本身）+ 受限 SID 一轮（能力 SID、登录 SID、Everyone）。
-// 工作区 DACL 追加一条可继承的“能力 SID 可写”ACE，受保护目录（.ybase）追加能力 SID 拒写 ACE；
+// 工作区 DACL 追加一条可继承的“能力 SID 可写”ACE，受保护目录（.tenon）追加能力 SID 拒写 ACE；
 // 于是 workspace-write 只能写工作区（及专用临时目录），read-only 不带能力 SID，哪里都写不了
 // （Everyone 可写的目录除外，已知缺口）。读不受影响（WRITE_RESTRICTED 只限制写）。
 // 与旧方案（Low 完整性 + 给工作区打 Low 标签）相比：工作区不再被降级，工作区里的程序照常运行。
@@ -272,14 +272,14 @@ func grantWorkspace(s *Sandbox, root string, cap *windows.SID) (string, error) {
 	return tmp, nil
 }
 
-// sandboxTemp <dir>\<工作区哈希>；dir 空 = %LOCALAPPDATA%\ybase\sbtmp。
+// sandboxTemp <dir>\<工作区哈希>；dir 空 = %LOCALAPPDATA%\tenon\sbtmp。
 func sandboxTemp(dir, root string) (string, error) {
 	if dir == "" {
 		base, err := windows.KnownFolderPath(windows.FOLDERID_LocalAppData, 0)
 		if err != nil {
 			return "", err
 		}
-		dir = filepath.Join(base, "ybase", "sbtmp")
+		dir = filepath.Join(base, "tenon", "sbtmp")
 	}
 	h := sha256.Sum256([]byte(strings.ToLower(root)))
 	d := filepath.Join(dir, hex.EncodeToString(h[:6]))

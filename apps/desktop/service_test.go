@@ -15,14 +15,14 @@ import (
 	"testing"
 	"time"
 
-	"ybase/appapi"
-	"ybase/appapi/wire"
-	"ybase/runtime/agent"
-	"ybase/runtime/bus"
-	"ybase/runtime/host"
-	"ybase/runtime/session"
-	"ybase/runtime/store/sqlite"
-	"ybase/runtime/toolhub"
+	"tenon/appapi"
+	"tenon/appapi/wire"
+	"tenon/runtime/agent"
+	"tenon/runtime/bus"
+	"tenon/runtime/host"
+	"tenon/runtime/session"
+	"tenon/runtime/store/sqlite"
+	"tenon/runtime/toolhub"
 )
 
 type fakeModel struct{}

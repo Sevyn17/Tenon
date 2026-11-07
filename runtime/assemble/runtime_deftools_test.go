@@ -6,11 +6,11 @@ import (
 	"strings"
 	"testing"
 
-	"ybase/runtime/agentdef"
-	"ybase/runtime/callctx"
-	"ybase/runtime/session"
-	"ybase/runtime/store/memstore"
-	"ybase/runtime/toolhub"
+	"tenon/runtime/agentdef"
+	"tenon/runtime/callctx"
+	"tenon/runtime/session"
+	"tenon/runtime/store/memstore"
+	"tenon/runtime/toolhub"
 )
 
 func defWithTools(t *testing.T, name string, tools ...string) agentdef.Source {
@@ -20,7 +20,7 @@ func defWithTools(t *testing.T, name string, tools ...string) agentdef.Source {
 	for i, s := range tools {
 		q[i] = `"` + s + `"`
 	}
-	manifest := "format = \"ybase/v1\"\nid = \"" + name + "\"\ndescription = \"测试\"\ntools = [" + strings.Join(q, ", ") + "]\n"
+	manifest := "format = \"tenon/v1\"\nid = \"" + name + "\"\ndescription = \"测试\"\ntools = [" + strings.Join(q, ", ") + "]\n"
 	if err := m.Put(agentdef.Ref{Namespace: agentdef.Platform, Name: name}, agentdef.Files{"agent.toml": []byte(manifest)}); err != nil {
 		t.Fatal(err)
 	}

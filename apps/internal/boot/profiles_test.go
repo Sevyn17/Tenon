@@ -10,18 +10,18 @@ import (
 	"strings"
 	"testing"
 
-	"ybase/appapi"
-	"ybase/appapi/wire"
-	"ybase/runtime/bus"
-	"ybase/runtime/component"
-	"ybase/runtime/host"
-	"ybase/runtime/store/memstore"
+	"tenon/appapi"
+	"tenon/appapi/wire"
+	"tenon/runtime/bus"
+	"tenon/runtime/component"
+	"tenon/runtime/host"
+	"tenon/runtime/store/memstore"
 )
 
 // plugins.set 经真实文件：用户层写入、pending、if_revision 冲突、项目未受信不可写、强制插件、未知键、项目层禁设的键。
 func TestPluginsSetEndToEnd(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("YBASE_HOME", home)
+	t.Setenv("TENON_HOME", home)
 	root := t.TempDir()
 	p, _, err := LoadProfiles("", root, false)
 	if err != nil {
@@ -118,7 +118,7 @@ func TestPluginsSetEndToEnd(t *testing.T) {
 	if _, e := call(trusted, "plugins.set", wire.PluginsSetArgs{Name: "compact-basic", Scope: "project", Enabled: &off}); e != nil {
 		t.Fatal(e)
 	}
-	if _, err := os.Stat(filepath.Join(root, ".ybase", "profile.toml")); err != nil {
+	if _, err := os.Stat(filepath.Join(root, ".tenon", "profile.toml")); err != nil {
 		t.Fatal(err)
 	}
 }

@@ -16,8 +16,8 @@ import (
 	"sort"
 	"strings"
 
-	"ybase/runtime/modelhub"
-	"ybase/runtime/session"
+	"tenon/runtime/modelhub"
+	"tenon/runtime/session"
 )
 
 // OpenAIChat openai-chat 协议适配器。

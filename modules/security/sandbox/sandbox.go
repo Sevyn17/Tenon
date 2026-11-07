@@ -14,7 +14,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"ybase/runtime/toolhub"
+	"tenon/runtime/toolhub"
 )
 
 // Mode 沙箱模式（词汇定义在 toolhub，工具与权限插件不必 import 本包）。
@@ -48,7 +48,7 @@ type Sandbox struct {
 	Root string // 工作区根（绝对路径）
 	// Protect 工作区内即使 workspace-write 也不可写的子目录（相对 Root），默认 DefaultProtect。
 	Protect []string
-	// TempDir 沙箱专用临时 / 缓存目录的上级；空 = %LOCALAPPDATA%\ybase\sbtmp（plugin-switch-plan §2.2）。
+	// TempDir 沙箱专用临时 / 缓存目录的上级；空 = %LOCALAPPDATA%\tenon\sbtmp（plugin-switch-plan §2.2）。
 	TempDir string
 	// KeepGoCache true = 不把 GOCACHE 改到沙箱临时目录（用户自己保证缓存可写）。
 	KeepGoCache bool
@@ -61,10 +61,10 @@ type Sandbox struct {
 func PlatformSupported() bool { return platformSupported }
 
 // DefaultProtect 缺省受保护路径：
-//   - .ybase：本框架的项目配置（权限档位、钩子、MCP）；
+//   - .tenon：本框架的项目配置（权限档位、钩子、MCP）；
 //   - .git：沙箱里写进 .git/hooks、.git/config 的东西，会在用户之后于沙箱外执行 git 时以完整权限运行，
 //     等于逃出沙箱（2026-11-04 审查 P0-14）。代价：workspace-write 里不能 git commit，需要时申请更宽沙箱。
-var DefaultProtect = []string{".ybase", ".git"}
+var DefaultProtect = []string{".tenon", ".git"}
 
 // existingOnly 只在已存在时才保护、不存在不新建的路径（新建空 .git 会让 git 误以为这是仓库）。
 func existingOnly(p string) bool { return filepath.Clean(p) == ".git" }

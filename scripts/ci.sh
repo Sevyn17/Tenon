@@ -9,5 +9,5 @@ echo "== go test"
 go test -count=1 ./...
 echo "== go test -race（宿主、存储、会话、工具、权限、装配）"
 go test -race -count=1 ./runtime/host/ ./runtime/store/... ./runtime/session/ ./runtime/toolhub/ ./runtime/agent/ ./runtime/bus/ ./runtime/inject/ \
-  ./modules/security/... ./modules/collab/... ./apps/internal/boot/ ./ybasetest/
+  ./modules/security/... ./modules/collab/... ./apps/internal/boot/ ./tenontest/
 echo "== 通过"

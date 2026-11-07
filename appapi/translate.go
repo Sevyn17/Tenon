@@ -12,8 +12,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"ybase/appapi/wire"
-	"ybase/runtime/session"
+	"tenon/appapi/wire"
+	"tenon/runtime/session"
 )
 
 // MaxWireText 线上工具结果文本的上限（06 10.12 Q6）；超出截断并给 output_ref。

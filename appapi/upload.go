@@ -12,8 +12,8 @@ import (
 	"net/http"
 	"strings"
 
-	"ybase/appapi/wire"
-	"ybase/runtime/toolhub"
+	"tenon/appapi/wire"
+	"tenon/runtime/toolhub"
 )
 
 // MaxUpload HTTP 上传的单文件上限。

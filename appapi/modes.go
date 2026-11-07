@@ -6,10 +6,10 @@ import (
 	"context"
 	"encoding/json"
 
-	"ybase/appapi/wire"
-	"ybase/runtime/component"
-	"ybase/runtime/reqlog"
-	"ybase/runtime/session"
+	"tenon/appapi/wire"
+	"tenon/runtime/component"
+	"tenon/runtime/reqlog"
+	"tenon/runtime/session"
 )
 
 // ModeInfo mode.list 的一行。
@@ -17,7 +17,7 @@ type ModeInfo struct {
 	ID      string   `json:"id"`
 	Label   string   `json:"label"`
 	Builtin bool     `json:"builtin"`
-	Project bool     `json:"project"`           // 来自项目 .ybase/modes
+	Project bool     `json:"project"`           // 来自项目 .tenon/modes
 	Widened []string `json:"widened,omitempty"` // 相对基础档位放宽的权限项
 }
 

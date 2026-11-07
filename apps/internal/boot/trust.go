@@ -1,9 +1,9 @@
 package boot
 
 // 项目信任（plugin-switch-plan §3.3，参照 Codex projects.trust_level）。
-// ~/.ybase/trust.toml：[projects."<路径>"] trust = "trusted" | "untrusted"；键 = git 根目录，找不到用工作目录；
-// 子目录继承最近的上级记录。不受信：不读项目 .ybase 下的 profile / permissions / hooks / mcp（AGENTS.md 照读）。
-// 原在 apps/ybase/trust.go，桌面端与 CLI 共用后移到这里；CLI 只保留终端交互部分。
+// ~/.tenon/trust.toml：[projects."<路径>"] trust = "trusted" | "untrusted"；键 = git 根目录，找不到用工作目录；
+// 子目录继承最近的上级记录。不受信：不读项目 .tenon 下的 profile / permissions / hooks / mcp（AGENTS.md 照读）。
+// 原在 apps/tenon/trust.go，桌面端与 CLI 共用后移到这里；CLI 只保留终端交互部分。
 
 import (
 	_ "embed"
@@ -15,8 +15,8 @@ import (
 
 	"github.com/BurntSushi/toml"
 
-	"ybase/runtime/component"
-	"ybase/runtime/pkgs"
+	"tenon/runtime/component"
+	"tenon/runtime/pkgs"
 )
 
 // 信任级别。
@@ -69,7 +69,7 @@ func writeTrustFile(f trustFile) error {
 	}
 	sort.Strings(keys)
 	var b strings.Builder
-	b.WriteString("# 项目信任记录（ybase trust 维护）\n")
+	b.WriteString("# 项目信任记录（tenon trust 维护）\n")
 	for _, k := range keys {
 		fmt.Fprintf(&b, "\n[projects.%q]\ntrust = %q\n", k, f.Projects[k].Trust)
 	}
@@ -112,7 +112,7 @@ func ApproveMode(root, mode, widened string) error {
 	return writeTrustFile(f)
 }
 
-// Home 用户级目录：$YBASE_HOME，缺省 ~/.ybase；取不到返回空。
+// Home 用户级目录：$TENON_HOME，缺省 ~/.tenon；取不到返回空。
 func Home() string {
 	if tp := TrustPath(); tp != "" {
 		return filepath.Dir(tp)
@@ -147,16 +147,16 @@ func PackageNotices(p *component.Profile, ps []*pkgs.Package) []string {
 	return out
 }
 
-// TrustPath trust.toml 位置：$YBASE_HOME/trust.toml，缺省 ~/.ybase/trust.toml。
+// TrustPath trust.toml 位置：$TENON_HOME/trust.toml，缺省 ~/.tenon/trust.toml。
 func TrustPath() string {
-	if h := os.Getenv("YBASE_HOME"); h != "" {
+	if h := os.Getenv("TENON_HOME"); h != "" {
 		return filepath.Join(h, "trust.toml")
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(home, ".ybase", "trust.toml")
+	return filepath.Join(home, ".tenon", "trust.toml")
 }
 
 // ProjectKey 信任记录的键：向上找 .git，找不到用工作目录本身。
@@ -237,11 +237,11 @@ func SaveTrust(key, level string) error {
 // HasProjectConfig 工作目录下是否有会被信任规则影响的项目配置。
 func HasProjectConfig(root string) bool {
 	for _, n := range []string{"profile.toml", "permissions.toml", "hooks.toml", "mcp.toml"} {
-		if _, err := os.Stat(filepath.Join(root, ".ybase", n)); err == nil {
+		if _, err := os.Stat(filepath.Join(root, ".tenon", n)); err == nil {
 			return true
 		}
 	}
-	return pkgs.HasAny(filepath.Join(root, ".ybase", "plugins"))
+	return pkgs.HasAny(filepath.Join(root, ".tenon", "plugins"))
 }
 
 // ResolveTrust 决定本次运行是否信任项目。force（-trust-project / -project-hooks）只对本次生效。
@@ -262,7 +262,7 @@ func ResolveTrust(force bool, root string, ask func(key string) bool) (bool, str
 		return false, "trust.toml", nil
 	}
 	if !HasProjectConfig(root) {
-		return false, "无记录（项目无 .ybase 配置）", nil
+		return false, "无记录（项目无 .tenon 配置）", nil
 	}
 	if ask == nil {
 		return false, "无记录（非交互，按不受信）", nil
@@ -291,8 +291,8 @@ func LoadProfiles(extra, root string, trusted bool) (*component.Profile, []strin
 }
 
 // LoadAll 读插件包与各层 profile：
-// 内置 < 插件包 [config.*] < ~/.ybase/profile.toml < <dir>/.ybase/profile.toml（受信时）< extra（-profile）。
-// 插件包：用户级 <home>/plugins/*，项目级 <dir>/.ybase/plugins/*（只在受信时）。
+// 内置 < 插件包 [config.*] < ~/.tenon/profile.toml < <dir>/.tenon/profile.toml（受信时）< extra（-profile）。
+// 插件包：用户级 <home>/plugins/*，项目级 <dir>/.tenon/plugins/*（只在受信时）。
 func LoadAll(extra, root string, trusted bool) (*component.Profile, []*pkgs.Package, []string, error) {
 	p, err := component.ParseProfile(defaultProfileTOML, ".")
 	if err != nil {
@@ -340,13 +340,13 @@ func LoadAll(extra, root string, trusted bool) (*component.Profile, []*pkgs.Pack
 			return nil, nil, nil, err
 		}
 	}
-	proj := filepath.Join(root, ".ybase", "profile.toml")
+	proj := filepath.Join(root, ".tenon", "profile.toml")
 	if trusted {
 		if err := layer(proj, true); err != nil {
 			return nil, nil, nil, err
 		}
 	} else if _, err := os.Stat(proj); err == nil {
-		notes = append(notes, "项目未受信，未读 "+proj+"（ybase trust 可信任）")
+		notes = append(notes, "项目未受信，未读 "+proj+"（tenon trust 可信任）")
 	}
 	if extra != "" {
 		q, err := component.LoadProfile(extra)

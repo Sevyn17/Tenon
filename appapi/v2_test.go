@@ -11,8 +11,8 @@ import (
 	"sync"
 	"testing"
 
-	"ybase/appapi/wire"
-	"ybase/runtime/host"
+	"tenon/appapi/wire"
+	"tenon/runtime/host"
 )
 
 // memArt 测试用工件存储。

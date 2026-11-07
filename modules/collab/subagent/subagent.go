@@ -8,9 +8,9 @@ import (
 	"sync"
 	"time"
 
-	"ybase/runtime/host"
-	"ybase/runtime/session"
-	"ybase/runtime/toolhub"
+	"tenon/runtime/host"
+	"tenon/runtime/session"
+	"tenon/runtime/toolhub"
 )
 
 // SubagentTimeout 委派工具默认超时（子回合可能很长）。

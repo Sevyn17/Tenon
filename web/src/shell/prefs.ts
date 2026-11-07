@@ -61,7 +61,7 @@ export interface PrefsStore extends ReadStore<Prefs> {
   reset(): void;
 }
 
-export function createPrefs(ns = "ybase", initial: Partial<Prefs> = {}, storage: Storage | null = safeStorage()): PrefsStore {
+export function createPrefs(ns = "tenon", initial: Partial<Prefs> = {}, storage: Storage | null = safeStorage()): PrefsStore {
   const key = `${ns}.prefs.v1`;
   const base = { ...DEFAULT_PREFS, ...initial };
   let loaded: Partial<Prefs> = {};

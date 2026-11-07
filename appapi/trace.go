@@ -8,10 +8,10 @@ import (
 	"sort"
 	"strings"
 
-	"ybase/runtime/store"
+	"tenon/runtime/store"
 )
 
-// RenderTrace 渲染一次任务的路径：经过的会话、信封、工具与拒绝原因。CLI 的 `ybase explain trace` 与 trace.explain 共用。
+// RenderTrace 渲染一次任务的路径：经过的会话、信封、工具与拒绝原因。CLI 的 `tenon explain trace` 与 trace.explain 共用。
 func RenderTrace(ctx context.Context, db store.TraceStore, trace string) (string, error) {
 	evs, err := db.TraceEvents(ctx, trace)
 	if err != nil {

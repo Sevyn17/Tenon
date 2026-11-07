@@ -15,8 +15,8 @@ import (
 
 	_ "modernc.org/sqlite"
 
-	"ybase/runtime/bus"
-	"ybase/runtime/store"
+	"tenon/runtime/bus"
+	"tenon/runtime/store"
 )
 
 // DB 一个存储文件。
@@ -211,7 +211,7 @@ func (db *DB) DB() *sql.DB { return db.sql }
 func (db *DB) Dialect() string { return "sqlite" }
 
 // *DB 自带 SQL 出口（store.SQL）：SDK 的 WithStore(sqlite) 据此装上要建表的组件（2026-11-04 审查 P2：
-// 原先出口只在 SQLOut 包装里，ybase.New 断言不到，workgroup 被悄悄去掉）。
+// 原先出口只在 SQLOut 包装里，tenon.New 断言不到，workgroup 被悄悄去掉）。
 var _ store.SQL = (*DB)(nil)
 
 // Migrate 执行某 owner 的迁移（插件自有表 p_<名>_* 经此登记，乙类点位）。

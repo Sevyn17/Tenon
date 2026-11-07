@@ -15,8 +15,8 @@ import (
 	"io"
 	"time"
 
-	"ybase/runtime/bus"
-	"ybase/runtime/session"
+	"tenon/runtime/bus"
+	"tenon/runtime/session"
 )
 
 // Tenant 当前租户（单机固定）。

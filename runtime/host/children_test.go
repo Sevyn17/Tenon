@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"ybase/runtime/agent"
-	"ybase/runtime/session"
-	"ybase/runtime/store"
+	"tenon/runtime/agent"
+	"tenon/runtime/session"
+	"tenon/runtime/store"
 )
 
 // 父会话回退时取消子会话：全库会话很多时较老的子会话也要被取消

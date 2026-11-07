@@ -7,12 +7,12 @@ import (
 	"testing"
 	"time"
 
-	"ybase/runtime/agentdef"
-	"ybase/runtime/callctx"
-	"ybase/runtime/store"
-	"ybase/runtime/store/sqlite"
-	"ybase/runtime/toolhub"
-	"ybase/runtime/useconf"
+	"tenon/runtime/agentdef"
+	"tenon/runtime/callctx"
+	"tenon/runtime/store"
+	"tenon/runtime/store/sqlite"
+	"tenon/runtime/toolhub"
+	"tenon/runtime/useconf"
 )
 
 // memoryUse 记忆组件的使用配置原型（06 6.2 的例子）。

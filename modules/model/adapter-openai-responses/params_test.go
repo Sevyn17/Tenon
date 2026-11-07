@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"ybase/runtime/modelhub"
-	"ybase/runtime/session"
+	"tenon/runtime/modelhub"
+	"tenon/runtime/session"
 )
 
 // ToolChoice 映射到请求体（2026-11-04 审查 P1-32）。

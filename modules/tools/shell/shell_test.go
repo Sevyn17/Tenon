@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"ybase/runtime/session"
-	"ybase/runtime/toolhub"
+	"tenon/runtime/session"
+	"tenon/runtime/toolhub"
 )
 
 func shellTool(s *Shell, name string) *toolhub.Tool {
@@ -56,7 +56,7 @@ func TestShellRunsInWorkdir(t *testing.T) {
 	base := t.TempDir()
 	if la := os.Getenv("LOCALAPPDATA"); runtime.GOOS == "windows" && la != "" {
 		var err error
-		if base, err = os.MkdirTemp(la, "ybase-shelltest-"); err != nil {
+		if base, err = os.MkdirTemp(la, "tenon-shelltest-"); err != nil {
 			t.Fatal(err)
 		}
 		t.Cleanup(func() { os.RemoveAll(base) })

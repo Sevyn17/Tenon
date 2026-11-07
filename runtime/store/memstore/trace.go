@@ -5,7 +5,7 @@ import (
 	"sort"
 	"time"
 
-	"ybase/runtime/store"
+	"tenon/runtime/store"
 )
 
 var _ store.TraceStore = (*Store)(nil)

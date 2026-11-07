@@ -5,9 +5,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"ybase/runtime/agent"
-	"ybase/runtime/callctx"
-	"ybase/runtime/session"
+	"tenon/runtime/agent"
+	"tenon/runtime/callctx"
+	"tenon/runtime/session"
 )
 
 func TestSpawnSubagent(t *testing.T) {

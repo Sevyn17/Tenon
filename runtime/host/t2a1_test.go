@@ -10,11 +10,11 @@ import (
 	"testing"
 	"time"
 
-	"ybase/runtime/agent"
-	"ybase/runtime/session"
-	"ybase/runtime/store"
-	"ybase/runtime/store/sqlite"
-	"ybase/runtime/toolhub"
+	"tenon/runtime/agent"
+	"tenon/runtime/session"
+	"tenon/runtime/store"
+	"tenon/runtime/store/sqlite"
+	"tenon/runtime/toolhub"
 )
 
 // scriptedModel T2a-1 测试用模型：记录调用、可并发计数、可阻塞在 gate、可按次序回工具调用。

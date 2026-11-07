@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"ybase/runtime/store"
+	"tenon/runtime/store"
 )
 
 // SessionStatus 读会话生命周期状态（active / sleeping / deleted）。

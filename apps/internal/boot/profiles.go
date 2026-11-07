@@ -1,14 +1,14 @@
 package boot
 
-// plugins.set 的文件侧（appapi.Profiles）：用户层 ~/.ybase/profile.toml、项目层 <dir>/.ybase/profile.toml。
+// plugins.set 的文件侧（appapi.Profiles）：用户层 ~/.tenon/profile.toml、项目层 <dir>/.tenon/profile.toml。
 // 只改这两层；-profile 指定的文件与插件包不动（它们在叠加顺序里各有位置，界面改不到时 pending 会显示出来）。
 
 import (
 	"fmt"
 	"path/filepath"
 
-	"ybase/appapi/wire"
-	"ybase/runtime/component"
+	"tenon/appapi/wire"
+	"tenon/runtime/component"
 )
 
 // Profiles 实现 appapi.Profiles。
@@ -23,11 +23,11 @@ func (p Profiles) path(scope string) (string, error) {
 	case "user":
 		h := Home()
 		if h == "" {
-			return "", fmt.Errorf("取不到用户目录（可设 YBASE_HOME）")
+			return "", fmt.Errorf("取不到用户目录（可设 TENON_HOME）")
 		}
 		return filepath.Join(h, "profile.toml"), nil
 	case "project":
-		return filepath.Join(p.Root, ".ybase", "profile.toml"), nil
+		return filepath.Join(p.Root, ".tenon", "profile.toml"), nil
 	}
 	return "", fmt.Errorf("未知 scope %q", scope)
 }
@@ -47,7 +47,7 @@ func (p Profiles) Scopes() []wire.ProfileScope {
 			sc.Reason = err.Error()
 		}
 		if s == "project" && !p.Trusted {
-			sc.Writable, sc.Reason = false, "项目未受信，不读项目 profile（ybase trust 可信任）"
+			sc.Writable, sc.Reason = false, "项目未受信，不读项目 profile（tenon trust 可信任）"
 		}
 		out = append(out, sc)
 	}

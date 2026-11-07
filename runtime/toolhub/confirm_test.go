@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"ybase/runtime/session"
+	"tenon/runtime/session"
 )
 
 // approvalGuard：有 delivered+approve 且参数哈希一致的记录才放行，否则要求确认。

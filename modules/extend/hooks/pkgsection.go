@@ -7,7 +7,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 
-	"ybase/runtime/pkgs"
+	"tenon/runtime/pkgs"
 )
 
 func init() {

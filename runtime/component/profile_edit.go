@@ -100,7 +100,7 @@ func EditProfile(path string, e PluginEdit, ifRevision *string) (string, error) 
 		f.Plugin = append(f.Plugin[:i], f.Plugin[i+1:]...)
 	}
 	var buf bytes.Buffer
-	buf.WriteString("# 由 YBase 设置页改写（plugins.set）：原文件已备份为 profile.toml.bak，注释不保留。\n\n")
+	buf.WriteString("# 由 Tenon 设置页改写（plugins.set）：原文件已备份为 profile.toml.bak，注释不保留。\n\n")
 	if err := toml.NewEncoder(&buf).Encode(fileOut(f)); err != nil {
 		return "", err
 	}

@@ -1,4 +1,4 @@
-package ybase
+package tenon
 
 import (
 	"context"
@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"ybase/runtime/modelhub"
-	"ybase/runtime/store/memstore"
+	"tenon/runtime/modelhub"
+	"tenon/runtime/store/memstore"
 )
 
 // WithKernel 的宿主参数接到 Host 上：SDK 与应用走同一份接线（assemble.Wire，2026-11-04 审查 P1-51：

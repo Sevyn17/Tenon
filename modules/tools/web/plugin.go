@@ -3,9 +3,9 @@ package web
 // 插件登记（thin-kernel-plan §2.2）：web_fetch / web_search（DeepSeek 搜索）。
 
 import (
-	"ybase/runtime/assemble"
-	"ybase/runtime/component"
-	"ybase/runtime/toolhub"
+	"tenon/runtime/assemble"
+	"tenon/runtime/component"
+	"tenon/runtime/toolhub"
 )
 
 type plug struct{}

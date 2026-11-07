@@ -19,8 +19,8 @@ import (
 
 	"golang.org/x/text/unicode/norm"
 
-	"ybase/runtime/session"
-	"ybase/runtime/toolhub"
+	"tenon/runtime/session"
+	"tenon/runtime/toolhub"
 )
 
 // EditSchema edit 工具参数。
@@ -299,7 +299,7 @@ func writeAtomic(p string, data []byte) error {
 	if st, err := os.Stat(p); err == nil {
 		mode = st.Mode().Perm()
 	}
-	f, err := os.CreateTemp(filepath.Dir(p), ".ybase-edit-*")
+	f, err := os.CreateTemp(filepath.Dir(p), ".tenon-edit-*")
 	if err != nil {
 		return err
 	}

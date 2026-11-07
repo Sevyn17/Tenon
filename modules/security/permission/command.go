@@ -5,8 +5,8 @@ package permission
 import (
 	"encoding/json"
 
-	"ybase/modules/internal/cmdline"
-	"ybase/runtime/toolhub"
+	"tenon/modules/internal/cmdline"
+	"tenon/runtime/toolhub"
 )
 
 // 命令拆分与安全段判断与 shell 插件共用一份（modules/internal/cmdline，审查 P1-61）。

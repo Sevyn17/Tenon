@@ -1,4 +1,4 @@
-package ybase
+package tenon
 
 import (
 	"context"
@@ -7,11 +7,11 @@ import (
 	"fmt"
 	"strings"
 
-	"ybase/appapi"
-	"ybase/runtime/agentdef"
-	"ybase/runtime/assemble"
-	"ybase/runtime/component"
-	"ybase/runtime/mail"
+	"tenon/appapi"
+	"tenon/runtime/agentdef"
+	"tenon/runtime/assemble"
+	"tenon/runtime/component"
+	"tenon/runtime/mail"
 )
 
 // Meta 会话业务 meta（写进会话行，组件经 *Ctx 读）。
@@ -37,10 +37,10 @@ func (a *App) Start(ctx context.Context) (err error) {
 	if a.started {
 		return nil
 	}
-	scope := component.NewRoot("ybase")
+	scope := component.NewRoot("tenon")
 	if err := a.asm.Start(scope); err != nil {
 		_ = scope.Close(ctx)
-		return fmt.Errorf("ybase: 启动组件: %w", err)
+		return fmt.Errorf("tenon: 启动组件: %w", err)
 	}
 	// 中途失败整体回滚：关组件作用域，再 Start 从头来（审查 P1-23：原先留着已启动的
 	// 作用域和后台协程，再次 Start 会让组件启动两次）。
@@ -58,16 +58,16 @@ func (a *App) Start(ctx context.Context) (err error) {
 	w, err := assemble.Wire(assemble.WireOptions{Asm: a.asm, Host: a.host, DB: db, Blobs: a.handle.Blobs(),
 		Models: a.models, Workdir: a.workdir, Kernel: a.kern, Definitions: a.defs, MaxSteps: -1})
 	if err != nil {
-		return fmt.Errorf("ybase: 接线: %w", err)
+		return fmt.Errorf("tenon: 接线: %w", err)
 	}
 	if _, err := appapi.New(appapi.Options{
 		Host: a.host, Bus: a.bus, DB: db, Builder: w.Builder,
 		Model: a.models.Model, Workdir: a.workdir, Trusted: true,
 	}); err != nil {
-		return fmt.Errorf("ybase: 应用接口: %w", err)
+		return fmt.Errorf("tenon: 应用接口: %w", err)
 	}
 	if errs := w.Ready(ctx); len(errs) > 0 {
-		return fmt.Errorf("ybase: ready: %w", errors.Join(errs...))
+		return fmt.Errorf("tenon: ready: %w", errors.Join(errs...))
 	}
 	a.builder = w.Builder
 	a.bgStop = w.Background()
@@ -102,7 +102,7 @@ func (a *App) Close(ctx context.Context) error {
 	}
 	a.bus.Close()
 	if len(errs) > 0 {
-		return fmt.Errorf("ybase: 关闭: %w", errs[0])
+		return fmt.Errorf("tenon: 关闭: %w", errs[0])
 	}
 	return nil
 }

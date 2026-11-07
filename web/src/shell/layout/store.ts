@@ -12,7 +12,7 @@ export interface LayoutStore extends ReadStore<LayoutState> {
   reset(init?: LayoutState): void;
 }
 
-export function createLayoutStore(ns = "ybase", init: LayoutState = EMPTY_LAYOUT, storage: Storage | null = safe()): LayoutStore {
+export function createLayoutStore(ns = "tenon", init: LayoutState = EMPTY_LAYOUT, storage: Storage | null = safe()): LayoutStore {
   const key = `${ns}.layout.v1`;
   let raw: unknown = null;
   try {

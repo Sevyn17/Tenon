@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"ybase/runtime/ext"
-	"ybase/runtime/mail"
+	"tenon/runtime/ext"
+	"tenon/runtime/mail"
 )
 
 type fakeSender struct {

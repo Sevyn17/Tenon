@@ -78,8 +78,8 @@ func TestSkillsCatalogBudget(t *testing.T) {
 // 不受信项目不读项目里的技能，只读用户级与插件包（审查 P1-4）。
 func TestSkillsUntrustedProject(t *testing.T) {
 	root, home := t.TempDir(), t.TempDir()
-	t.Setenv("YBASE_HOME", home)
-	writeSkill(t, filepath.Join(root, ".ybase", "skills", "evil", "SKILL.md"), "---\nname: evil\ndescription: 项目技能\n---\n")
+	t.Setenv("TENON_HOME", home)
+	writeSkill(t, filepath.Join(root, ".tenon", "skills", "evil", "SKILL.md"), "---\nname: evil\ndescription: 项目技能\n---\n")
 	writeSkill(t, filepath.Join(home, "skills", "mine", "SKILL.md"), "---\nname: mine\ndescription: 用户技能\n---\n")
 	names := func(s *Skills) string {
 		var out []string

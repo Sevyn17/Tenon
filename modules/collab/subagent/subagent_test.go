@@ -7,11 +7,11 @@ import (
 	"strings"
 	"testing"
 
-	"ybase/runtime/agent"
-	"ybase/runtime/host"
-	"ybase/runtime/session"
-	"ybase/runtime/store/sqlite"
-	"ybase/runtime/toolhub"
+	"tenon/runtime/agent"
+	"tenon/runtime/host"
+	"tenon/runtime/session"
+	"tenon/runtime/store/sqlite"
+	"tenon/runtime/toolhub"
 )
 
 // echoModel 回 "re:<最后一条用户文本>"。

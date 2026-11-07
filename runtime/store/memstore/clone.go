@@ -3,7 +3,7 @@ package memstore
 // Tx 回滚用的状态快照（2026-11-04 审查 P1-55：原先 Tx 只是执行 fn，失败不回滚，一致性套件约束不了事务语义）。
 // 深复制全部可变状态；条目体等 []byte 写入后不再修改，按值共享。
 
-import "ybase/runtime/store"
+import "tenon/runtime/store"
 
 type snapshot struct {
 	clock    int64

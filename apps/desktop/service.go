@@ -14,12 +14,12 @@ import (
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 
-	"ybase/appapi"
-	"ybase/appapi/wire"
+	"tenon/appapi"
+	"tenon/appapi/wire"
 )
 
 // EventName 前端订阅的 Wails 事件名；数据为 wire.Envelope。
-const EventName = "ybase:event"
+const EventName = "tenon:event"
 
 // Service 桌面端绑定服务。方法签名保持简单（字符串进出），前端统一按 JSON 解析。
 type Service struct {

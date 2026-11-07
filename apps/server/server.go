@@ -20,13 +20,13 @@ import (
 
 	"golang.org/x/net/websocket"
 
-	"ybase/appapi"
-	"ybase/appapi/wire"
+	"tenon/appapi"
+	"tenon/appapi/wire"
 )
 
 const (
 	// CookieName 令牌 cookie（HttpOnly + SameSite=Strict），首个带 ?token= 的页面请求设置，之后静态资源与 WebSocket 都凭它通过。
-	CookieName = "ybase_token"
+	CookieName = "tenon_token"
 	// MaxFrame 单个请求帧上限。
 	MaxFrame = 4 << 20
 	// MaxInflight 每个连接同时执行的命令数上限；满了暂停读帧（背压）。

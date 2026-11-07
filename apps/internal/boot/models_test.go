@@ -3,8 +3,8 @@ package boot
 import (
 	"testing"
 
-	"ybase/runtime/assemble"
-	"ybase/runtime/modelhub"
+	"tenon/runtime/assemble"
+	"tenon/runtime/modelhub"
 )
 
 func TestModelListAvailability(t *testing.T) {

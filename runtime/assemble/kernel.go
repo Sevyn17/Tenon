@@ -9,8 +9,8 @@ import (
 	"sort"
 	"time"
 
-	"ybase/runtime/session"
-	"ybase/runtime/toolhub"
+	"tenon/runtime/session"
+	"tenon/runtime/toolhub"
 )
 
 // Kernel 解析后的 [kernel] 节。

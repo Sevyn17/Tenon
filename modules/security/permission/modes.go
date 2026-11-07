@@ -1,8 +1,8 @@
 package permission
 
 // 档位（06 - 工具权限设计方案 §9.4）：内置档位 read-only / ask / workspace / full 不是文件，
-// 各权限项的取值由插件建议值生成（封顶表约束，见 caps.go）；自定义档位放在用户级 ~/.ybase/modes/
-// 与受信项目的 <项目>/.ybase/modes/，只写覆盖项（[items]），可用 base 继承。
+// 各权限项的取值由插件建议值生成（封顶表约束，见 caps.go）；自定义档位放在用户级 ~/.tenon/modes/
+// 与受信项目的 <项目>/.tenon/modes/，只写覆盖项（[items]），可用 base 继承。
 
 import (
 	"errors"
@@ -16,7 +16,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 
-	"ybase/runtime/toolhub"
+	"tenon/runtime/toolhub"
 )
 
 // MaxBaseDepth base 继承链上限。
@@ -98,7 +98,7 @@ type ModeDef struct {
 	Description string
 	Source      string // builtin / 文件路径
 	Builtin     bool
-	// Project 来自受信项目的 .ybase/modes（放宽时首次选用须用户确认，§9.6）。
+	// Project 来自受信项目的 .tenon/modes（放宽时首次选用须用户确认，§9.6）。
 	Project bool
 	// Items 按权限项取值（§9.4）：键是项 id。取不到的项由判定方回落到建议值。
 	Items map[string]ItemSetting
@@ -369,7 +369,7 @@ func (r *Registry) Copy(src, dst Mode, dir string) (string, error) {
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "name = %q\nbase = %q\ndescription = %q\n\n", string(dst), string(src), "复制自 "+d.Title)
-	b.WriteString("# 只写要覆盖的权限项；没写的项沿 base 继承（ybase mode show " + string(src) + " 看完整取值表）。\n[items]\n")
+	b.WriteString("# 只写要覆盖的权限项；没写的项沿 base 继承（tenon mode show " + string(src) + " 看完整取值表）。\n[items]\n")
 	ids := make([]string, 0, len(d.Items))
 	for id := range d.Items {
 		ids = append(ids, id)

@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"ybase/runtime/modelhub"
-	"ybase/runtime/session"
+	"tenon/runtime/modelhub"
+	"tenon/runtime/session"
 )
 
 // 2026-11-04 审查 P2 工具体验：失败的工具结果带 is_error；max_tokens 取模型目录的 max_output；

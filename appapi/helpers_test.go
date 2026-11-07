@@ -8,12 +8,12 @@ import (
 	"testing"
 	"time"
 
-	"ybase/runtime/agent"
-	"ybase/runtime/bus"
-	"ybase/runtime/host"
-	"ybase/runtime/session"
-	"ybase/runtime/store/sqlite"
-	"ybase/runtime/toolhub"
+	"tenon/runtime/agent"
+	"tenon/runtime/bus"
+	"tenon/runtime/host"
+	"tenon/runtime/session"
+	"tenon/runtime/store/sqlite"
+	"tenon/runtime/toolhub"
 )
 
 // fakeModel：最后一条是 user → 含 "tool" 调 echo，否则回 "re:<文本>"（经 onText 流式）；最后一条是 tool → 回 "done"。

@@ -3,7 +3,7 @@ package inject
 // 注入编排（2026-11-04 审查 P1-59）：原先写在 agent 里，快照与状态两类条目的哈希、撤销、预算交织在一起，
 // P0-10 / P0-11 都出在这里。收成纯函数后可以不起会话直接测。
 
-import "ybase/runtime/session"
+import "tenon/runtime/session"
 
 // Write 一条要写进上下文的注入条目（Plan 的输出，调用方交给 session.Core.Inject）。
 type Write struct {
