@@ -21,6 +21,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -70,12 +71,13 @@ func bind[In, Out any](f func(*App, context.Context, In) (Out, error)) handler {
 }
 
 var commands = map[string]handler{
-	"hello":          bind((*App).Hello),
-	"sessions.list":  bind((*App).SessionsList),
-	"session.create": bind((*App).Create),
-	"session.update": bind((*App).Update),
-	"session.delete": bind((*App).Delete),
-	"feedback.list":  bind((*App).FeedbackList),
+	"hello":             bind((*App).Hello),
+	"sessions.list":     bind((*App).SessionsList),
+	"session.create":    bind((*App).Create),
+	"session.update":    bind((*App).Update),
+	"session.delete":    bind((*App).Delete),
+	"feedback.list":     bind((*App).FeedbackList),
+	"session.followups": bind((*App).SessionFollowups),
 	"feedback.set": bind(func(v *App, ctx context.Context, in wire.FeedbackArgs) (wire.Feedback, error) {
 		return v.FeedbackSet(ctx, in, LocalPrincipal.ID) // 进程内调用按本机身份；连接上按连接身份（conn.go）
 	}),
@@ -217,6 +219,9 @@ func (v *App) capabilities() []string {
 	if o.Models != nil {
 		out = append(out, "models")
 	}
+	if o.Followups != nil {
+		out = append(out, "followups")
+	}
 	if o.Upload && o.Artifacts != nil {
 		out = append(out, "upload")
 	}
@@ -315,6 +320,119 @@ func (v *App) Update(ctx context.Context, in wire.UpdateArgs) (wire.SessionSnaps
 		return wire.SessionSnapshot{}, err
 	}
 	return v.snapshot(ctx, in.Session)
+}
+
+// followupCache 建议追问的缓存：（会话, 回合, 日志长度）→ 结果（同一回合多端、刷新都不重复调模型）。只留最近一批。
+type followupCache struct {
+	mu sync.Mutex
+	m  map[string][]string
+}
+
+func (c *followupCache) get(k string) ([]string, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	v, ok := c.m[k]
+	return v, ok
+}
+
+func (c *followupCache) put(k string, v []string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.m == nil || len(c.m) > 256 {
+		c.m = map[string][]string{}
+	}
+	c.m[k] = v
+}
+
+// SessionFollowups 某回合之后的建议追问：取这一回合的用户输入与最后一条助手正文，交给模型侧调用生成；
+// 回合还没结束或没有正文时返回空。结果按（会话, 回合, 日志长度）缓存。
+func (v *App) SessionFollowups(ctx context.Context, in wire.FollowupsArgs) (wire.FollowupsResult, error) {
+	if v.o.Followups == nil {
+		return wire.FollowupsResult{}, Errorf(wire.CodeUnsupported, "未提供建议追问")
+	}
+	if err := need(in.Session); err != nil {
+		return wire.FollowupsResult{}, err
+	}
+	l, err := host.LoadHead(ctx, v.o.DB, in.Session)
+	if err != nil {
+		return wire.FollowupsResult{}, err
+	}
+	h := l.Snapshot.Header
+	from := max(h.LogLen-200, h.CompactionBase)
+	es, err := v.o.DB.Entries(ctx, in.Session, from, h.LogLen)
+	if err != nil {
+		return wire.FollowupsResult{}, err
+	}
+	out := wire.FollowupsResult{Turn: in.Turn, Items: []string{}}
+	if len(es) == 0 {
+		return out, nil
+	}
+	last := es[len(es)-1].Turn
+	if out.Turn == 0 {
+		out.Turn = last
+	}
+	if h.Status != session.StatusIdle && out.Turn == last {
+		return out, nil // 回合还在进行
+	}
+	key := fmt.Sprintf("%s|%d|%d", in.Session, out.Turn, h.LogLen)
+	if got, ok := v.followups.get(key); ok {
+		out.Items = got
+		return out, nil
+	}
+	var input, answer string
+	for _, e := range es {
+		if e.Turn != out.Turn {
+			continue
+		}
+		switch {
+		case e.Item.Kind == session.KindUser && e.Item.User != nil && input == "":
+			input = textOf(e.Item.User.Content)
+		case e.Item.Kind == session.KindAssistant && e.Item.Assistant != nil:
+			if t := textOf(e.Item.Assistant.Content); strings.TrimSpace(t) != "" {
+				answer = t
+			}
+		}
+	}
+	if strings.TrimSpace(answer) == "" {
+		return out, nil
+	}
+	model := ""
+	if h.Config != nil {
+		model = h.Config.Model
+	}
+	items, err := v.o.Followups(ctx, model, clip(input, 4000), clip(answer, 8000))
+	if err != nil {
+		return wire.FollowupsResult{}, err
+	}
+	if items == nil {
+		items = []string{}
+	}
+	if len(items) > 0 { // 空结果不缓存（侧调用失败也是空），下次再试
+		v.followups.put(key, items)
+	}
+	out.Items = items
+	return out, nil
+}
+
+func textOf(c session.Content) string {
+	var sb strings.Builder
+	for _, p := range c {
+		if p.Kind == "text" {
+			sb.WriteString(p.Text)
+		}
+	}
+	return sb.String()
+}
+
+// clip 按字节截断（不切坏 UTF-8），保留开头。
+func clip(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	for n > 0 && !utf8.RuneStart(s[n]) {
+		n--
+	}
+	return s[:n] + "…"
 }
 
 // metaFeedback 会话行业务键里的反馈：条目 id → Feedback。

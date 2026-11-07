@@ -63,6 +63,17 @@ type ListArgs struct {
 	Pinned bool `json:"pinned,omitempty"`
 }
 
+// FollowupsArgs session.followups：某回合（缺省最后一个结束的回合）之后的建议追问。
+type FollowupsArgs struct {
+	Session string `json:"session"`
+	Turn    uint32 `json:"turn,omitempty"`
+}
+
+type FollowupsResult struct {
+	Turn  uint32   `json:"turn"`
+	Items []string `json:"items"` // 最多 4 条，每条一句话
+}
+
 // FeedbackArgs feedback.set：给一条 assistant 条目打分（up / down），vote 为空串表示撤销；note 可选（≤ 2000 字节）。
 type FeedbackArgs struct {
 	Session string `json:"session"`

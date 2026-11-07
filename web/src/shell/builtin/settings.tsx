@@ -56,6 +56,8 @@ function Appearance({ sh }: { sh: ShellState }) {
   const [thinking, setThinking] = usePref(sh, "thinkingOpen");
   const [collapse, setCollapse] = usePref(sh, "toolsAutoCollapse");
   const [ctx, setCtx] = usePref(sh, "showContext");
+  const [fu, setFu] = usePref(sh, "followups");
+  const canFu = useStore(sh.client.hello)?.capabilities.includes("followups") ?? false;
   return (
     <>
       <SettingsSection title="主题">
@@ -120,6 +122,12 @@ function Appearance({ sh }: { sh: ShellState }) {
           description="插件在每轮请求前注入的内容（记忆、技能清单等）"
           control={<Switch checked={ctx} onChange={setCtx} label="显示上下文注入" />}
         />
+        <SettingsRow
+          id="followups"
+          title="建议追问"
+          description={canFu ? "回合结束后在下方给几句可以接着问的话（每回合多一次模型调用）" : "后端没有提供建议追问"}
+          control={<Switch checked={fu && canFu} disabled={!canFu} onChange={setFu} label="建议追问" />}
+        />
       </SettingsSection>
     </>
   );
@@ -179,6 +187,7 @@ export function settingsPack(sh: ShellState): ContributionPack {
           { id: "thinkingOpen", title: "推理默认展开", keywords: ["思考"] },
           { id: "toolsAutoCollapse", title: "工具步骤结束后收起" },
           { id: "showContext", title: "显示上下文注入" },
+          { id: "followups", title: "建议追问", keywords: ["推荐", "followup"] },
         ],
         render: () => <Appearance sh={sh} />,
       });

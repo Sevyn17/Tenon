@@ -12,6 +12,7 @@ export const COMMANDS = [
   "session.delete",
   "feedback.set",
   "feedback.list",
+  "session.followups",
   "session.get",
   "session.subscribe",
   "session.unsubscribe",
@@ -51,6 +52,7 @@ export interface CommandMap {
   "session.delete": [W.SessionArgs, W.Empty];
   "feedback.set": [W.FeedbackArgs, W.Feedback];
   "feedback.list": [W.SessionArgs, W.FeedbackListResult];
+  "session.followups": [W.FollowupsArgs, W.FollowupsResult];
   "session.get": [W.SessionArgs, W.SessionSnapshot];
   "session.subscribe": [W.SubscribeArgs, W.Empty];
   "session.unsubscribe": [W.SessionArgs, W.Empty];

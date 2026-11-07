@@ -84,6 +84,9 @@ type Models interface {
 	Check(id string) error
 }
 
+// Followups 按一个回合的输入与回答生成建议追问（模型侧调用）；model 是会话的模型。
+type Followups func(ctx context.Context, model, input, answer string) ([]string, error)
+
 // Files 列工作区文件（fs 插件的 ListFiles 适配）：遵守 .gitignore，只读，不出工作目录。
 type Files func(ctx context.Context, query string, limit int) ([]wire.FileInfo, bool, error)
 

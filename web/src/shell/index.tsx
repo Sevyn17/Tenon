@@ -272,6 +272,14 @@ function shellPack(sh: ShellState): ContributionPack {
     title: "工作台",
     builtin: true,
     setup(ctx) {
+      // 回合尾巴的建议追问（session.followups）：后端用会话模型生成，按回合缓存；偏好里可关。
+      ctx.add(sh.reg.followups, {
+        id: "model",
+        suggest: async (x) => {
+          if (!x.session || !x.client.can("followups") || !sh.prefs.get().followups) return [];
+          return (await x.client.call("session.followups", { session: x.session, turn: x.turn })).items;
+        },
+      });
       const cmd = (c: Parameters<typeof sh.reg.commands.add>[0]) => ctx.add(sh.reg.commands, c);
       cmd({
         id: "shell.toggleSidebar",

@@ -428,6 +428,16 @@ export interface FeedbackListResult {
   items: Feedback[];
 }
 
+export interface FollowupsArgs {
+  session: string;
+  turn?: number;
+}
+
+export interface FollowupsResult {
+  turn: number;
+  items: string[];
+}
+
 export interface CreateArgs {
   session?: string;
   definition?: string;

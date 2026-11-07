@@ -103,7 +103,7 @@ export function Working({ startedAt, step, label, onStop }: { startedAt: number;
 export function Followups({ items, onPick }: { items: string[]; onPick: (t: string) => void }) {
   if (items.length === 0) return null;
   return (
-    <div className={s.followups}>
+    <div className={s.followups} role="group" aria-label="建议追问">
       {items.map((t) => (
         <button key={t} type="button" className={s.followup} onClick={() => onPick(t)}>
           {t}

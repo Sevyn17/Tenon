@@ -211,6 +211,7 @@ func (r *Runtime) BuildApp(o AppOptions) (*Built, error) {
 	root := r.Root
 	ao.Profiles = Profiles{Extra: r.ExtraProfile, Root: root, Trusted: r.Trusted}
 	ao.Models = ModelList{M: rt.Models}
+	ao.Followups = FollowupsFrom(rt.Models)
 	ao.Upload = o.Upload
 	ao.Files = func(ctx context.Context, q string, limit int) ([]wire.FileInfo, bool, error) { // 界面 @ 文件（workspace.files）
 		hits, trunc, err := fs.ListFiles(ctx, root, q, limit, MaxScanFiles)

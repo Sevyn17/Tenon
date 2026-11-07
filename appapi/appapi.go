@@ -51,6 +51,8 @@ type Options struct {
 	Models Models
 	// Profiles 可写的 profile 层（plugins.set）；nil = 只读（plugins.set 返回 unsupported）。
 	Profiles Profiles
+	// Followups 生成建议追问（session.followups）；nil = 不提供。
+	Followups Followups
 	// Files 列工作区文件（workspace.files，界面 @ 文件用）；nil = 不提供。
 	Files Files
 	// Upload 传输层挂了 UploadHandler（HTTP 上传大附件）：hello 的能力清单带 upload。
@@ -61,9 +63,10 @@ type Options struct {
 
 // App 一个进程一个：持有装配结果，对外提供命令与事件。方法并发安全。
 type App struct {
-	o       Options
-	streams sync.Map // 会话 id → *streamer
-	lives   sync.Map // 会话 id → *liveState（protocol 2 分段流式与快照 live，stream2.go）
+	o         Options
+	streams   sync.Map // 会话 id → *streamer
+	lives     sync.Map // 会话 id → *liveState（protocol 2 分段流式与快照 live，stream2.go）
+	followups followupCache
 }
 
 // New 构造 App：把 DB 的提交事件接到总线（Follow 的实时部分）；包一层 Host.Hooks

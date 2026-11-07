@@ -147,7 +147,7 @@ function statsOf(t: Turn): TurnStats | undefined {
 }
 
 /** 后续建议：只问最后一个已结束的回合（FollowupProvider 注册表合并、去重，最多 4 条）；回合中或没有来源时为空。 */
-function useFollowups(session: string, turn: number | null): string[] {
+function useFollowups(session: string, turn: number | null, sig = ""): string[] {
   const sh = useShell();
   const providers = useRegistry(sh.reg.followups);
   const [items, setItems] = useState<string[]>([]);
@@ -172,7 +172,7 @@ function useFollowups(session: string, turn: number | null): string[] {
     return () => {
       live = false;
     };
-  }, [providers, session, turn, sh]);
+  }, [providers, session, turn, sig, sh]);
   return items;
 }
 
@@ -338,7 +338,8 @@ function Conversation({ id }: { id: string }) {
   const chainTakeover = useChainSlot("composer.takeover", { session: id });
   const lastIndex = turns.length - 1;
   const lastDone = turns.length && !turns[lastIndex].live && st.runState !== "running" ? turns[lastIndex].turn : null;
-  const followups = useFollowups(id, lastDone);
+  // 签名：回合结束事件可能先于最后一条助手条目到达，条目数变了再问一次。
+  const followups = useFollowups(id, lastDone, lastDone === null ? "" : String(turns[lastIndex].entries.length));
   // 已结束回合只在这些变了时重渲染（其余靠回合自身内容的签名）。
   const revision = useMemo(
     () => ({ showContext: prefs.showContext, actions, renderers, lastEnd: st.lastEnd, followups, entryRs }),

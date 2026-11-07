@@ -17,6 +17,8 @@ export interface Prefs {
   toolsAutoCollapse: boolean;
   /** 显示上下文注入条目。 */
   showContext: boolean;
+  /** 回合结束后给建议追问（后端每回合多一次模型调用）。 */
+  followups: boolean;
   /** 回合完成 / 需要确认时提醒（窗口在后台时）。 */
   notify: "never" | "background" | "always";
   /** 快捷键改绑：命令 id → 快捷键（"" = 解绑）。 */
@@ -43,6 +45,7 @@ export const DEFAULT_PREFS: Prefs = {
   thinkingOpen: false,
   toolsAutoCollapse: true,
   showContext: false,
+  followups: true,
   notify: "background",
   keybinds: {},
   disabledPacks: [],

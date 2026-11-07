@@ -265,3 +265,38 @@ func TestV2Feedback(t *testing.T) {
 		t.Fatalf("viewer 能看：%v", err)
 	}
 }
+
+// session.followups：取最后结束回合的输入与回答，结果按回合缓存；未装配 unsupported。
+func TestV2Followups(t *testing.T) {
+	app := newApp(t)
+	_, e := call2(t, app, "session.followups", `{"session":"x"}`)
+	wantCode(t, e, wire.CodeUnsupported, "")
+	calls := 0
+	var gotIn, gotAns string
+	app.o.Followups = func(_ context.Context, model, input, answer string) ([]string, error) {
+		calls++
+		gotIn, gotAns = input, answer
+		return []string{"再说说 " + input}, nil
+	}
+	if _, e := call2(t, app, "session.create", `{"session":"fu"}`); e != nil {
+		t.Fatal(e)
+	}
+	out, e := call2(t, app, "session.followups", `{"session":"fu"}`)
+	if e != nil || len(out.(wire.FollowupsResult).Items) != 0 || calls != 0 {
+		t.Fatalf("空会话：%+v %v", out, e)
+	}
+	sendWait(t, app, "fu", "天气", "c1")
+	out, e = call2(t, app, "session.followups", `{"session":"fu"}`)
+	r := out.(wire.FollowupsResult)
+	if e != nil || r.Turn != 1 || len(r.Items) != 1 || r.Items[0] != "再说说 天气" || gotIn != "天气" || gotAns != "re:天气" {
+		t.Fatalf("结果：%+v %v in=%q ans=%q", r, e, gotIn, gotAns)
+	}
+	if _, e := call2(t, app, "session.followups", `{"session":"fu","turn":1}`); e != nil || calls != 1 {
+		t.Fatalf("同一回合应走缓存：calls=%d %v", calls, e)
+	}
+	sendWait(t, app, "fu", "明天", "c2")
+	out, _ = call2(t, app, "session.followups", `{"session":"fu"}`)
+	if r := out.(wire.FollowupsResult); r.Turn != 2 || calls != 2 || r.Items[0] != "再说说 明天" {
+		t.Fatalf("新回合：%+v calls=%d", r, calls)
+	}
+}
