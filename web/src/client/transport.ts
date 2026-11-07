@@ -89,8 +89,15 @@ interface Pending {
   reject(e: unknown): void;
 }
 
-/** WebSocket 传输。断线后按退避自动重连（1s 起，最多 10s）。 */
-export function wsTransport(url: string): Transport {
+/** 心跳间隔：每隔这么久发一次 {"ping":n}（服务端 HeartbeatInterval 同值；服务端 60 s 收不到任何帧就断开）。 */
+export const HEARTBEAT_MS = 25_000;
+/** 发出心跳后这么久没收到任何帧，判定连接已死（电脑休眠、网络切换留下的半开连接），主动关掉走重连。 */
+export const HEARTBEAT_TIMEOUT_MS = 10_000;
+
+/** WebSocket 传输。断线后按退避自动重连（1s 起，最多 10s）；心跳见 HEARTBEAT_MS。 */
+export function wsTransport(url: string, opts: { heartbeatMs?: number; heartbeatTimeoutMs?: number } = {}): Transport {
+  const beatMs = opts.heartbeatMs ?? HEARTBEAT_MS;
+  const beatTimeoutMs = opts.heartbeatTimeoutMs ?? HEARTBEAT_TIMEOUT_MS;
   let ws: WebSocket | null = null;
   let open: Promise<WebSocket> | null = null;
   let seq = 0;
@@ -100,6 +107,26 @@ export function wsTransport(url: string): Transport {
   let emit: Listener = () => {};
   let setState: (s: ConnectionState) => void = () => {};
   const pending = new Map<string, Pending>();
+  let beat: ReturnType<typeof setInterval> | undefined;
+  let deadline: ReturnType<typeof setTimeout> | undefined;
+  const stopBeat = () => {
+    clearInterval(beat);
+    clearTimeout(deadline);
+    beat = deadline = undefined;
+  };
+  // 收到任何帧都算活着：取消等 pong 的计时。
+  const alive = () => {
+    clearTimeout(deadline);
+    deadline = undefined;
+  };
+  const startBeat = (s: WebSocket) => {
+    stopBeat();
+    beat = setInterval(() => {
+      if (s.readyState !== WebSocket.OPEN) return;
+      s.send(JSON.stringify({ ping: ++seq }));
+      if (deadline === undefined) deadline = setTimeout(() => s.close(), beatTimeoutMs);
+    }, beatMs);
+  };
 
   const connect = (): Promise<WebSocket> => {
     if (closed) return Promise.reject(new ApiError({ code: "internal", message: "连接已关闭", retry: false }));
@@ -109,6 +136,7 @@ export function wsTransport(url: string): Transport {
       s.onopen = () => {
         ws = s;
         delay = 1000;
+        startBeat(s);
         resolve(s);
         setState("open");
         if (everOpen) emit(local(LOCAL_RECONNECTED)); // 新连接上没有订阅：通知订阅方重新订阅
@@ -116,6 +144,7 @@ export function wsTransport(url: string): Transport {
       };
       s.onerror = () => reject(new ApiError({ code: "internal", message: "WebSocket 连接失败", retry: true }));
       s.onclose = () => {
+        stopBeat();
         ws = null;
         open = null;
         for (const p of pending.values()) p.reject(new ApiError({ code: "internal", message: "连接已断开", retry: true }));
@@ -129,6 +158,7 @@ export function wsTransport(url: string): Transport {
         delay = Math.min(delay * 2, 10000);
       };
       s.onmessage = (m) => {
+        alive();
         let f: { id?: string; ok?: boolean; result?: unknown; error?: ProtocolError; event?: Envelope };
         try {
           f = JSON.parse(String(m.data));

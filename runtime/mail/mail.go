@@ -100,17 +100,17 @@ func (o Origin) Trusted() bool { return o != OriginExternal }
 
 // Envelope 一封信封。内核字段由投递方写入，见 11 的信封表。
 type Envelope struct {
-	ID        string    `json:"id"`
-	From      Address   `json:"from"`
-	Via       string    `json:"via,omitempty"` // 组件转发时的发送组件名（人仍是 from）
-	To        Address   `json:"to"`
-	Kind      Kind      `json:"kind"`
-	Mode      Mode      `json:"mode"`
-	Key       string    `json:"key,omitempty"` // 会话键，只对 agent: 有效
-	Corr      string    `json:"corr,omitempty"`
-	Trace     string    `json:"trace,omitempty"`
-	Hop       int       `json:"hop,omitempty"`
-	Origin    Origin    `json:"origin"`
+	ID     string  `json:"id"`
+	From   Address `json:"from"`
+	Via    string  `json:"via,omitempty"` // 组件转发时的发送组件名（人仍是 from）
+	To     Address `json:"to"`
+	Kind   Kind    `json:"kind"`
+	Mode   Mode    `json:"mode"`
+	Key    string  `json:"key,omitempty"` // 会话键，只对 agent: 有效
+	Corr   string  `json:"corr,omitempty"`
+	Trace  string  `json:"trace,omitempty"`
+	Hop    int     `json:"hop,omitempty"`
+	Origin Origin  `json:"origin"`
 	// Caps 授权工具范围：nil = 不限，空集 = 一个都不许（不能用 omitempty，否则空集落库后变成不限）。
 	Caps      []string  `json:"caps"`
 	BudgetRef string    `json:"budget_ref,omitempty"`

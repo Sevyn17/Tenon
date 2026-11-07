@@ -3,6 +3,9 @@
 # 改动包的 -race。不需要网络与 API key。用法：在 kernel/ 下运行 `bash scripts/ci.sh`。
 set -euo pipefail
 cd "$(dirname "$0")/.."
+echo "== gofmt"
+bad=$(gofmt -l . ../client)
+if [ -n "$bad" ]; then echo "未 gofmt：$bad"; exit 1; fi
 echo "== go vet"
 go vet ./...
 echo "== go test"

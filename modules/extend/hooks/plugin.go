@@ -43,8 +43,8 @@ func (p *plug) Setup(cx *component.Registrar) error {
 		return err
 	}
 	var cs []Config
-	if home, err := os.UserHomeDir(); err == nil {
-		c, err := LoadConfig(filepath.Join(home, ".tenon", "hooks.toml"))
+	if home := userHome(); home != "" {
+		c, err := LoadConfig(filepath.Join(home, "hooks.toml"))
 		if err != nil {
 			return err
 		}
@@ -109,4 +109,15 @@ func (p *plug) Start(sc *component.Scope) error {
 		return nil
 	})
 	return nil
+}
+
+// userHome 用户全局目录：$TENON_HOME 或 ~/.tenon；取不到返回空（与权限、技能、指令组件同一约定）。
+func userHome() string {
+	if h := os.Getenv("TENON_HOME"); h != "" {
+		return h
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		return filepath.Join(home, ".tenon")
+	}
+	return ""
 }

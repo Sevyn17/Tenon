@@ -126,23 +126,23 @@ type Settings struct {
 
 // Interaction 一次等人回答（10.6）。
 type Interaction struct {
-	ID         string    `json:"id"`
-	Session    string    `json:"session"`
-	Turn       uint32    `json:"turn,omitempty"`
-	Kind       string    `json:"kind"` // approval / question / choice / form / confirm，或插件自定义
-	Title      string    `json:"title"`
-	Approval   *Approval `json:"approval,omitempty"`
-	Question   *Question `json:"question,omitempty"`
-	Choice     *Choice   `json:"choice,omitempty"`
-	Form       *Form     `json:"form,omitempty"`
-	Confirm    *Confirm  `json:"confirm,omitempty"`
+	ID       string    `json:"id"`
+	Session  string    `json:"session"`
+	Turn     uint32    `json:"turn,omitempty"`
+	Kind     string    `json:"kind"` // approval / question / choice / form / confirm，或插件自定义
+	Title    string    `json:"title"`
+	Approval *Approval `json:"approval,omitempty"`
+	Question *Question `json:"question,omitempty"`
+	Choice   *Choice   `json:"choice,omitempty"`
+	Form     *Form     `json:"form,omitempty"`
+	Confirm  *Confirm  `json:"confirm,omitempty"`
 	// Schema 回答（response.value）须满足的 JSON Schema；form 必有，插件自定义 kind 可给。
 	Schema json.RawMessage `json:"schema,omitempty"`
 	// Blocking 智能体是否停下来等（true：接管输入框；false：内联在消息流里，不挡输入）。缺省 true。
 	Blocking   *bool    `json:"blocking,omitempty"`
 	Responders []string `json:"responders"`
-	Deadline   int64     `json:"deadline,omitempty"`
-	OpenedAt   int64     `json:"opened_at"`
+	Deadline   int64    `json:"deadline,omitempty"`
+	OpenedAt   int64    `json:"opened_at"`
 }
 
 // Approval 工具确认的内容。

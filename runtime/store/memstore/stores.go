@@ -231,4 +231,3 @@ func (s *Store) PendConfirm(ctx context.Context, sessionID, callID, argsHash str
 	return s.insertTool(store.ToolRecord{SessionID: sessionID, CallID: callID, Status: store.ToolPending,
 		Kind: "confirm", ArgsHash: argsHash, Deadline: deadline})
 }
-

@@ -3,8 +3,8 @@ package shell
 import (
 	"context"
 	"encoding/json"
-	"path/filepath"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"

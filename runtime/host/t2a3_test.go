@@ -216,7 +216,10 @@ func TestSuspendDuringBacklog(t *testing.T) {
 	}
 	done := make(chan error, 1)
 	go func() { done <- r.h.Suspend(ctx, "s1", "budget") }()
-	waitFor(t, func() bool { return len(hd.a.in) > 0 }) // Suspend 已进队列（原先固定睡 50ms，负载高时不够）
+	// 等 Suspend 进队列：积压的三条 Send 各往同一队列放了一个唤醒命令（模型卡在 gate，回合中没人取），
+	// 所以要等到 4 个，不能只看非空——原先 len>0 在 Suspend 入队前就成立，gate 先放开时积压会开新回合
+	// （2026-11-07：CI 全量并行下偶发 calls=3）。
+	waitFor(t, func() bool { return len(hd.a.in) >= 4 })
 	close(m.gate)
 	select {
 	case err := <-done:
