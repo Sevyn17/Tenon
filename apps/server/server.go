@@ -108,6 +108,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch r.URL.Path {
 	case "/ws", "/api": // /api 是前端 transport.ts 的缺省路径
 		s.serveWS(w, r)
+	case appapi.UploadPath: // 大附件上传（06 10.9）：与 WebSocket 一样要令牌与同源 Origin
+		s.serveUpload(w, r)
 	default:
 		s.serveStatic(w, r)
 	}
@@ -178,6 +180,18 @@ func (s *Server) originOK(r *http.Request) bool {
 		return false
 	}
 	return strings.EqualFold(u.Host, r.Host)
+}
+
+func (s *Server) serveUpload(w http.ResponseWriter, r *http.Request) {
+	if ok, _ := s.authorized(r); !ok {
+		deny(w, http.StatusUnauthorized, "令牌错误或缺失")
+		return
+	}
+	if !s.originOK(r) { // 防跨站表单提交（cookie 是 SameSite=Strict，这里再挡一层）
+		deny(w, http.StatusForbidden, "Origin 与 Host 不同源")
+		return
+	}
+	s.cfg.API.UploadHandler().ServeHTTP(w, r)
 }
 
 func (s *Server) serveWS(w http.ResponseWriter, r *http.Request) {

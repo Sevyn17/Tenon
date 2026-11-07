@@ -53,6 +53,8 @@ type Options struct {
 	Profiles Profiles
 	// Files 列工作区文件（workspace.files，界面 @ 文件用）；nil = 不提供。
 	Files Files
+	// Upload 传输层挂了 UploadHandler（HTTP 上传大附件）：hello 的能力清单带 upload。
+	Upload bool
 	// Cleaners 删除会话时依次调用的插件清理回调（on_session_delete 点位）；可空。
 	Cleaners []store.Cleaner
 }

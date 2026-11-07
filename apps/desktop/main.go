@@ -48,7 +48,7 @@ func run(f boot.Flags) error {
 		return err
 	}
 	defer rt.Close()
-	built, err := rt.BuildApp(boot.AppOptions{MaxSteps: f.MaxSteps, UI: ui, ModesWorkdir: f.Workdir})
+	built, err := rt.BuildApp(boot.AppOptions{MaxSteps: f.MaxSteps, UI: ui, ModesWorkdir: f.Workdir, Upload: true})
 	if err != nil {
 		return err
 	}
@@ -63,10 +63,11 @@ func run(f boot.Flags) error {
 		Name:        "YBase",
 		Description: "YBase 桌面端",
 		Services:    []application.Service{application.NewService(svc)},
-		Assets:      application.AssetOptions{Handler: application.AssetFileServerFS(web.Dist()), DisableLogging: true},
-		LogLevel:    slog.LevelWarn,
-		Windows:     application.WindowsOptions{},
-		OnShutdown:  svc.StopEvents,
+		Assets: application.AssetOptions{Handler: application.AssetFileServerFS(web.Dist()), DisableLogging: true,
+			Middleware: uploadMiddleware(built.API)},
+		LogLevel:   slog.LevelWarn,
+		Windows:    application.WindowsOptions{},
+		OnShutdown: svc.StopEvents,
 	})
 	app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Title: "YBase — " + rt.Root, Width: 1280, Height: 820, MinWidth: 800, MinHeight: 500, URL: "/",

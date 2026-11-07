@@ -167,6 +167,8 @@ type AppOptions struct {
 	UI *appapi.UI
 	// ModesWorkdir 项目档位确认记录（trust.toml）用的目录；CLI 沿用 -dir 原值。
 	ModesWorkdir string
+	// Upload 传输层会挂 appapi.UploadHandler（网页服务、桌面端）：hello 报 upload 能力。
+	Upload bool
 }
 
 // Built BuildApp 的结果。
@@ -209,6 +211,7 @@ func (r *Runtime) BuildApp(o AppOptions) (*Built, error) {
 	root := r.Root
 	ao.Profiles = Profiles{Extra: r.ExtraProfile, Root: root, Trusted: r.Trusted}
 	ao.Models = ModelList{M: rt.Models}
+	ao.Upload = o.Upload
 	ao.Files = func(ctx context.Context, q string, limit int) ([]wire.FileInfo, bool, error) { // 界面 @ 文件（workspace.files）
 		hits, trunc, err := fs.ListFiles(ctx, root, q, limit, MaxScanFiles)
 		out := make([]wire.FileInfo, len(hits))

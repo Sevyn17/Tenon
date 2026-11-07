@@ -6,8 +6,10 @@ import type { Part } from "../../client";
 import type { Attachment, MentionItem, UIEntry } from "../../ui";
 import { useCommandContext, useRegistry, useShell, whenState } from "../context";
 
-/** artifact.put 单次上限（appapi.MaxArtifactPut = 2 MiB）；更大的文件要走 HTTP 上传，首版直接提示。 */
+/** artifact.put 单次上限（appapi.MaxArtifactPut = 2 MiB）；更大的走 HTTP 上传（能力 upload），上限 MAX_UPLOAD。 */
 export const MAX_ATTACHMENT = 2 << 20;
+/** HTTP 上传的单文件上限（appapi.MaxUpload = 64 MiB）。 */
+export const MAX_UPLOAD = 64 << 20;
 
 interface Held extends Attachment {
   part?: Part;
@@ -36,17 +38,28 @@ export function useAttachments(session: string) {
         const id = `att${++seq.current}`;
         const mime = f.type || "application/octet-stream";
         const base: Held = { id, name: f.name || "粘贴的文件", mime, size: f.size, state: "uploading" };
-        if (f.size > MAX_ATTACHMENT) {
-          setItems((xs) => [...xs, { ...base, state: "failed", error: `超过 ${MAX_ATTACHMENT >> 20} MiB 上限` }]);
+        const big = f.size > MAX_ATTACHMENT;
+        const limit = sh.client.can("upload") ? MAX_UPLOAD : MAX_ATTACHMENT;
+        if (f.size > limit) {
+          setItems((xs) => [...xs, { ...base, state: "failed", error: `超过 ${limit >> 20} MiB 上限` }]);
           continue;
         }
         setItems((xs) => [...xs, base]);
         void (async () => {
           try {
-            const url = await readDataURL(f);
-            if (mime.startsWith("image/")) patch(id, (a) => ({ ...a, preview: url }));
-            const r = await sh.client.call("artifact.put", { session, mime, base64: url.slice(url.indexOf(",") + 1) });
-            patch(id, (a) => ({ ...a, state: "ready", part: { kind: "media", media: { ref: r.ref, mime, size: f.size } } }));
+            let ref: string;
+            if (big) {
+              if (mime.startsWith("image/") && f.size <= 8 * MAX_ATTACHMENT) {
+                const url = await readDataURL(f);
+                patch(id, (a) => ({ ...a, preview: url }));
+              }
+              ref = await sh.client.upload(session, f);
+            } else {
+              const url = await readDataURL(f);
+              if (mime.startsWith("image/")) patch(id, (a) => ({ ...a, preview: url }));
+              ref = (await sh.client.call("artifact.put", { session, mime, base64: url.slice(url.indexOf(",") + 1) })).ref;
+            }
+            patch(id, (a) => ({ ...a, state: "ready", part: { kind: "media", media: { ref, mime, size: f.size } } }));
           } catch (e) {
             patch(id, (a) => ({ ...a, state: "failed", error: e instanceof Error ? e.message : String(e) }));
           }

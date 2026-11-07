@@ -7,7 +7,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
+	"net/url"
+	"strings"
 	"sync"
+
+	"github.com/wailsapp/wails/v3/pkg/application"
 
 	"ybase/appapi"
 	"ybase/appapi/wire"
@@ -105,5 +110,26 @@ func (s *Service) StopEvents() {
 	}
 	if c != nil {
 		c.Close()
+	}
+}
+
+// uploadMiddleware 资源服务器上挂 HTTP 上传（appapi.UploadPath，06 10.9）：只服务本窗口的 webview，
+// 不监听端口；带 Origin 时必须与请求同源（挡住别的页面借浏览器提交）。
+func uploadMiddleware(api *appapi.App) application.Middleware {
+	up := api.UploadHandler()
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path != appapi.UploadPath {
+				next.ServeHTTP(w, r)
+				return
+			}
+			if o := r.Header.Get("Origin"); o != "" {
+				if u, err := url.Parse(o); err != nil || !strings.EqualFold(u.Host, r.Host) {
+					http.Error(w, "Origin 与 Host 不同源", http.StatusForbidden)
+					return
+				}
+			}
+			up.ServeHTTP(w, r)
+		})
 	}
 }

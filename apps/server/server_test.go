@@ -42,7 +42,7 @@ func (fakeModel) Stream(_ context.Context, req session.Request, onText func(stri
 	return session.AssistantItem{Content: session.Content{session.NewTextPart(out)}}, session.StopReason{V: "stop"}, nil
 }
 
-func newTestApp(t *testing.T) *appapi.App {
+func newTestApp(t *testing.T, opts ...func(*appapi.Options)) *appapi.App {
 	t.Helper()
 	ctx := context.Background()
 	db, err := sqlite.Open(ctx, filepath.Join(t.TempDir(), "s.db"), sqlite.Options{})
@@ -59,7 +59,11 @@ func newTestApp(t *testing.T) *appapi.App {
 		cfg := &session.Config{Model: "m", Tools: hub.Exposed(hub.SpecsFor(nil, 0)), Policy: session.DefaultPolicy()}
 		return a, cfg, nil
 	}
-	app, err = appapi.New(appapi.Options{Host: h, Bus: b, DB: db, Model: "m", Workdir: "w", UI: appapi.NewUI(b)})
+	o := appapi.Options{Host: h, Bus: b, DB: db, Model: "m", Workdir: "w", UI: appapi.NewUI(b)}
+	for _, f := range opts {
+		f(&o)
+	}
+	app, err = appapi.New(o)
 	if err != nil {
 		t.Fatal(err)
 	}

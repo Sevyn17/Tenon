@@ -213,6 +213,9 @@ func (v *App) capabilities() []string {
 	if o.Models != nil {
 		out = append(out, "models")
 	}
+	if o.Upload && o.Artifacts != nil {
+		out = append(out, "upload")
+	}
 	return out
 }
 

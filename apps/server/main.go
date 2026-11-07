@@ -125,7 +125,7 @@ func run(o options) error {
 		return err
 	}
 	defer rt.Close()
-	built, err := rt.BuildApp(boot.AppOptions{MaxSteps: o.boot.MaxSteps, UI: ui, ModesWorkdir: o.boot.Workdir})
+	built, err := rt.BuildApp(boot.AppOptions{MaxSteps: o.boot.MaxSteps, UI: ui, ModesWorkdir: o.boot.Workdir, Upload: true})
 	if err != nil {
 		return err
 	}
