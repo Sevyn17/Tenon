@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # M4 验收（真实 DeepSeek）：等确认时杀进程，重启后仍在等；批准后按原调用执行一次。
-# 用法：bash scripts/accept_m4.sh（在 kernel/ 下执行；key 读自 kernel/.env，不回显）
+# 用法：bash scripts/accept_m4.sh（在 framework/ 下执行；key 读自 framework/.env，不回显）
 set -u
 cd "$(dirname "$0")/.."
 set -a; . ./.env; set +a
-go build -o /tmp/tenon-m4.exe ./apps/tenon || exit 1
+go build -C ../client -o /tmp/tenon-m4.exe ./tenon || exit 1
 W=$(mktemp -d)
 echo hello > "$W/a.txt"
 ARGS=(-base https://api.deepseek.com/v1 -model deepseek-chat -dir "$W" -mode ask)

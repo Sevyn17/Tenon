@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # M6 验收（真实 DeepSeek）：沙箱拒越界写；接一个真实 MCP server；子智能体完成一次委派。
-# 用法：bash scripts/accept_m6.sh（在 kernel/ 下执行；key 读自 kernel/.env，不回显）
+# 用法：bash scripts/accept_m6.sh（在 framework/ 下执行；key 读自 framework/.env，不回显）
 set -u
 cd "$(dirname "$0")/.."
 set -a; . ./.env; set +a
-go build -o /tmp/tenon-m6.exe ./apps/tenon || exit 1
+go build -C ../client -o /tmp/tenon-m6.exe ./tenon || exit 1
 W=$(mktemp -d)
 mkdir -p "$W/ws/.tenon"
 printf 'hello from workspace\n' > "$W/ws/note.txt"

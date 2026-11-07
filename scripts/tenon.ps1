@@ -1,6 +1,6 @@
-﻿# 启动 tenon：读 kernel/.env 里的 key，再在指定目录里开会话。
+﻿# 启动 tenon：读 framework/.env 里的 key，再在指定目录里开会话。
 # 用法（PowerShell）：
-#   & "<Tenon>\kernel\scripts\tenon.ps1" -Dir D:\某项目 [-Session 名字] [-Model deepseek-flash] [其它 tenon 参数]
+#   & "<Tenon>\framework\scripts\tenon.ps1" -Dir D:\某项目 [-Session 名字] [-Model deepseek-flash] [其它 tenon 参数]
 param(
   [string]$Dir = (Get-Location).Path,
   [string]$Session = "default",
@@ -19,7 +19,7 @@ Remove-Item env:TENON_BASE_URL, env:TENON_MODEL -ErrorAction SilentlyContinue
 # 会以 Low 完整性启动，连 .tenon 都建不了。每次启动先重新编译，保证用的是最新代码。
 $exe = Join-Path $env:LOCALAPPDATA "tenon\tenon.exe"
 Push-Location $kernel
-go build -o $exe ./apps/tenon
+go build -C ../client -o $exe ./tenon
 $ok = $LASTEXITCODE -eq 0
 Pop-Location
 if (-not $ok) { Write-Error "编译失败"; exit 1 }

@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # P0 退出判据 1 验收：在 kernel/ 副本里注入一个真实 bug，用缺省档位（auto，不加 -yes）让真实 DeepSeek 找出并修好。
-# 用法：bash scripts/accept_p0.sh（在 kernel/ 下执行；key 读自 kernel/.env，不回显）
+# 用法：bash scripts/accept_p0.sh（在 framework/ 下执行；key 读自 framework/.env，不回显）
 set -u
 cd "$(dirname "$0")/.."
 set -a; . ./.env; set +a
 export DEEPSEEK_API_KEY="${DEEPSEEK_API_KEY:-$TENON_API_KEY}"
 unset TENON_BASE_URL TENON_MODEL
 EXE="$LOCALAPPDATA/tenon/tenon.exe"
-go build -o "$EXE" ./apps/tenon || exit 1
+go build -C ../client -o "$EXE" ./tenon || exit 1
 W=$(mktemp -d)
 cp -r . "$W/k"; rm -rf "$W/k/.tenon" "$W/k/bin" "$W/k/.env"
 cd "$W/k" || exit 1

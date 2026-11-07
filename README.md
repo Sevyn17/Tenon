@@ -1,11 +1,11 @@
 # Tenon
 
-Go 智能体框架（Go 模块 `tenon`）。运行时（`runtime/`）只提供机制：会话、信封、检查点、崩溃恢复、守卫；工具、权限、沙箱、提示词等能力由标准模块（`modules/`）的组件提供，应用经 SDK（模块根 `package tenon`）或 profile 装配。CLI、桌面端、网页服务在 `apps/`。
+Go 智能体框架（Go 模块 `tenon`）。运行时（`runtime/`）只提供机制：会话、信封、检查点、崩溃恢复、守卫；工具、权限、沙箱、提示词等能力由标准模块（`modules/`）的组件提供，应用经 SDK（模块根 `package tenon`）或 profile 装配。CLI、桌面端、网页服务在 `client/`。
 
 ## 运行
 
 ```powershell
-# 推荐：加载 kernel/.env 中的 DEEPSEEK_API_KEY，编译到 %LOCALAPPDATA%\tenon 后启动
+# 推荐：加载 framework/.env 中的 DEEPSEEK_API_KEY，编译到 %LOCALAPPDATA%\tenon 后启动
 ./scripts/tenon.ps1 -dir D:\Code
 ```
 

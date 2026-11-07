@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # M5 验收（真实 DeepSeek）：在本仓库 kernel/ 的副本上用 tenon 完成 3 个真实小任务。
-# 用法：bash scripts/accept_m5.sh（在 kernel/ 下执行；key 读自 kernel/.env，不回显）
+# 用法：bash scripts/accept_m5.sh（在 framework/ 下执行；key 读自 framework/.env，不回显）
 # 每个任务一次进程：发出任务后立刻 /exit（回合结束后才退出），同一会话续聊。
 set -u
 cd "$(dirname "$0")/.."
 set -a; . ./.env; set +a
-go build -o /tmp/tenon-m5.exe ./apps/tenon || exit 1
+go build -C ../client -o /tmp/tenon-m5.exe ./tenon || exit 1
 W=$(mktemp -d)
 cp -r . "$W/kernel"; rm -rf "$W/kernel/.tenon" "$W/kernel/.env"
 cd "$W/kernel" && git init -q . && cd - >/dev/null

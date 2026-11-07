@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # M7 冒烟：同一 DeepSeek 账号的三种协议（chat completions / responses / anthropic）各跑一个多步工具任务。
-# 用法：bash scripts/smoke_protocols.sh [model]（在 kernel/ 下执行；key 读自 kernel/.env，不回显）
+# 用法：bash scripts/smoke_protocols.sh [model]（在 framework/ 下执行；key 读自 framework/.env，不回显）
 set -u
 cd "$(dirname "$0")/.."
 set -a; . ./.env; set +a
 export DEEPSEEK_API_KEY="${DEEPSEEK_API_KEY:-$TENON_API_KEY}"
 unset TENON_BASE_URL TENON_MODEL
 M="${1:-deepseek-flash}"
-go build -o /tmp/tenon-m7.exe ./apps/tenon || exit 1
+go build -C ../client -o /tmp/tenon-m7.exe ./tenon || exit 1
 for p in deepseek deepseek-responses deepseek-anthropic; do
   W=$(mktemp -d)
   printf 'hello\n' > "$W/a.txt"

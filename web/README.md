@@ -183,13 +183,13 @@ args = { session = "{{session}}" }
 ## 五、和后端的约定
 
 - 线上类型 `src/client/wire.gen.ts` 由 Go 生成：`go test ./appapi/wire -run TestTypeScript -update`，不要手改。
-- 命令表 `src/client/commands.ts` 的 `COMMANDS` 由 `apps/desktop/service_test.go` 的 `TestProtocolCommands` 校验与服务端一致。
+- 命令表 `src/client/commands.ts` 的 `COMMANDS` 由 `client/desktop/service_test.go` 的 `TestProtocolCommands` 校验与服务端一致。
 - 语义（快照 + 游标、易失事件、交互、错误码）以 [docs/06](<../docs/06 - 应用协议契约.md>) 为准。
 
 ## 六、本地运行
 
 ```bash
-go build -o bin/tenon-server.exe ./apps/server   # 在 kernel/ 下，先 pnpm build，dist/ 会嵌进去
+go build -C ../client -o ../framework/bin/tenon-server.exe ./server   # 在 framework/ 下，先 pnpm build，dist/ 会嵌进去
 bin/tenon-server.exe -addr 127.0.0.1:8765 -dir <工作目录>
 ```
 

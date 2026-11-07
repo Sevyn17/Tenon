@@ -3,11 +3,11 @@
 #   1 缺省档位 workspace：工作区内 edit / shell 写不确认；越界写被沙箱拒，模型申请升权 → 人拒绝 → 文件不存在
 #   2 /mode 切换后重启仍生效
 #   3 ask 档位下“本次会话内都允许”：同一命令第二次不再确认
-# 用法：bash scripts/accept_perm.sh（在 kernel/ 下执行；key 读自 kernel/.env，不回显）
+# 用法：bash scripts/accept_perm.sh（在 framework/ 下执行；key 读自 framework/.env，不回显）
 set -u
 cd "$(dirname "$0")/.."
 set -a; . ./.env; set +a
-go build -o /tmp/tenon-perm.exe ./apps/tenon || exit 1
+go build -C ../client -o /tmp/tenon-perm.exe ./tenon || exit 1
 W=$(mktemp -d)
 mkdir -p "$W/ws"
 printf 'hello\n' > "$W/ws/a.txt"

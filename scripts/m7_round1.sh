@@ -6,7 +6,7 @@ set -a; . ./.env; set +a
 export DEEPSEEK_API_KEY="${DEEPSEEK_API_KEY:-$TENON_API_KEY}"
 unset TENON_BASE_URL TENON_MODEL
 EXE="$LOCALAPPDATA/tenon/tenon.exe"
-go build -o "$EXE" ./apps/tenon || exit 1
+go build -C ../client -o "$EXE" ./tenon || exit 1
 W=$(mktemp -d)
 cp -r . "$W/k"; rm -rf "$W/k/.tenon" "$W/k/bin" "$W/k/.env"
 cd "$W/k" && git init -q && git add -A && git commit -qm base

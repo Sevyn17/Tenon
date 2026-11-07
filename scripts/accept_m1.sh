@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # M1 验收：真实模型（DeepSeek）回合进行中杀进程，重启后续跑。
-# 用法：bash scripts/accept_m1.sh（在 kernel/ 下执行；key 读自 kernel/.env，不回显）
+# 用法：bash scripts/accept_m1.sh（在 framework/ 下执行；key 读自 framework/.env，不回显）
 set -u
 cd "$(dirname "$0")/.."
 set -a; . ./.env; set +a
-go build -o /tmp/tenon-m1.exe ./apps/tenon || exit 1
+go build -C ../client -o /tmp/tenon-m1.exe ./tenon || exit 1
 W=$(mktemp -d)
 echo "workdir=$W"
 
