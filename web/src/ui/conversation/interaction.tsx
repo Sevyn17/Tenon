@@ -1,13 +1,14 @@
-// 交互卡（前端方案第十节）："智能体在等人回答"。按 kind 渲染：approval 工具确认、question 提问，
-// 不认识的 kind 用通用卡（标题 + 原始内容 + 自由回答），不会卡死。
+// 交互卡（前端方案第十节）："智能体在等人回答"。按 kind 渲染：approval 工具确认、question 提问、choice 选择
+// （单选 / 多选）、form 表单（按 schema 生成）、confirm 是否继续；不认识的 kind 用通用卡（标题 + 原始内容 + 自由回答），不会卡死。
 //
 // 键盘：Enter 允许 / 提交、Esc 拒绝、a 本会话允许、数字键选选项；焦点在输入控件里时这些键不被截走。
 // 结束后（answered / expired / voided / 被别处回答）卡片变只读并说明原因，不出现点了没反应的按钮。
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Check, CircleHelp, ShieldAlert, X } from "lucide-react";
+import { Check, CircleHelp, ClipboardList, ListChecks, ShieldAlert, TriangleAlert, X } from "lucide-react";
 import { Button, Kbd, Textarea } from "../controls";
 import { CodeBlock } from "../blocks";
+import { SchemaForm, type FormValue, type JSONSchema } from "../form";
 import { cx } from "../cx";
 import s from "./conversation.module.css";
 import type { UIInteraction, UIResponse } from "./types";
@@ -34,6 +35,14 @@ export interface InteractionCardProps {
   /** 是否抢键盘（卡片接管输入框时为真；消息流里的只读记录为假）。 */
   keyboard?: boolean;
 }
+
+const KIND_ICON: Record<string, ReactNode> = {
+  approval: <ShieldAlert size={16} />,
+  question: <CircleHelp size={16} />,
+  choice: <ListChecks size={16} />,
+  form: <ClipboardList size={16} />,
+  confirm: <TriangleAlert size={16} />,
+};
 
 const OUTCOME_TEXT: Record<string, string> = {
   approved: "已允许",
@@ -79,6 +88,12 @@ export function InteractionCard(p: InteractionCardProps) {
   const [err, setErr] = useState("");
   const [text, setText] = useState("");
   const [denying, setDenying] = useState(false);
+  const [picked, setPicked] = useState<string[]>([]);
+  // 表单初值取 schema 的 default：界面显示的值就是会提交的值（不然开关显示为开、提交时却没有这个键）。
+  const [form, setForm] = useState<FormValue>(() => {
+    const props = (it.schema as JSONSchema | undefined)?.properties ?? {};
+    return Object.fromEntries(Object.entries(props).filter(([, v]) => v.default !== undefined).map(([k, v]) => [k, v.default]));
+  });
   const left = useCountdown(it.deadline);
   const root = useRef<HTMLDivElement>(null);
   const done = p.done;
@@ -128,6 +143,21 @@ export function InteractionCard(p: InteractionCardProps) {
           e.preventDefault();
           void answer({ text: opts[n - 1] });
         }
+      } else if (it.kind === "choice" && !typing && !it.choice?.multiple) {
+        const opts = it.choice?.options ?? [];
+        const n = Number(e.key);
+        if (n >= 1 && n <= opts.length) {
+          e.preventDefault();
+          void answer({ value: opts[n - 1].id });
+        }
+      } else if (it.kind === "confirm" && !typing) {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          void answer({ approve: true });
+        } else if (e.key === "Escape") {
+          e.preventDefault();
+          void answer({ approve: false });
+        }
       }
     };
     window.addEventListener("keydown", onKey);
@@ -137,7 +167,7 @@ export function InteractionCard(p: InteractionCardProps) {
 
   const head = (
     <div className={s.icardHead}>
-      <span className={s.icardHeadIcon}>{it.kind === "approval" ? <ShieldAlert size={16} /> : <CircleHelp size={16} />}</span>
+      <span className={s.icardHeadIcon}>{KIND_ICON[it.kind] ?? <CircleHelp size={16} />}</span>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div>{it.kind === "approval" ? `需要确认：${it.approval?.tool ?? it.title}` : it.title}</div>
         <div className={s.icardSub}>
@@ -263,6 +293,78 @@ export function InteractionCard(p: InteractionCardProps) {
         提交
       </Button>
     );
+  } else if (!body && it.kind === "choice" && it.choice) {
+    const c = it.choice;
+    const multi = !!c.multiple;
+    const toggle = (id: string) => setPicked((xs) => (xs.includes(id) ? xs.filter((x) => x !== id) : [...xs, id]));
+    const tooFew = multi && (c.min ?? 1) > picked.length;
+    const tooMany = multi && !!c.max && picked.length > c.max;
+    body = (
+      <>
+        {c.text && c.text !== it.title && <div>{c.text}</div>}
+        <div className={s.options} role={multi ? "group" : "radiogroup"} aria-label={it.title}>
+          {c.options.map((o, i) => {
+            const on = picked.includes(o.id);
+            return (
+              <button
+                key={o.id}
+                type="button"
+                className={s.option}
+                role={multi ? "checkbox" : "radio"}
+                aria-checked={multi ? on : undefined}
+                data-on={on || undefined}
+                disabled={!live}
+                onClick={() => (multi ? toggle(o.id) : void answer({ value: o.id }))}
+              >
+                <span className={s.optionKey}>{multi ? (on ? "✓" : "") : i + 1}</span>
+                <span>
+                  {o.label}
+                  {o.description && <span className={s.optionDesc}>{o.description}</span>}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        {multi && (c.min || c.max) ? (
+          <div className={s.icardNote}>
+            {c.min && c.max ? `选 ${c.min}–${c.max} 项` : c.min ? `至少选 ${c.min} 项` : `最多选 ${c.max} 项`}
+          </div>
+        ) : null}
+      </>
+    );
+    actions = multi ? (
+      <Button variant="primary" disabled={!live || tooFew || tooMany} onClick={() => void answer({ value: picked })}>
+        确定（{picked.length}）
+      </Button>
+    ) : null;
+  } else if (!body && it.kind === "form") {
+    const sc = (it.schema ?? { type: "object", properties: {} }) as JSONSchema;
+    const missing = (sc.required ?? []).filter((k) => form[k] === undefined || form[k] === "");
+    body = (
+      <>
+        {it.form?.text && <div>{it.form.text}</div>}
+        <SchemaForm schema={sc} value={form} onChange={setForm} readOnly={!live} />
+        {missing.length > 0 && <div className={s.icardNote}>还没填：{missing.map((k) => sc.properties?.[k]?.title ?? k).join("、")}</div>}
+      </>
+    );
+    actions = (
+      <Button variant="primary" disabled={!live || missing.length > 0} onClick={() => void answer({ value: form })}>
+        {it.form?.submit || "提交"}
+      </Button>
+    );
+  } else if (!body && it.kind === "confirm") {
+    const c = it.confirm;
+    body = c?.text && c.text !== it.title ? <div>{c.text}</div> : null;
+    actions = (
+      <>
+        <Button variant={c?.danger ? "danger" : "primary"} disabled={!live} icon={<Check size={14} />} onClick={() => void answer({ approve: true })}>
+          {c?.confirm || "继续"} <Kbd bind="Enter" />
+        </Button>
+        <Button variant="ghost" disabled={!live} onClick={() => void answer({ approve: false })}>
+          {c?.cancel || "取消"} <Kbd bind="Esc" />
+        </Button>
+      </>
+    );
   } else if (!body) {
     // 通用卡：不认识的 kind，显示原始内容 + 自由文本回答。
     body = (
@@ -282,7 +384,7 @@ export function InteractionCard(p: InteractionCardProps) {
   return (
     <div
       ref={root}
-      className={cx(s.icard, it.kind === "approval" && s.icard_approval, done && s.icardDone)}
+      className={cx(s.icard, (it.kind === "approval" || (it.kind === "confirm" && it.confirm?.danger)) && s.icard_approval, done && s.icardDone)}
       role="group"
       aria-label={it.title}
       data-interaction={it.id}

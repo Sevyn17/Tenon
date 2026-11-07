@@ -5,8 +5,11 @@ package assemble
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
+	"time"
 
 	"ybase/runtime/agent"
 	"ybase/runtime/component"
@@ -92,6 +95,40 @@ type UI interface {
 type SessionUI interface {
 	PrintIn(sessionID, text string)
 	AskIn(ctx context.Context, sessionID, question string, options []string) (string, error)
+}
+
+// Interaction 插件发起的一次非工具交互（protocol 2 10.6：choice / form / confirm 或自定义 kind）。
+// Body 放在线上 Interaction 与 Kind 同名的键下；Schema 是回答须满足的 JSON Schema；Blocking 为假时界面内联显示。
+type Interaction struct {
+	Kind     string
+	Title    string
+	Body     map[string]any
+	Schema   json.RawMessage
+	Blocking *bool
+	Deadline time.Time
+}
+
+// InteractionAnswer 回答：confirm 看 Approve，question 看 Text，其余看 Value（JSON）。
+type InteractionAnswer struct {
+	Approve bool
+	Text    string
+	Value   json.RawMessage
+}
+
+// Interactor 可选：UI 能发起结构化交互（桌面、网页服务的 appapi.UI 实现；终端界面没有）。
+type Interactor interface {
+	Interact(ctx context.Context, sessionID string, it Interaction) (InteractionAnswer, error)
+}
+
+// ErrNoInteract 当前界面不支持结构化交互（调用方可退回 AskIn 的自由文本提问）。
+var ErrNoInteract = errors.New("assemble: 当前界面不支持结构化交互")
+
+// Interact 经 ui 发起交互；ui 没实现 Interactor 返回 ErrNoInteract。
+func Interact(ui UI, ctx context.Context, sessionID string, it Interaction) (InteractionAnswer, error) {
+	if s, ok := ui.(Interactor); ok {
+		return s.Interact(ctx, sessionID, it)
+	}
+	return InteractionAnswer{}, ErrNoInteract
 }
 
 // AskIn 带会话 id 向人提问（ui 实现 SessionUI 时用它，否则退回 Ask）。

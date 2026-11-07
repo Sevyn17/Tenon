@@ -129,11 +129,18 @@ type Interaction struct {
 	ID         string    `json:"id"`
 	Session    string    `json:"session"`
 	Turn       uint32    `json:"turn,omitempty"`
-	Kind       string    `json:"kind"` // approval / question
+	Kind       string    `json:"kind"` // approval / question / choice / form / confirm，或插件自定义
 	Title      string    `json:"title"`
 	Approval   *Approval `json:"approval,omitempty"`
 	Question   *Question `json:"question,omitempty"`
-	Responders []string  `json:"responders"`
+	Choice     *Choice   `json:"choice,omitempty"`
+	Form       *Form     `json:"form,omitempty"`
+	Confirm    *Confirm  `json:"confirm,omitempty"`
+	// Schema 回答（response.value）须满足的 JSON Schema；form 必有，插件自定义 kind 可给。
+	Schema json.RawMessage `json:"schema,omitempty"`
+	// Blocking 智能体是否停下来等（true：接管输入框；false：内联在消息流里，不挡输入）。缺省 true。
+	Blocking   *bool    `json:"blocking,omitempty"`
+	Responders []string `json:"responders"`
 	Deadline   int64     `json:"deadline,omitempty"`
 	OpenedAt   int64     `json:"opened_at"`
 }
@@ -153,10 +160,43 @@ type Question struct {
 	Options []string `json:"options,omitempty"`
 }
 
+// Choice 从选项里选（单选或多选），回答 response.value = 选中的 id（单选为字符串，多选为字符串数组）。
+type Choice struct {
+	Text    string         `json:"text,omitempty"`
+	Options []ChoiceOption `json:"options"`
+	// Multiple 多选；Min / Max 多选时的个数下限与上限（0 = 不限）。
+	Multiple bool `json:"multiple,omitempty"`
+	Min      int  `json:"min,omitempty"`
+	Max      int  `json:"max,omitempty"`
+}
+
+type ChoiceOption struct {
+	ID          string `json:"id"`
+	Label       string `json:"label"`
+	Description string `json:"description,omitempty"`
+}
+
+// Form 填表：字段由 Interaction.Schema 描述（object 的 properties），回答 response.value = 对象。
+type Form struct {
+	Text   string `json:"text,omitempty"`
+	Submit string `json:"submit,omitempty"` // 提交按钮文字
+}
+
+// Confirm 是否继续（不涉及工具）：回答 response.approve。
+type Confirm struct {
+	Text    string `json:"text,omitempty"`
+	Danger  bool   `json:"danger,omitempty"`
+	Confirm string `json:"confirm,omitempty"` // 确认按钮文字
+	Cancel  string `json:"cancel,omitempty"`
+}
+
 // 交互种类与结果。
 const (
 	InteractionApproval = "approval"
 	InteractionQuestion = "question"
+	InteractionChoice   = "choice"
+	InteractionForm     = "form"
+	InteractionConfirm  = "confirm"
 
 	OutcomeApproved = "approved"
 	OutcomeDenied   = "denied"

@@ -82,6 +82,13 @@ export interface UIInteraction {
   title: string;
   approval?: { tool: string; args?: unknown; reason?: string; session_rules?: string[]; blocked?: string[] };
   question?: { text: string; options?: string[] };
+  choice?: { text?: string; options: { id: string; label: string; description?: string }[]; multiple?: boolean; min?: number; max?: number };
+  form?: { text?: string; submit?: string };
+  confirm?: { text?: string; danger?: boolean; confirm?: string; cancel?: string };
+  /** 回答（value）须满足的 JSON Schema（form 的字段）。 */
+  schema?: unknown;
+  /** false = 智能体不停下来等：内联在消息流里，不接管输入框。缺省 true。 */
+  blocking?: boolean;
   deadline?: number;
   opened_at: number;
 }

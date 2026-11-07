@@ -375,7 +375,12 @@ func (v *App) FeedbackList(ctx context.Context, in wire.SessionArgs) (wire.Feedb
 	for _, f := range feedbackOf(l.Meta.Meta) {
 		out.Items = append(out.Items, f)
 	}
-	sort.Slice(out.Items, func(i, j int) bool { return out.Items[i].At < out.Items[j].At })
+	sort.Slice(out.Items, func(i, j int) bool {
+		if out.Items[i].At != out.Items[j].At {
+			return out.Items[i].At < out.Items[j].At
+		}
+		return out.Items[i].Entry < out.Items[j].Entry // 同一毫秒：按条目 id，顺序稳定
+	})
 	return out, nil
 }
 

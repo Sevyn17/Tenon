@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"ybase/runtime/session"
 	"ybase/runtime/toolhub"
 )
 
@@ -47,5 +48,34 @@ func TestAskUser(t *testing.T) {
 	s, _ = callTool(t, tool, `{"question":""}`)
 	if !strings.Contains(s, "不能为空") {
 		t.Fatal(s)
+	}
+}
+
+func TestAskChoice(t *testing.T) {
+	var gotKind string
+	var gotBody map[string]any
+	tool := AskChoice(func(_ context.Context, sid, kind, title string, body map[string]any) (json.RawMessage, error) {
+		gotKind, gotBody = kind, body
+		return json.RawMessage(`"b"`), nil
+	})
+	call := func(args string) (string, bool) {
+		out, err := tool.Call(context.Background(), &toolhub.Cx{SessionID: "s"}, json.RawMessage(args))
+		if err != nil {
+			t.Fatal(err)
+		}
+		txt := ""
+		for _, p := range out.Content {
+			txt += p.Text
+		}
+		return txt, out.Status == session.ToolError
+	}
+	out, isErr := call(`{"question":"选哪个","options":[{"id":"a","label":"A"},{"id":"b","label":"B","description":"更快"}]}`)
+	if isErr || out != `{"selected":"b"}` || gotKind != "choice" || gotBody["text"] != "选哪个" {
+		t.Fatalf("%q %v %s %+v", out, isErr, gotKind, gotBody)
+	}
+	for _, bad := range []string{`{"question":"q","options":[{"id":"a","label":"A"}]}`, `{"question":"q","options":[{"id":"a","label":"A"},{"id":"a","label":"B"}]}`, `{"question":" ","options":[]}`} {
+		if _, isErr := call(bad); !isErr {
+			t.Errorf("%s 应失败", bad)
+		}
 	}
 }

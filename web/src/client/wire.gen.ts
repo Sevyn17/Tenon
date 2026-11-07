@@ -11,7 +11,7 @@ export type RunState = (typeof RunStates)[number];
 export const Roles = ["viewer", "operator"] as const;
 export type Role = (typeof Roles)[number];
 
-export const InteractionKinds = ["approval", "question"] as const;
+export const InteractionKinds = ["approval", "question", "choice", "form", "confirm"] as const;
 export type InteractionKind = (typeof InteractionKinds)[number];
 
 export const Outcomes = ["approved", "denied", "answered", "expired", "voided"] as const;
@@ -117,6 +117,11 @@ export interface Interaction {
   title: string;
   approval?: Approval;
   question?: Question;
+  choice?: Choice;
+  form?: Form;
+  confirm?: Confirm;
+  schema?: unknown;
+  blocking?: boolean;
   responders: string[];
   deadline?: number;
   opened_at: number;
@@ -133,6 +138,32 @@ export interface Approval {
 export interface Question {
   text: string;
   options?: string[];
+}
+
+export interface Choice {
+  text?: string;
+  options: ChoiceOption[];
+  multiple?: boolean;
+  min?: number;
+  max?: number;
+}
+
+export interface ChoiceOption {
+  id: string;
+  label: string;
+  description?: string;
+}
+
+export interface Form {
+  text?: string;
+  submit?: string;
+}
+
+export interface Confirm {
+  text?: string;
+  danger?: boolean;
+  confirm?: string;
+  cancel?: string;
 }
 
 export interface Live {

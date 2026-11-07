@@ -988,3 +988,14 @@
   white-space: pre-wrap;
   word-break: break-all;
 }
+
+/* choice 选项的说明与选中态 */
+.optionDesc {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--text-xs);
+  color: var(--fg-2);
+}
+.option[data-on] {
+  border-color: var(--accent, currentColor);
+}

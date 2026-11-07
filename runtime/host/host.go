@@ -150,8 +150,9 @@ type Host struct {
 	// 回信（KindReply + corr）投回会话时按 corr 交给等待中的工具确认。
 	humanMu   sync.Mutex
 	humanWait map[string]chan bool
-	// askWait question 交互的等待方：corr → 回答通道（Host.Ask / Host.Respond，protocol 2 10.6）。同受 humanMu 保护。
-	askWait map[string]chan string
+	// askWait 非工具交互（question、choice、form……）的等待方：corr → 回答通道（Host.Interact / Host.Respond，
+	// protocol 2 10.6）。同受 humanMu 保护。
+	askWait map[string]chan Answer
 	// SleepAfter 空闲多久后休眠（0 = 不休眠）。休眠的会话释放进程内对象与写租约，
 	// 只剩存储里的几行；有新信件时任一节点抢到租约即可唤醒（02 2.2）。
 	SleepAfter time.Duration

@@ -71,8 +71,26 @@ func (v *App) respondAs(ctx context.Context, in wire.RespondArgs, p wire.Princip
 			return wire.RespondResult{}, Errorf(wire.CodeBadRequest, "question 交互须带 response.text")
 		}
 		ans.Text, res.Answer, res.Outcome = *in.Response.Text, *in.Response.Text, wire.OutcomeAnswered
-	default:
-		return wire.RespondResult{}, Errorf(wire.CodeUnsupported, "不支持的交互种类 %q", cur.Kind)
+	case wire.InteractionConfirm:
+		if in.Response.Approve == nil {
+			return wire.RespondResult{}, Errorf(wire.CodeBadRequest, "confirm 交互须带 response.approve")
+		}
+		ans.Approve, res.Outcome = *in.Response.Approve, wire.OutcomeDenied
+		if ans.Approve {
+			res.Outcome = wire.OutcomeApproved
+		}
+	default: // choice、form 与插件自定义的 kind：回答是 value，按交互的 schema 校验
+		if len(in.Response.Value) == 0 {
+			if in.Response.Text == nil {
+				return wire.RespondResult{}, Errorf(wire.CodeBadRequest, "%s 交互须带 response.value", cur.Kind)
+			}
+			b, _ := json.Marshal(*in.Response.Text) // 不认识的 kind 用通用卡回答：自由文本当作字符串值
+			in.Response.Value = b
+		}
+		if err := validateValue(answerSchema(it), in.Response.Value); err != nil {
+			return wire.RespondResult{}, invalid("%v", err)
+		}
+		ans.Value, res.Answer, res.Outcome = in.Response.Value, string(in.Response.Value), wire.OutcomeAnswered
 	}
 	got, won, err := v.o.Host.Respond(ctx, in.Interaction, res, ans)
 	if err != nil {
@@ -163,6 +181,34 @@ func (v *App) wireInteraction(p store.Pending) wire.Interaction {
 		ap.SessionRules, ap.Blocked = v.o.Modes.SessionAllow(ap.Tool, ap.Args)
 	}
 	return it
+}
+
+// answerSchema 回答须满足的 schema：choice 由选项生成（单选 = 选项 id 之一，多选 = id 数组 + 个数上下限），
+// 其余用交互自带的 schema。
+func answerSchema(it wire.Interaction) json.RawMessage {
+	c := it.Choice
+	if it.Kind != wire.InteractionChoice || c == nil {
+		return it.Schema
+	}
+	ids := make([]any, len(c.Options))
+	for i, o := range c.Options {
+		ids[i] = o.ID
+	}
+	one := map[string]any{"type": "string", "enum": ids}
+	var sc map[string]any
+	if c.Multiple {
+		sc = map[string]any{"type": "array", "items": one}
+		if c.Min > 0 {
+			sc["minItems"] = c.Min
+		}
+		if c.Max > 0 {
+			sc["maxItems"] = c.Max
+		}
+	} else {
+		sc = one
+	}
+	b, _ := json.Marshal(sc)
+	return b
 }
 
 func contains(xs []string, x string) bool {

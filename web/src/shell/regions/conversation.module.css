@@ -202,3 +202,13 @@
   background: var(--bg-hover);
   color: var(--fg);
 }
+
+/* 不阻塞的交互（blocking = false）：内联在消息流末尾，和消息同宽 */
+.inlineInteractions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  width: min(100%, var(--conv-width, 760px));
+  margin: var(--space-3) auto 0;
+  padding: 0 var(--space-4);
+}

@@ -236,7 +236,11 @@ func TestV2Feedback(t *testing.T) {
 	}
 	out, _ := call2(t, app, "feedback.list", `{"session":"f"}`)
 	items := out.(wire.FeedbackListResult).Items
-	if len(items) != 2 || items[0].Entry != "e2" || items[1].Entry != "e1" || items[1].Vote != "down" || items[0].Note != "答非所问" || items[0].By != "alice" {
+	byEntry := map[string]wire.Feedback{}
+	for _, f := range items {
+		byEntry[f.Entry] = f
+	}
+	if len(items) != 2 || byEntry["e1"].Vote != "down" || byEntry["e2"].Note != "答非所问" || byEntry["e2"].By != "alice" || items[0].At > items[1].At {
 		t.Fatalf("列表：%+v", items)
 	}
 	if _, err := callC("feedback.set", `{"session":"f","entry":"e1","vote":""}`); err != nil {

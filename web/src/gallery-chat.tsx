@@ -99,6 +99,52 @@ const approval: UIInteraction = {
   opened_at: now - 6000,
 };
 
+// 其余交互种类（choice / form / confirm）：陈列用，回答只记在本地。
+const moreKinds: UIInteraction[] = [
+  {
+    id: "i2",
+    session: "demo",
+    kind: "choice",
+    title: "周报用哪种格式？",
+    choice: {
+      multiple: true,
+      max: 2,
+      options: [
+        { id: "md", label: "Markdown", description: "轻量，便于版本管理" },
+        { id: "html", label: "网页", description: "浏览器直接打开" },
+        { id: "pdf", label: "PDF", description: "适合打印，生成最慢" },
+      ],
+    },
+    opened_at: now - 3000,
+  },
+  {
+    id: "i3",
+    session: "demo",
+    kind: "form",
+    title: "补充发布信息",
+    blocking: false,
+    form: { text: "智能体先继续写代码，填好后会用到。", submit: "保存" },
+    schema: {
+      type: "object",
+      required: ["version"],
+      properties: {
+        version: { type: "string", title: "版本号" },
+        notes: { type: "string", title: "发布说明", "x-widget": "textarea" },
+        notify: { type: "boolean", title: "通知订阅者", default: true },
+      },
+    },
+    opened_at: now - 2000,
+  },
+  {
+    id: "i4",
+    session: "demo",
+    kind: "confirm",
+    title: "清空构建缓存？",
+    confirm: { text: "会删掉 .cache 下约 1.2 GB 文件，下次构建变慢。", danger: true, confirm: "清空" },
+    opened_at: now - 1000,
+  },
+];
+
 const items: ComposerItem[] = [
   { id: "file", group: "add", title: "文件或图片", description: "上传后作为附件发送", icon: <ImagePlus size={15} />, run: () => {} },
   { id: "ref", group: "add", title: "引用会话", description: "@ 另一个会话", icon: <FileText size={15} />, run: () => "@" },
@@ -113,6 +159,7 @@ export function GalleryChat() {
   const [text, setText] = useState("");
   const [streamText, setStreamText] = useState("");
   const [resolved, setResolved] = useState<string | null>(null);
+  const [answers, setAnswers] = useState<Record<string, { outcome: string; by?: string }>>({});
   useEffect(() => applyTheme(theme), [theme]);
 
   // 模拟正文流式：确认后逐字出现。
@@ -178,6 +225,11 @@ export function GalleryChat() {
           )
         }
       />
+      <div className={s.chatKinds} data-gallery="interaction-kinds">
+        {moreKinds.map((it) => (
+          <InteractionCard key={it.id} it={it} done={answers[it.id]} onRespond={async (r) => setAnswers((a) => ({ ...a, [it.id]: { outcome: r.approve === false ? "denied" : r.approve ? "approved" : "answered", by: JSON.stringify(r.value ?? r.approve ?? r.text) } }))} />
+        ))}
+      </div>
       <div className={s.chatComposer}>
         <Composer
           value={text}

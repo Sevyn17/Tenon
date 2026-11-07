@@ -11,6 +11,7 @@ import (
 	"context"
 	"sync"
 
+	"ybase/runtime/assemble"
 	"ybase/runtime/bus"
 	"ybase/runtime/host"
 	"ybase/runtime/store"
@@ -43,6 +44,19 @@ func (u *UI) Warn(source, msg string) {
 // Ask 发 ask 事件并等回答（ctx 结束返回 ctx.Err()）。
 func (u *UI) Ask(ctx context.Context, question string, options []string) (string, error) {
 	return u.AskIn(ctx, "", question, options)
+}
+
+// Interact 结构化交互（assemble.Interactor）：会话必须在本进程打开着，登记成交互、等第一条回答。
+func (u *UI) Interact(ctx context.Context, sessionID string, it assemble.Interaction) (assemble.InteractionAnswer, error) {
+	u.mu.Lock()
+	h := u.host
+	u.mu.Unlock()
+	if h == nil || sessionID == "" {
+		return assemble.InteractionAnswer{}, assemble.ErrNoInteract
+	}
+	ans, err := h.Interact(ctx, sessionID, host.Request{Kind: it.Kind, Title: it.Title, Body: it.Body, Schema: it.Schema,
+		Blocking: it.Blocking, Deadline: it.Deadline})
+	return assemble.InteractionAnswer{Approve: ans.Approve, Text: ans.Text, Value: ans.Value}, err
 }
 
 // AskIn 带会话的提问（assemble.SessionUI，审查 P1-28）：ask 事件带 session，多会话界面知道是哪个会话在问。
@@ -113,3 +127,5 @@ func (u *UI) bindHost(h *host.Host) {
 	u.host = h
 	u.mu.Unlock()
 }
+
+var _ assemble.Interactor = (*UI)(nil)

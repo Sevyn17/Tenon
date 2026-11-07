@@ -29,10 +29,22 @@ const (
 	OutcomeVoided   = "voided"
 )
 
-// Answer 交给等待方的回答：approval 用 Approve，question 用 Text。
+// Answer 交给等待方的回答：approval / confirm 用 Approve，question 用 Text，choice / form 等用 Value（JSON）。
 type Answer struct {
 	Approve bool
 	Text    string
+	Value   json.RawMessage
+}
+
+// Request 一次非工具交互（Host.Interact）：Kind 与 Body 原样进线上 Interaction（Body 放在与 Kind 同名的键下），
+// Schema 是回答须满足的 JSON Schema（可空）；Blocking 为假时界面内联显示、不接管输入框。Deadline 零值 = 不限。
+type Request struct {
+	Kind     string
+	Title    string
+	Body     map[string]any
+	Schema   json.RawMessage
+	Blocking *bool
+	Deadline time.Time
 }
 
 // jsonArgs 工具参数作为 JSON 值放进载荷；不合法的 JSON 包成字符串（不让整个载荷编码失败）。
@@ -54,13 +66,16 @@ func rootOf(id string) string {
 	return ""
 }
 
-// interactionPayload interaction.opened 的载荷（线上 Interaction 的形状）；不含 corr。
+// interactionPayload interaction.opened 的载荷（线上 Interaction 的形状）；不含 corr。extra 是额外的顶层键（schema、blocking）。
 func interactionPayload(id, session string, turn uint32, kind, title string, body map[string]any,
-	responders []string, deadline time.Time) json.RawMessage {
+	responders []string, deadline time.Time, extra map[string]any) json.RawMessage {
 	m := map[string]any{"id": id, "session": session, "turn": turn, "kind": kind, "title": title,
 		"responders": responders, "opened_at": time.Now().UnixMilli()}
 	if !deadline.IsZero() {
 		m["deadline"] = deadline.UnixMilli()
+	}
+	for k, v := range extra {
+		m[k] = v
 	}
 	m[kind] = body
 	b, _ := json.Marshal(m)
@@ -79,7 +94,7 @@ func (a *actor) responders() []string {
 
 // openInteraction 登记一次交互（同时是一条待回复）。登记失败时退回只登记 corr（回信路径仍可用），
 // 再失败 corr 为空。返回交互 id（空 = 没登记成交互）与 corr。
-func (a *actor) openInteraction(kind, title string, body map[string]any, deadline time.Time) (iid, corr string) {
+func (a *actor) openInteraction(kind, title string, body map[string]any, deadline time.Time, extra ...map[string]any) (iid, corr string) {
 	corr = mail.NewID()
 	iid = "i-" + NewItemID()
 	idx, turn := 0, uint32(0)
@@ -94,7 +109,7 @@ func (a *actor) openInteraction(kind, title string, body map[string]any, deadlin
 	}
 	p := store.Pending{Corr: corr, SessionID: a.id, Trace: a.ag.TraceID(), IssuedIdx: idx, Deadline: dl,
 		InteractionID: iid, Kind: kind, Root: rootOf(a.id),
-		Payload: interactionPayload(iid, a.id, turn, kind, title, body, a.responders(), deadline)}
+		Payload: interactionPayload(iid, a.id, turn, kind, title, body, a.responders(), deadline, firstMap(extra))}
 	if err := a.h.DB.OpenInteraction(context.Background(), p, a.epoch); err == nil {
 		return iid, corr
 	}
@@ -105,9 +120,19 @@ func (a *actor) openInteraction(kind, title string, body map[string]any, deadlin
 	return "", corr
 }
 
+func firstMap(ms []map[string]any) map[string]any {
+	if len(ms) == 0 {
+		return nil
+	}
+	return ms[0]
+}
+
 // closeInteraction 等待结束后收尾：结束交互（已被 Respond 结束的不变），或只作废 corr。
 func (a *actor) closeInteraction(iid, corr, outcome string) {
 	ctx := context.Background()
+	if iid != "" && outcome == "" { // 已由 Respond 结束
+		return
+	}
 	if iid != "" {
 		_, _, _ = a.h.DB.ResolveInteraction(ctx, iid, store.Resolution{Outcome: outcome})
 		return
@@ -158,7 +183,7 @@ func (h *Host) Respond(ctx context.Context, id string, r store.Resolution, ans A
 		}
 	} else {
 		select {
-		case qch <- ans.Text:
+		case qch <- ans:
 		default:
 		}
 	}
@@ -168,26 +193,55 @@ func (h *Host) Respond(ctx context.Context, id string, r store.Resolution, ans A
 // Ask 在已打开的会话上向人提问（question 交互）并等回答。opened 非空时在登记后、等待前调用（protocol 1 的 ask 事件用）。
 // ctx 结束返回 ctx.Err()，会话退出返回 ErrClosed，交互随之 voided。
 func (h *Host) Ask(ctx context.Context, sessionID, question string, options []string, opened func(interactionID string)) (string, error) {
-	hd, ok := h.Get(sessionID)
-	if !ok {
-		return "", fmt.Errorf("%w: %s", ErrSessionNotFound, sessionID)
-	}
-	a := hd.a
 	body := map[string]any{"text": question}
 	if len(options) > 0 {
 		body["options"] = options
 	}
-	iid, corr := a.openInteraction("question", question, body, time.Time{})
+	ans, err := h.interact(ctx, sessionID, Request{Kind: "question", Title: question, Body: body}, opened)
+	return ans.Text, err
+}
+
+// Interact 在已打开的会话上发起一次非工具交互（choice / form / confirm 或插件自定义的 kind），等第一条回答。
+// 回答经 interaction.respond 到达（appapi 按 kind 校验）；ctx 结束、会话退出时交互 voided，过了 Deadline 为 expired。
+// 工具确认（approval）不走这里：它由工具调用的确认路径登记。
+func (h *Host) Interact(ctx context.Context, sessionID string, r Request) (Answer, error) {
+	if r.Kind == "" || r.Kind == "approval" {
+		return Answer{}, fmt.Errorf("host: Interact 不接受 kind %q", r.Kind)
+	}
+	return h.interact(ctx, sessionID, r, nil)
+}
+
+func (h *Host) interact(ctx context.Context, sessionID string, r Request, opened func(string)) (Answer, error) {
+	hd, ok := h.Get(sessionID)
+	if !ok {
+		return Answer{}, fmt.Errorf("%w: %s", ErrSessionNotFound, sessionID)
+	}
+	a := hd.a
+	extra := map[string]any{}
+	if len(r.Schema) > 0 {
+		if !json.Valid(r.Schema) {
+			return Answer{}, fmt.Errorf("host: 交互的 schema 不是合法 JSON")
+		}
+		extra["schema"] = r.Schema
+	}
+	if r.Blocking != nil {
+		extra["blocking"] = *r.Blocking
+	}
+	body := r.Body
+	if body == nil {
+		body = map[string]any{}
+	}
+	iid, corr := a.openInteraction(r.Kind, r.Title, body, r.Deadline, extra)
 	if corr == "" || iid == "" {
 		if corr != "" {
 			_ = h.DB.VoidCorr(context.Background(), corr)
 		}
-		return "", fmt.Errorf("host: 交互登记失败")
+		return Answer{}, fmt.Errorf("host: 交互登记失败")
 	}
-	ch := make(chan string, 1)
+	ch := make(chan Answer, 1)
 	h.humanMu.Lock()
 	if h.askWait == nil {
-		h.askWait = map[string]chan string{}
+		h.askWait = map[string]chan Answer{}
 	}
 	h.askWait[corr] = ch
 	h.humanMu.Unlock()
@@ -201,14 +255,24 @@ func (h *Host) Ask(ctx context.Context, sessionID, question string, options []st
 	if opened != nil {
 		opened(iid)
 	}
+	var timeout <-chan time.Time
+	if !r.Deadline.IsZero() {
+		t := time.NewTimer(time.Until(r.Deadline))
+		defer t.Stop()
+		timeout = t.C
+	}
 	select {
-	case t := <-ch:
-		outcome = OutcomeAnswered
-		return t, nil
+	case ans := <-ch:
+		outcome = "" // 已由 Respond 结束（结果按回答定），closeInteraction 不覆盖
+		return ans, nil
+	case <-timeout:
+		outcome = OutcomeExpired
+		return Answer{}, fmt.Errorf("host: 交互 %s 已过截止时间", iid)
 	case <-ctx.Done():
-		return "", ctx.Err()
+		outcome = waitOutcome(r.Deadline)
+		return Answer{}, ctx.Err()
 	case <-a.exit:
-		return "", ErrClosed
+		return Answer{}, ErrClosed
 	}
 }
 

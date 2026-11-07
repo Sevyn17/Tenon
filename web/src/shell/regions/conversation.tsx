@@ -29,6 +29,7 @@ import {
   type Turn,
   type TurnStats,
   type UIInteraction,
+  type UIResponse,
   type UITool,
 } from "../../ui";
 import { isVisible } from "../layout/reducer";
@@ -302,27 +303,31 @@ function Conversation({ id }: { id: string }) {
 
   const composerItems = useComposerItems(id, setDraft, atts.add);
 
-  const cur = pending[Math.min(ix, Math.max(0, pending.length - 1))];
+  // blocking = false 的交互（智能体不停下来等）内联在消息流末尾，不接管输入框。
+  const blocking = pending.filter((x) => x.blocking !== false);
+  const inline = pending.filter((x) => x.blocking === false);
+  const respond = (it: Interaction) => async (r: UIResponse) => {
+    await sh.client.interactions.respond(it.id, r);
+  };
+  const cur = blocking[Math.min(ix, Math.max(0, blocking.length - 1))];
   const takeover = cur ? (
     <InteractionCard
       key={cur.id}
       it={cur as UIInteraction}
       keyboard
       position={
-        pending.length > 1
+        blocking.length > 1
           ? {
-              index: pending.indexOf(cur),
-              total: pending.length,
+              index: blocking.indexOf(cur),
+              total: blocking.length,
               prev: () => setIx((i) => Math.max(0, i - 1)),
-              next: () => setIx((i) => Math.min(pending.length - 1, i + 1)),
+              next: () => setIx((i) => Math.min(blocking.length - 1, i + 1)),
             }
           : undefined
       }
       source={cur.session !== id ? sh.t("conv.subSource", { sub: cur.session.slice(id.length + 1) }) : undefined}
       body={irs.find((r) => r.kind === cur.kind)?.render(cur)}
-      onRespond={async (r) => {
-        await sh.client.interactions.respond(cur.id, r);
-      }}
+      onRespond={respond(cur)}
       onDenyWithReason={async (text) => {
         await sh.client.interactions.respond(cur.id, { approve: false });
         if (text.trim()) await store.send(text.trim());
@@ -388,6 +393,19 @@ function Conversation({ id }: { id: string }) {
       <div ref={bodyRef} className={s.body} style={{ ["--conv-width" as string]: `${prefs.chatWidth}px` }}>
         {finding && <FindBar root={bodyRef} focusSignal={findSig} onClose={() => setFinding(false)} />}
         <MarkdownExtensions value={mdExts.map((m) => m.ext)}>{content}</MarkdownExtensions>
+        {inline.length > 0 && (
+          <div className={s.inlineInteractions}>
+            {inline.map((it) => (
+              <InteractionCard
+                key={it.id}
+                it={it as UIInteraction}
+                source={it.session !== id ? sh.t("conv.subSource", { sub: it.session.slice(id.length + 1) }) : undefined}
+                body={irs.find((r) => r.kind === it.kind)?.render(it)}
+                onRespond={respond(it)}
+              />
+            ))}
+          </div>
+        )}
         <InlineCards session={id} />
         <TurnNav root={bodyRef} marks={marks} />
         <SelectionToolbar root={bodyRef} actions={selectionActions} />
