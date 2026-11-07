@@ -87,6 +87,8 @@ func (h *Hub) readArtifactTool() *Tool {
 	return &Tool{
 		Spec: session.ToolSpec{Name: "read_artifact", Description: "按行读取已存为工件的超大工具结果", Schema: json.RawMessage(schema)},
 		Risk: Read,
+		// 只读本 hub 的工件，与用户无关：不需授权（原先没声明权限项，full 档位下也要问）。
+		NoAuth: true,
 		Call: func(_ context.Context, _ *Cx, raw json.RawMessage) (Output, error) {
 			var a struct {
 				Ref           string

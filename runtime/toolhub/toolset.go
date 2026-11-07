@@ -133,8 +133,9 @@ func (h *Hub) catalog(names []string) string {
 func (h *Hub) searchTool() *Tool {
 	schema := `{"type":"object","properties":{"query":{"type":"string","description":"关键词，或用逗号分隔的工具名"}},"required":["query"]}`
 	return &Tool{
-		Spec: session.ToolSpec{Name: "tool_search", Description: "加载未显露工具的完整定义；加载后下一步即可调用", Schema: json.RawMessage(schema)},
-		Risk: Read,
+		Spec:   session.ToolSpec{Name: "tool_search", Description: "加载未显露工具的完整定义；加载后下一步即可调用", Schema: json.RawMessage(schema)},
+		Risk:   Read,
+		NoAuth: true, // 只加载工具定义，不碰用户数据
 		Call: func(_ context.Context, cx *Cx, raw json.RawMessage) (Output, error) {
 			var a struct{ Query string }
 			_ = json.Unmarshal(raw, &a)

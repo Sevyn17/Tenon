@@ -40,4 +40,4 @@ run "2 真实 MCP" mcp "只用 MCP 工具（名字以 mcp__fs__ 开头，可先�
 
 run "3 子智能体委派" sub "用 subagent 工具委派一个子任务：统计工作区 note.txt 的字符数（不含换行）。拿到子智能体结果后告诉我数字和子会话 id。"
 echo "===== 会话行"
-sqlite3 "$W/ws/.tenon/tenon.db" "select id, parent_id, origin from sessions" 2>/dev/null || ls "$W/ws/.tenon"
+sqlite3 "$W/ws/.tenon/state.db" "select id, parent_id, origin from sessions" 2>/dev/null || ls "$W/ws/.tenon"
