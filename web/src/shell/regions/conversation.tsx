@@ -496,25 +496,9 @@ function Conversation({ id }: { id: string }) {
   );
 }
 
-/** 上下文占用：上一次模型请求的输入 tokens（最后一条带 usage 的助手条目）。点了打开"上下文与用量"面板。
- *  协议还不下发模型的上下文窗口，所以只显示数量、不画占比环（见 docs/计划/05）。 */
-function ContextUse({ entries, onOpen }: { entries: { item: { kind: string; usage?: { input: number; cache_read: number } } }[]; onOpen: () => void }) {
-  const sh = useShell();
-  let input = 0;
-  for (let i = entries.length - 1; i >= 0; i--) {
-    const u = entries[i].item.kind === "assistant" ? entries[i].item.usage : undefined;
-    if (u) {
-      input = u.input;
-      break;
-    }
-  }
-  if (!input) return null;
-  const label = input >= 1000 ? `${(input / 1000).toFixed(1)}k` : String(input);
-  return (
-    <button type="button" className={s.ctxUse} onClick={onOpen} title={sh.t("conv.context", { n: input })} aria-label={sh.t("conv.contextLabel")}>
-      {label}
-    </button>
-  );
+/** 上下文占用：协议还不下发模型上下文窗口，所以暂时隐藏（见 docs/计划/05 F3、F9；方案要求超过 80% 才显示小环）。 */
+function ContextUse(_props: { entries: { item: { kind: string; usage?: { input: number; cache_read: number } } }[]; onOpen: () => void }) {
+  return null; // 暂时隐藏，协议补上 hello.model.context_window 后再显示小环
 }
 
 function RunningStatus({ startedAt, onStop }: { startedAt?: number; onStop: () => void }) {

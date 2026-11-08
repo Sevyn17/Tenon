@@ -63,9 +63,13 @@
 .composerWrap {
   flex: none;
   width: 100%;
-  max-width: calc(var(--conv-width, 760px) + 40px);
+  max-width: 640px; /* 首页宽度 640px */
   margin: 0 auto;
   padding: 0 var(--space-5) var(--space-4);
+}
+/* 有会话时恢复对话宽度 */
+.body:has([data-turn]) ~ .composerWrap {
+  max-width: calc(var(--conv-width, 720px) + 40px);
 }
 
 /* —— ④ 对话内小卡片 —— */

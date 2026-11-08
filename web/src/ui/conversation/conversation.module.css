@@ -494,16 +494,15 @@
 }
 .composerBox {
   position: relative;
-  border: 1px solid var(--border-strong);
+  border: 1px solid transparent;
   border-radius: var(--radius-2xl);
-  background: var(--bg-sunken);
+  background: var(--bg-raised);
   transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
   display: flex;
   flex-direction: column;
 }
 .composerBox:focus-within {
-  border-color: var(--focus);
-  box-shadow: 0 0 0 3px var(--accent-soft);
+  border-color: var(--border-strong);
 }
 .composerDrop {
   border-style: dashed;
