@@ -44,7 +44,7 @@
 }
 .attachments {
   display: flex;
-  gap: var(--space-1);
+  gap: var(--space-2);
   flex-wrap: wrap;
   justify-content: flex-end;
 }
@@ -53,7 +53,34 @@
   color: var(--fg-2);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  padding: 2px var(--space-2);
+  padding: var(--space-1);
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  background: var(--bg-elevated);
+  max-width: 240px;
+}
+.attach img {
+  max-width: 200px;
+  max-height: 120px;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+}
+.attach > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+.attach button {
+  flex: none;
+  padding: var(--space-1);
+  border-radius: var(--radius-sm);
+  transition: background var(--dur) var(--ease);
+}
+.attach button:hover {
+  background: var(--bg-hover);
 }
 
 /* 消息外层：悬停显示操作条 */

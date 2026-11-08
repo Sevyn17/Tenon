@@ -25,6 +25,26 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 40%;
+  cursor: pointer;
+  padding: var(--space-1) var(--space-2);
+  margin: calc(-1 * var(--space-1)) calc(-1 * var(--space-2));
+  border-radius: var(--radius-md);
+  transition: background var(--dur) var(--ease);
+}
+.title:hover {
+  background: var(--bg-hover);
+}
+.titleInput {
+  font-size: var(--text-md);
+  font-weight: 600;
+  max-width: 40%;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-md);
+  padding: var(--space-1) var(--space-2);
+  background: var(--bg-elevated);
+  outline: none;
+  font-family: inherit;
+  color: var(--fg);
 }
 .meta {
   display: flex;

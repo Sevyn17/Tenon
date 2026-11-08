@@ -3,11 +3,10 @@
 // 可插入的位置都经插槽与注册表（消息操作、工具渲染、交互渲染、输入框动作、尾巴建议）。
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Menu as Menu2, MoreHorizontal, ShieldCheck, Square } from "lucide-react";
+import { Menu as Menu2, MoreHorizontal, Square } from "lucide-react";
 import type { Entry, Interaction, ToolState } from "../../client";
 import { useInteractions, useSession, useStore } from "../../client/react";
 import {
-  Badge,
   Composer,
   Dot,
   ErrorBoundary,
@@ -24,7 +23,6 @@ import {
   buildTurns,
   cx,
   type Block,
-  type ComposerItem,
   type ToolView,
   type Turn,
   type TurnStats,
@@ -34,10 +32,10 @@ import {
 } from "../../ui";
 import { isVisible } from "../layout/reducer";
 import { PanelsMenu } from "../layout/panelmenu";
-import { Slot, useChainSlot, useCommandContext, useRegistry, useShell, whenState } from "../context";
+import { Slot, useChainSlot, useCommandContext, useRegistry, useShell } from "../context";
 import { toUIActions, type ActionTarget } from "../contributions";
 import { useMenuGroups } from "./sidebar";
-import { useAttachments, useHistory, useMentions } from "./composer";
+import { useSessionComposer } from "./session-composer";
 import { useViewport } from "../viewport";
 import s from "./conversation.module.css";
 
@@ -66,30 +64,11 @@ export function MainArea() {
   return <Conversation key={nav.session} id={nav.session} />;
 }
 
+/** 首页：草稿会话。输入框与对话页是同一份编排（useSessionComposer），发第一条消息时才建会话。 */
 function EmptyMain() {
   const sh = useShell();
   const vp = useViewport();
-  const prefs = useStore(sh.prefs);
-  const [draft, setDraft] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [focusSig, setFocusSig] = useState(0);
-  // 首页直接输入：发送时先建会话、打开它，再把这条消息发出去（不先留下一个空会话）。
-  const send = async () => {
-    const t = draft.trim();
-    if (!t || busy) return;
-    setBusy(true);
-    try {
-      const snap = await sh.client.call("session.create", {});
-      sh.client.sessions.upsert({ id: snap.id, title: snap.title, preview: "", run_state: snap.run_state, origin: snap.origin, updated_at: Date.now() });
-      sh.api.openSession(snap.id);
-      setDraft("");
-      await sh.client.session(snap.id).send(t);
-    } catch (e) {
-      sh.api.toast(e instanceof Error ? e.message : String(e), "danger");
-    } finally {
-      setBusy(false);
-    }
-  };
+  const c = useSessionComposer({ session: null });
   return (
     <main className={s.conv}>
       {vp === "sm" && (
@@ -101,22 +80,15 @@ function EmptyMain() {
         </header>
       )}
       <div className={s.body}>
-        <Hero onPick={(t) => {
-          setDraft(t);
-          setFocusSig((n) => n + 1);
-        }} />
+        <Hero
+          onPick={(t) => {
+            c.setDraft(t);
+            c.focus();
+          }}
+        />
       </div>
       <div className={s.composerWrap}>
-        <Composer
-          value={draft}
-          onChange={setDraft}
-          onSend={() => void send()}
-          busy={busy}
-          placeholder={sh.t("conv.placeholder")}
-          sendKey={prefs.sendKey}
-          autoFocus
-          focusSignal={focusSig}
-        />
+        <Composer {...c.props} autoFocus />
       </div>
     </main>
   );
@@ -223,7 +195,6 @@ function Conversation({ id }: { id: string }) {
   const mdExts = useRegistry(sh.reg.markdown);
   const irs = useRegistry(sh.reg.interactionRenderers);
   const entryRs = useRegistry(sh.reg.entryRenderers);
-  const [draft, setDraft] = useDraft(id);
   const [ix, setIx] = useState(0);
 
   const pending = useMemo(
@@ -250,18 +221,6 @@ function Conversation({ id }: { id: string }) {
       }),
     [st.entries, st.streams, st.tools, st.turn, st.runState, awaiting],
   );
-
-  // 外部插入（shell.api.insert）：走本工作台的事件通道，不走 window（同页多个工作台互不串扰）。
-  useEffect(
-    () =>
-      sh.bus.on("insert", (d) => {
-        if (d.session === id || d.session === "*") setDraft((v) => (v ? v + (v.endsWith(" ") ? "" : " ") + d.text : d.text));
-      }),
-    [sh.bus, id, setDraft],
-  );
-  // 聚焦输入框（shell.api.focusComposer / ⌘L）：递增信号让 Composer 抢焦点。
-  const [focusSig, setFocusSig] = useState(0);
-  useEffect(() => sh.bus.on("focusComposer", () => setFocusSig((n) => n + 1)), [sh.bus]);
 
   // 对话内查找（⌘F）、上 / 下一回合（⌥↑ / ⌥↓）：命令经事件通道发到当前对话。
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -304,23 +263,8 @@ function Conversation({ id }: { id: string }) {
   );
   const selectionActions = (text: string) => toUIActions(actions, { ...cmd, session: id, target: "selection", text });
 
-  const atts = useAttachments(id);
-  const history = useHistory(st.entries);
-  const mentions = useMentions();
-
-  const send = async () => {
-    const t = draft.trim();
-    const media = atts.parts;
-    if (!t && !media.length) return;
-    setDraft("");
-    atts.clear();
-    history.reset();
-    try {
-      await store.send(t, media.length ? [...media, ...(t ? [{ kind: "text", text: t }] : [])] : undefined);
-    } catch (e) {
-      sh.api.toast(e instanceof Error ? e.message : String(e), "danger");
-    }
-  };
+  const c = useSessionComposer({ session: id, store, entries: st.entries });
+  const setDraft = c.setDraft;
 
   // 回合被拒（turn.rejected）：把那几条输入放回输入框并说明原因，不让用户的话丢掉。
   const rejected = st.rejected;
@@ -335,7 +279,6 @@ function Conversation({ id }: { id: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rejected]);
 
-  const composerItems = useComposerItems(id, setDraft, atts.add);
 
   // blocking = false 的交互（智能体不停下来等）内联在消息流末尾，不接管输入框。
   const blocking = pending.filter((x) => x.blocking !== false);
@@ -421,7 +364,7 @@ function Conversation({ id }: { id: string }) {
 
   return (
     <main className={s.conv}>
-      <Header id={id} title={st.title || id} />
+      <Header id={id} title={st.title} />
       {st.closed && <div className={cx(s.banner, s.banner_danger)}>{sh.t("conv.closed", { reason: st.closed })}</div>}
       {st.error && st.status === "error" && <div className={cx(s.banner, s.banner_danger)}>{st.error}</div>}
       <Slot at="conversation.banner" props={{ session: id }} />
@@ -447,58 +390,24 @@ function Conversation({ id }: { id: string }) {
       </div>
       <div className={s.composerWrap}>
         <Composer
-          value={draft}
-          onChange={setDraft}
-          onSend={() => void send()}
+          {...c.props}
           onStop={() => void store.cancel()}
           running={st.runState === "running"}
           disabled={!!st.closed}
           disabledReason={st.closed ? sh.t("conv.closed", { reason: st.closed }) : undefined}
           placeholder={st.runState === "running" ? sh.t("conv.placeholder.running") : sh.t("conv.placeholder")}
-          sendKey={prefs.sendKey}
-          items={composerItems}
-          mentions={mentions}
-          attachments={atts.items}
-          onAttach={atts.add}
-          onRemoveAttachment={atts.remove}
-          onLongPaste={atts.addText}
-          onHistory={history.step}
           queued={st.outbox
             .filter((o) => o.state !== "sent")
             .map((o) => ({ id: o.client_id, text: o.text, state: o.state === "failed" ? "failed" : "sending", error: o.error }))}
           onRetryQueued={(cid) => void store.retry(cid)}
           onDiscardQueued={(cid) => store.discard(cid)}
-          above={<Slot at="composer.above" props={{ session: id }} />}
-          toolbarLeft={
-            <>
-              {st.mode && (
-                <Badge tone="neutral">
-                  <ShieldCheck size={12} /> {st.mode.label || st.mode.mode}
-                </Badge>
-              )}
-              <Slot at="composer.toolbar.left" props={{ session: id }} />
-            </>
-          }
-          toolbarRight={
-            <>
-              <Slot at="composer.toolbar.right" props={{ session: id }} />
-              <ContextUse entries={st.entries} onOpen={() => sh.api.openPanel("usage")} />
-            </>
-          }
-          below={<Slot at="composer.below" props={{ session: id }} />}
           status={st.runState === "running" ? <RunningStatus startedAt={st.turn?.startedAt} onStop={() => void store.cancel()} /> : null}
           takeover={takeover ?? chainTakeover}
           autoFocus
-          focusSignal={focusSig}
         />
       </div>
     </main>
   );
-}
-
-/** 上下文占用：协议还不下发模型上下文窗口，所以暂时隐藏（见 docs/计划/05 F3、F9；方案要求超过 80% 才显示小环）。 */
-function ContextUse(_props: { entries: { item: { kind: string; usage?: { input: number; cache_read: number } } }[]; onOpen: () => void }) {
-  return null; // 暂时隐藏，协议补上 hello.model.context_window 后再显示小环
 }
 
 function RunningStatus({ startedAt, onStop }: { startedAt?: number; onStop: () => void }) {
@@ -523,6 +432,37 @@ function Header({ id, title }: { id: string; title: string }) {
   const sh = useShell();
   const vp = useViewport();
   const groups = useMenuGroups("conversation.header.menu");
+  // 点标题直接改名：回车或失焦保存，Esc 放弃。标题为空（还没自动起名）时编辑框也从空开始。
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const done = useRef(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (editing) inputRef.current?.select();
+  }, [editing]);
+  const begin = () => {
+    done.current = false;
+    setDraft(title);
+    setEditing(true);
+  };
+  // 回车、失焦都走这里，只认第一次（回车后输入框卸载还会再触发一次失焦）。
+  const finish = async (keep: boolean) => {
+    if (done.current) return;
+    done.current = true;
+    setEditing(false);
+    if (!keep) return;
+    const next = draft.trim();
+    if (!next || next === title) return;
+    try {
+      await sh.client.call("session.update", { session: id, title: next });
+      // 列表那一行只改标题（其余字段保持原样）；会话自己的标题由 session.updated 事件更新。
+      const row = sh.client.sessions.find(id);
+      if (row) sh.client.sessions.upsert({ ...row, title: next });
+    } catch (e) {
+      sh.api.toast(e instanceof Error ? e.message : String(e), "danger");
+    }
+  };
+
   return (
     <header className={s.head}>
       {vp === "sm" && (
@@ -531,9 +471,42 @@ function Header({ id, title }: { id: string; title: string }) {
         </IconButton>
       )}
       <Slot at="conversation.header.leading" props={{ session: id }} />
-      <span className={s.title} title={id}>
-        {title}
-      </span>
+      {editing ? (
+        <input
+          ref={inputRef}
+          type="text"
+          className={s.titleInput}
+          value={draft}
+          placeholder={sh.t("sessions.untitled")}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={() => void finish(true)}
+          onKeyDown={(e) => {
+            if (e.nativeEvent.isComposing) return;
+            if (e.key === "Enter") {
+              e.preventDefault();
+              void finish(true);
+            } else if (e.key === "Escape") {
+              e.preventDefault();
+              e.stopPropagation();
+              void finish(false);
+            }
+          }}
+          aria-label={sh.t("sessions.rename")}
+        />
+      ) : (
+        <span
+          className={s.title}
+          title={sh.t("sessions.rename")}
+          role="button"
+          tabIndex={0}
+          onClick={begin}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") begin();
+          }}
+        >
+          {title || sh.t("sessions.untitled")}
+        </span>
+      )}
       <span className={s.grow} />
       <Slot at="conversation.header.actions" props={{ session: id }} />
       <PanelsMenu />
@@ -583,77 +556,3 @@ export function PanelCard(p: { icon?: ReactNode; title: ReactNode; onOpen: () =>
   );
 }
 
-/** 草稿按会话保存在 sessionStorage（刷新不丢，切会话各自保留）。 */
-function useDraft(id: string): [string, (v: string | ((x: string) => string)) => void] {
-  const key = `tenon.draft.${id}`;
-  const [v, setV] = useState(() => {
-    try {
-      return sessionStorage.getItem(key) ?? "";
-    } catch {
-      return "";
-    }
-  });
-  const set = (x: string | ((y: string) => string)) =>
-    setV((cur) => {
-      const nv = typeof x === "function" ? x(cur) : x;
-      try {
-        if (nv) sessionStorage.setItem(key, nv);
-        else sessionStorage.removeItem(key);
-      } catch {
-        /* 存储不可用 */
-      }
-      return nv;
-    });
-  return [v, set];
-}
-
-/** "+" 菜单与 / 命令：ComposerAction 注册表 + 声明了 slash 的命令。 */
-function useComposerItems(
-  session: string,
-  setDraft: (v: string | ((x: string) => string)) => void,
-  attach: (f: File[]) => void,
-): ComposerItem[] {
-  const sh = useShell();
-  const acts = useRegistry(sh.reg.composerActions);
-  const cmds = useRegistry(sh.reg.commands);
-  const cx0 = useCommandContext();
-  const insert = (t: string) => setDraft((v) => (v ? v + t : t));
-  const out: ComposerItem[] = [];
-  for (const a of acts) {
-    const w = whenState(a.when?.(cx0));
-    if (!w.show) continue;
-    out.push({
-      id: a.id,
-      group: a.group,
-      title: a.title,
-      description: a.description,
-      icon: a.icon,
-      slash: a.slash,
-      keywords: a.keywords,
-      disabled: w.disabled,
-      reason: w.reason,
-      run: () => a.run({ ...cx0, session, insert, attach }),
-    });
-  }
-  for (const c of cmds) {
-    if (!c.slash || out.some((x) => x.slash === c.slash)) continue;
-    const w = whenState(c.when?.(cx0));
-    if (!w.show) continue;
-    out.push({
-      id: "cmd:" + c.id,
-      group: "command",
-      title: c.title,
-      description: c.description,
-      icon: c.icon,
-      slash: c.slash,
-      keywords: c.keywords,
-      disabled: w.disabled,
-      reason: w.reason,
-      run: async () => {
-        setDraft("");
-        await c.run(cx0);
-      },
-    });
-  }
-  return out;
-}

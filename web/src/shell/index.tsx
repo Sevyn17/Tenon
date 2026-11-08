@@ -10,6 +10,7 @@ import { backendPack } from "./backend-ui";
 import { ClientProvider, useStore } from "../client/react";
 import { Button, Dialog, Input, ToastProvider, applyAccent, applyDensity, applyTheme, isMac, useToast, type ThemePref } from "../ui";
 import { createShellBus } from "./bus";
+import { createDraftSettings } from "./draft";
 import { useKeybindings } from "./commands";
 import { ShellProvider, slotDebug, type Brand, type ShellState } from "./context";
 import { createRegistries, type ShellApi, type ShellNotice } from "./contributions";
@@ -81,15 +82,15 @@ export function createShell(o: ShellOptions = {}): Shell {
   let toastFn: (text: string, tone?: ShellNotice["tone"]) => void = () => {};
   let askFn: (a: Asker) => void = () => {};
   const notices = createNotices();
+  const draft = createDraftSettings();
 
   const api: ShellApi = {
     current: () => nav.get().session,
     openSession: (id) => nav.update((v) => ({ ...v, session: id, page: null, palette: null, drawer: false })),
     closeSession: () => nav.update((v) => ({ ...v, session: null, page: null })),
+    // 新建会话 = 回到首页的草稿输入框；发第一条消息时才真正 session.create（不留下空会话）。
     async newSession() {
-      const snap = await client.call("session.create", {});
-      client.sessions.upsert({ id: snap.id, title: snap.title, preview: "", run_state: snap.run_state, origin: snap.origin, updated_at: Date.now() });
-      api.openSession(snap.id);
+      nav.update((v) => ({ ...v, session: null, page: null, palette: null, drawer: false }));
       setTimeout(() => api.focusComposer(), 0);
     },
     openPanel: (id, params) => layout.dispatch({ type: "open", panel: id, dock: reg.panels.byId(id)?.dock, params }),
@@ -128,6 +129,7 @@ export function createShell(o: ShellOptions = {}): Shell {
     nav,
     bus,
     notices,
+    draft,
     t,
     api,
     brand,

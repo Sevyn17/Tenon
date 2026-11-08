@@ -16,6 +16,7 @@ import type { CommandContext, Registries, ShellApi, SlotItem, SlotKind } from ".
 import type { T } from "./i18n";
 import type { LayoutStore } from "./layout/store";
 import type { PrefsStore } from "./prefs";
+import type { DraftStore } from "./draft";
 import type { PackHost, Registry, Contribution } from "./registry";
 
 export interface Brand {
@@ -42,6 +43,8 @@ export interface ShellState {
   bus: ShellBus;
   /** 通知中心（回合完成、需要确认、插件的 notify）。 */
   notices: NoticesStore;
+  /** 草稿会话（首页，还没建）的模型与档位选择。 */
+  draft: DraftStore;
   brand: Brand;
   /** 嵌入方强制的布局预设（createShell 的 preset）；不写进偏好，给了就不看偏好里的 preset。 */
   preset?: string;

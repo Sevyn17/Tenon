@@ -29,6 +29,7 @@ import type { ContributionPack, PackInfo } from "../registry";
 import type { ShellState } from "../context";
 import type { SettingsPage } from "../contributions";
 import { effectiveBindings } from "../commands";
+import { setSessionMode } from "../modes";
 import { conflicts, normalize } from "../keys";
 
 /** 不能在设置里关掉的内置包（关了设置页本身或基本命令就没了）。 */
@@ -317,20 +318,8 @@ function Modes({ sh }: { sh: ShellState }) {
     if (!session) return;
     setBusy(true);
     try {
-      try {
-        await sh.client.call("mode.set", { session, mode: m.id });
-      } catch (e) {
-        // 项目档位放宽了内置档位：确认后再切
-        if (!(e instanceof ApiError && e.code === "need_confirm")) throw e;
-        const ok = await sh.api.confirm({
-          title: `切换到 ${m.label}`,
-          body: `这是项目档位，会放宽：${(m.widened ?? []).join("、") || e.message}`,
-          confirm: "切换",
-          danger: true,
-        });
-        if (!ok) return;
-        await sh.client.call("mode.set", { session, mode: m.id, confirm: true });
-      }
+      // 项目档位放宽了内置档位：后端回 need_confirm 时先问用户（与输入框工具栏的档位选择共用）。
+      if (!(await setSessionMode(sh.client, sh.api, session, m))) return;
       sh.api.toast(`档位：${m.label}`, "success");
       cur.reload();
     } catch (e) {

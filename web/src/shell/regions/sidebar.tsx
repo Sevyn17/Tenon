@@ -227,7 +227,7 @@ function SessionRow({ row, active, pending }: { row: SessionInfo; active: boolea
           e.preventDefault();
           setCtx({ x: e.clientX, y: e.clientY });
         }}
-        title={row.preview || row.id}
+        title={row.preview || undefined}
       >
         <Slot
           at="session.row.leading"
@@ -240,7 +240,9 @@ function SessionRow({ row, active, pending }: { row: SessionInfo; active: boolea
             ) : null
           }
         />
-        <span className={s.rowTitle}>{row.title || row.id}</span>
+        <span className={s.rowTitle} title={row.title || sh.t("sessions.untitled")}>
+          {row.title || sh.t("sessions.untitled")}
+        </span>
         <span className={s.rowBadges}>
           <Slot at="session.row.badge" props={{ row }} />
         </span>

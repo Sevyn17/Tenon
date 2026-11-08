@@ -24,8 +24,9 @@ function readDataURL(f: File): Promise<string> {
   });
 }
 
-/** 附件：选中 / 粘贴 / 拖入即上传，发送时变成 media 部件。预览用 data URL（CSP 的 img-src 只放行 self 与 data:）。 */
-export function useAttachments(session: string) {
+/** 附件：选中 / 粘贴 / 拖入即上传，发送时变成 media 部件。预览用 data URL（CSP 的 img-src 只放行 self 与 data:）。
+ * target 是会话 id，或（草稿态）一个按需建会话并返回 id 的函数：上传要会话 id，第一个附件进来时才建。 */
+export function useAttachments(target: string | (() => Promise<string>)) {
   const sh = useShell();
   const [items, setItems] = useState<Held[]>([]);
   const seq = useRef(0);
@@ -47,6 +48,7 @@ export function useAttachments(session: string) {
         setItems((xs) => [...xs, base]);
         void (async () => {
           try {
+            const session = typeof target === "string" ? target : await target();
             let ref: string;
             if (big) {
               if (mime.startsWith("image/") && f.size <= 8 * MAX_ATTACHMENT) {
@@ -66,7 +68,7 @@ export function useAttachments(session: string) {
         })();
       }
     },
-    [sh.client, session],
+    [sh.client, target],
   );
 
   /** 超长粘贴：折叠成"粘贴的文本"chip，不上传，发送时作为 text 部件。返回 true 表示收下。 */

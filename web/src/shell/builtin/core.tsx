@@ -1,12 +1,9 @@
 // 内置贡献包 core：工作台自己的命令（带缺省快捷键）、区域、布局预设、消息操作。
 // 与插件贡献走同一组注册表：嵌入方用同 id、更小的 priority 替换，或 createShell({ disable: ["core.xxx"] }) 关掉。
 
-import { MessageSquareQuote, Copy, CornerUpLeft, Cpu, FileText, GitBranch, MessagesSquare, Paperclip, Pencil, Pin, PinOff, Quote, RotateCcw, Trash2 } from "lucide-react";
-import { Button, Menu, copyText, type MenuGroupSpec } from "../../ui";
-import { useEffect, useState } from "react";
-import type { ModelsListResult } from "../../client";
-import { useSession } from "../../client/react";
-import { useShell } from "../context";
+import { MessageSquareQuote, Copy, CornerUpLeft, FileText, GitBranch, MessagesSquare, Paperclip, Pencil, Pin, PinOff, Quote, RotateCcw, Trash2 } from "lucide-react";
+import { copyText } from "../../ui";
+import { ContextMeter, ModelPicker, ModePicker } from "./toolbar";
 import { listed } from "../../client";
 import type { ContributionPack } from "../registry";
 import type { Registries } from "../contributions";
@@ -48,75 +45,6 @@ async function deleteSession(x: { client: import("../../client").Client; shell: 
   x.shell.toast("已删除", "success");
 }
 
-/** 可选模型（models.list）：整个页面共用一份，第一次用到时取。 */
-let modelsCache: Promise<ModelsListResult> | null = null;
-function loadModels(client: import("../../client").Client) {
-  modelsCache ??= client.call("models.list", {}).catch((e) => {
-    modelsCache = null;
-    throw e;
-  });
-  return modelsCache;
-}
-
-/** 输入框工具栏的模型选择（composer.toolbar.left）：别名一组、模型按提供方分组，凭证不可用的停用并给原因。 */
-function ModelPicker({ session }: { session: string }) {
-  const sh = useShell();
-  const [st] = useSession(session);
-  const [list, setList] = useState<ModelsListResult | null>(null);
-  const can = sh.client.can("models");
-  useEffect(() => {
-    if (!can) return;
-    let live = true;
-    loadModels(sh.client).then((r) => live && setList(r), () => {});
-    return () => {
-      live = false;
-    };
-  }, [sh.client, can]);
-  if (!can || !list || !list.models.length) return null;
-  const cur = st.model || list.default;
-  const pick = async (id: string) => {
-    try {
-      const r = await sh.client.call("session.settings", { session, model: id });
-      if (!r.committed) sh.api.toast(`回合结束后换成 ${id}`);
-    } catch (e) {
-      sh.api.toast(e instanceof Error ? e.message : String(e), "danger");
-    }
-  };
-  const groups = (): MenuGroupSpec[] => {
-    const byGroup = new Map<string, MenuGroupSpec>();
-    for (const m of list.models) {
-      const g = m.alias ? "别名" : m.provider;
-      if (!byGroup.has(g)) byGroup.set(g, { id: g, label: g, items: [] });
-      byGroup.get(g)!.items.push({
-        id: m.id,
-        label: m.alias ? m.id : m.name || m.id,
-        description: [m.alias && m.name ? m.name : "", m.context_window ? `${Math.round(m.context_window / 1000)}k` : "", m.images ? "图片" : "", m.reasoning ? "推理" : ""]
-          .filter(Boolean)
-          .join(" · ") || undefined,
-        checked: m.id === cur,
-        disabled: !m.available,
-        reason: m.reason,
-        run: () => void pick(m.id),
-      });
-    }
-    return [...byGroup.values()];
-  };
-  const short = cur.includes("/") ? cur.slice(cur.indexOf("/") + 1) : cur;
-  return (
-    <Menu
-      placement="top-start"
-      groups={groups}
-      trigger={({ ref, toggle }) => (
-        <Button ref={ref} size="sm" variant="ghost" onClick={toggle} aria-label={`模型：${cur}，点击切换`} title={cur}>
-          <Cpu size={12} /> {short}
-        </Button>
-      )}
-    />
-  );
-}
-
-const sh0 = (p: Record<string, unknown>) => typeof p.session === "string" && p.session !== "";
-
 /** 会话里某回合的起点：rewind {to_turn} 用回合号（绝对目标，重发无害）。 */
 async function rewindTo(cx: { client: import("../../client").Client; session: string | null }, turn: number) {
   if (!cx.session) return;
@@ -136,13 +64,11 @@ export function corePack(reg: Registries): ContributionPack {
       ctx.add(reg.presets, { id: "chat", order: 1, title: "聊天", sidebar: "sidebar", main: "main", panels: "drawer" });
       ctx.add(reg.presets, { id: "embed", order: 2, title: "嵌入（单会话）", sidebar: null, main: "main", panels: "float" });
 
-      // 输入框工具栏：切换本会话的模型（后端有模型目录时）。
-      ctx.add(reg.slots, {
-        id: "composer.model",
-        at: "composer.toolbar.left",
-        order: 10,
-        render: (p) => (sh0(p) ? <ModelPicker session={p.session as string} /> : null),
-      });
+      // 输入框工具栏：模型、权限档位（左）与上下文用量（右）。首页草稿时 session 为 null，模型与档位记进 sh.draft。
+      const sid = (p: Record<string, unknown>) => (typeof p.session === "string" && p.session ? p.session : null);
+      ctx.add(reg.slots, { id: "composer.model", at: "composer.toolbar.left", order: 10, render: (p) => <ModelPicker session={sid(p)} /> });
+      ctx.add(reg.slots, { id: "composer.mode", at: "composer.toolbar.left", order: 20, render: (p) => <ModePicker session={sid(p)} /> });
+      ctx.add(reg.slots, { id: "composer.context", at: "composer.toolbar.right", order: 10, render: (p) => <ContextMeter session={sid(p)} /> });
 
       // ---- 命令 ----
       const cmd = (c: Parameters<typeof reg.commands.add>[0]) => ctx.add(reg.commands, c);

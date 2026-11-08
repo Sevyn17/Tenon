@@ -365,24 +365,17 @@ export function Composer(p: ComposerProps) {
             </Tooltip>
           )}
           {p.onAttach && (
-            <>
-              <Tooltip label="添加文件或图片">
-                <IconButton label="添加文件或图片" size="sm" onClick={() => fileRef.current?.click()}>
-                  <Paperclip size={15} />
-                </IconButton>
-              </Tooltip>
-              <input
-                ref={fileRef}
-                type="file"
-                multiple
-                hidden
-                onChange={(e) => {
-                  const f = [...(e.target.files ?? [])];
-                  if (f.length) p.onAttach!(f);
-                  e.target.value = "";
-                }}
-              />
-            </>
+            <input
+              ref={fileRef}
+              type="file"
+              multiple
+              hidden
+              onChange={(e) => {
+                const f = [...(e.target.files ?? [])];
+                if (f.length) p.onAttach!(f);
+                e.target.value = "";
+              }}
+            />
           )}
           {p.toolbarLeft}
           <span className={s.grow} />
