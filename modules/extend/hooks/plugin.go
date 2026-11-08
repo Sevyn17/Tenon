@@ -92,11 +92,11 @@ func (p *plug) Setup(cx *component.Registrar) error {
 		}
 		return ls
 	}
-	cx.Register(assemble.PointSessionLayer, "hooks-post", assemble.LayerEntry{Order: 10,
+	component.RegisterAt(cx, assemble.SessionLayer, "hooks-post", assemble.LayerEntry{Order: 10,
 		Func: func(*assemble.SessionCx) ([]toolhub.Layer, error) { return split(false), nil }})
-	cx.Register(assemble.PointSessionLayer, "hooks-pre", assemble.LayerEntry{Guard: true, Order: 20,
+	component.RegisterAt(cx, assemble.SessionLayer, "hooks-pre", assemble.LayerEntry{Guard: true, Order: 20,
 		Func: func(*assemble.SessionCx) ([]toolhub.Layer, error) { return split(true), nil }})
-	cx.Register(assemble.PointAfterTurn, "hooks", assemble.AfterTurnFunc(r.AfterTurn))
+	component.RegisterAt(cx, assemble.AfterTurn, "hooks", assemble.AfterTurnFunc(r.AfterTurn))
 	return nil
 }
 

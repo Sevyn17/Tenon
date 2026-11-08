@@ -1,6 +1,6 @@
 package tenon
 
-// 应用宿主用的选项与访问器（计划/07 阶段三）：按 profile 装配、插件提供存储、注入应用预置服务、会话钩子、
+// 应用宿主选项（godoc 的"应用宿主选项"一组）与内核对象（计划/07 阶段三；计划/08 3.4 把访问器收成 Internals）：按 profile 装配、插件提供存储、注入应用预置服务、会话钩子、
 // 档位确认记录、协议层选项。apphost（profile 分层、项目信任、工作区）建在这些之上；
 // 自己写产品外壳的应用也可以直接用。只用 Ask / History 的嵌入方用不到这一页。
 
@@ -107,42 +107,29 @@ func WithReadyErrors(f func([]error)) Option {
 	}
 }
 
-// —— 访问器：给建在 SDK 上的应用宿主用（列插件、查轨迹、打开会话等）——
-
-// Host 会话宿主。
-func (a *App) Host() *host.Host { return a.host }
-
-// Bus 事件总线。
-func (a *App) Bus() *bus.Bus { return a.bus }
-
-// Assembly 装配结果（组件、点位、服务）。
-func (a *App) Assembly() *component.Assembly { return a.asm }
-
-// Models 模型服务。
-func (a *App) Models() *assemble.Models { return a.models }
-
-// Definitions 智能体定义来源（组件模板 + 应用来源）。
-func (a *App) Definitions() agentdef.Source { return a.defs }
-
-// DB 存储；存储由组件提供时 Open / Start 之前为 nil。
-func (a *App) DB() store.Store {
-	if a.handle == nil {
-		return nil
-	}
-	return a.handle.DB()
+// Internals 内核对象：给建在 SDK 上的应用宿主用（列插件、查轨迹、打开会话等）。
+//
+// 这些类型来自 runtime/*，不在稳定承诺之内（见 docs/框架设计/07 - SDK 接口.md）：升级时可能改名、改签名。
+// 只用 Ask / Session / API 的应用用不到它。
+type Internals struct {
+	Host        *host.Host          // 会话宿主
+	Bus         *bus.Bus            // 事件总线
+	Assembly    *component.Assembly // 装配结果（组件、点位、服务）
+	Models      *assemble.Models    // 模型服务；没装 models 组件时为 nil
+	Definitions agentdef.Source     // 智能体定义来源（组件模板 + 应用来源）
+	DB          store.Store         // 存储；存储由组件提供时 Open / Start 之前为 nil
+	Blobs       toolhub.Artifacts   // 工件存储；Open / Start 之前可能为 nil
+	Builder     *assemble.Builder   // 会话构造器；Start 之前为 nil
 }
 
-// Blobs 工件存储；Open / Start 之前可能为 nil。
-func (a *App) Blobs() toolhub.Artifacts {
-	if a.handle == nil {
-		return nil
+// Internals 取内核对象的快照：DB、Blobs、Builder 在 Open / Start 之后才有，之前取到的是 nil，要用时重新取。
+func (a *App) Internals() Internals {
+	in := Internals{Host: a.host, Bus: a.bus, Assembly: a.asm, Models: a.models, Definitions: a.defs}
+	if a.handle != nil {
+		in.DB, in.Blobs = a.handle.DB(), a.handle.Blobs()
 	}
-	return a.handle.Blobs()
-}
-
-// Builder 会话构造器；Start 之前为 nil。
-func (a *App) Builder() *assemble.Builder {
 	a.mu.Lock()
-	defer a.mu.Unlock()
-	return a.builder
+	in.Builder = a.builder
+	a.mu.Unlock()
+	return in
 }

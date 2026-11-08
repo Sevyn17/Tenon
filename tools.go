@@ -150,7 +150,7 @@ func (appTools) Meta() component.Meta { return component.Meta{Name: appToolsName
 
 func (p appTools) Setup(cx *component.Registrar) error {
 	tools := p.tools
-	cx.Register(assemble.PointSessionTools, appToolsName, assemble.ToolsEntry{Order: 50,
+	component.RegisterAt(cx, assemble.SessionTools, appToolsName, assemble.ToolsEntry{Order: 50,
 		Tools: func() []*toolhub.Tool { return tools }})
 	return nil
 }

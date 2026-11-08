@@ -41,7 +41,7 @@ func (*plug) Setup(cx *component.Registrar) error {
 		}
 	}
 	for _, it := range Items() {
-		cx.Register(assemble.PointPermItems, "skills", it)
+		component.RegisterAt(cx, assemble.PermItems, "skills", it)
 	}
 	// 技能索引装配期扫一次，各会话共用（工具与系统块读同一份）。
 	s := NewSkillsTrust(root, assemble.ProjectTrusted(cx), extra...) // 不受信项目不读项目技能（审查 P1-4）
@@ -49,11 +49,11 @@ func (*plug) Setup(cx *component.Registrar) error {
 		ui.Warn("技能", w)
 	}
 	sk := s.Tool().WithItems(ItemLoad)
-	cx.Register(assemble.PointSessionTools, "skills", assemble.ToolsEntry{Order: 25,
+	component.RegisterAt(cx, assemble.SessionTools, "skills", assemble.ToolsEntry{Order: 25,
 		Tools: func() []*toolhub.Tool { return []*toolhub.Tool{sk} },
 		// 没有技能时不暴露 skill 工具（2026-11-04 审查 P2 工具体验：原先空目录也给模型一个调不通的工具）。
 		Visible: func(*assemble.SessionCx) bool { return len(s.List()) > 0 }})
-	cx.Register(assemble.PointSystemBlock, "skills", assemble.BlockEntry{Order: 20,
+	component.RegisterAt(cx, assemble.SystemBlock, "skills", assemble.BlockEntry{Order: 20,
 		Func: func(*assemble.SessionCx) (*session.SystemBlock, error) { return s.Block(), nil }})
 	return nil
 }

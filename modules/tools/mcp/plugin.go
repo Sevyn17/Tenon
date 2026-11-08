@@ -60,10 +60,10 @@ func (p *plug) Setup(cx *component.Registrar) error {
 		return err
 	}
 	for _, it := range Items(p.cfg) {
-		cx.Register(assemble.PointPermItems, "mcp", it)
+		component.RegisterAt(cx, assemble.PermItems, "mcp", it)
 	}
 	// MCP 的工具要等进程起来（Start）才知道，所以懒取；取到的是同一批只读对象。
-	cx.Register(assemble.PointSessionTools, "mcp", assemble.ToolsEntry{Order: 50,
+	component.RegisterAt(cx, assemble.SessionTools, "mcp", assemble.ToolsEntry{Order: 50,
 		Tools: func() []*toolhub.Tool {
 			if p.src == nil {
 				return nil

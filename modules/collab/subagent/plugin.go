@@ -55,10 +55,10 @@ func (*plug) Setup(cx *component.Registrar) error {
 	}
 	t := Tool(h, h.ChildFactory()).WithItems(ItemSpawn)
 	for _, it := range Items() {
-		cx.Register(assemble.PointPermItems, it.ID, it)
+		component.RegisterAt(cx, assemble.PermItems, it.ID, it)
 	}
 	// 子会话不再带委派工具（深度上限 1）。这里用 Visible 而不是重造工具。
-	cx.Register(assemble.PointSessionTools, "subagent", assemble.ToolsEntry{Order: 60,
+	component.RegisterAt(cx, assemble.SessionTools, "subagent", assemble.ToolsEntry{Order: 60,
 		Tools:   func() []*toolhub.Tool { return []*toolhub.Tool{t} },
 		Visible: func(sc *assemble.SessionCx) bool { return !sc.Child }})
 	return nil

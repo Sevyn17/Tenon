@@ -35,7 +35,7 @@ func TestAskGoesThroughGuards(t *testing.T) {
 	if err := app.Start(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := app.Ask(ctx, "support", "hi", nil); !errors.Is(err, host.ErrNotAllowed) {
+	if _, err := app.Ask(ctx, "support", "hi", nil); !errors.Is(err, host.ErrNotAllowed) || !errors.Is(err, tenon.ErrDenied) {
 		t.Fatalf("守卫拒绝新建会话时 Ask 应失败：%v", err)
 	}
 }

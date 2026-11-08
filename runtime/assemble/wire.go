@@ -98,6 +98,7 @@ func Wire(o WireOptions) (*Wired, error) {
 		Statuses:    col.Statuses,
 		Schemas:     o.Asm.AgentSchemas(),
 		Hooks:       o.Hooks,
+		Guards:      h.Guards,
 	}
 	// 顶层会话带委派 / 领导工具；子会话与工作组成员按 child 构造（深度 1）。
 	h.New = func(id, def string) (*agent.Agent, *session.Config, error) { return rb.Build(id, def, false) }

@@ -19,13 +19,13 @@ func (*plug) Meta() component.Meta {
 func (*plug) Setup(cx *component.Registrar) error {
 	w := &Web{Search: NewDeepSeekSearch()}
 	for _, it := range Items() {
-		cx.Register(assemble.PointPermItems, it.ID, it)
+		component.RegisterAt(cx, assemble.PermItems, it.ID, it)
 	}
 	// 工具装配期构造一次（WithItems 只做一次，不再按会话重复追加）。
 	ts := w.Tools()
 	ts[0].WithItems(ItemFetch)
 	ts[1].WithItems(ItemSearch)
-	cx.Register(assemble.PointSessionTools, "web", assemble.ToolsEntry{Order: 40,
+	component.RegisterAt(cx, assemble.SessionTools, "web", assemble.ToolsEntry{Order: 40,
 		Tools: func() []*toolhub.Tool { return ts }})
 	return nil
 }

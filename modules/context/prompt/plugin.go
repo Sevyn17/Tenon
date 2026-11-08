@@ -72,14 +72,14 @@ func (*plug) Setup(cx *component.Registrar) error {
 	if err != nil {
 		return err
 	}
-	cx.Register(assemble.PointSystemBlock, "prompt", assemble.BlockEntry{Order: 0,
+	component.RegisterAt(cx, assemble.SystemBlock, "prompt", assemble.BlockEntry{Order: 0,
 		Func: func(*assemble.SessionCx) (*session.SystemBlock, error) {
 			return &session.SystemBlock{Text: text, Source: "agent"}, nil
 		}})
 	// 会话定义的 prompt（框架设计 12 L1：定义 prompt 进系统段）：接在基础提示词之后，
 	// 基础提示词里的工作目录与工具用法照样保留。原先没有任何代码读它，定义里写的角色被静默丢弃
 	// （2026-11-04 审查 P0-2）。
-	cx.Register(assemble.PointSystemBlock, "prompt-def", assemble.BlockEntry{Order: 1,
+	component.RegisterAt(cx, assemble.SystemBlock, "prompt-def", assemble.BlockEntry{Order: 1,
 		Func: func(sc *assemble.SessionCx) (*session.SystemBlock, error) {
 			if sc == nil || sc.Def == nil {
 				return nil, nil
@@ -106,7 +106,7 @@ func (*plug) Setup(cx *component.Registrar) error {
 			continue
 		}
 		src := "plugin:" + k.Name
-		cx.Register(assemble.PointSystemBlock, "prompt-"+k.Name, assemble.BlockEntry{Order: 5,
+		component.RegisterAt(cx, assemble.SystemBlock, "prompt-"+k.Name, assemble.BlockEntry{Order: 5,
 			Func: func(*assemble.SessionCx) (*session.SystemBlock, error) {
 				return &session.SystemBlock{Text: t, Source: src}, nil
 			}})

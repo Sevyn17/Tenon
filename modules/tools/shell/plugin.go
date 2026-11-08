@@ -55,11 +55,11 @@ func (p *plug) Setup(cx *component.Registrar) error {
 	}
 	p.sh = sh
 	for _, it := range Items() {
-		cx.Register(assemble.PointPermItems, it.ID, it)
+		component.RegisterAt(cx, assemble.PermItems, it.ID, it)
 	}
 	// 进程级一个 Shell（后台 job 属于本进程），工具装配期构造一次。
 	tools := sh.Tools()
-	cx.Register(assemble.PointSessionTools, "shell", assemble.ToolsEntry{Order: 30,
+	component.RegisterAt(cx, assemble.SessionTools, "shell", assemble.ToolsEntry{Order: 30,
 		Tools: func() []*toolhub.Tool { return tools }})
 	return nil
 }

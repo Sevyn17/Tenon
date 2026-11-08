@@ -170,12 +170,13 @@ func Start(o StartOptions) (*Runtime, error) {
 		_ = app.Close(context.Background())
 		return nil, err
 	}
-	r.App, r.Bus, r.Host = app, app.Bus(), app.Host()
-	r.Rt = &Assembled{Asm: app.Assembly(), Models: app.Models(), Defs: app.Definitions()}
-	if v, ok := app.Assembly().Value(assemble.ServiceDB); ok {
+	in := app.Internals()
+	r.App, r.Bus, r.Host = app, in.Bus, in.Host
+	r.Rt = &Assembled{Asm: in.Assembly, Models: in.Models, Defs: in.Definitions}
+	if v, ok := in.Assembly.Value(assemble.ServiceDB); ok {
 		r.Rt.Store, _ = v.(assemble.DBHandle)
 	}
-	if v, ok := app.Assembly().Value(assemble.ServiceCompactor); ok {
+	if v, ok := in.Assembly.Value(assemble.ServiceCompactor); ok {
 		r.Rt.Compact, _ = v.(*compact.Compactor)
 	}
 	if r.Rt.Store == nil { // WithStore 不在这条路上：存储一定来自组件
@@ -214,14 +215,15 @@ func (b *Built) Ready(context.Context) []error { return b.ready }
 // BuildApp 接上会话构造器与 [kernel] 宿主参数、应用协议层，跑 ready 点位，再启动后台循环（tenon.App.Start）。
 // 只跑一次性子命令（export / explain）的不调它，也就不起后台循环。
 func (r *Runtime) BuildApp() (*Built, error) {
-	if r.App.Models() == nil {
+	if r.App.Internals().Models == nil {
 		return nil, fmt.Errorf("profile 中没有 models 插件")
 	}
 	if err := r.App.Start(context.Background()); err != nil {
 		return nil, err
 	}
-	b := &Built{API: r.App.API(), DB: r.App.DB(), Model: r.App.Models().Model, Builder: r.App.Builder(), ready: r.readyErrs}
-	if v, ok := r.App.Assembly().Value(permission.Service); ok {
+	in := r.App.Internals()
+	b := &Built{API: r.App.API(), DB: in.DB, Model: in.Models.Model, Builder: in.Builder, ready: r.readyErrs}
+	if v, ok := in.Assembly.Value(permission.Service); ok {
 		b.Perms, _ = v.(*permission.Sessions)
 	}
 	return b, nil

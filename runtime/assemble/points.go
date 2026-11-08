@@ -16,6 +16,7 @@ import (
 	"tenon/runtime/ext"
 	"tenon/runtime/inject"
 	"tenon/runtime/session"
+	"tenon/runtime/store"
 	"tenon/runtime/toolhub"
 )
 
@@ -29,6 +30,17 @@ const (
 	// PointPermItems toolhub.Item：权限项声明（06 - 工具权限设计方案 §9.3）。
 	// 装配级而非会话级：注册表由装进来的插件汇总一次，各会话共用。
 	PointPermItems = ext.PointPermItems
+)
+
+// 类型化点位（计划/08 3.5）：组件用 component.RegisterAt(cx, assemble.SessionTools, 名字, ToolsEntry{…}) 登记。
+var (
+	SessionTools    = ext.NewPoint[ToolsEntry](PointSessionTools)
+	SessionLayer    = ext.NewPoint[LayerEntry](PointSessionLayer)
+	SystemBlock     = ext.NewPoint[BlockEntry](PointSystemBlock)
+	AfterTurn       = ext.NewPoint[AfterTurnFunc](PointAfterTurn)
+	Ready           = ext.NewPoint[ReadyFunc](PointReady)
+	PermItems       = ext.NewPoint[toolhub.Item](PointPermItems)
+	OnSessionDelete = ext.NewPoint[store.Cleaner](PointOnSessionDelete)
 )
 
 // 应用预置服务（component.Spec.Inject 的键）。

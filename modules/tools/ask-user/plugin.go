@@ -34,7 +34,7 @@ func (*plug) Setup(cx *component.Registrar) error {
 			return ans.Value, err
 		}))
 	}
-	cx.Register(assemble.PointSessionTools, "ask-user", assemble.ToolsEntry{Order: 21,
+	component.RegisterAt(cx, assemble.SessionTools, "ask-user", assemble.ToolsEntry{Order: 21,
 		Tools: func() []*toolhub.Tool { return tools }})
 	return nil
 }

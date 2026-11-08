@@ -53,7 +53,7 @@ func (p *plug) Setup(cx *component.Registrar) error {
 	if c == nil {
 		c = &Config{}
 	}
-	cx.Register(assemble.PointSessionLayer, "sandbox", assemble.LayerEntry{Guard: true, Order: 5,
+	component.RegisterAt(cx, assemble.SessionLayer, "sandbox", assemble.LayerEntry{Guard: true, Order: 5,
 		Func: func(*assemble.SessionCx) ([]toolhub.Layer, error) {
 			return []toolhub.Layer{Layer(pol.SandboxMode, ap)}, nil
 		}})

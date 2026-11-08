@@ -32,7 +32,7 @@ func (*plug) Setup(cx *component.Registrar) error {
 		}
 		assemble.PrintIn(ui, sid, b.String()) // 带会话 id（审查 P1-28）
 	})
-	cx.Register(assemble.PointSessionTools, "todo", assemble.ToolsEntry{Order: 20,
+	component.RegisterAt(cx, assemble.SessionTools, "todo", assemble.ToolsEntry{Order: 20,
 		Tools: func() []*toolhub.Tool { return []*toolhub.Tool{todo} }})
 	return nil
 }

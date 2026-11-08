@@ -18,10 +18,10 @@ func (*plug) Meta() component.Meta {
 
 func (*plug) Setup(cx *component.Registrar) error {
 	for _, it := range Items() {
-		cx.Register(assemble.PointPermItems, "code-mode", it)
+		component.RegisterAt(cx, assemble.PermItems, "code-mode", it)
 	}
 	// 子调用回到本次调用所在的 hub（toolhub.Cx.Hub），工具本身与会话无关。
-	cx.Register(assemble.PointSessionTools, "code-mode", assemble.ToolsEntry{Order: 90,
+	component.RegisterAt(cx, assemble.SessionTools, "code-mode", assemble.ToolsEntry{Order: 90,
 		Tools: func() []*toolhub.Tool { return []*toolhub.Tool{Tool()} }})
 	return nil
 }

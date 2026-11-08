@@ -67,8 +67,8 @@ func (*plug) Setup(cx *component.Registrar) error {
 	if err := cx.AgentConfig(&UseConfig{}); err != nil {
 		return err
 	}
-	cx.Register(assemble.PointPermItems, ItemSandbox, SandboxItem())
-	cx.Register(assemble.PointSessionLayer, "permission", assemble.LayerEntry{Guard: true, Order: 10,
+	component.RegisterAt(cx, assemble.PermItems, ItemSandbox, SandboxItem())
+	component.RegisterAt(cx, assemble.SessionLayer, "permission", assemble.LayerEntry{Guard: true, Order: 10,
 		Func: func(sc *assemble.SessionCx) ([]toolhub.Layer, error) {
 			// §9.5：与参数无关地必然 deny 的工具不进模型工具列表（每次构造工具列表时按当前档位求值）。
 			hub, id := sc.Hub, sc.ID

@@ -1,143 +1,82 @@
-# 07 SDK 接口
+# 07 SDK 接口：公开面清单
 
-> 状态：草案（2026-11-01）。列出应用开发者直接用到的公开接口，以及它们怎样演进。组件开发者用到的接口见 [04 扩展模型](<04 - 扩展模型.md>)。
+> 状态：定稿（2026-11-09，计划/08 阶段 B）。列出哪些包、哪些名字在稳定承诺里，以及它们怎样演进。
+> 怎么用见 [上手](<../上手/01 - 十分钟：带工具的智能体.md>)；完整签名以 `testdata/api.txt` 为准。
+> 2026-11-01 的草案（`Send(to, body)`、`Events`、`Respond`、`Fork` 等设想）见本文件的 git 历史，未实现的部分列在 7.6。
 
-## 7.1 最小例子
+## 7.1 承诺的包
 
-```go
-func main() {
-    app, err := tenon.New(
-        tenon.Default(),                          // 标准组件预设（10）
-        tenon.WithStore(sqlite.Open("data.db")),
-        tenon.WithModels(openai.FromEnv()),
-        tenon.WithAgents(tenon.Dir("./agents")),  // 定义来源（03 3.5）
-        tenon.With(&shop.Orders{}),               // 应用自己的组件
-    )
-    if err != nil { log.Fatal(err) }
-    defer app.Close(context.Background())
+| 包 | 给谁用 | 内容 |
+|---|---|---|
+| `tenon`（根包） | 应用 | `New` 与选项、`App`、`Session`、工具外观、写组件用的点位 / 服务键 / 守卫、错误值 |
+| `tenon/tenontest` | 应用的测试 | 脚本模型（`Model`、`Reply`、`CallTool`）、`New` / `NewOn` / `Stores`、`AssertToolCalled` |
+| `tenon/transport/web` | 接前端 | HTTP + WebSocket 服务（`Config`、`New`、`NewToken`、`LoopbackHosts`、`WriteTokenFile`） |
+| `tenon/transport/bind` | 接桌面壳 | 把应用协议绑到进程内调用（`NewService`） |
+| `tenon/appapi/wire` | 前端与协议客户端 | 应用协议的帧、命令参数与事件结构（契约见 [06 - 应用协议契约](<../06 - 应用协议契约.md>)） |
+| `tenon/apphost` | 建在 SDK 上的应用宿主 | 读 profile、项目信任、工作区切换、`Start` |
+| `tenon/adapters` | 应用宿主 | 把内核对象接到应用协议的适配（`Fill`、`Parts`、模式批准） |
 
-    ctx := tenon.WithTenant(context.Background(), "t1")
-    ctx = tenon.WithUser(ctx, "u42")
-    reply, err := app.Ask(ctx, "support", "我的订单到哪了？", nil)
-}
-```
+`tenontest` 之外的四个包给"应用宿主"用（像产品客户端那样自己管 profile、工作区和前端的程序）；只写应用不需要它们。
 
-## 7.2 装配选项
+### 不在承诺里
 
-| 选项 | 作用 |
+- `tenon/runtime/*`：内核。可能改名、拆分、换签名。
+- `tenon/modules/*`：内置组件的实现。组件名和配置键见 [04 - 核心与扩展模块清单](<../04 - 核心与扩展模块清单.md>)，Go 代码可能变。
+- `tenon/appapi`：应用协议的服务端实现。前端只依赖 `appapi/wire` 与协议契约；`App.API()` 返回的 `*appapi.App` 只拿来交给 `transport/*`。
+- `App.Internals()` 返回的内核对象（Host、Bus、Assembly、Models、Definitions、DB、Blobs、Builder）：给应用宿主用，字段和类型跟着内核变。
+- 根包里指向 `runtime/*` 的别名（`Registrar`、`Scope`、`SessionCx`、`ToolsEntry`……）：别名本身在承诺里，快照连同目标类型的导出字段一起记录；目标里没被别名带出来的类型（如 `SessionCx.Hub` 的 `*toolhub.Hub`）不在承诺里。
+
+## 7.2 根包分组
+
+根包 godoc 按下面的分组写成目录页。
+
+| 组 | 名字 |
 |---|---|
-| `Default()` | 装上标准组件组合 |
-| `With(c ...Component)` | 加组件 |
-| `Without(names ...string)` | 从预设里去掉组件 |
-| `WithStore(Store)` | 存储实现（05） |
-| `WithModels(...ModelProvider)` | 模型供应商；档位 `fast` / `strong` 映射到具体模型 |
-| `WithAgents(...SpecSource)` | 定义来源，可多个，按命名空间（平台 / 租户 / 用户）区分，不做字段合并（03 3.5，D7） |
-| `WithConfig(path)` / `WithConfigSource(ConfigSource)` | 配置（06） |
-| `Override[T](impl)` | 替换某个服务（04 4.4） |
-| `WithOrder(point, names...)` | 显式指定中间件顺序（04 4.3） |
+| 建应用 | `New`、`App.Start` / `Open` / `Close`、`Default`、`Minimal`、`With`、`Without` |
+| 应用选项 | 存储 `WithStore`、`MemoryStore`、`SQLiteStore`；模型 `WithOpenAI`、`WithOpenAIResponses`、`WithAnthropic`、`WithModel`、`WithModels`、`WithModelCatalog`、`WithSecrets`、`Env`；智能体 `WithAgent`、`WithAgents`、`Dir`、`WithDefaultAgent`；工具 `WithTools`；其余 `WithWorkdir`、`WithUI`、`WithConfig`、`WithProtocolUI`、`WithSleepAfter`、`WithProjectTrust`、`WithKernel` |
+| 应用宿主选项 | `WithProfile`、`WithService`、`WithWorkspace`、`WithSessionHooks`、`WithModeApprovals`、`WithProtocolOptions`、`WithReadyErrors`；`App.Internals()`（不在承诺里，见上） |
+| 会话 | `App.Ask` / `NewSession` / `Session` / `History`、`Session.Send` / `Stream` / `History` / `Cancel`、`Event` 与 `Event*`、`Reply`、`Meta`、`WithTenant`、`WithUser` |
+| 工具 | `Func`、`Raw`、`SchemaOf`、`Tool` 的修饰方法、`CallInfoFrom` |
+| 写组件 | `Component`、`ComponentInfo`、`Registrar`、`Scope`；点位 `Point`、`RegisterAt`、`PointTools` / `ToolsOf`、`PointSystemBlock`、`PointLayer`、`PointAfterTurn`；服务 `Key`、`NewKey`、`Provide`、`Get`、`GetOptional`；守卫 `GuardRule`、`GuardDeliver` / `GuardSessionOpen` / `GuardToolCall`、`Allow` / `Deny` / `Abstain` |
+| 前端 | `App.API()`，交给 `transport/web` 或 `transport/bind` |
+| 错误 | `ErrNotStarted`、`ErrInvalid`、`ErrNotFound`、`ErrConflict`、`ErrDenied`，用 `errors.Is` 判断 |
 
-`New` 只装配和校验，不启动后台工作；必须显式调用 `app.Start(ctx)` 才启动，未启动时调用运行接口返回错误（D6）。所有校验错误在 `New` 里一次报完，不是遇到第一个就返回。
+## 7.3 快照
 
-## 7.3 运行接口
+`api_snapshot_test.go` 用 `go list -export` 取承诺包的编译导出数据，`go/importer` 读出类型，把全部导出名与签名写进 `testdata/api.txt`（每行一项，按包、按名排序）。不依赖要联网安装的工具，约 3 秒。
 
-```go
-type App interface {
-    // 和智能体新建会话并发第一条，等到本轮结束；是 NewSession + Send 的简写
-    Ask(ctx context.Context, agent, text string, meta Meta, opts ...RunOption) (*Reply, error)
+- 不一致时测试失败，列出多出和少掉的行，提示"公开接口变了：更新快照并写决策日志"。
+- 有意改公开面：`go test -run TestAPISnapshot -update-api .` 重录，同一个提交里在 [决策日志](<../计划/02 - 决策日志.md>) 写一行：改了什么、为什么。
+- `-short` 下跳过。
+- 承诺的包有变动时同步改测试里的 `promised` 列表和本篇 7.1。
 
-    // 发一封信封，不等结果；to 可以是 session: / agent: / human: 等（02 2.3）
-    // 只传目标和正文：from、origin、hop、caps、budget_ref、trace、corr 由内核写入（D2、D3）
-    // session:<id> 只查不建：找不到返回 ErrSessionNotFound，已关闭返回 ErrSessionClosed（13 13.3）
-    // agent:<名字> 新建会话；WithKey(key) 时按 (租户, 定义, 创建者, key) 原子地查或建（会话键，B19 修订；模型工具不开放）
-    // 返回投递到的会话 id 和 trace id
-    Send(ctx context.Context, to Address, body Body, opts ...SendOption) (SendResult, error)
+## 7.4 版本规则
 
-    // 会话
-    Session(ctx context.Context, id SessionID) (Session, error)
-    NewSession(ctx context.Context, agent string, meta Meta) (Session, error)
-    Sessions(ctx context.Context, q SessionQuery, cur Cursor) ([]SessionInfo, Cursor, error) // 按定义、状态、meta 键查，分页
+- **v0（现在）**：接口可以改，但每次改都要过快照、写决策日志。能加的不改：加选项、加方法、加字段优先于改签名。
+- **v1 起**：小版本只加不删、不改含义；不兼容改动只在大版本，大版本换模块路径（`…/v2`）。
+- **弃用**：标 `// Deprecated:` 并写替代方式，至少保留两个小版本，在下一个大版本删除。
+- 应用协议（`appapi/wire`）有自己的 `protocol` 号（06 应用协议契约）：加命令、加事件、加字段不升号；改语义或删字段升号。
+- 定义包格式有自己的版本（03 3.4）：新 SDK 读旧格式必须兼容，读到不认识的新格式直接拒绝。
+- `meta` 与 `x.*` 的内容框架原样保存，不解释。
 
-    // 订阅事件（04 4.6），从 cursor 之后开始；cursor 可持久化，断线后续读
-    Events(ctx context.Context, after Cursor, filter EventFilter) (<-chan Event, error)
+## 7.5 守卫执行的位置
 
-    // 回答人工确认 / 提问；框架核对 ctx 里的用户就是被问的人、corr 未过期未用过（D3）
-    Respond(ctx context.Context, corr string, answer Answer) error
+`Registrar.Guard` 登记的规则在这三处执行：
 
-    // 诊断
-    Explain(ctx context.Context, q ExplainQuery) (*Explanation, error)
+| 位置 | 时机 | 被拒时 |
+|---|---|---|
+| `GuardDeliver` | 信封投递前 | 投递失败，记 `guard.denied` |
+| `GuardSessionOpen` | 新建会话前 | `NewSession` / `Ask` 返回 `ErrDenied` |
+| `GuardToolCall` | 工具执行前（先于权限组件的授权层） | 失败结果交给模型，这一轮继续 |
 
-    Start(ctx context.Context) error
-    Close(ctx context.Context) error
-}
+合并规则：任一条 Deny 即拒绝；全部 Abstain 走内核缺省；Allow 只放开"往 `session:` 投递"的缺省限制。`runtime/component` 里还有 `GuardTurn`、`GuardModelCall` 两个位置，内核没有执行它们，所以根包不导出。
 
-type Session interface {
-    ID() SessionID
-    Send(ctx context.Context, text string, opts ...RunOption) (*Run, error)   // 返回的 Run 可流式读
-    History(ctx context.Context, from, limit int) ([]Entry, error)
-    Fork(ctx context.Context, at int) (Session, error)
-    Rewind(ctx context.Context, at int) error
-    Cancel(ctx context.Context) error                  // 中断当前一轮（02 2.2 已中断）
-    Resume(ctx context.Context) error                  // 预算挂起后显式恢复
-    Migrate(ctx context.Context, version string) error // 迁到定义的新版本（03 3.4）
-    SetMeta(ctx context.Context, m Meta) error         // 应用改 meta，模型改不了（05 5.4）
-    Close(ctx context.Context) error                   // 归档
-}
-
-// 一轮的结果；Run 可流式读增量，Wait 等到本轮结束
-type Run interface {
-    Stream() <-chan Delta
-    Wait(ctx context.Context) (*Reply, error)
-}
-```
-
-错误类型：`ErrNotStarted`（未 `Start`）、`ErrDenied`（守卫拒绝，带原因）、`ErrBudget`（预算用尽）、`ErrNotFound`、`ErrSessionNotFound`（`session:` 地址找不到会话）、`ErrSessionClosed`（会话已关闭，发送方应新建会话）、`ErrConflict`（租约或条件写冲突）、`ErrInvalid`（定义或参数校验失败），都能用 `errors.Is` 判断。
-
-租户和用户是一等字段，不放 `meta`：应用用 `tenon.WithTenant(ctx, t)`、`tenon.WithUser(ctx, u)` 写进调用上下文，框架把它们记为会话的租户和信封的发送者 `from`（02 2.4、08 8.3）。取不到租户的调用直接报错（08 8.8）；单机应用用 `tenon.WithTenant(ctx, "local")` 或装配时设缺省租户。
-
-多人会话：每个用户用自己的 ctx 调 `Session.Send`，发送者各不相同；谁能往这个会话发，由成员组件的守卫规则决定（08 8.2）。
-
-`meta` 由应用写入，放其余业务键（如店铺、渠道），模型改不了（05 5.4）。
-
-## 7.4 对外协议
-
-同一套接口通过 `tenon/server` 暴露成 HTTP + WebSocket（或 SSE），供非 Go 应用和界面使用。路径和 Go 方法一一对应，OpenAPI 文档由接口定义生成。协议和 Go SDK 用同一个版本号。
-
-鉴权由应用提供：`server.WithAuthenticator(func(*http.Request) (tenant, user string, err error))`，框架用返回值调用 `WithTenant` / `WithUser`。没有配置 Authenticator 时服务只监听本机回环地址。
-
-## 7.5 事件名
-
-| 事件 | 时机 |
-|---|---|
-| `definition.loaded` / `definition.rejected` | 定义加载成功 / 校验失败 |
-| `session.created` / `session.active` / `session.idle` / `session.closed` | 会话状态变化（02 2.2） |
-| `session.suspended` / `session.resumed` / `session.forked` / `session.rewound` / `session.migrated` | 预算挂起、恢复、Fork、Rewind、迁版本 |
-| `turn.started` / `turn.done` / `turn.failed` / `turn.interrupted` | 一轮运行（02 2.4） |
-| `lease.acquired` / `lease.lost` | 租约变化（02 2.2） |
-| `plugin.crashed` | 外部插件崩溃重启（04 4.8） |
-| `model.called` | 一次模型请求结束，带用量 |
-| `tool.called` | 一次工具调用结束 |
-| `mail.delivered` / `mail.rejected` | 信封投递 |
-| `guard.denied` | 守卫拒绝（08） |
-| `human.asked` / `human.answered` | 问人 |
-| `budget.exceeded` | 预算用尽 |
-
-组件可以加自己的事件，名字前缀必须是组件名：`group.posted`、`board.claimed`。
-
-## 7.6 版本与弃用
-
-- 包路径 `tenon/v1`，大版本才允许不兼容改动，大版本换包路径。
-- 小版本内：可以加方法、加选项、加事件、加字段；不删、不改含义。
-- 弃用：标 `// Deprecated:` 并在运行时第一次调用时打一条警告日志，**至少保留两个小版本**再在下一个大版本删除。弃用说明必须写替代方式。
-- 定义包格式有自己的版本 `format = "tenon/v1"`（03 3.4），和 SDK 版本分开：新 SDK 读旧格式必须兼容，读到不认识的新格式直接拒绝。
-- 事件结构只加字段不改字段；订阅者要容忍不认识的字段。
-- `x.*` 和 `meta` 的内容框架永远原样保存，任何版本都不会去解释它们。
-
-## 7.7 现状差距
+## 7.6 现状差距
 
 | 现状 | 目标 | 处理 |
 |---|---|---|
-| 应用通过 `runtime.Builder` 拼装，接口偏内部 | `tenon.New` + 选项 | T1b-2d 完成：SDK 落模块根（package `tenon`）（`New` + `Component` + 选项 + `ErrNotStarted` + `Ask`/`History`），`tenontest` 端到端测试 |
-| 没有对外承诺的接口边界 | 本篇列出的接口加版本规则 | T1 定稿，T2 起执行 |
-| 界面已经走应用接口层 `appapi`（protocol 1，24 条命令（2026-11-02 加 `session.reply` 按 corr 回信应答确认、`trace.explain`），`App.Call` 分发；api-server 走 WebSocket JSON 帧，见 [10 - 框架模块/12](<../90 - 归档/10 - 框架模块/12 - 应用接口层.md>)、[14](<../90 - 归档/10 - 框架模块/14 - 网页服务.md>)）。但命令按会话 id + 文本设计（`session.send`），没有信封、地址、租户和用户 | appapi 是 7.4 协议的前身：T1 把 `appapi.App` 改成包在 `tenon.App` 外面的薄适配；T3 有了信封和地址后，命令改成 `Send(to, body)`、事件改用 7.5 的名字，protocol 升到 2 | T1b-2d 完成 SDK 侧（模块根的 SDK 直接复用 `appapi` 起服务）；`appapi` 变成 `tenon.App` 外面的薄适配随 T3 协议升级一起做 |
-| api-server 只有随机令牌 + Host/Origin 检查，只认本机 | `server.WithAuthenticator` 返回租户和用户 | v1 后：多租户 / 多用户随 T4（v1 单机一个用户） |
-| appapi 错误码 `busy`、`not_idle`、`conflict`、`not_found` 等 | 7.3 的错误类型；appapi 码按类型映射 | T1b-2d 先落 `ErrNotStarted` / `ErrInvalid` / `ErrNotFound`；`ErrLeaseLost` 已归 `conflict`（2026-11-02）；其余随 appapi 协议升 2（v1 后置 ⑤） |
+| 模块路径是 `tenon`，不能 `go get` | 可下载的路径，框架独立仓库 | 计划/08 阶段 C |
+| `Send(to, body)` 发信封、`Events(after)` 订阅、`Respond(corr)` 回答 | 应用用信封与地址和其他会话通信 | 未做。现在由 `Session.Send` / `Stream` 和应用协议覆盖；有外部需求再加到根包 |
+| `Fork` / `Rewind` / `Migrate` / `SetMeta` | 会话操作 | 应用协议里有对应命令，根包未暴露 |
+| 多租户鉴权（`WithAuthenticator`） | 服务按请求取租户和用户 | v1 后（T4）；现在 `transport/web` 只有令牌 + Host / Origin 检查 |
+| 守卫只在投递、建会话、工具调用三处执行 | 回合与模型调用也能拦 | 有需要时在 agent 里加执行点，再导出 `GuardTurn` / `GuardModelCall` |

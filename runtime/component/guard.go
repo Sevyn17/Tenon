@@ -111,3 +111,28 @@ func (a *Assembly) GuardRules() []GuardRule {
 	copy(out, a.guards)
 	return out
 }
+
+// EvalGuards 跑完 req.Point 上的全部规则并合并结论（04 4.2、08 D4）：任一条 Deny 即拒绝（原因为空时用规则名）；
+// 有 Allow 结论为 Allow；全部 Abstain 为 Abstain，由调用方走内核缺省。
+func EvalGuards(rules []GuardRule, req GuardRequest) (Verdict, string) {
+	verdict, reason := Abstain, ""
+	for _, r := range rules {
+		if r.On != req.Point || r.Check == nil {
+			continue
+		}
+		v, why := r.Check(req)
+		switch v {
+		case Deny:
+			if why == "" {
+				why = r.Name
+			}
+			return Deny, why
+		case Allow:
+			verdict = Allow
+			if why != "" {
+				reason = why
+			}
+		}
+	}
+	return verdict, reason
+}

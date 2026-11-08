@@ -1,0 +1,458 @@
+tenon: const Abstain tenon/runtime/component.Verdict
+tenon: type AfterTurnFunc = tenon/runtime/assemble.AfterTurnFunc
+tenon: type Agent struct{Name string; Description string; Prompt string; Model string; Tools []string; Use map[string]map[string]any}
+tenon: type AgentSource = tenon/runtime/agentdef.Source
+tenon: const Allow tenon/runtime/component.Verdict
+tenon: type App struct{}
+tenon: method (App) API() *tenon/appapi.App
+tenon: method (App) Ask(ctx context.Context, agentName string, text string, meta Meta) (*Reply, error)
+tenon: method (App) Close(ctx context.Context) error
+tenon: method (App) History(ctx context.Context, id string) ([]*Entry, error)
+tenon: method (App) Internals() Internals
+tenon: method (App) NewSession(ctx context.Context, agentName string, meta Meta) (*Session, error)
+tenon: method (App) Open(ctx context.Context) error
+tenon: method (App) Session(ctx context.Context, id string) (*Session, error)
+tenon: method (App) Start(ctx context.Context) (err error)
+tenon: type BlockEntry = tenon/runtime/assemble.BlockEntry struct{Order int; Func tenon/runtime/assemble.BlockFunc}
+tenon: type CallInfo struct{Session string; CallID string; Agent string; Tenant string; User string; Meta Meta}
+tenon: func CallInfoFrom(ctx context.Context) (CallInfo, bool)
+tenon: type Component interface{Name() string; Setup(cx *Registrar) error; Start(sc *Scope) error}
+tenon: type ComponentInfo struct{Config any; Provides []string; Requires []string}
+tenon: func Default() Option
+tenon: const DefaultAgent untyped string
+tenon: const Deny tenon/runtime/component.Verdict
+tenon: func Dir(root string) AgentSource
+tenon: type EndReason = tenon/runtime/session.EndReason struct{Kind tenon/runtime/session.EndKind; Code string; Message string}
+tenon: method (EndReason) String() string
+tenon: type Entry = tenon/runtime/session.Entry struct{V uint16; ID string; Turn uint32; At int64; Meta map[string]any; Item tenon/runtime/session.Item}
+tenon: func Env(name string) KeyRef
+tenon: var ErrConflict error
+tenon: var ErrDenied error
+tenon: var ErrInvalid error
+tenon: var ErrNotFound error
+tenon: var ErrNotStarted error
+tenon: type Event struct{Kind EventKind; Text string; Tool string; CallID string; Args string; Reason string; Failed bool; Reply *Reply; Err error}
+tenon: method (Event) Approve(ok bool) error
+tenon: const EventConfirm EventKind
+tenon: const EventDone EventKind
+tenon: const EventError EventKind
+tenon: type EventKind string
+tenon: const EventReset EventKind
+tenon: const EventText EventKind
+tenon: const EventToolCall EventKind
+tenon: const EventToolResult EventKind
+tenon: func Func[T any](name string, desc string, fn func(ctx context.Context, args T) (any, error)) Tool
+tenon: func Get[T any](cx *Registrar, k Key[T]) (T, error)
+tenon: func GetOptional[T any](cx *Registrar, k Key[T]) (T, bool, error)
+tenon: const GuardDeliver tenon/runtime/component.GuardPoint
+tenon: type GuardPoint = tenon/runtime/component.GuardPoint
+tenon: method (GuardPoint) String() string
+tenon: type GuardRequest = tenon/runtime/component.GuardRequest struct{Point tenon/runtime/component.GuardPoint; Envelope *tenon/runtime/mail.Envelope; Agent string; Tool string; Args encoding/json.RawMessage; Risk tenon/runtime/component.Risk; Model string}
+tenon: type GuardRule = tenon/runtime/component.GuardRule struct{Name string; On tenon/runtime/component.GuardPoint; Check func(req tenon/runtime/component.GuardRequest) (tenon/runtime/component.Verdict, string)}
+tenon: const GuardSessionOpen tenon/runtime/component.GuardPoint
+tenon: const GuardToolCall tenon/runtime/component.GuardPoint
+tenon: type Internals struct{Host *tenon/runtime/host.Host; Bus *tenon/runtime/bus.Bus; Assembly *tenon/runtime/component.Assembly; Models *tenon/runtime/assemble.Models; Definitions tenon/runtime/agentdef.Source; DB tenon/runtime/store.Store; Blobs tenon/runtime/toolhub.Artifacts; Builder *tenon/runtime/assemble.Builder}
+tenon: type Key[T any] = tenon/runtime/ext.Key[T] struct{}
+tenon: method (Key) Maybe() string
+tenon: method (Key) Name() string
+tenon: method (Key) Need() string
+tenon: type KeyRef string
+tenon: type LayerEntry = tenon/runtime/assemble.LayerEntry struct{Guard bool; Order int; Func tenon/runtime/assemble.LayerFunc}
+tenon: const LocalTenant untyped string
+tenon: const LocalUser untyped string
+tenon: func MemoryStore() Store
+tenon: type Meta map[string]any
+tenon: func Minimal() Option
+tenon: type ModelHub = tenon/runtime/modelhub.Hub struct{OnSpan func(tenon/runtime/modelhub.AttemptSpan)}
+tenon: method (ModelHub) AddLayer(l tenon/runtime/modelhub.Layer)
+tenon: method (ModelHub) Call(ctx context.Context, r *tenon/runtime/modelhub.Request) <-chan tenon/runtime/modelhub.Event
+tenon: method (ModelHub) Catalog() *tenon/runtime/modelhub.Catalog
+tenon: method (ModelHub) RegisterAdapter(a tenon/runtime/modelhub.Adapter) error
+tenon: method (ModelHub) SideCall(ctx context.Context, alias string, req tenon/runtime/session.Request) (*tenon/runtime/modelhub.Done, *tenon/runtime/modelhub.Failure)
+tenon: func New(opts ...Option) (*App, error)
+tenon: func NewKey[T any](name string) Key[T]
+tenon: type Option func(*config) error
+tenon: type Point[T any] = tenon/runtime/ext.Point[T] struct{}
+tenon: method (Point) Name() string
+tenon: var PointAfterTurn tenon/runtime/ext.Point[tenon/runtime/assemble.AfterTurnFunc]
+tenon: var PointLayer tenon/runtime/ext.Point[tenon/runtime/assemble.LayerEntry]
+tenon: var PointSystemBlock tenon/runtime/ext.Point[tenon/runtime/assemble.BlockEntry]
+tenon: var PointTools tenon/runtime/ext.Point[tenon/runtime/assemble.ToolsEntry]
+tenon: func Provide[T any](cx *Registrar, k Key[T], v T) error
+tenon: func Raw(name string, desc string, schema string, fn func(ctx context.Context, args encoding/json.RawMessage) (any, error)) Tool
+tenon: func RegisterAt[T any](cx *Registrar, p Point[T], name string, impl T)
+tenon: type Registrar = tenon/runtime/component.Registrar struct{}
+tenon: method (Registrar) AgentConfig(proto any) error
+tenon: method (Registrar) Config() any
+tenon: method (Registrar) FillSlot(name string, impl any) error
+tenon: method (Registrar) Guard(g tenon/runtime/component.GuardRule)
+tenon: method (Registrar) Mailer() *tenon/runtime/component.Mailer
+tenon: method (Registrar) Plugin() string
+tenon: method (Registrar) PointItems(point string) func() []tenon/runtime/component.Item
+tenon: method (Registrar) Provide(name string, svc any) error
+tenon: method (Registrar) Register(point string, name string, impl any)
+tenon: method (Registrar) Status(key string, fn tenon/runtime/inject.Func) error
+tenon: method (Registrar) Template(src tenon/runtime/agentdef.Source)
+tenon: type Reply struct{Text string; SessionID string}
+tenon: func SQLiteStore(path string) (Store, error)
+tenon: func SchemaOf[T any]() string
+tenon: type Scope = tenon/runtime/component.Scope struct{}
+tenon: method (Scope) Child(name string) *tenon/runtime/component.Scope
+tenon: method (Scope) Close(ctx context.Context) error
+tenon: method (Scope) Context() context.Context
+tenon: method (Scope) Degraded() []string
+tenon: method (Scope) Go(name string, f func(ctx context.Context) error)
+tenon: method (Scope) Live() int
+tenon: method (Scope) Name() string
+tenon: method (Scope) OnClose(f func(context.Context) error)
+tenon: type Session struct{}
+tenon: method (Session) Cancel(ctx context.Context) error
+tenon: method (Session) History(ctx context.Context) ([]*Entry, error)
+tenon: method (Session) ID() string
+tenon: method (Session) Send(ctx context.Context, text string) (*Reply, error)
+tenon: method (Session) Stream(ctx context.Context, text string) iter.Seq[Event]
+tenon: type SessionCx = tenon/runtime/assemble.SessionCx struct{ID string; Workdir string; Hub *tenon/runtime/toolhub.Hub; Agent *tenon/runtime/agent.Agent; Ctx *tenon/runtime/callctx.Ctx; Child bool; Def *tenon/runtime/agentdef.Agent; Parent *tenon/runtime/assemble.ParentLimits; Values map[string]any}
+tenon: type Store = tenon/runtime/store.Store
+tenon: type SystemBlock = tenon/runtime/session.SystemBlock struct{Text string; Breakpoint bool; Source string}
+tenon: type Tool struct{}
+tenon: method (Tool) Dangerous() Tool
+tenon: method (Tool) Name() string
+tenon: method (Tool) Serial() Tool
+tenon: method (Tool) Timeout(d time.Duration) Tool
+tenon: method (Tool) Writes() Tool
+tenon: type ToolsEntry = tenon/runtime/assemble.ToolsEntry struct{Order int; Tools func() []*tenon/runtime/toolhub.Tool; Visible func(*tenon/runtime/assemble.SessionCx) bool}
+tenon: func ToolsOf(order int, ts ...Tool) ToolsEntry
+tenon: type UI = tenon/runtime/assemble.UI
+tenon: type Verdict = tenon/runtime/component.Verdict
+tenon: method (Verdict) String() string
+tenon: func With(cs ...Component) Option
+tenon: func WithAgent(as ...Agent) Option
+tenon: func WithAgents(srcs ...AgentSource) Option
+tenon: func WithAnthropic(model string, key KeyRef) Option
+tenon: func WithConfig(component string, kv map[string]any) Option
+tenon: func WithDefaultAgent(name string) Option
+tenon: func WithKernel(kv map[string]any) Option
+tenon: func WithModeApprovals(a tenon/adapters.ModeApprovals) Option
+tenon: func WithModel(name string) Option
+tenon: func WithModelCatalog(path string) Option
+tenon: func WithModels(hub *ModelHub, model string) Option
+tenon: func WithOpenAI(baseURL string, model string, key KeyRef) Option
+tenon: func WithOpenAIResponses(baseURL string, model string, key KeyRef) Option
+tenon: func WithProfile(p *tenon/runtime/component.Profile) Option
+tenon: func WithProjectTrust(trusted bool) Option
+tenon: func WithProtocolOptions(f func(*tenon/appapi.Options)) Option
+tenon: func WithProtocolUI() Option
+tenon: func WithReadyErrors(f func([]error)) Option
+tenon: func WithSecrets(f func(ref string) (string, error)) Option
+tenon: func WithService(key string, v any) Option
+tenon: func WithSessionHooks(f func(*tenon/runtime/assemble.SessionCx) tenon/runtime/agent.Hooks) Option
+tenon: func WithSleepAfter(d time.Duration) Option
+tenon: func WithStore(s Store) Option
+tenon: func WithTenant(ctx context.Context, tenant string) context.Context
+tenon: func WithTools(ts ...Tool) Option
+tenon: func WithUI(ui UI) Option
+tenon: func WithUser(ctx context.Context, user string) context.Context
+tenon: func WithWorkdir(dir string) Option
+tenon: func WithWorkspace(key string) Option
+tenon: func Without(names ...string) Option
+tenon/tenontest: type App struct{*tenon.App}
+tenon/tenontest: method (App) API() *tenon/appapi.App
+tenon/tenontest: method (App) Ask(ctx context.Context, agentName string, text string, meta tenon.Meta) (*tenon.Reply, error)
+tenon/tenontest: method (App) AssertToolCalled(name string)
+tenon/tenontest: method (App) Close(ctx context.Context) error
+tenon/tenontest: method (App) History(ctx context.Context, id string) ([]*tenon.Entry, error)
+tenon/tenontest: method (App) Internals() tenon.Internals
+tenon/tenontest: method (App) NewSession(ctx context.Context, agentName string, meta tenon.Meta) (*tenon.Session, error)
+tenon/tenontest: method (App) Open(ctx context.Context) error
+tenon/tenontest: method (App) Session(ctx context.Context, id string) (*tenon.Session, error)
+tenon/tenontest: method (App) Start(ctx context.Context) (err error)
+tenon/tenontest: type Backend struct{Name string; Open func(t *testing.T) tenon/runtime/store.Store}
+tenon/tenontest: func Model(steps ...Step) tenon.Option
+tenon/tenontest: func New(t *testing.T, opts ...tenon.Option) *App
+tenon/tenontest: func NewOn(t *testing.T, st tenon/runtime/store.Store, opts ...tenon.Option) *App
+tenon/tenontest: func Reply(text string) Step
+tenon/tenontest: type Step struct{}
+tenon/tenontest: method (Step) CallTool(name string, args string) Step
+tenon/tenontest: func Stores() []Backend
+tenon/transport/web: type Config struct{API *tenon/appapi.App; Token string; Hosts []string; TLS bool; Static io/fs.FS; Idle time.Duration}
+tenon/transport/web: const CookieName untyped string
+tenon/transport/web: const HeartbeatInterval time.Duration
+tenon/transport/web: const IdleTimeout time.Duration
+tenon/transport/web: func LoopbackHosts(port int) []string
+tenon/transport/web: const MaxFrame untyped int
+tenon/transport/web: const MaxInflight untyped int
+tenon/transport/web: func New(c Config) *Server
+tenon/transport/web: func NewToken() (string, error)
+tenon/transport/web: type Server struct{}
+tenon/transport/web: method (Server) API() *tenon/appapi.App
+tenon/transport/web: method (Server) ServeHTTP(w net/http.ResponseWriter, r *net/http.Request)
+tenon/transport/web: method (Server) SwapAPI(api *tenon/appapi.App)
+tenon/transport/web: const TokenFileName untyped string
+tenon/transport/web: const WriteTimeout time.Duration
+tenon/transport/web: func WriteTokenFile(path string, url string) (func(), error)
+tenon/transport/bind: const EventName untyped string
+tenon/transport/bind: func NewService(api *tenon/appapi.App, emit func(name string, data any)) *Service
+tenon/transport/bind: type Service struct{}
+tenon/transport/bind: method (Service) API() *tenon/appapi.App
+tenon/transport/bind: method (Service) Call(cmd string, args string) (string, error)
+tenon/transport/bind: method (Service) StartEvents()
+tenon/transport/bind: method (Service) StopEvents()
+tenon/transport/bind: method (Service) SwapAPI(api *tenon/appapi.App)
+tenon/adapters: func Files(root string) tenon/appapi.Files
+tenon/adapters: func Fill(o *tenon/appapi.Options, p Parts) (*tenon/modules/security/permission.Sessions, error)
+tenon/adapters: var FollowupTimeout time.Duration
+tenon/adapters: func FollowupsFrom(m *tenon/runtime/assemble.Models) func(ctx context.Context, model string, input string, answer string) ([]string, error)
+tenon/adapters: const MaxScanFiles untyped int
+tenon/adapters: type ModeApprovals interface{Approve(mode string, widened string) error; Approved(mode string, widened string) bool}
+tenon/adapters: type ModelList struct{M *tenon/runtime/assemble.Models}
+tenon/adapters: method (ModelList) Check(id string) error
+tenon/adapters: method (ModelList) List() tenon/appapi/wire.ModelsListResult
+tenon/adapters: type Parts struct{Asm *tenon/runtime/component.Assembly; Models *tenon/runtime/assemble.Models; Blobs tenon/runtime/toolhub.Artifacts; Workdir string; Approvals ModeApprovals}
+tenon/adapters: type PermModes struct{P *tenon/modules/security/permission.Sessions; Approvals ModeApprovals}
+tenon/adapters: method (PermModes) AllowForSession(id string, tool string, args encoding/json.RawMessage) (added []string, all []string)
+tenon/adapters: method (PermModes) ExtKeys() (mode string, rules string)
+tenon/adapters: method (PermModes) Get(id string) tenon/appapi.ModeState
+tenon/adapters: method (PermModes) List() []tenon/appapi.ModeInfo
+tenon/adapters: method (PermModes) Notice(id string) string
+tenon/adapters: method (PermModes) SessionAllow(tool string, args encoding/json.RawMessage) (rules []string, blocked []string)
+tenon/adapters: method (PermModes) SessionRules(id string) []string
+tenon/adapters: method (PermModes) Set(id string, mode string, confirm bool) (tenon/appapi.ModeState, error)
+tenon/adapters: method (PermModes) Show(id string, mode string) ([]tenon/appapi.ModeItem, error)
+tenon/adapters: func TitlerFrom(m *tenon/runtime/assemble.Models) func(ctx context.Context, model string, input string) (string, error)
+tenon/apphost: type AppOptions struct{MaxSteps int; Hooks func(*tenon/runtime/assemble.SessionCx) tenon/runtime/agent.Hooks; ModesWorkdir string; Upload bool; Workspaces tenon/appapi.Workspaces}
+tenon/apphost: func ApproveMode(root string, mode string, widened string) error
+tenon/apphost: type Assembled struct{Asm *tenon/runtime/component.Assembly; Store tenon/runtime/assemble.DBHandle; Models *tenon/runtime/assemble.Models; Compact *tenon/modules/context/compact-basic.Compactor; Defs tenon/runtime/agentdef.Source}
+tenon/apphost: type Built struct{API *tenon/appapi.App; DB tenon/runtime/store.Store; Model string; Perms *tenon/modules/security/permission.Sessions; Builder *tenon/runtime/assemble.Builder}
+tenon/apphost: method (Built) Ready(context.Context) []error
+tenon/apphost: func DefaultProfileTOML() string
+tenon/apphost: var ErrNoWorkspace error
+tenon/apphost: type Flags struct{Base string; Model string; Workdir string; Profile string; Sandbox string; MCP string; Mode string; Yes bool; ProjectHooks bool; TrustProject bool; MaxSteps int; BaseProfile string}
+tenon/apphost: func HasProjectConfig(root string) bool
+tenon/apphost: func Home() string
+tenon/apphost: const LegacyImportedSuffix untyped string
+tenon/apphost: func LoadAll(base string, extra string, root string, trusted bool) (*tenon/runtime/component.Profile, []*tenon/runtime/pkgs.Package, []string, error)
+tenon/apphost: func LoadProfiles(base string, extra string, root string, trusted bool) (*tenon/runtime/component.Profile, []string, error)
+tenon/apphost: func LoadTrust() (map[string]string, error)
+tenon/apphost: func LookupTrust(m map[string]string, key string) string
+tenon/apphost: const MaxRecentWorkspaces untyped int
+tenon/apphost: func ModeApproved(root string, mode string, widened string) bool
+tenon/apphost: func NormPath(p string) string
+tenon/apphost: func OpenWorkspaceManager(o WorkspaceOptions) (*WorkspaceManager, error)
+tenon/apphost: func Overrides(f Flags, root string) map[string]map[string]any
+tenon/apphost: func PackageNotices(p *tenon/runtime/component.Profile, ps []*tenon/runtime/pkgs.Package) []string
+tenon/apphost: type Profiles struct{Base string; Extra string; Root string; Trusted bool}
+tenon/apphost: method (Profiles) Denied() map[string][]string
+tenon/apphost: method (Profiles) Edit(scope string, e tenon/runtime/component.PluginEdit, ifRevision *string) (string, error)
+tenon/apphost: method (Profiles) Reload() (*tenon/runtime/component.Profile, error)
+tenon/apphost: method (Profiles) Scopes() []tenon/appapi/wire.ProfileScope
+tenon/apphost: func ProjectKey(root string) string
+tenon/apphost: func ResolveTrust(force bool, root string, ask func(key string) bool) (bool, string, error)
+tenon/apphost: type Runtime struct{App *tenon.App; Rt *Assembled; Profile *tenon/runtime/component.Profile; Root string; Bus *tenon/runtime/bus.Bus; Host *tenon/runtime/host.Host; UI tenon/runtime/assemble.UI; Trusted bool; TrustWhy string; Notes []string; Packages []*tenon/runtime/pkgs.Package; ExtraProfile string; BaseProfile string}
+tenon/apphost: method (Runtime) BuildApp() (*Built, error)
+tenon/apphost: method (Runtime) Close()
+tenon/apphost: func SaveTrust(key string, level string) error
+tenon/apphost: func Start(o StartOptions) (*Runtime, error)
+tenon/apphost: type StartOptions struct{Flags Flags; AskTrust func(key string) bool; UI tenon/runtime/assemble.UI; SleepAfter time.Duration; App AppOptions}
+tenon/apphost: type TrustApprovals struct{Root string}
+tenon/apphost: method (TrustApprovals) Approve(mode string, widened string) error
+tenon/apphost: method (TrustApprovals) Approved(mode string, widened string) bool
+tenon/apphost: func TrustPath() string
+tenon/apphost: const Trusted untyped string
+tenon/apphost: const Untrusted untyped string
+tenon/apphost: type Workspace struct{Runtime *Runtime; Built *Built}
+tenon/apphost: func WorkspaceKey(root string) string
+tenon/apphost: type WorkspaceManager struct{}
+tenon/apphost: method (WorkspaceManager) Close()
+tenon/apphost: method (WorkspaceManager) Current() *Workspace
+tenon/apphost: method (WorkspaceManager) List() []tenon/appapi/wire.WorkspaceInfo
+tenon/apphost: method (WorkspaceManager) Open(_ context.Context, path string) (tenon/appapi/wire.WorkspaceInfo, error)
+tenon/apphost: type WorkspaceOptions struct{Flags Flags; SleepAfter time.Duration; Upload bool; OnSwitch func(api *tenon/appapi.App); RecentPath string}
+tenon/appapi/wire: type Approval struct{Tool string; Args encoding/json.RawMessage; Reason string; SessionRules []string; Blocked []string}
+tenon/appapi/wire: type ArtifactGetArgs struct{Session string; Ref string; Offset int; Length int}
+tenon/appapi/wire: type ArtifactGetResult struct{MIME string; Size int; Text string; Base64 string}
+tenon/appapi/wire: type ArtifactPutArgs struct{Session string; MIME string; Base64 string}
+tenon/appapi/wire: type ArtifactPutResult struct{Ref string}
+tenon/appapi/wire: type Choice struct{Text string; Options []ChoiceOption; Multiple bool; Min int; Max int}
+tenon/appapi/wire: type ChoiceOption struct{ID string; Label string; Description string}
+tenon/appapi/wire: const CodeBadRequest untyped string
+tenon/appapi/wire: const CodeBusy untyped string
+tenon/appapi/wire: const CodeClosed untyped string
+tenon/appapi/wire: const CodeConflict untyped string
+tenon/appapi/wire: const CodeCursorExpired untyped string
+tenon/appapi/wire: const CodeDenied untyped string
+tenon/appapi/wire: const CodeForbidden untyped string
+tenon/appapi/wire: const CodeInternal untyped string
+tenon/appapi/wire: const CodeInvalid untyped string
+tenon/appapi/wire: const CodeNeedConfirm untyped string
+tenon/appapi/wire: const CodeNotFound untyped string
+tenon/appapi/wire: const CodeNotIdle untyped string
+tenon/appapi/wire: const CodeUnauthorized untyped string
+tenon/appapi/wire: const CodeUnsupported untyped string
+tenon/appapi/wire: type CompactArgs struct{Session string; Upto *int; IfCursor *int64}
+tenon/appapi/wire: type CompactResult struct{Summary string; Upto int; TokensBefore int; TokensAfter int}
+tenon/appapi/wire: type ConfigField struct{Key string; Type string; Default string; Title string; Description string; Group string; Widget string}
+tenon/appapi/wire: type Confirm struct{Text string; Danger bool; Confirm string; Cancel string}
+tenon/appapi/wire: const ConflictAnswered untyped string
+tenon/appapi/wire: const ConflictExists untyped string
+tenon/appapi/wire: const ConflictLeased untyped string
+tenon/appapi/wire: const ConflictStale untyped string
+tenon/appapi/wire: type CreateArgs struct{Session string; Definition string; ClientID string}
+tenon/appapi/wire: type CursorRef struct{Cursor int64}
+tenon/appapi/wire: func Durable(kind string) bool
+tenon/appapi/wire: type Empty struct{}
+tenon/appapi/wire: type EntriesArgs struct{Session string; From *int; To *int; Tail int}
+tenon/appapi/wire: type EntriesResult struct{Entries []Entry; Base int; Len int}
+tenon/appapi/wire: type Entry struct{ID string; Idx int; Turn uint32; At int64; Source string; ClientIDs []string; Item Item}
+tenon/appapi/wire: type EntryAppended struct{Entry Entry}
+tenon/appapi/wire: type Envelope struct{V int; Session string; Kind string; At int64; Cursor int64; Turn uint32; Data any}
+tenon/appapi/wire: type Error struct{Code string; Message string; Retry bool; Details map[string]any}
+tenon/appapi/wire: const EvEntryAppended untyped string
+tenon/appapi/wire: const EvInteractionDone untyped string
+tenon/appapi/wire: const EvInteractionOpen untyped string
+tenon/appapi/wire: const EvLagged untyped string
+tenon/appapi/wire: const EvLogCompacted untyped string
+tenon/appapi/wire: const EvLogRewound untyped string
+tenon/appapi/wire: const EvMessageDelta untyped string
+tenon/appapi/wire: const EvMessageDiscarded untyped string
+tenon/appapi/wire: const EvMessageEnded untyped string
+tenon/appapi/wire: const EvMessageStarted untyped string
+tenon/appapi/wire: const EvModeChanged untyped string
+tenon/appapi/wire: const EvNotice untyped string
+tenon/appapi/wire: const EvSessionClosed untyped string
+tenon/appapi/wire: const EvSessionForked untyped string
+tenon/appapi/wire: const EvSessionUpdated untyped string
+tenon/appapi/wire: const EvSessionsChanged untyped string
+tenon/appapi/wire: const EvSettingsChanged untyped string
+tenon/appapi/wire: const EvStateChanged untyped string
+tenon/appapi/wire: const EvSynced untyped string
+tenon/appapi/wire: const EvToolArgsDelta untyped string
+tenon/appapi/wire: const EvToolEnded untyped string
+tenon/appapi/wire: const EvToolProgress untyped string
+tenon/appapi/wire: const EvToolRunning untyped string
+tenon/appapi/wire: const EvToolStarted untyped string
+tenon/appapi/wire: const EvTurnEnded untyped string
+tenon/appapi/wire: const EvTurnRejected untyped string
+tenon/appapi/wire: const EvTurnStarted untyped string
+tenon/appapi/wire: type Feedback struct{Entry string; Vote string; Note string; By string; At int64}
+tenon/appapi/wire: type FeedbackArgs struct{Session string; Entry string; Vote string; Note string}
+tenon/appapi/wire: type FeedbackListResult struct{Items []Feedback}
+tenon/appapi/wire: type FileInfo struct{Path string; Size int64; MTime int64}
+tenon/appapi/wire: type FilesArgs struct{Query string; Limit int}
+tenon/appapi/wire: type FilesResult struct{Files []FileInfo; Truncated bool}
+tenon/appapi/wire: type FollowupsArgs struct{Session string; Turn uint32}
+tenon/appapi/wire: type FollowupsResult struct{Turn uint32; Items []string}
+tenon/appapi/wire: type ForkArgs struct{Session string; To string; Upto *int; Origin string; IfCursor *int64; ClientID string}
+tenon/appapi/wire: type Form struct{Text string; Submit string}
+tenon/appapi/wire: type HelloArgs struct{Client string; Protocol ProtocolRange}
+tenon/appapi/wire: type HelloResult struct{Protocol int; Server string; Principal Principal; Capabilities []string; Model string; Workdir string; Trusted bool; MaxOutput int}
+tenon/appapi/wire: type Interaction struct{ID string; Session string; Turn uint32; Kind string; Title string; Approval *Approval; Question *Question; Choice *Choice; Form *Form; Confirm *Confirm; Schema encoding/json.RawMessage; Blocking *bool; Responders []string; Deadline int64; OpenedAt int64}
+tenon/appapi/wire: const InteractionApproval untyped string
+tenon/appapi/wire: const InteractionChoice untyped string
+tenon/appapi/wire: const InteractionConfirm untyped string
+tenon/appapi/wire: const InteractionForm untyped string
+tenon/appapi/wire: const InteractionQuestion untyped string
+tenon/appapi/wire: type InteractionResolved struct{ID string; Session string; Outcome string; By string}
+tenon/appapi/wire: type InteractionsResult struct{Items []Interaction}
+tenon/appapi/wire: type Item struct{Kind string; Content []Part; Reasoning []Reasoning; ToolCalls []ToolCall; Model string; Usage *Usage; Interrupted bool; CallID string; Output []Part; Status string; CancelReason string; Truncated bool; OutputRef string; Upto int; Summary []Part; ContextSource string; Text string; Raw encoding/json.RawMessage}
+tenon/appapi/wire: const KindAssistant untyped string
+tenon/appapi/wire: const KindCompaction untyped string
+tenon/appapi/wire: const KindContext untyped string
+tenon/appapi/wire: const KindToolResult untyped string
+tenon/appapi/wire: const KindUnknown untyped string
+tenon/appapi/wire: const KindUser untyped string
+tenon/appapi/wire: type ListArgs struct{Cursor int64; Limit int; All bool; Pinned bool; AllWorkspaces bool}
+tenon/appapi/wire: type ListResult struct{Items []SessionInfo; Next int64}
+tenon/appapi/wire: type Live struct{Turn uint32; Streams []LiveStream; Tools []LiveTool}
+tenon/appapi/wire: type LiveStream struct{StreamID string; EntryID string; Part string; Text string}
+tenon/appapi/wire: type LiveTool struct{CallID string; Name string; Args encoding/json.RawMessage}
+tenon/appapi/wire: type LogCompacted struct{Upto int; EntryIdx int}
+tenon/appapi/wire: type LogPos struct{Base int; Len int}
+tenon/appapi/wire: type LogRewound struct{To int; VoidedInteractions []string}
+tenon/appapi/wire: type MediaRef struct{Ref string; MIME string; Size uint64; SHA256 string}
+tenon/appapi/wire: type MessageDelta struct{StreamID string; Text string}
+tenon/appapi/wire: type MessageStarted struct{StreamID string; EntryID string; Part string; Attempt int}
+tenon/appapi/wire: type Mode struct{Mode string; Label string; Sandbox string}
+tenon/appapi/wire: type ModeChanged = Mode struct{Mode string; Label string; Sandbox string}
+tenon/appapi/wire: type ModeInfo struct{ID string; Label string; Builtin bool; Project bool; Widened []string}
+tenon/appapi/wire: type ModeItem struct{Item string; Title string; Value string; Source string; Bounded bool}
+tenon/appapi/wire: type ModeListResult struct{Modes []ModeInfo}
+tenon/appapi/wire: type ModeSetArgs struct{Session string; Mode string; Confirm bool}
+tenon/appapi/wire: type ModeSetResult struct{State Mode; Committed bool}
+tenon/appapi/wire: type ModeShowArgs struct{Session string; Mode string}
+tenon/appapi/wire: type ModeShowResult struct{Mode string; Items []ModeItem}
+tenon/appapi/wire: type ModelInfo struct{ID string; Alias bool; Provider string; Name string; ContextWindow int; Images bool; Reasoning bool; Efforts []string; Available bool; Reason string}
+tenon/appapi/wire: type ModelsListResult struct{Models []ModelInfo; Default string}
+tenon/appapi/wire: type Notice struct{Level string; Source string; Text string}
+tenon/appapi/wire: const OutcomeAnswered untyped string
+tenon/appapi/wire: const OutcomeApproved untyped string
+tenon/appapi/wire: const OutcomeDenied untyped string
+tenon/appapi/wire: const OutcomeExpired untyped string
+tenon/appapi/wire: const OutcomeVoided untyped string
+tenon/appapi/wire: type PackageInfo struct{Name string; Version string; Description string; Scope string; Source string; Contents string; UI []UISlot}
+tenon/appapi/wire: type PackagesListResult struct{Packages []PackageInfo}
+tenon/appapi/wire: type Part struct{Kind string; Text string; Media *MediaRef; Data any; Schema string}
+tenon/appapi/wire: type PluginInfo struct{Name string; On bool; Default bool; Source string; Effects []string; Schema []ConfigField; Config map[string]any; Mandatory bool; Pending *PluginPending}
+tenon/appapi/wire: type PluginPending struct{On bool; Config map[string]any}
+tenon/appapi/wire: type PluginsListResult struct{Plugins []PluginInfo; Scopes []ProfileScope; Denied map[string][]string}
+tenon/appapi/wire: type PluginsSetArgs struct{Name string; Enabled *bool; Config map[string]any; Scope string; IfRevision *string}
+tenon/appapi/wire: type PluginsSetResult struct{Revision string; Restart bool; Plugin PluginInfo}
+tenon/appapi/wire: type Principal struct{ID string; Role string}
+tenon/appapi/wire: type ProfileScope struct{Scope string; Path string; Revision string; Writable bool; Reason string}
+tenon/appapi/wire: const Protocol untyped int
+tenon/appapi/wire: type ProtocolRange struct{Min int; Max int}
+tenon/appapi/wire: func Public(kind string) bool
+tenon/appapi/wire: type Question struct{Text string; Options []string}
+tenon/appapi/wire: type Reasoning struct{Text string}
+tenon/appapi/wire: var ReasoningEfforts []string
+tenon/appapi/wire: const ReasoningHigh untyped string
+tenon/appapi/wire: const ReasoningLow untyped string
+tenon/appapi/wire: const ReasoningMedium untyped string
+tenon/appapi/wire: type RespondArgs struct{Interaction string; Response Response; ClientID string}
+tenon/appapi/wire: type RespondResult struct{Outcome string}
+tenon/appapi/wire: type Response struct{Approve *bool; Scope string; Text *string; Value encoding/json.RawMessage}
+tenon/appapi/wire: type RewindArgs struct{Session string; ToTurn uint32; IfCursor *int64}
+tenon/appapi/wire: type RewindResult struct{To int}
+tenon/appapi/wire: const RoleOperator untyped string
+tenon/appapi/wire: const RoleViewer untyped string
+tenon/appapi/wire: const RunIdle untyped string
+tenon/appapi/wire: const RunRunning untyped string
+tenon/appapi/wire: type SendArgs struct{Session string; Content []Part; Text string; ClientID string}
+tenon/appapi/wire: type SendResult struct{ClientID string; Queued bool}
+tenon/appapi/wire: type SessionArgs struct{Session string}
+tenon/appapi/wire: type SessionClosed struct{Reason string}
+tenon/appapi/wire: type SessionForked struct{From string; Upto int}
+tenon/appapi/wire: type SessionInfo struct{ID string; Title string; Preview string; RunState string; Origin string; Parent string; UpdatedAt int64; Pinned bool; Workspace string}
+tenon/appapi/wire: type SessionSnapshot struct{ID string; Parent string; Origin string; Title string; Pinned bool; RunState string; Mode *Mode; Settings Settings; Log LogPos; Interactions []Interaction; Live *Live; Cursor int64}
+tenon/appapi/wire: type SessionUpdated struct{Title string; Pinned bool}
+tenon/appapi/wire: type SessionsChanged struct{ID string; RunState string; Title string; UpdatedAt int64; Pinned bool; Deleted bool}
+tenon/appapi/wire: type Settings struct{MaxSteps uint32; Model string; Reasoning string}
+tenon/appapi/wire: type SettingsArgs struct{Session string; MaxSteps *uint32; Model *string; Reasoning *string}
+tenon/appapi/wire: type SettingsChanged struct{Settings Settings}
+tenon/appapi/wire: type SettingsResult struct{Settings Settings; Committed bool}
+tenon/appapi/wire: type StateChanged struct{RunState string}
+tenon/appapi/wire: type Stats struct{Attempts int; Reported int; Missing int; Errors int; Input uint64; Output uint64; CacheRead uint64; CacheWrite uint64; HitRate float64; ToolCalls int; Compacts int; LastRequest string; Composition encoding/json.RawMessage}
+tenon/appapi/wire: type SteerArgs struct{Session string; Text string; ClientID string}
+tenon/appapi/wire: type StreamRef struct{StreamID string}
+tenon/appapi/wire: type SubscribeArgs struct{Session string; After *int64; Children bool}
+tenon/appapi/wire: type ToolArgsDelta struct{CallID string; Text string}
+tenon/appapi/wire: type ToolCall struct{ID string; Name string; Args encoding/json.RawMessage}
+tenon/appapi/wire: type ToolEnded struct{CallID string; Status string; Preview string; OutputRef string}
+tenon/appapi/wire: type ToolProgress struct{CallID string; Text string; Data any}
+tenon/appapi/wire: type ToolRunning struct{CallID string; Args any}
+tenon/appapi/wire: type ToolStarted struct{CallID string; Name string; EntryID string}
+tenon/appapi/wire: type TraceArgs struct{Trace string}
+tenon/appapi/wire: type TraceResult struct{Text string}
+tenon/appapi/wire: type TurnEnded struct{Turn uint32; Kind string; Code string; Message string}
+tenon/appapi/wire: type TurnRejected struct{Inputs []string; Reason string}
+tenon/appapi/wire: type TurnStarted struct{Turn uint32; Inputs []string}
+tenon/appapi/wire: func TypeScript() string
+tenon/appapi/wire: type UIData struct{Cmd string; Args map[string]any}
+tenon/appapi/wire: type UISlot struct{ID string; Slot string; Title string; Order int; Requires string; View encoding/json.RawMessage; Data *UIData}
+tenon/appapi/wire: type UpdateArgs struct{Session string; Title *string; Pinned *bool}
+tenon/appapi/wire: type Usage struct{Input uint64; Output uint64; CacheRead uint64; CacheWrite uint64; Source string}
+tenon/appapi/wire: func ValidReasoning(s string) bool
+tenon/appapi/wire: const Version untyped int
+tenon/appapi/wire: type WorkspaceInfo struct{Path string; Name string; Trusted bool; Current bool; OpenedAt int64; Missing bool}
+tenon/appapi/wire: type WorkspaceListResult struct{Items []WorkspaceInfo}
+tenon/appapi/wire: type WorkspaceOpenArgs struct{Path string}
+tenon/appapi/wire: type WorkspaceOpenResult struct{Workspace WorkspaceInfo}

@@ -1,18 +1,3 @@
-// Package tenon 底座对外的 SDK 入口（框架设计 07 - SDK 接口，T1b-2d）。
-//
-// 一个应用 = 组件清单 + 存储 + 模型 + 定义来源：
-//
-//	app, err := tenon.New(tenon.Default(),
-//	    tenon.WithStore(db), tenon.WithAgents(tenon.Dir("./agents")))
-//	if err != nil { ... }
-//	defer app.Close(context.Background())
-//	if err := app.Start(ctx); err != nil { ... }
-//	reply, err := app.Ask(ctx, "support", "你好", nil)
-//
-// New 只装配与校验，不启动后台工作；未 Start 调用运行接口返回 ErrNotStarted。
-// 校验错误（未知组件、重复组件、定义 [use.*] 写错……）在 New 里一次报完。
-//
-// 组件配置走代码（06 - 配置）：本包不读 tenon.toml，也不做环境变量覆盖。
 package tenon
 
 import (
@@ -39,7 +24,8 @@ import (
 )
 
 // Component 应用自带的组件（04 4.2：Name + Setup），需要后台工作的实现 Start。
-// 内置组件由预设提供，应用一般只在 With 里加自己的组件。
+// 内置组件由预设提供，应用一般只在 With 里加自己的组件。要声明配置、提供或使用服务的，
+// 再实现 Info() ComponentInfo（见 components.go）。
 type Component interface {
 	Name() string
 	Setup(cx *Registrar) error
@@ -50,7 +36,12 @@ type Component interface {
 type componentPlugin struct{ c Component }
 
 func (p componentPlugin) Meta() component.Meta {
-	return component.Meta{Name: p.c.Name(), Default: true}
+	m := component.Meta{Name: p.c.Name(), Default: true}
+	if d, ok := p.c.(interface{ Info() ComponentInfo }); ok {
+		in := d.Info()
+		m.Config, m.Provides, m.Requires = in.Config, in.Provides, in.Requires
+	}
+	return m
 }
 
 func (p componentPlugin) Setup(cx *component.Registrar) error { return p.c.Setup(cx) }
@@ -494,6 +485,9 @@ func build(c *config) (*App, error) {
 			inSpec[n] = true
 		}
 	}
+	for n := range extra {
+		inSpec[n] = true
+	}
 	for n := range c.configs {
 		if !inSpec[n] {
 			return nil, fmt.Errorf("%w: WithConfig 的组件 %s 不在装配里", ErrInvalid, n)
@@ -505,8 +499,8 @@ func build(c *config) (*App, error) {
 		}
 		spec.Defaults[assemble.SlotSecrets] = assemble.Secrets(secretsFunc(c.secrets))
 	}
-	for n := range extra { // 应用组件（With、WithTools）：两种装配方式都要显式列进来
-		spec.Plugins = append(spec.Plugins, component.Entry{Name: n})
+	for n := range extra { // 应用组件（With、WithTools）：两种装配方式都要显式列进来，WithConfig 也作用于它们
+		spec.Plugins = append(spec.Plugins, component.Entry{Name: n, Config: c.configs[n]})
 	}
 	asm, err := component.Assemble(spec)
 	if err != nil {

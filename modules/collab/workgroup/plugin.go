@@ -82,7 +82,7 @@ func (p *plug) Setup(cx *component.Registrar) error {
 		return err
 	}
 	for _, it := range Items() {
-		cx.Register(assemble.PointPermItems, it.ID, it)
+		component.RegisterAt(cx, assemble.PermItems, it.ID, it)
 	}
 	src, err := TemplateSource()
 	if err != nil {
@@ -91,7 +91,7 @@ func (p *plug) Setup(cx *component.Registrar) error {
 	cx.Template(src)
 	// 组长与成员是两批工具，靠 Visible 按会话定义挑（工作组 = 两个内置定义模板）。
 	isMember := func(sc *assemble.SessionCx) bool { return sc.Def != nil && sc.Def.ID == MemberDefinition }
-	cx.Register(assemble.PointSessionTools, "workgroup", assemble.ToolsEntry{Order: 70,
+	component.RegisterAt(cx, assemble.SessionTools, "workgroup", assemble.ToolsEntry{Order: 70,
 		Tools: func() []*toolhub.Tool {
 			if p.g == nil {
 				return nil
@@ -99,7 +99,7 @@ func (p *plug) Setup(cx *component.Registrar) error {
 			return p.g.LeaderTools()
 		},
 		Visible: func(sc *assemble.SessionCx) bool { return !sc.Child && !isMember(sc) }})
-	cx.Register(assemble.PointSessionTools, "workgroup-member", assemble.ToolsEntry{Order: 70,
+	component.RegisterAt(cx, assemble.SessionTools, "workgroup-member", assemble.ToolsEntry{Order: 70,
 		Tools: func() []*toolhub.Tool {
 			if p.g == nil {
 				return nil
@@ -107,7 +107,7 @@ func (p *plug) Setup(cx *component.Registrar) error {
 			return p.g.MemberTools()
 		},
 		Visible: isMember})
-	cx.Register(assemble.PointReady, "workgroup", assemble.ReadyFunc(func(ctx context.Context) error {
+	component.RegisterAt(cx, assemble.Ready, "workgroup", assemble.ReadyFunc(func(ctx context.Context) error {
 		if p.g == nil {
 			return nil
 		}

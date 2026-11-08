@@ -25,9 +25,9 @@ func (*plug) Setup(cx *component.Registrar) error {
 	if ok && c != nil {
 		c.SetRedact(func(s string) string { t, _ := red.String(s); return t })
 	}
-	cx.Register(assemble.PointSessionLayer, "redact", assemble.LayerEntry{Order: 0,
+	component.RegisterAt(cx, assemble.SessionLayer, "redact", assemble.LayerEntry{Order: 0,
 		Func: func(*assemble.SessionCx) ([]toolhub.Layer, error) { return []toolhub.Layer{Layer(red)}, nil }})
-	cx.Register(assemble.PointSessionLayer, "redact-guard", assemble.LayerEntry{Guard: true, Order: 1,
+	component.RegisterAt(cx, assemble.SessionLayer, "redact-guard", assemble.LayerEntry{Guard: true, Order: 1,
 		Func: func(*assemble.SessionCx) ([]toolhub.Layer, error) { return []toolhub.Layer{WriteGuard()}, nil }})
 	return nil
 }

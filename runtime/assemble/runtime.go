@@ -17,6 +17,7 @@ import (
 	"tenon/runtime/agent"
 	"tenon/runtime/agentdef"
 	"tenon/runtime/callctx"
+	"tenon/runtime/component"
 	"tenon/runtime/inject"
 	"tenon/runtime/modelhub"
 	"tenon/runtime/session"
@@ -82,6 +83,8 @@ type Builder struct {
 	// Schemas 装配期各组件登记的使用配置原型（06 6.2，Assembly.AgentSchemas）：新会话按定义的
 	// [use.*] 算 use_config 用；nil = 定义里写了 [use.*] 的会话创建失败（没有组件认这份配置）。
 	Schemas []useconf.Schema
+	// Guards 组件登记的守卫规则；GuardToolCall 上的规则装成每个会话工具栈里的一层守卫（toolGuard）。
+	Guards []component.GuardRule
 }
 
 // modelFor 会话用的模型：定义写了 model 就用它（经目录解析校验，写错即报错），否则用全局缺省。
@@ -158,6 +161,9 @@ func (b *Builder) Build(id, defName string, child bool) (*agent.Agent, *session.
 		for _, l := range ls {
 			hub.AddLayer(l)
 		}
+	}
+	if l, ok := toolGuard(b.Guards); ok { // 组件守卫先于授权层判定：被拒的调用不再要人确认
+		hub.PrependLayer(l)
 	}
 	if !hub.Authorized() { // 没装权限组件：用内核缺省授权层（有副作用的工具一律询问，P0-7）
 		hub.AddLayer(toolhub.DefaultAuthorizer())
@@ -359,4 +365,32 @@ func intersectAllow(a, b []string) []string {
 		}
 	}
 	return out
+}
+
+// toolGuard 把 GuardToolCall 上的守卫规则做成一层工具守卫；没有这类规则时不装。
+// Deny 返回失败结果给模型（不中止回合）；Allow / Abstain 都交给下一层（授权仍由权限组件判定）。
+func toolGuard(rules []component.GuardRule) (toolhub.Layer, bool) {
+	var own []component.GuardRule
+	for _, r := range rules {
+		if r.On == component.GuardToolCall && r.Check != nil {
+			own = append(own, r)
+		}
+	}
+	if len(own) == 0 {
+		return toolhub.Layer{}, false
+	}
+	return toolhub.Layer{Name: "component-guard", Guard: true,
+		Call: func(ctx context.Context, cx *toolhub.Cx, args json.RawMessage, next toolhub.Next) (toolhub.Output, error) {
+			req := component.GuardRequest{Point: component.GuardToolCall, Args: args}
+			if cx.Tool != nil {
+				req.Tool = cx.Tool.Spec.Name
+				if cx.Tool.Risk != toolhub.Read {
+					req.Risk = component.RiskHigh
+				}
+			}
+			if v, why := component.EvalGuards(own, req); v == component.Deny {
+				return toolhub.Failf("工具 %s 被守卫拒绝：%s", req.Tool, why), nil
+			}
+			return next(ctx, cx, args)
+		}}, true
 }

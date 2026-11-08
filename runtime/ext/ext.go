@@ -24,6 +24,17 @@ func (k Key[T]) Need() string { return k.name }
 // Maybe 写进 Meta.Requires：可选依赖（提供者缺席也能装配）。
 func (k Key[T]) Maybe() string { return Optional + k.name }
 
+// Point 带类型的点位：点位名和登记项的 Go 类型绑在一起（计划/08 3.5）。和 Key 一样，具体的点位值定义在
+// 登记项类型所在的包里（如 assemble.SessionTools），组件用 component.RegisterAt(cx, 点位, 名字, 实现) 登记，
+// 实现的类型不对是编译错误。零值不可用，用 NewPoint 构造。
+type Point[T any] struct{ name string }
+
+// NewPoint 构造类型化点位。name 用本包的 Point* 常量。
+func NewPoint[T any](name string) Point[T] { return Point[T]{name: name} }
+
+// Name 点位名。
+func (p Point[T]) Name() string { return p.name }
+
 // Optional 可选依赖前缀。
 const Optional = "?"
 

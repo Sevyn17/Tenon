@@ -22,7 +22,7 @@ func (*plug) Setup(cx *component.Registrar) error {
 		return err
 	}
 	for _, it := range Items(root) {
-		cx.Register(assemble.PointPermItems, it.ID, it)
+		component.RegisterAt(cx, assemble.PermItems, it.ID, it)
 	}
 	// 工具装配期构造一次，各会话共用同一批只读对象（框架设计 04 4.2）。工作目录来自 service:workdir，
 	// 与会话无关；将来若按会话给不同根，从 toolhub.Cx.Ctx 取。
@@ -36,7 +36,7 @@ func (*plug) Setup(cx *component.Registrar) error {
 		WriteFile(root, tr).WithItems(ItemWrite),
 		ListDir(root).WithItems(ItemRead),
 	}
-	cx.Register(assemble.PointSessionTools, "fs", assemble.ToolsEntry{Order: 10,
+	component.RegisterAt(cx, assemble.SessionTools, "fs", assemble.ToolsEntry{Order: 10,
 		Tools: func() []*toolhub.Tool { return tools }})
 	return nil
 }

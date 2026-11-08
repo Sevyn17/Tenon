@@ -45,11 +45,11 @@ func (*plug) Setup(cx *component.Registrar) error {
 		return err
 	}
 	trusted := assemble.ProjectTrusted(cx) // 不受信项目：只读用户全局 AGENTS.md（审查 P1-4）
-	cx.Register(assemble.PointSessionLayer, "instructions", assemble.LayerEntry{Order: 20,
+	component.RegisterAt(cx, assemble.SessionLayer, "instructions", assemble.LayerEntry{Order: 20,
 		Func: func(sc *assemble.SessionCx) ([]toolhub.Layer, error) {
 			return []toolhub.Layer{get(sc, root, trusted).Layer()}, nil
 		}})
-	cx.Register(assemble.PointSystemBlock, "instructions", assemble.BlockEntry{Order: 10,
+	component.RegisterAt(cx, assemble.SystemBlock, "instructions", assemble.BlockEntry{Order: 10,
 		Func: func(sc *assemble.SessionCx) (*session.SystemBlock, error) { return get(sc, root, trusted).Block() }})
 	return nil
 }

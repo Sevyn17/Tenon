@@ -239,6 +239,12 @@ func (cx *Registrar) Register(point, name string, impl any) {
 	cx.asm.points = append(cx.asm.points, Registration{Plugin: cx.plugin, Point: point, Name: name})
 }
 
+// RegisterAt 类型化点位登记：impl 的类型由点位决定，写错是编译错误（计划/08 3.5）。
+// 内置组件都用它；Register(point, name, any) 留给外置插件与动态点位。
+func RegisterAt[T any](cx *Registrar, p ext.Point[T], name string, impl T) {
+	cx.Register(p.Name(), name, impl)
+}
+
 // PointItems 返回一个读取 point 上全部登记的函数：装配结束后调用才完整（别的组件可能排在本组件之后 Setup）。
 // 开位的组件用它在运行时取登记项，不必让应用在装配后再接线（2026-11-04 审查 P1-25）。
 func (cx *Registrar) PointItems(point string) func() []Item {
