@@ -364,3 +364,16 @@ func LoadAll(base, extra, root string, trusted bool) (*component.Profile, []*pkg
 	notes = append(notes, PackageNotices(p, ps)...)
 	return p, ps, notes, nil
 }
+
+// TrustApprovals 项目档位放宽的确认记录（adapters.ModeApprovals），记在 trust.toml、按项目（Root 所在的 git 根）。
+type TrustApprovals struct{ Root string }
+
+// Approved 见 ModeApproved。
+func (a TrustApprovals) Approved(mode, widened string) bool {
+	return ModeApproved(a.Root, mode, widened)
+}
+
+// Approve 见 ApproveMode。
+func (a TrustApprovals) Approve(mode, widened string) error {
+	return ApproveMode(a.Root, mode, widened)
+}

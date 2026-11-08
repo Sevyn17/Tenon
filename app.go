@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 
+	"tenon/adapters"
 	"tenon/appapi"
 	"tenon/runtime/agentdef"
 	"tenon/runtime/assemble"
@@ -60,19 +61,36 @@ func (a *App) Start(ctx context.Context) (err error) {
 	if err != nil {
 		return fmt.Errorf("tenon: 接线: %w", err)
 	}
-	if _, err := appapi.New(appapi.Options{
-		Host: a.host, Bus: a.bus, DB: db, Builder: w.Builder,
-		Model: a.models.Model, Workdir: a.workdir, Trusted: true,
-	}); err != nil {
+	// 应用协议层：插件能力（模型列表、档位、追问、标题、文件、压缩、工件、删除清理）经 adapters 接上，
+	// 与应用宿主（apphost）同一套；App.API() 交给 transport/web 或 transport/bind 就能接框架的前端。
+	ao := appapi.Options{Host: a.host, Bus: a.bus, DB: db, Builder: w.Builder,
+		Model: a.models.Model, Workdir: a.workdir, Trusted: a.trusted, UI: a.pui}
+	if _, err := adapters.Fill(&ao, adapters.Parts{Asm: a.asm, Models: a.models, Blobs: a.handle.Blobs(), Workdir: a.workdir}); err != nil {
+		return fmt.Errorf("tenon: 应用接口: %w", err)
+	}
+	api, err := appapi.New(ao)
+	if err != nil {
 		return fmt.Errorf("tenon: 应用接口: %w", err)
 	}
 	if errs := w.Ready(ctx); len(errs) > 0 {
 		return fmt.Errorf("tenon: ready: %w", errors.Join(errs...))
 	}
 	a.builder = w.Builder
+	a.api = api
 	a.bgStop = w.Background()
 	a.started = true
 	return nil
+}
+
+// API 应用协议层（protocol 2，docs/06）：交给 transport/web（网页）或 transport/bind（桌面等绑定式宿主），
+// 框架的前端或任何协议客户端就能连上来列会话、发消息、看流式输出、回答确认。Start 之前、Close 之后返回 nil。
+func (a *App) API() *appapi.App {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if !a.started || a.closed {
+		return nil
+	}
+	return a.api
 }
 
 // Close 停后台工作、关存储。可重复调用。

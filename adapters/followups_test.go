@@ -1,4 +1,4 @@
-package apphost
+package adapters
 
 import (
 	"reflect"

@@ -1,6 +1,6 @@
-package apphost
+package adapters
 
-// 插件能力 → appapi 小接口的适配（appapi 属 core，不能 import 插件包，由应用在这里接上）。
+// 权限档位：permission 插件 → appapi.Modes。
 
 import (
 	"encoding/json"
@@ -11,10 +11,17 @@ import (
 	"tenon/runtime/toolhub"
 )
 
-// PermModes 用 permission 插件的会话服务实现 appapi.Modes。workdir 用于项目档位的确认记录（trust.toml）。
+// ModeApprovals 项目档位放宽权限的确认记录：记在哪由应用决定（apphost 记在 ~/.tenon/trust.toml，按项目）。
+// widened 是放宽清单（顿号连接）；清单变了要重新确认。
+type ModeApprovals interface {
+	Approved(mode, widened string) bool
+	Approve(mode, widened string) error
+}
+
+// PermModes 用 permission 插件的会话服务实现 appapi.Modes。Approvals 为 nil 时不记确认：每次选用放宽了的项目档位都要确认。
 type PermModes struct {
-	P       *permission.Sessions
-	Workdir string
+	P         *permission.Sessions
+	Approvals ModeApprovals
 }
 
 var _ appapi.Modes = PermModes{}
@@ -27,6 +34,10 @@ func (m PermModes) List() []appapi.ModeInfo {
 			Project: d.Project, Widened: permission.Widened(d, items)})
 	}
 	return out
+}
+
+func (m PermModes) approved(mode, widened string) bool {
+	return m.Approvals != nil && m.Approvals.Approved(mode, widened)
 }
 
 func (m PermModes) label(mode permission.Mode) string {
@@ -48,12 +59,14 @@ func (m PermModes) Set(id, mode string, confirm bool) (appapi.ModeState, error) 
 	}
 	// §9.6：受信项目提交的档位若放宽了权限，首次选用要用户确认一次（记进 trust.toml，放宽清单变了要重新确认）。
 	if d.Project {
-		if w := strings.Join(permission.ProjectWidened(d, m.P.Items()), "、"); w != "" && !ModeApproved(m.Workdir, mode, w) {
+		if w := strings.Join(permission.ProjectWidened(d, m.P.Items()), "、"); w != "" && !m.approved(mode, w) {
 			if !confirm {
 				return appapi.ModeState{}, appapi.Errorf(appapi.CodeNeedConfirm, "档位 %s 来自项目 .tenon/modes，放宽了：%s", mode, w)
 			}
-			if err := ApproveMode(m.Workdir, mode, w); err != nil {
-				return appapi.ModeState{}, err
+			if m.Approvals != nil {
+				if err := m.Approvals.Approve(mode, w); err != nil {
+					return appapi.ModeState{}, err
+				}
 			}
 		}
 	}

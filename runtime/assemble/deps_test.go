@@ -23,10 +23,12 @@ func isRuntime(p string) bool { return strings.HasPrefix(p, "runtime/") }
 
 func isAppAPI(p string) bool { return p == "appapi" || strings.HasPrefix(p, "appapi/") }
 
-// assembler SDK、应用宿主（apphost）、传输（transport/）、测试套件与前端嵌入包：装配层，可以 import
+// assembler SDK、应用宿主（apphost）、协议适配（adapters）、传输（transport/）、示例（examples/）、测试套件与
+// 前端嵌入包：装配层，可以 import
 // 任何包；运行时、标准模块、应用接口层都不得反过来 import 它们（计划/07）。
 func assembler(p string) bool {
-	return p == "" || p == "tenontest" || p == "web" || p == "apphost" || strings.HasPrefix(p, "transport/")
+	return p == "" || p == "tenontest" || p == "web" || p == "apphost" || p == "adapters" || strings.HasPrefix(p, "transport/") ||
+		strings.HasPrefix(p, "examples/")
 }
 
 // rel 本模块内的相对路径（模块根 = ""）；不是本模块的包返回 false。

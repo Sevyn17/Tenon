@@ -8,13 +8,11 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
-	"strings"
 	"time"
 
+	"tenon/adapters"
 	"tenon/appapi"
-	"tenon/appapi/wire"
 	"tenon/modules/security/permission"
-	"tenon/modules/tools/fs"
 	"tenon/runtime/agent"
 	"tenon/runtime/assemble"
 	"tenon/runtime/bus"
@@ -26,11 +24,11 @@ import (
 
 // Flags 命令行参数（CLI 与桌面端同名同义）。
 type Flags struct {
-	// BaseProfile 产品内置的 base profile 原文（最底层，其余各层叠在上面）；空 = DefaultProfileTOML。
-	BaseProfile                                       string
 	Base, Model, Workdir, Profile, Sandbox, MCP, Mode string
 	Yes, ProjectHooks, TrustProject                   bool
 	MaxSteps                                          int // -1 = 未指定
+	// BaseProfile 产品内置的 base profile 原文（最底层，其余各层叠在上面）；空 = DefaultProfileTOML。
+	BaseProfile string
 }
 
 // Overrides 命令行参数 → 插件配置覆盖（只覆盖给了值的项）。
@@ -193,9 +191,6 @@ type Built struct {
 // Ready 跑 ready 点位（构造器就绪后再跑：如工作组补投会打开领导会话），返回各自的错误。
 func (b *Built) Ready(ctx context.Context) []error { return b.wired.Ready(ctx) }
 
-// MaxScanFiles workspace.files 最多遍历的文件数（大仓库里 @ 文件只看前这么多个）。
-const MaxScanFiles = 20000
-
 // BuildApp 接线（assemble.Wire：会话构造器与 [kernel] 宿主参数）、构造应用接口层，再启动后台循环。
 // 不跑 ready，调用方在接好输出后调 Built.Ready。只跑一次性子命令（export / explain）的不调它，也就不起后台循环。
 func (r *Runtime) BuildApp(o AppOptions) (*Built, error) {
@@ -210,10 +205,6 @@ func (r *Runtime) BuildApp(o AppOptions) (*Built, error) {
 		return nil, fmt.Errorf("profile [kernel]: %w", err)
 	}
 	db := rt.Store.DB()
-	var perms *permission.Sessions
-	if v, ok := rt.Asm.Value(permission.Service); ok {
-		perms, _ = v.(*permission.Sessions)
-	}
 	w, err := assemble.Wire(assemble.WireOptions{Asm: rt.Asm, Host: r.Host, DB: db, Blobs: rt.Store.Blobs(),
 		Models: rt.Models, Workdir: r.Root, Kernel: kern, Definitions: rt.Defs,
 		MaxSteps: o.MaxSteps, SleepAfter: r.sleepAfter, Hooks: o.Hooks})
@@ -223,38 +214,14 @@ func (r *Runtime) BuildApp(o AppOptions) (*Built, error) {
 	// 应用接口层：在构造器钩子上并入流式事件、把提交事件接到总线、档位变化提示发 notice。
 	ao := appapi.Options{Host: r.Host, Bus: r.Bus, DB: db, Builder: w.Builder, Model: rt.Models.Model, Workdir: r.Root,
 		Trusted: r.Trusted, Profile: r.Profile, Packages: r.Packages, UI: o.UI, Artifacts: rt.Store.Blobs()}
-	root := r.Root
-	ao.Profiles = Profiles{Base: r.BaseProfile, Extra: r.ExtraProfile, Root: root, Trusted: r.Trusted}
-	ao.Models = ModelList{M: rt.Models}
-	ao.Followups = FollowupsFrom(rt.Models)
-	ao.Titler = TitlerFrom(rt.Models)
+	ao.Profiles = Profiles{Base: r.BaseProfile, Extra: r.ExtraProfile, Root: r.Root, Trusted: r.Trusted}
 	ao.Upload = o.Upload
 	ao.Workspaces = o.Workspaces
-	ao.Files = func(ctx context.Context, q string, limit int) ([]wire.FileInfo, bool, error) { // 界面 @ 文件（workspace.files）
-		hits, trunc, err := fs.ListFiles(ctx, root, q, limit, MaxScanFiles)
-		out := make([]wire.FileInfo, len(hits))
-		for i, h := range hits {
-			out[i] = wire.FileInfo{Path: h.Path, Size: h.Size, MTime: h.MTime}
-		}
-		return out, trunc, err
-	}
-	for _, it := range rt.Asm.Items(assemble.PointOnSessionDelete) { // 删除会话时的插件清理回调（session.delete）
-		c, ok := it.Impl.(store.Cleaner)
-		if !ok {
-			return nil, fmt.Errorf("插件 %s 的 %s 类型不符（%T）", it.Plugin, assemble.PointOnSessionDelete, it.Impl)
-		}
-		ao.Cleaners = append(ao.Cleaners, c)
-	}
-	if perms != nil {
-		ao.Modes = PermModes{P: perms, Workdir: o.ModesWorkdir}
-		// 项目档位当新会话缺省时，也要用户确认过放宽（与 /mode 切换共用 trust.toml 的确认记录）。
-		wd := o.ModesWorkdir
-		perms.ModeApproved = func(m permission.Mode, widened []string) bool {
-			return ModeApproved(wd, string(m), strings.Join(widened, "、"))
-		}
-	}
-	if rt.Compact != nil {
-		ao.Compactor = rt.Compact
+	// 插件能力 → 协议：模型、档位（确认记在 trust.toml）、追问、标题、文件、压缩、删除清理。
+	perms, err := adapters.Fill(&ao, adapters.Parts{Asm: rt.Asm, Models: rt.Models, Workdir: r.Root,
+		Approvals: TrustApprovals{Root: o.ModesWorkdir}})
+	if err != nil {
+		return nil, err
 	}
 	api, err := appapi.New(ao)
 	if err != nil {

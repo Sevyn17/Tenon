@@ -25,6 +25,7 @@ import (
 	"sync"
 	"time"
 
+	"tenon/appapi"
 	"tenon/runtime/agentdef"
 	"tenon/runtime/assemble"
 	"tenon/runtime/bus"
@@ -67,6 +68,10 @@ type config struct {
 	agents     []agentdef.Source // WithAgents
 	workdir    string
 	ui         assemble.UI
+	// protocolUI 界面经应用协议（WithProtocolUI）。
+	protocolUI bool
+	// configs 组件配置（WithConfig），按组件名合并。
+	configs map[string]map[string]any
 	// sleepAfter 空闲会话休眠超时（0 = 不休眠，02 2.2）；>0 时启动兜底扫描。
 	sleepAfter time.Duration
 	// projectTrust 工作目录是否受信（WithProjectTrust）；缺省 false。
@@ -175,6 +180,35 @@ func WithUI(ui UI) Option {
 			return fmt.Errorf("%w: WithUI 传了 nil", ErrInvalid)
 		}
 		c.ui = ui
+		return nil
+	}
+}
+
+// WithConfig 设一个预设组件的配置键，等同 profile 里的 [plugin.<名>] 节（如 models 的 base_url、model）。
+// 多次调用按键合并、后者覆盖前者；组件不在装配里、键未知或类型不对在 New 里报错。
+func WithConfig(component string, kv map[string]any) Option {
+	return func(c *config) error {
+		if component == "" {
+			return fmt.Errorf("%w: WithConfig 的组件名为空", ErrInvalid)
+		}
+		if c.configs == nil {
+			c.configs = map[string]map[string]any{}
+		}
+		if c.configs[component] == nil {
+			c.configs[component] = map[string]any{}
+		}
+		for k, v := range kv {
+			c.configs[component][k] = v
+		}
+		return nil
+	}
+}
+
+// WithProtocolUI 界面经应用协议：插件输出发成 notice、向人提问登记成交互，由连在 App.API() 上的客户端
+// （框架的前端或别的协议客户端）回答。和 WithUI 二选一；都不给时输出丢弃、提问直接报错。
+func WithProtocolUI() Option {
+	return func(c *config) error {
+		c.protocolUI = true
 		return nil
 	}
 }
@@ -335,12 +369,19 @@ func build(c *config) (*App, error) {
 		return nil, fmt.Errorf("%w: 工作目录 %s: %v", ErrInvalid, workdir, err)
 	}
 	workdir = abs
-	ui := c.ui
-	if ui == nil {
-		ui = nopUI{}
-	}
 	st := &storeHandle{db: c.store, blobs: newMemArtifacts(c.store.Exists)}
 	b := bus.New(0)
+	ui := c.ui
+	var pui *appapi.UI
+	switch {
+	case c.protocolUI && ui != nil:
+		return nil, fmt.Errorf("%w: WithUI 与 WithProtocolUI 只能选一个", ErrInvalid)
+	case c.protocolUI:
+		pui = appapi.NewUI(b)
+		ui = pui
+	case ui == nil:
+		ui = nopUI{}
+	}
 	h := &host.Host{Bus: b}
 	inject := map[string]any{
 		assemble.ServiceHost:    h,
@@ -363,8 +404,15 @@ func build(c *config) (*App, error) {
 		Instances: extra,
 		Defaults:  assemble.SlotDefaults(),
 	}
+	inSpec := map[string]bool{}
 	for _, n := range names {
-		spec.Plugins = append(spec.Plugins, component.Entry{Name: n})
+		spec.Plugins = append(spec.Plugins, component.Entry{Name: n, Config: c.configs[n]})
+		inSpec[n] = true
+	}
+	for n := range c.configs {
+		if !inSpec[n] {
+			return nil, fmt.Errorf("%w: WithConfig 的组件 %s 不在装配里", ErrInvalid, n)
+		}
 	}
 	for n := range extra {
 		spec.Plugins = append(spec.Plugins, component.Entry{Name: n})
@@ -377,7 +425,7 @@ func build(c *config) (*App, error) {
 	if err != nil {
 		return nil, fmt.Errorf("tenon: 定义: %w", err)
 	}
-	app := &App{asm: asm, defs: defs, host: h, bus: b, handle: st, workdir: workdir, ui: ui, kern: kern}
+	app := &App{asm: asm, defs: defs, host: h, bus: b, handle: st, workdir: workdir, ui: ui, pui: pui, trusted: c.projectTrust, kern: kern}
 	if v, ok := asm.Value(assemble.ServiceModelhub); ok {
 		app.models, _ = v.(*assemble.Models)
 	}
@@ -426,6 +474,9 @@ type App struct {
 	models  *assemble.Models
 	workdir string
 	ui      assemble.UI
+	pui     *appapi.UI // WithProtocolUI 时的协议界面
+	trusted bool
+	api     *appapi.App // 应用协议层：Start 里建
 	scope   *component.Scope
 	builder *assemble.Builder
 	// kern 内核与宿主参数（WithKernel、WithSleepAfter）；bgStop 后台循环的取消函数。

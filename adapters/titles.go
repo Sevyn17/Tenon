@@ -1,4 +1,4 @@
-package apphost
+package adapters
 
 // 会话短标题（appapi.Titler）：按第一条用户消息，用模型侧调用（不经层、不进会话日志）起一个短标题。
 // 失败或输出不合规时返回空，界面保留兜底标题（第一行）。
