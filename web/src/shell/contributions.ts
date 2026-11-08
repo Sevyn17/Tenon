@@ -42,7 +42,7 @@ export interface CommandContext {
 // ---- 菜单项 ----
 
 /** 菜单位置：左栏菜单区、头像菜单、会话行菜单、对话头部菜单、面板竖栏的"+"、输入框"+"由 ComposerAction 管。 */
-export type MenuPlace = "nav.primary" | "avatar.menu" | "session.row.menu" | "conversation.header.menu" | "rail.add";
+export type MenuPlace = "nav.primary" | "avatar.menu" | "session.row.menu" | "conversation.header.menu";
 
 export interface MenuItem extends Contribution {
   menu: MenuPlace;

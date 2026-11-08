@@ -33,6 +33,7 @@ import {
   type UITool,
 } from "../../ui";
 import { isVisible } from "../layout/reducer";
+import { PanelsMenu } from "../layout/panelmenu";
 import { Slot, useChainSlot, useCommandContext, useRegistry, useShell, whenState } from "../context";
 import { toUIActions, type ActionTarget } from "../contributions";
 import { useMenuGroups } from "./sidebar";
@@ -420,7 +421,7 @@ function Conversation({ id }: { id: string }) {
 
   return (
     <main className={s.conv}>
-      <Header id={id} title={st.title || id} running={st.runState === "running"} mode={st.mode?.label} />
+      <Header id={id} title={st.title || id} />
       {st.closed && <div className={cx(s.banner, s.banner_danger)}>{sh.t("conv.closed", { reason: st.closed })}</div>}
       {st.error && st.status === "error" && <div className={cx(s.banner, s.banner_danger)}>{st.error}</div>}
       <Slot at="conversation.banner" props={{ session: id }} />
@@ -534,7 +535,7 @@ function RunningStatus({ startedAt, onStop }: { startedAt?: number; onStop: () =
   );
 }
 
-function Header({ id, title, running, mode }: { id: string; title: string; running: boolean; mode?: string }) {
+function Header({ id, title }: { id: string; title: string }) {
   const sh = useShell();
   const vp = useViewport();
   const groups = useMenuGroups("conversation.header.menu");
@@ -549,16 +550,9 @@ function Header({ id, title, running, mode }: { id: string; title: string; runni
       <span className={s.title} title={id}>
         {title}
       </span>
-      <span className={s.meta}>
-        {running && (
-          <>
-            <Dot state="running" /> {sh.t("conv.running")}
-          </>
-        )}
-        {mode && !running && <span>{mode}</span>}
-      </span>
       <span className={s.grow} />
       <Slot at="conversation.header.actions" props={{ session: id }} />
+      <PanelsMenu />
       <Menu
         placement="bottom-end"
         groups={groups}

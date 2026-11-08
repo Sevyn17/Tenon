@@ -180,7 +180,8 @@ function GroupView(p: DockProps & { group: GroupNode }) {
           p.dispatch({ type: "move", panel: id, group: group.id, edge: "center", index: insertAt ?? group.tabs.length });
         }}
       >
-        <div className={s.tabList} role="tablist">
+        {group.tabs.length > 1 ? (
+          <div className={s.tabList} role="tablist">
           {group.tabs.map((id, i) => {
             const pn = p.panels.get(id);
             if (!pn) return null;
@@ -228,15 +229,30 @@ function GroupView(p: DockProps & { group: GroupNode }) {
             );
           })}
           {insertAt === group.tabs.length && <span className={s.tabInsert} />}
-        </div>
+          </div>
+        ) : (
+          // 只开一个面板时不留标签栏：顶部只有标题与关闭（06 §3.1）。
+          <div className={s.singleTitle} title={active?.title}>
+            {active?.icon}
+            <span>{active?.title}</span>
+          </div>
+        )}
         {active && (
           <div className={s.groupTools}>
-            <IconButton label="浮动" size="sm" onClick={() => p.dispatch({ type: "float", panel: active.id, x: 120, y: 120 })}>
-              <PictureInPicture2 size={14} />
-            </IconButton>
-            <IconButton label="最大化" size="sm" onClick={() => p.dispatch({ type: "maximize", panel: active.id })}>
-              <Maximize2 size={14} />
-            </IconButton>
+            {group.tabs.length > 1 ? (
+              <>
+                <IconButton label="浮动" size="sm" onClick={() => p.dispatch({ type: "float", panel: active.id, x: 120, y: 120 })}>
+                  <PictureInPicture2 size={14} />
+                </IconButton>
+                <IconButton label="最大化" size="sm" onClick={() => p.dispatch({ type: "maximize", panel: active.id })}>
+                  <Maximize2 size={14} />
+                </IconButton>
+              </>
+            ) : (
+              <IconButton label="关闭" size="sm" onClick={() => p.dispatch({ type: "close", panel: active.id })}>
+                <X size={14} />
+              </IconButton>
+            )}
           </div>
         )}
       </div>

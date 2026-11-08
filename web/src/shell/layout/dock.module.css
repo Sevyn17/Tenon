@@ -104,6 +104,22 @@
   overflow-x: auto;
   scrollbar-width: none;
 }
+/* 单面板：顶部只显示标题（无标签栏）。 */
+.singleTitle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex: 1;
+  min-width: 0;
+  padding-left: var(--space-1);
+  font-size: var(--text-sm);
+  color: var(--fg);
+}
+.singleTitle > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .tab {
   flex: none; /* 不收缩：放不下时标签行横向滚动，不截断文字 */
   display: inline-flex;

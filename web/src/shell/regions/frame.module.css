@@ -34,64 +34,6 @@
   min-width: 0;
 }
 
-/* —— 面板竖栏 —— */
-.rail {
-  flex: none;
-  width: 44px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-1);
-  padding: var(--space-2) 0;
-  border-left: 1px solid var(--border);
-  background: var(--bg-sidebar);
-}
-.railBtn {
-  position: relative;
-  width: 32px;
-  height: 32px;
-  display: grid;
-  place-items: center;
-  border: 0;
-  border-radius: var(--radius-md);
-  background: none;
-  color: var(--fg-2);
-  cursor: pointer;
-  transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
-}
-.railBtn:hover {
-  background: var(--bg-hover);
-  color: var(--fg);
-}
-.railBtn[aria-pressed="true"] {
-  background: var(--bg-active);
-  color: var(--accent);
-}
-.railBtn[aria-pressed="true"]::before {
-  content: "";
-  position: absolute;
-  left: -6px;
-  top: 8px;
-  bottom: 8px;
-  width: 2px;
-  border-radius: 2px;
-  background: var(--accent);
-}
-.railBadge {
-  position: absolute;
-  top: 2px;
-  right: 2px;
-}
-.railGrow {
-  flex: 1;
-}
-.railSep {
-  width: 20px;
-  height: 1px;
-  margin: var(--space-1) 0;
-  background: var(--border);
-}
-
 /* —— 连接条 —— */
 .banner {
   flex: none;

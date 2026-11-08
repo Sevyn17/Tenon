@@ -77,13 +77,13 @@ createRoot(el).render(<shell.Root />);
 ### 区域
 
 ```
-① 菜单区（新建、搜索、nav.primary 菜单项）   ③ 对话区（头部 · 消息流 · ④ 对话内小卡片 · ⑦ 输入框）   ⑤ 动态面板区   ⑥ 面板竖栏
+① 菜单区（新建、搜索、nav.primary 菜单项）   ③ 对话区（头部含面板按钮 · 消息流 · ④ 对话内小卡片 · ⑦ 输入框）   ⑤ 动态面板区
 ② 会话列表
 ⑧ 头像菜单
 覆盖层：⑨ 设置 · 命令面板 ⌘K · 快捷键速查 ? · 连接状态条 · 通知
 ```
 
-内置布局预设：`workbench`（缺省，右侧和底部停靠区 + 竖栏）、`chat`（面板变抽屉）、`embed`（无左栏，面板浮动）。窄屏（< 768）时左栏和面板区都变成抽屉；768–1024 时左栏收成图标条。
+内置布局预设：`workbench`（缺省，右侧和底部停靠区；面板入口在对话顶栏）、`chat`（面板变抽屉）、`embed`（无左栏，面板浮动）。窗口不足 1100px 时面板区变成覆盖在对话上的抽屉；窄屏（< 768）时左栏也变成抽屉；768–1024 时左栏收成图标条。
 
 ## 三、贡献包与注册表
 
@@ -126,7 +126,7 @@ export const myPack: ContributionPack = {
 | 注册表 | 用途 |
 |---|---|
 | `commands` | 命令：标题、分组、`keybind`、`slash`（也作输入框 `/` 命令）、`when`、`run`（返回 false 把按键让给焦点元素） |
-| `menus` | 菜单项，位置为 `nav.primary` / `avatar.menu` / `session.row.menu` / `conversation.header.menu` / `rail.add` |
+| `menus` | 菜单项，位置为 `nav.primary` / `avatar.menu` / `session.row.menu` / `conversation.header.menu` |
 | `slots` | 插槽内容，`render(props)` 或声明式 `view` |
 | `regions` / `presets` | 区域与布局预设 |
 | `panels` | 动态面板区的面板（`dock` 缺省停靠区、`badge`、`card`、`needsSession`） |
@@ -150,7 +150,7 @@ export const myPack: ContributionPack = {
 | 对话区 | `conversation.header.leading` / `.actions`、`conversation.banner`、`conversation.empty`（single）、`conversation.card` |
 | 消息流 | `message.user.after`、`message.assistant.after`、`message.turn.before` / `.after`、`turn.tail` |
 | 输入框 | `composer.above`、`composer.toolbar.left` / `.right`、`composer.below`、`composer.takeover`（chain，阻塞式交互接管输入框） |
-| 其他 | `rail.bottom`、`shell.overlay` |
+| 其他 | `shell.overlay` |
 
 **宿主接口**：命令、操作、菜单项的上下文里有 `shell`（`ShellApi`）：`openSession`、`newSession`、`openPanel(id, params)`、`togglePanel`、`openPage`、`openSettings(page, entry)`、`openPalette`、`insert(text)`、`focusComposer`、`run(commandId)`、`notify`、`toast`、`confirm`、`prompt`。
 

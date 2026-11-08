@@ -1,18 +1,18 @@
-// 工作台外框（前端方案第五节）：左栏 | 主区（对话 + 底部停靠区）| 右侧停靠区 | 面板竖栏，外加浮动面板、
+// 工作台外框（前端方案第五节）：左栏 | 主区（对话 + 底部停靠区）| 右侧停靠区，外加浮动面板、
 // 命令面板、快捷键速查、连接状态条。左栏与主区的实现取自 Region 注册表（嵌入方可替换），布局预设决定显示哪些。
+// 面板入口在对话顶栏（PanelsMenu），不再有右侧图标竖栏（06 §3.1）。
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { PanelRight, PanelBottom, WifiOff } from "lucide-react";
+import { WifiOff } from "lucide-react";
 import { listed } from "../../client";
 import { useConnection, useSessions, useStore } from "../../client/react";
-import { Count, Dialog, EmptyState, ErrorBoundary, Kbd, Spinner, Tooltip } from "../../ui";
+import { Dialog, EmptyState, ErrorBoundary, Kbd, Spinner } from "../../ui";
 import { Slot, useCommandContext, useRegistry, useShell, whenState } from "../context";
 import type { Command, Panel } from "../contributions";
 import { bindingOf, effectiveBindings, runCommand } from "../commands";
 import { Dock, Floats, useWindowDrop } from "../layout/dock";
-import { isOpen } from "../layout/reducer";
 import { Settings } from "./settings";
-import { useViewport } from "../viewport";
+import { usePanelDrawer, useViewport } from "../viewport";
 import s from "./frame.module.css";
 
 export function Frame() {
@@ -45,9 +45,10 @@ export function Frame() {
   const focus = nav.focus;
   const vp = useViewport();
   const narrow = vp === "sm";
-  // panels：dock = 停靠区 + 竖栏；float = 只有浮动面板（embed）；drawer = 右侧停靠区当抽屉、不显示底部区与竖栏（chat）；null = 不要面板。
-  // 窄屏（sm）一律按 drawer：右侧停靠区盖在对话上，没有底部区与竖栏（面板从命令面板 / 对话头部菜单打开）。
-  const mode = narrow && preset?.panels === "dock" ? "drawer" : preset ? preset.panels : "dock";
+  const panelDrawer = usePanelDrawer();
+  // panels：dock = 停靠区；float = 只有浮动面板（embed）；drawer = 右侧停靠区当抽屉、不显示底部区（chat）；null = 不要面板。
+  // 窄屏（sm）与窗口不足 1100px 时按 drawer：右侧停靠区盖在对话上，面板从顶栏的面板按钮打开（06 §3.1）。
+  const mode = !preset ? "dock" : preset.panels === "dock" && (narrow || panelDrawer) ? "drawer" : preset.panels;
   const docked = mode === "dock";
   const drawer = mode === "drawer";
   const closeDrawer = () => sh.nav.update((v) => ({ ...v, drawer: false }));
@@ -80,7 +81,6 @@ export function Frame() {
           <Dock dock="right" state={layout} dispatch={sh.layout.dispatch} panels={panelMap} renderPanel={renderPanel} />
         </RightDrawer>
       )}
-      {!focus && docked && <Rail panels={panels} />}
       {mode !== null && <Floats state={layout} dispatch={sh.layout.dispatch} panels={panelMap} renderPanel={renderPanel} />}
       <Slot at="shell.overlay" />
       {nav.palette && <Palette mode={nav.palette} />}
@@ -141,58 +141,6 @@ function RightDrawer({ onClose, children }: { onClose: () => void; children: Rea
       <div className={s.drawerScrim} onMouseDown={() => close.current()} />
       <div className={s.drawerRight}>{children}</div>
     </>
-  );
-}
-
-// ---- 面板竖栏 ----
-
-function Rail({ panels }: { panels: Panel[] }) {
-  const sh = useShell();
-  const layout = useStore(sh.layout);
-  const cx0 = useCommandContext();
-  const right = panels.filter((p) => (p.dock ?? "right") === "right");
-  const bottom = panels.filter((p) => p.dock === "bottom");
-  const btn = (p: Panel) => {
-    const on = isOpen(layout, p.id);
-    const n = p.badge?.(cx0);
-    return (
-      <Tooltip key={p.id} label={p.title} keybind={bindingOf(sh, `panel.${p.id}`) ?? p.keybind} side="left">
-        <button
-          type="button"
-          className={s.railBtn}
-          aria-pressed={on}
-          aria-label={p.title}
-          onClick={() => sh.api.togglePanel(p.id)}
-          draggable
-          onDragStart={(e) => {
-            e.dataTransfer.setData("application/x-tenon-panel", p.id);
-            e.dataTransfer.effectAllowed = "move";
-          }}
-        >
-          {p.icon}
-          {n ? <Count n={n} className={s.railBadge} /> : null}
-        </button>
-      </Tooltip>
-    );
-  };
-  return (
-    <nav className={s.rail} aria-label={sh.t("rail.label")}>
-      {right.map(btn)}
-      {bottom.length > 0 && <span className={s.railSep} />}
-      {bottom.map(btn)}
-      <span className={s.railGrow} />
-      <Slot at="rail.bottom" />
-      <Tooltip label={sh.t("rail.bottom")} keybind={bindingOf(sh, "shell.toggleBottom")} side="left">
-        <button type="button" className={s.railBtn} aria-label={sh.t("rail.bottom")} aria-pressed={!!layout.docks.bottom && !layout.hidden.bottom} onClick={() => sh.api.run("shell.toggleBottom")}>
-          <PanelBottom size={16} />
-        </button>
-      </Tooltip>
-      <Tooltip label={sh.t("rail.right")} keybind={bindingOf(sh, "shell.togglePanels")} side="left">
-        <button type="button" className={s.railBtn} aria-label={sh.t("rail.right")} aria-pressed={!!layout.docks.right && !layout.hidden.right} onClick={() => sh.api.run("shell.togglePanels")}>
-          <PanelRight size={16} />
-        </button>
-      </Tooltip>
-    </nav>
   );
 }
 

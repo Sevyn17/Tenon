@@ -7,6 +7,8 @@ export type Viewport = "sm" | "md" | "lg";
 
 const SM = "(max-width: 767px)";
 const MD = "(max-width: 1023px)";
+// 面板区什么时候改成覆盖式抽屉（06 §3.1：窗口不足 1100px）。与视口档位无关：md/lg 都可能落在抽屉里。
+const PANEL_DRAWER = "(max-width: 1099px)";
 
 export function currentViewport(): Viewport {
   if (typeof matchMedia !== "function") return "lg";
@@ -29,4 +31,24 @@ function subscribe(fn: () => void): () => void {
 
 export function useViewport(): Viewport {
   return useSyncExternalStore(subscribe, currentViewport, () => "lg" as Viewport);
+}
+
+function currentPanelDrawer(): boolean {
+  return typeof matchMedia === "function" && matchMedia(PANEL_DRAWER).matches;
+}
+
+function subscribePanelDrawer(fn: () => void): () => void {
+  if (typeof matchMedia !== "function") return () => {};
+  const q = matchMedia(PANEL_DRAWER);
+  q.addEventListener("change", fn);
+  addEventListener("resize", fn);
+  return () => {
+    q.removeEventListener("change", fn);
+    removeEventListener("resize", fn);
+  };
+}
+
+/** 窗口不足以并排显示面板区时为 true：右侧面板改成覆盖在对话上的抽屉。 */
+export function usePanelDrawer(): boolean {
+  return useSyncExternalStore(subscribePanelDrawer, currentPanelDrawer, () => false);
 }
