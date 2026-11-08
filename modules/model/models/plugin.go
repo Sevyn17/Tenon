@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 
 	"tenon/runtime/assemble"
 	"tenon/runtime/component"
@@ -13,9 +14,13 @@ import (
 
 // Config models 插件配置。
 type Config struct {
-	Model    string `cfg:"model" default:"deepseek-chat" title:"模型或别名"`
-	Catalog  string `cfg:"catalog" title:"用户目录 models.toml" description:"整条覆盖内置目录（model-hub D3）" widget:"file"`
-	BaseURL  string `cfg:"base_url" title:"临时 OpenAI 兼容端点" description:"非空时注册提供方 cli（key = env:TENON_API_KEY）"`
+	Model   string `cfg:"model" default:"deepseek-chat" title:"模型或别名"`
+	Catalog string `cfg:"catalog" title:"用户目录 models.toml" description:"整条覆盖内置目录（model-hub D3）" widget:"file"`
+	BaseURL string `cfg:"base_url" title:"临时端点" description:"非空时注册提供方 cli（协议见 protocol，密钥见 api_key）"`
+	// APIKey 端点的密钥引用（env:NAME 或 slot:secrets 认得的其他引用），只写引用，不写明文。
+	APIKey string `cfg:"api_key" default:"env:TENON_API_KEY" title:"端点密钥引用" description:"如 env:DEEPSEEK_API_KEY；不写明文密钥"`
+	// Protocol 端点的协议：openai-chat（缺省）、openai-responses、anthropic-messages。
+	Protocol string `cfg:"protocol" default:"openai-chat" title:"端点协议" description:"openai-chat / openai-responses / anthropic-messages"`
 	Discover bool   `cfg:"discover_ollama" title:"发现本地 Ollama 模型" widget:"switch"`
 }
 
@@ -62,8 +67,16 @@ func (modelsPlugin) Setup(cx *component.Registrar) error {
 	}
 	model := cfg.Model
 	if cfg.BaseURL != "" {
+		switch cfg.Protocol {
+		case "openai-chat", "openai-responses", "anthropic-messages":
+		default:
+			return fmt.Errorf("models: protocol %q 不认识（openai-chat / openai-responses / anthropic-messages）", cfg.Protocol)
+		}
+		if strings.TrimSpace(cfg.APIKey) != "" && !strings.Contains(cfg.APIKey, ":") {
+			return fmt.Errorf("models: api_key 要写成引用（如 env:NAME），不写明文")
+		}
 		f := modelhub.CatalogFile{
-			Provider: map[string]modelhub.Provider{"cli": {Protocol: "openai-chat", BaseURL: cfg.BaseURL, Key: "env:TENON_API_KEY"}},
+			Provider: map[string]modelhub.Provider{"cli": {Protocol: cfg.Protocol, BaseURL: cfg.BaseURL, Key: cfg.APIKey}},
 			Model:    map[string]modelhub.Model{"cli/" + model: {Provider: "cli", Name: model}},
 		}
 		if err := cat.Add(modelhub.LayerUser, "cli", f); err != nil {

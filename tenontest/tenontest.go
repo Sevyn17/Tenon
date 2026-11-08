@@ -207,6 +207,9 @@ func (a *scriptAdapter) Stream(ctx context.Context, r *modelhub.Request, ep mode
 		if len(s.calls) > 0 {
 			stop = session.StopReason{V: "ToolUse"}
 		}
+		if s.text != "" { // 和真实适配器一样先流式给正文，再给完整回复
+			ch <- modelhub.Event{TextDelta: s.text}
+		}
 		ch <- modelhub.Event{Done: &modelhub.Done{Reply: reply, Stop: stop}}
 	}()
 	return ch

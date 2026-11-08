@@ -19,6 +19,10 @@ import (
 )
 
 // agentSessionID 不带会话键的 agent: 投递所建会话的 id：由（定义, 创建者, 信封 id）确定，重投得到同一个 id（P1-17）。
+// AgentSessionID 投给 agent:<def> 的第一封信（不带会话键）落进的会话 id：由（定义, 创建者, 信封 id）确定。
+// SDK 用它在投递之前就订阅这个会话的事件（流式输出一个字都不漏）。
+func AgentSessionID(def, creator, envID string) string { return agentSessionID(def, creator, envID) }
+
 func agentSessionID(def, creator, envID string) string {
 	sum := sha256.Sum256([]byte(def + "\x00" + creator + "\x00" + envID))
 	return "ag-" + hex.EncodeToString(sum[:16])

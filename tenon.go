@@ -88,6 +88,11 @@ type config struct {
 	approvals adapters.ModeApprovals
 	protocol  []func(*appapi.Options)
 	readyErrs func([]error)
+	// 外观（tools.go、agents.go）。
+	tools        []Tool
+	inline       []Agent
+	defaultAgent string
+	secrets      func(string) (string, error) // WithSecrets
 }
 
 // Default 标准组件预设（10 10.2）：内核、上下文、模型、工具、权限、沙箱、协作。
@@ -430,7 +435,32 @@ func build(c *config) (*App, error) {
 		inject[assemble.ServiceModelhub] = c.models
 	}
 	// 定义来源：组件模板（装配期登记）+ 应用来源；平台同名冲突在这里报。
-	appDefs := agentdef.Multi(c.agents...)
+	inline := agentdef.Mem() // WithAgent 的定义
+	for _, ag := range c.inline {
+		if err := putAgent(inline, ag); err != nil {
+			return nil, err
+		}
+	}
+	builtin := agentdef.Mem() // 内置缺省智能体（Start 里按需登记）
+	appDefs := agentdef.Multi(append(append([]agentdef.Source(nil), c.agents...), inline)...)
+	// 应用工具（WithTools）：一个内部组件登记到 session_tools。
+	var toolNames []string
+	if len(c.tools) > 0 {
+		ts := make([]*toolhub.Tool, 0, len(c.tools))
+		seen := map[string]bool{}
+		for _, t := range c.tools {
+			if seen[t.Name()] {
+				return nil, fmt.Errorf("%w: WithTools 里工具 %s 重复", ErrInvalid, t.Name())
+			}
+			seen[t.Name()] = true
+			ts = append(ts, t.t)
+			toolNames = append(toolNames, t.Name())
+		}
+		if _, dup := extra[appToolsName]; dup {
+			return nil, fmt.Errorf("%w: 组件名 %s 是 WithTools 用的，换个名字", ErrInvalid, appToolsName)
+		}
+		extra[appToolsName] = appTools{tools: ts}
+	}
 	var spec component.Spec
 	inSpec := map[string]bool{}
 	if c.profile != nil { // 按 profile：开关、强制项、各组件配置（WithConfig 的键覆盖 profile 的）
@@ -469,14 +499,20 @@ func build(c *config) (*App, error) {
 			return nil, fmt.Errorf("%w: WithConfig 的组件 %s 不在装配里", ErrInvalid, n)
 		}
 	}
-	for n := range extra {
+	if c.secrets != nil { // WithSecrets：代替缺省的 env: 解析
+		if spec.Defaults == nil {
+			spec.Defaults = map[string]any{}
+		}
+		spec.Defaults[assemble.SlotSecrets] = assemble.Secrets(secretsFunc(c.secrets))
+	}
+	for n := range extra { // 应用组件（With、WithTools）：两种装配方式都要显式列进来
 		spec.Plugins = append(spec.Plugins, component.Entry{Name: n})
 	}
 	asm, err := component.Assemble(spec)
 	if err != nil {
 		return nil, fmt.Errorf("tenon: 装配: %w", err)
 	}
-	defs, err := asm.Definitions(appDefs)
+	defs, err := asm.Definitions(agentdef.Multi(appDefs, builtin))
 	if err != nil {
 		return nil, fmt.Errorf("tenon: 定义: %w", err)
 	}
@@ -489,7 +525,8 @@ func build(c *config) (*App, error) {
 		}
 	}
 	app := &App{asm: asm, defs: defs, host: h, bus: b, handle: st, own: c.store, workdir: workdir, ui: ui, pui: pui,
-		trusted: c.projectTrust, kern: kern, hooks: c.hooks, approvals: c.approvals, protocol: c.protocol, readyErrs: c.readyErrs}
+		trusted: c.projectTrust, kern: kern, hooks: c.hooks, approvals: c.approvals, protocol: c.protocol, readyErrs: c.readyErrs,
+		appDefs: appDefs, builtinDefs: builtin, appToolNames: toolNames, defaultAgent: c.defaultAgent, protocolUIOn: c.protocolUI || c.ui != nil}
 	if v, ok := asm.Value(assemble.ServiceModelhub); ok {
 		app.models, _ = v.(*assemble.Models)
 	}
@@ -540,15 +577,21 @@ type App struct {
 	approvals adapters.ModeApprovals
 	protocol  []func(*appapi.Options)
 	readyErrs func([]error)
-	opened    bool // 组件已启动（Open）
-	models    *assemble.Models
-	workdir   string
-	ui        assemble.UI
-	pui       *appapi.UI // WithProtocolUI 时的协议界面
-	trusted   bool
-	api       *appapi.App // 应用协议层：Start 里建
-	scope     *component.Scope
-	builder   *assemble.Builder
+	// 外观用的（agents.go、session.go）。
+	appDefs      agentdef.Source
+	builtinDefs  *agentdef.MemSource
+	appToolNames []string
+	defaultAgent string
+	protocolUIOn bool // 有人能回答确认（WithProtocolUI 或 WithUI）
+	opened       bool // 组件已启动（Open）
+	models       *assemble.Models
+	workdir      string
+	ui           assemble.UI
+	pui          *appapi.UI // WithProtocolUI 时的协议界面
+	trusted      bool
+	api          *appapi.App // 应用协议层：Start 里建
+	scope        *component.Scope
+	builder      *assemble.Builder
 	// kern 内核与宿主参数（WithKernel、WithSleepAfter）；bgStop 后台循环的取消函数。
 	kern    assemble.Kernel
 	bgStop  context.CancelFunc

@@ -2,17 +2,14 @@ package tenon
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 
 	"tenon/adapters"
 	"tenon/appapi"
-	"tenon/runtime/agentdef"
 	"tenon/runtime/assemble"
 	"tenon/runtime/component"
-	"tenon/runtime/mail"
 )
 
 // Meta 会话业务 meta（写进会话行，组件经 *Ctx 读）。
@@ -80,6 +77,9 @@ func (a *App) Start(ctx context.Context) (err error) {
 				a.scope, a.opened = nil, false
 			}
 		}()
+	}
+	if err := a.putDefaultAgent(ctx); err != nil { // 应用没给定义时的内置缺省智能体（工具在组件启动后才齐）
+		return fmt.Errorf("tenon: 缺省智能体: %w", err)
 	}
 	db := a.handle.DB()
 	w, err := assemble.Wire(assemble.WireOptions{Asm: a.asm, Host: a.host, DB: db, Blobs: a.handle.Blobs(),
@@ -161,63 +161,21 @@ func (a *App) Close(ctx context.Context) error {
 // LocalUser 没有 WithUser 时的发送者（单机应用的本机用户）：信封 from 必须有 id，会话创建者记它。
 const LocalUser = "local"
 
-// Ask 新开一个会话跑一轮：建会话（绑定义、写 meta）→ 投递用户消息 → 等回合结束 → 取最后一段助手文本。
+// Ask 新开一个会话跑一轮，返回最后一段助手文本：等于 NewSession + Send。agentName 为空时按缺省智能体规则选
+// （见 DefaultAgent）。走信封投递（审查 P1-24）：from = human:<用户>，经会话打开守卫、投递守卫与联系名单，
+// 和 CLI / 服务端 / 其他会话发来的信同一条路。ctx 取消时取消这一轮；没人能回答的确认立即拒绝。
 func (a *App) Ask(ctx context.Context, agentName, text string, meta Meta) (*Reply, error) {
-	a.mu.Lock()
-	started, closed := a.started, a.closed
-	a.mu.Unlock()
-	if !started || closed {
-		return nil, ErrNotStarted
-	}
-	if err := checkTenant(ctx); err != nil {
+	if err := a.ready(ctx); err != nil {
 		return nil, err
-	}
-	if strings.TrimSpace(agentName) == "" {
-		return nil, fmt.Errorf("%w: 定义名为空", ErrInvalid)
 	}
 	if strings.TrimSpace(text) == "" {
 		return nil, fmt.Errorf("%w: 消息为空", ErrInvalid)
 	}
-	// 走信封投递（审查 P1-24）：from = human:<用户>，经会话打开守卫、投递守卫与联系名单，
-	// 和 CLI / 服务端 / 其他会话发来的信同一条路；会话只构造一次。
-	user := userFrom(ctx)
-	if user == "" {
-		user = LocalUser
-	}
-	var raw json.RawMessage
-	if len(meta) > 0 {
-		b, err := json.Marshal(meta)
-		if err != nil {
-			return nil, fmt.Errorf("%w: meta: %v", ErrInvalid, err)
-		}
-		raw = b
-	}
-	id, err := a.host.DeliverAgent(ctx, mail.Envelope{
-		From: mail.Address{Kind: mail.AddrHuman, ID: user},
-		To:   mail.Address{Kind: mail.AddrAgent, ID: agentName},
-		Kind: mail.KindRequest, Origin: mail.OriginHuman, Body: text,
-	}, raw)
+	s, err := a.NewSession(ctx, agentName, meta)
 	if err != nil {
-		if errors.Is(err, agentdef.ErrNotFound) {
-			return nil, fmt.Errorf("%w: 定义 %s", ErrNotFound, agentName)
-		}
-		return nil, wrapErr(err)
+		return nil, err
 	}
-	hd, ok := a.host.Get(id)
-	if !ok {
-		var err error
-		if hd, err = a.host.Open(ctx, id); err != nil {
-			return nil, wrapErr(err)
-		}
-	}
-	if err := hd.Wait(); err != nil {
-		return nil, wrapErr(err)
-	}
-	out, err := lastAssistant(ctx, a.handle, id)
-	if err != nil {
-		return nil, wrapErr(err)
-	}
-	return &Reply{Text: out, SessionID: id}, nil
+	return s.Send(ctx, text)
 }
 
 // History 读一个会话的条目（断言与回放用）。
