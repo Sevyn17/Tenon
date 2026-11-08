@@ -100,12 +100,21 @@ func replayEnvelope(session string, cur int64, kind, data, body string, at int64
 // ListSessions 按更新时间倒序列出未删除会话；before > 0 时只列 updated_at < before 的（分页游标）。
 // topOnly 只列顶层会话（不含子智能体 / 成员）。
 func (db *DB) ListSessions(ctx context.Context, before int64, limit int, topOnly bool) ([]store.SessionInfo, error) {
+	return db.ListSessionsIn(ctx, "", before, limit, topOnly)
+}
+
+// ListSessionsIn 同 ListSessions，只列属于 workspace 的会话（空 = 不过滤）。
+func (db *DB) ListSessionsIn(ctx context.Context, workspace string, before int64, limit int, topOnly bool) ([]store.SessionInfo, error) {
 	if limit <= 0 || limit > 500 {
 		limit = 50
 	}
-	q := `SELECT id, title, preview, run_state, origin, parent_id, updated_at, meta FROM sessions
+	q := `SELECT id, title, preview, run_state, origin, parent_id, workspace, updated_at, meta FROM sessions
 		WHERE tenant = ? AND status != 'deleted'`
 	args := []any{store.Tenant}
+	if workspace != "" {
+		q += ` AND workspace = ?`
+		args = append(args, workspace)
+	}
 	if before > 0 {
 		q += ` AND updated_at < ?`
 		args = append(args, before)
@@ -166,7 +175,7 @@ func (db *DB) SessionsWithMeta(ctx context.Context, key string, limit int) ([]st
 	if limit <= 0 || limit > 500 {
 		limit = 50
 	}
-	rows, err := db.rq().QueryContext(ctx, `SELECT id, title, preview, run_state, origin, parent_id, updated_at, meta FROM sessions
+	rows, err := db.rq().QueryContext(ctx, `SELECT id, title, preview, run_state, origin, parent_id, workspace, updated_at, meta FROM sessions
 		WHERE tenant = ? AND status != 'deleted' AND json_extract(meta, '$.' || ?) = 1 ORDER BY updated_at DESC LIMIT ?`,
 		store.Tenant, key, limit)
 	if err != nil {
@@ -181,7 +190,7 @@ func scanInfos(rows *sql.Rows) ([]store.SessionInfo, error) {
 	for rows.Next() {
 		var s store.SessionInfo
 		var meta string
-		if err := rows.Scan(&s.ID, &s.Title, &s.Preview, &s.RunState, &s.Origin, &s.ParentID, &s.UpdatedAt, &meta); err != nil {
+		if err := rows.Scan(&s.ID, &s.Title, &s.Preview, &s.RunState, &s.Origin, &s.ParentID, &s.Workspace, &s.UpdatedAt, &meta); err != nil {
 			return nil, err
 		}
 		if meta != "" && meta != "{}" {

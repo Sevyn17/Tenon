@@ -190,4 +190,9 @@ var coreMigrations = []migration{
 		`CREATE UNIQUE INDEX session_pending_interaction ON session_pending(tenant, interaction_id) WHERE interaction_id <> ''`,
 		`CREATE INDEX session_pending_open ON session_pending(tenant, outcome, interaction_id)`,
 	}},
+	// 一个用户一个库：会话记着所属工作区，列表按它过滤。
+	{version: 12, stmts: []string{
+		`ALTER TABLE sessions ADD COLUMN workspace TEXT NOT NULL DEFAULT ''`,
+		`CREATE INDEX sessions_workspace ON sessions(tenant, workspace, status, updated_at)`,
+	}},
 }

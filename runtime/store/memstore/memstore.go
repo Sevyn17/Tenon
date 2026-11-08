@@ -235,6 +235,11 @@ func (s *Store) CreateSession(ctx context.Context, m store.SessionMeta, hdr sess
 			return err
 		}
 	}
+	if m.Workspace == "" && m.ParentID != "" { // 子会话跟随父会话的工作区（与 sqlite 一致）
+		if p, ok := s.sessions[m.ParentID]; ok {
+			m.Workspace = p.meta.Workspace
+		}
+	}
 	m.Meta, m.UseConfig = cloneRaw(m.Meta), cloneRaw(m.UseConfig)
 	x := &sess{meta: m, header: hb, shellHash: hash, nextSeq: 1, runState: "idle", status: "active",
 		updatedAt: s.now(), entries: map[int]entry{}, requests: map[string]request{}}
@@ -600,6 +605,11 @@ func (s *Store) DeleteSession(ctx context.Context, id string, cleaners []store.C
 
 // ListSessions 按更新时间倒序列出未删除会话；before > 0 时只列 updated_at < before 的。
 func (s *Store) ListSessions(ctx context.Context, before int64, limit int, topOnly bool) ([]store.SessionInfo, error) {
+	return s.ListSessionsIn(ctx, "", before, limit, topOnly)
+}
+
+// ListSessionsIn 同 ListSessions，只列属于 workspace 的会话（空 = 不过滤）。
+func (s *Store) ListSessionsIn(ctx context.Context, workspace string, before int64, limit int, topOnly bool) ([]store.SessionInfo, error) {
 	if err := s.lock(); err != nil {
 		return nil, err
 	}
@@ -609,7 +619,8 @@ func (s *Store) ListSessions(ctx context.Context, before int64, limit int, topOn
 	}
 	var out []store.SessionInfo
 	for _, x := range s.sessions {
-		if x.status == "deleted" || (before > 0 && x.updatedAt >= before) || (topOnly && x.meta.ParentID != "") {
+		if x.status == "deleted" || (before > 0 && x.updatedAt >= before) || (topOnly && x.meta.ParentID != "") ||
+			(workspace != "" && x.meta.Workspace != workspace) {
 			continue
 		}
 		out = append(out, x.info())
@@ -628,7 +639,7 @@ func (s *Store) ListSessions(ctx context.Context, before int64, limit int, topOn
 
 func (x *sess) info() store.SessionInfo {
 	i := store.SessionInfo{ID: x.meta.ID, Title: x.meta.Title, Preview: x.preview, RunState: x.runState,
-		Origin: x.meta.Origin, ParentID: x.meta.ParentID, UpdatedAt: x.updatedAt}
+		Origin: x.meta.Origin, ParentID: x.meta.ParentID, Workspace: x.meta.Workspace, UpdatedAt: x.updatedAt}
 	if m := x.meta.Meta; len(m) > 0 && string(m) != "{}" {
 		i.Meta = cloneRaw(m)
 	}

@@ -43,6 +43,12 @@ func (db *DB) CreateSession(ctx context.Context, m store.SessionMeta, hdr sessio
 	now := time.Now().UnixMilli()
 	var forked *bus.Envelope
 	err := db.inTx(ctx, func(tx *sql.Tx) error {
+		if m.Workspace == "" && m.ParentID != "" { // 子会话跟随父会话的工作区
+			if err := tx.QueryRowContext(ctx, `SELECT workspace FROM sessions WHERE tenant = ? AND id = ?`, store.Tenant, m.ParentID).
+				Scan(&m.Workspace); err != nil && !errors.Is(err, sql.ErrNoRows) {
+				return err
+			}
+		}
 		shell, hb, err := splitHeader(hdr)
 		if err != nil {
 			return err
@@ -51,9 +57,9 @@ func (db *DB) CreateSession(ctx context.Context, m store.SessionMeta, hdr sessio
 			return err
 		}
 		if _, err := tx.ExecContext(ctx, `INSERT INTO sessions(tenant, id, agent_id, agent_hash, creator, parent_id, origin, fork_upto,
-			title, header, shell_hash, session_key, meta, use_config, log_len, next_sync_seq, updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,1,?)`,
+			title, header, shell_hash, session_key, meta, use_config, workspace, log_len, next_sync_seq, updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,1,?)`,
 			store.Tenant, m.ID, m.AgentID, m.AgentHash, m.Creator, m.ParentID, m.Origin, m.ForkUpto, m.Title, hb, shell.hash,
-			nullStr(m.SessionKey), jsonObj(m.Meta), jsonObj(m.UseConfig), now); err != nil {
+			nullStr(m.SessionKey), jsonObj(m.Meta), jsonObj(m.UseConfig), m.Workspace, now); err != nil {
 			if isUniqueViolation(err) {
 				return fmt.Errorf("%w: 会话 %s 或会话键已存在", store.ErrConflict, m.ID)
 			}
@@ -224,10 +230,10 @@ func (db *DB) Load(ctx context.Context, id string, base *int) (*store.Loaded, er
 		metaJ, useCfgJ string
 	)
 	err := db.rq().QueryRowContext(ctx, `SELECT agent_id, agent_hash, creator, parent_id, origin, fork_upto, title, run_state, header, shell_hash,
-		session_key, meta, use_config, next_sync_seq - 1
+		session_key, meta, use_config, workspace, next_sync_seq - 1
 		FROM sessions WHERE id = ? AND tenant = ? AND status != 'deleted'`, id, store.Tenant).
 		Scan(&l.Meta.AgentID, &l.Meta.AgentHash, &l.Meta.Creator, &l.Meta.ParentID, &l.Meta.Origin, &l.Meta.ForkUpto, &l.Meta.Title, &l.RunState, &hb, &shellH,
-			&key, &metaJ, &useCfgJ, &l.Cursor)
+			&key, &metaJ, &useCfgJ, &l.Meta.Workspace, &l.Cursor)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, store.ErrNotFound
 	}

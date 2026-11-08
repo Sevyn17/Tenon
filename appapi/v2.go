@@ -159,6 +159,8 @@ func AsError(err error) *Error {
 		out.Code = wire.CodeNotFound
 	case errors.Is(err, host.ErrNotAllowed):
 		out.Code = wire.CodeDenied
+	case errors.Is(err, host.ErrOtherWorkspace): // 在别的工作区里打开它：工具会在错的目录里执行
+		out.Code = wire.CodeInvalid
 	case errors.Is(err, session.ErrNotIdle):
 		out.Code = wire.CodeNotIdle
 	case errors.Is(err, session.ErrNotWaiting): // steer 时没有进行中的回合：提示用户直接发送，不是"等一会再试"
@@ -240,6 +242,10 @@ func (v *App) SessionsList(ctx context.Context, in wire.ListArgs) (wire.ListResu
 	if limit <= 0 || limit > 500 {
 		limit = 50
 	}
+	ws := v.o.Host.Workspace // 缺省只列当前工作区的会话
+	if in.AllWorkspaces {
+		ws = ""
+	}
 	if in.Pinned { // 置顶的会话：单独一页，不分页
 		ms, ok := v.o.DB.(store.SessionMetaStore)
 		if !ok {
@@ -251,13 +257,13 @@ func (v *App) SessionsList(ctx context.Context, in wire.ListArgs) (wire.ListResu
 		}
 		out := wire.ListResult{Items: []wire.SessionInfo{}}
 		for _, s := range items {
-			if in.All || s.ParentID == "" {
+			if (in.All || s.ParentID == "") && (ws == "" || s.Workspace == ws) {
 				out.Items = append(out.Items, wireInfo(s))
 			}
 		}
 		return out, nil
 	}
-	items, err := v.o.DB.ListSessions(ctx, in.Cursor, limit, !in.All)
+	items, err := v.o.DB.ListSessionsIn(ctx, ws, in.Cursor, limit, !in.All)
 	if err != nil {
 		return wire.ListResult{}, err
 	}
@@ -283,7 +289,7 @@ func pinnedOf(meta json.RawMessage) bool {
 
 func wireInfo(s store.SessionInfo) wire.SessionInfo {
 	return wire.SessionInfo{ID: s.ID, Title: s.Title, Preview: s.Preview, RunState: wireRun(s.RunState),
-		Origin: s.Origin, Parent: s.ParentID, UpdatedAt: s.UpdatedAt, Pinned: pinnedOf(s.Meta)}
+		Origin: s.Origin, Parent: s.ParentID, UpdatedAt: s.UpdatedAt, Pinned: pinnedOf(s.Meta), Workspace: s.Workspace}
 }
 
 // MaxTitle 会话标题上限（字节）。
@@ -1170,7 +1176,7 @@ func (v *App) WorkspaceOpen(ctx context.Context, in wire.WorkspaceOpenArgs) (wir
 func (v *App) runningSessions(ctx context.Context) (int, error) {
 	n := 0
 	for before := int64(0); ; {
-		rows, err := v.o.DB.ListSessions(ctx, before, 200, false)
+		rows, err := v.o.DB.ListSessionsIn(ctx, v.o.Host.Workspace, before, 200, false)
 		if err != nil {
 			return 0, err
 		}

@@ -150,7 +150,7 @@ func (h *Host) deliverAgentID(ctx context.Context, env mail.Envelope, bizMeta js
 			return "", err
 		}
 	}
-	meta := store.SessionMeta{ID: id, AgentID: env.To.ID, Creator: creator, SessionKey: env.Key, Origin: "agent", Meta: bizMeta}
+	meta := store.SessionMeta{ID: id, AgentID: env.To.ID, Creator: creator, SessionKey: env.Key, Origin: "agent", Meta: bizMeta, Workspace: h.Workspace}
 	probe := env
 	probe.To = mail.Address{Kind: mail.AddrSession, ID: id}
 	verdict, reason := h.evalGuard(component.GuardRequest{Point: component.GuardDeliver, Envelope: &probe})

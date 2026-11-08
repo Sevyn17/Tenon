@@ -59,9 +59,46 @@ func Run(t *testing.T, open func(t *testing.T) store.Store) {
 		{"EventsCursorExpired", testEventsCursorExpired},
 		{"Interactions", testInteractions},
 		{"SessionMetaUpdate", testSessionMetaUpdate},
+		{"Workspace", testWorkspace},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) { c.f(t, open(t)) })
+	}
+}
+
+// testWorkspace 会话的工作区：建会话时记下、子会话跟随父会话、Load 读回、ListSessionsIn 只列该工作区的（空 = 全部）。
+func testWorkspace(t *testing.T, db store.Store) {
+	ctx := context.Background()
+	create(t, db, store.SessionMeta{ID: "a1", Workspace: "wa"}, newCore())
+	create(t, db, store.SessionMeta{ID: "a1/sub", ParentID: "a1", Origin: "subagent"}, newCore())
+	create(t, db, store.SessionMeta{ID: "b1", Workspace: "wb"}, newCore())
+	create(t, db, store.SessionMeta{ID: "none"}, newCore())
+	l, err := db.Load(ctx, "a1/sub", nil)
+	if err != nil || l.Meta.Workspace != "wa" {
+		t.Fatalf("子会话应跟随父会话的工作区：%+v %v", l, err)
+	}
+	ids := func(ws string, top bool) map[string]string {
+		ls, err := db.ListSessionsIn(ctx, ws, 0, 50, top)
+		if err != nil {
+			t.Fatal(err)
+		}
+		m := map[string]string{}
+		for _, x := range ls {
+			m[x.ID] = x.Workspace
+		}
+		return m
+	}
+	if m := ids("wa", false); len(m) != 2 || m["a1"] != "wa" || m["a1/sub"] != "wa" {
+		t.Fatalf("wa：%v", m)
+	}
+	if m := ids("wa", true); len(m) != 1 {
+		t.Fatalf("wa 顶层：%v", m)
+	}
+	if m := ids("wb", true); len(m) != 1 || m["b1"] != "wb" {
+		t.Fatalf("wb：%v", m)
+	}
+	if m := ids("", true); len(m) != 3 {
+		t.Fatalf("不过滤：%v", m)
 	}
 }
 

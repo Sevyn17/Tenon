@@ -61,6 +61,8 @@ type ListArgs struct {
 	All    bool  `json:"all,omitempty"`
 	// Pinned 只列置顶的会话（不分页，最多 limit 条；含子会话与否同 all）。
 	Pinned bool `json:"pinned,omitempty"`
+	// AllWorkspaces 列所有工作区的会话；缺省只列当前工作区的（会话库是用户级的，多个工作区共用）。
+	AllWorkspaces bool `json:"all_workspaces,omitempty"`
 }
 
 // FollowupsArgs session.followups：某回合（缺省最后一个结束的回合）之后的建议追问。

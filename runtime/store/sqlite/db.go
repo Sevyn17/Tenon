@@ -31,7 +31,11 @@ type DB struct {
 	onCommit func(bus.Envelope)
 	// txActive 外层句柄上有 Tx 在进行（见 Tx / q）。
 	txActive atomic.Bool
+	path     string // 库文件（Open 时的路径）
 }
+
+// Path 库文件路径（Open 时给的）。
+func (db *DB) Path() string { return db.path }
 
 // execer 是 *sql.DB 与 *sql.Tx 的公共子集，子存储方法通过 q() 取执行器。
 type execer interface {
@@ -152,7 +156,7 @@ func Open(ctx context.Context, path string, opt Options) (*DB, error) {
 				return nil, err
 			}
 			rd.SetMaxOpenConns(ReadConns)
-			db.rd = rd
+			db.rd, db.path = rd, path
 			return db, nil
 		}
 		lastErr = err

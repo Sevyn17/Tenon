@@ -282,6 +282,8 @@ type SessionInfo struct {
 	Parent    string `json:"parent,omitempty"`
 	UpdatedAt int64  `json:"updated_at"`
 	Pinned    bool   `json:"pinned,omitempty"`
+	// Workspace 所属工作区的键（sessions.list {all_workspaces} 时用来分组）；空 = 不属于任何工作区。
+	Workspace string `json:"workspace,omitempty"`
 }
 
 // Principal 连接身份（10.8）。

@@ -140,6 +140,10 @@ type Host struct {
 	Hooks Hooks
 	Bus   *bus.Bus // 可空：易失事件（界面）
 	Queue int      // 外部队列容量，默认 64
+	// Workspace 本宿主所在的工作区键（应用给，如规范化后的项目目录）：新建的顶层会话记上它（子会话由存储跟随父会话）；
+	// 非空时拒绝打开属于别的工作区的会话——会话的工具在本宿主的工作目录里执行，开错了就是在别的项目里读写。
+	// 空 = 不区分工作区。
+	Workspace string
 
 	// Holder 本实例的租约持有者标识（空 = 首次打开时按实例生成）。
 	// 同一存储上两个 Host 打开同一会话会互相抢租约，旧持有者的写入被存储拒绝（02 2.2 fencing）。
@@ -288,7 +292,7 @@ func (h *Host) Create(ctx context.Context, id, def string, bizMeta json.RawMessa
 		return Handle{}, fmt.Errorf("%w: 会话 %s 已存在", store.ErrConflict, id)
 	}
 	hd, err := h.open(ctx, id, def, h.New, func(ag *agent.Agent, cfg *session.Config) error {
-		meta := store.SessionMeta{Origin: "new", Meta: bizMeta}
+		meta := store.SessionMeta{Origin: "new", Meta: bizMeta, Workspace: h.Workspace}
 		if ag.Def != nil {
 			meta.AgentID, meta.AgentHash = ag.Def.ID, ag.Def.Version
 		}
@@ -344,6 +348,9 @@ func (h *Host) open(ctx context.Context, id, def string, f Factory, pre func(*ag
 		return Handle{a}, nil
 	}
 	h.mu.Unlock()
+	if err := h.checkWorkspace(ctx, id); err != nil {
+		return Handle{}, err
+	}
 
 	ag, cfg, err := f(id, def)
 	if err != nil {
@@ -415,6 +422,27 @@ func (h *Host) open(ctx context.Context, id, def string, f Factory, pre func(*ag
 	h.voidStale(ctx, id)
 	go a.run()
 	return Handle{a}, nil
+}
+
+// ErrOtherWorkspace 会话属于另一个工作区（Host.Workspace）。
+var ErrOtherWorkspace = errors.New("host: 会话属于另一个工作区")
+
+// checkWorkspace 已有会话属于别的工作区时拒绝打开；没记工作区的旧会话、新会话照常。
+func (h *Host) checkWorkspace(ctx context.Context, id string) error {
+	if h.Workspace == "" {
+		return nil
+	}
+	l, err := h.head(ctx, id)
+	if errors.Is(err, store.ErrNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if w := l.Meta.Workspace; w != "" && w != h.Workspace {
+		return fmt.Errorf("%w（%s）：切到那个工作区再打开", ErrOtherWorkspace, w)
+	}
+	return nil
 }
 
 // leaseHolder 本实例的租约持有者标识（懒生成）。

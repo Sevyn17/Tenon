@@ -213,6 +213,7 @@ export interface SessionInfo {
   parent?: string;
   updated_at: number;
   pinned?: boolean;
+  workspace?: string;
 }
 
 export interface Principal {
@@ -400,6 +401,7 @@ export interface ListArgs {
   limit?: number;
   all?: boolean;
   pinned?: boolean;
+  all_workspaces?: boolean;
 }
 
 export interface ListResult {

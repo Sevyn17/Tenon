@@ -26,7 +26,22 @@ func TestV10BackfillsEvents(t *testing.T) {
 		t.Fatalf("v9 迁移: %v", err)
 	}
 	c := newCore()
-	if err := old.CreateSession(ctx, store.SessionMeta{ID: "o"}, c.Snapshot().Header, nil); err != nil {
+	// 用 v9 的列写会话行（现在的 CreateSession 会写后来加的列）。
+	sh, hb, err := splitHeader(c.Snapshot().Header)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tx, err := s.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := putShell(ctx, tx, sh); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(`INSERT INTO sessions(tenant, id, header, shell_hash, updated_at) VALUES('local','o',?,?,1)`, string(hb), sh.hash); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
 		t.Fatal(err)
 	}
 	// 用 v9 的写法直接写条目与归档（没有事件表）：a=1, b=2，回退占 3，c=4。

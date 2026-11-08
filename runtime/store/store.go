@@ -87,6 +87,8 @@ type SessionStore interface {
 	DeleteSession(ctx context.Context, id string, cleaners []Cleaner) error
 	// ListSessions 按更新时间倒序列出未删除会话。
 	ListSessions(ctx context.Context, before int64, limit int, topOnly bool) ([]SessionInfo, error)
+	// ListSessionsIn 同 ListSessions，只列属于 workspace 的会话；workspace 为空 = 不过滤（等于 ListSessions）。
+	ListSessionsIn(ctx context.Context, workspace string, before int64, limit int, topOnly bool) ([]SessionInfo, error)
 	// FindSessionByKey 按会话键（定义、创建者、key）查会话 id（13 13.3 B19）。
 	// 唯一约束不看状态：墓碑占着键也会返回；调用方自行判断已关闭。不存在返回 ErrNotFound。
 	FindSessionByKey(ctx context.Context, agentID, creator, key string) (string, error)
@@ -259,9 +261,12 @@ type SessionMeta struct {
 	Origin     string // new / fork / side / subagent / member
 	ForkUpto   int
 	Title      string
-	SessionKey string          // 会话键；空 = 不带 key（不参与唯一约束）
-	Meta       json.RawMessage // 应用写入的业务键（JSON 对象）；空 = {}
-	UseConfig  json.RawMessage // 创建时算好的使用配置（JSON 对象）；空 = {}
+	SessionKey string // 会话键；空 = 不带 key（不参与唯一约束）
+	// Workspace 所属工作区（应用给的键，如规范化后的项目目录）；空 = 不属于任何工作区。
+	// 子会话（ParentID 非空）没给时跟随父会话。存储只按它过滤，不解释它。
+	Workspace string
+	Meta      json.RawMessage // 应用写入的业务键（JSON 对象）；空 = {}
+	UseConfig json.RawMessage // 创建时算好的使用配置（JSON 对象）；空 = {}
 }
 
 // RequestRecord 结构化请求记录（review-1 R1）。
@@ -418,6 +423,7 @@ type SessionInfo struct {
 	RunState  string `json:"run_state"`
 	Origin    string `json:"origin"`
 	ParentID  string `json:"parent"`
+	Workspace string `json:"workspace,omitempty"`
 	UpdatedAt int64  `json:"updated_at"`
 	// Meta 应用写入的业务键（JSON 对象）。
 	Meta json.RawMessage `json:"meta,omitempty"`
