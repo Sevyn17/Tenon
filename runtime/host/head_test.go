@@ -6,8 +6,8 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"tenon/runtime/mail"
-	"tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/mail"
+	"github.com/Sevyn17/tenon/runtime/store"
 )
 
 // fullLoadCounter 数整份日志的 Load（base == nil：要读并反序列化全部条目）。

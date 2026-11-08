@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"tenon/runtime/session"
-	"tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/store"
 )
 
 func importCore() session.Header {

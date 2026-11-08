@@ -17,10 +17,10 @@ import (
 	"sync"
 	"time"
 
-	"tenon/runtime/agentdef"
-	"tenon/runtime/bus"
-	"tenon/runtime/host"
-	"tenon/runtime/mail"
+	"github.com/Sevyn17/tenon/runtime/agentdef"
+	"github.com/Sevyn17/tenon/runtime/bus"
+	"github.com/Sevyn17/tenon/runtime/host"
+	"github.com/Sevyn17/tenon/runtime/mail"
 )
 
 // Session 一个会话。并发安全；同一会话同时只跑一轮（后来的 Send 排到前一轮之后）。

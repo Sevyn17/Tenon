@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"tenon/runtime/mail"
+	"github.com/Sevyn17/tenon/runtime/mail"
 )
 
 // deliverHuman 投递给人（11 11.2）。v1 没有端点注册表：发布 human.delivered 事件，

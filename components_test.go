@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"tenon"
-	"tenon/tenontest"
+	"github.com/Sevyn17/tenon"
+	"github.com/Sevyn17/tenon/tenontest"
 )
 
 // 应用组件只 import tenon：声明配置、提供与使用服务、在类型化点位登记工具、登守卫规则。

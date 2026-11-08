@@ -12,8 +12,8 @@ import (
 	"sort"
 	"strings"
 
-	"tenon/runtime/callctx"
-	"tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/callctx"
+	"github.com/Sevyn17/tenon/runtime/session"
 )
 
 // Kind 片段种类（12.5）。

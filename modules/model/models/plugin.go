@@ -7,9 +7,9 @@ import (
 	"os"
 	"strings"
 
-	"tenon/runtime/assemble"
-	"tenon/runtime/component"
-	"tenon/runtime/modelhub"
+	"github.com/Sevyn17/tenon/runtime/assemble"
+	"github.com/Sevyn17/tenon/runtime/component"
+	"github.com/Sevyn17/tenon/runtime/modelhub"
 )
 
 // Config models 插件配置。

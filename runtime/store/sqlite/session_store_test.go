@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"tenon/runtime/session"
-	"tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/store"
 )
 
 func txt(s string) session.Content { return session.Content{session.NewTextPart(s)} }

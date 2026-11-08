@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"tenon/appapi/wire"
+	"github.com/Sevyn17/tenon/appapi/wire"
 )
 
 type fakeWorkspaces struct{ opened []string }

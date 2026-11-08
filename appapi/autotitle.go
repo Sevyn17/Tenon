@@ -9,9 +9,9 @@ import (
 	"time"
 	"unicode"
 
-	"tenon/runtime/host"
-	"tenon/runtime/session"
-	"tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/host"
+	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/store"
 )
 
 // AutoTitleRunes 自动标题的最大字符数（超出加省略号）。

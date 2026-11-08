@@ -7,13 +7,13 @@ import (
 	"testing"
 	"time"
 
-	"tenon/appapi/wire"
-	"tenon/runtime/agent"
-	"tenon/runtime/bus"
-	"tenon/runtime/host"
-	"tenon/runtime/session"
-	"tenon/runtime/store/sqlite"
-	"tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/appapi/wire"
+	"github.com/Sevyn17/tenon/runtime/agent"
+	"github.com/Sevyn17/tenon/runtime/bus"
+	"github.com/Sevyn17/tenon/runtime/host"
+	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/store/sqlite"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 // waitKind 从连接取事件直到出现 kind；返回途中收到的全部事件（含它）。

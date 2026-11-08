@@ -5,9 +5,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"tenon/runtime/agent"
-	"tenon/runtime/callctx"
-	"tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/agent"
+	"github.com/Sevyn17/tenon/runtime/callctx"
+	"github.com/Sevyn17/tenon/runtime/session"
 )
 
 func TestSpawnSubagent(t *testing.T) {

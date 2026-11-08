@@ -15,8 +15,8 @@ import (
 
 	_ "modernc.org/sqlite"
 
-	"tenon/runtime/bus"
-	"tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/bus"
+	"github.com/Sevyn17/tenon/runtime/store"
 )
 
 // DB 一个存储文件。

@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"tenon"
-	"tenon/runtime/store/memstore"
-	"tenon/tenontest"
+	"github.com/Sevyn17/tenon"
+	"github.com/Sevyn17/tenon/runtime/store/memstore"
+	"github.com/Sevyn17/tenon/tenontest"
 )
 
 // base 最小可装配选项：内存存储 + 脚本模型 + 临时工作目录。

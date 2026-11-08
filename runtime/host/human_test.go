@@ -8,12 +8,12 @@ import (
 	"testing"
 	"time"
 
-	"tenon/runtime/agent"
-	"tenon/runtime/bus"
-	"tenon/runtime/mail"
-	"tenon/runtime/session"
-	"tenon/runtime/store/sqlite"
-	"tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/runtime/agent"
+	"github.com/Sevyn17/tenon/runtime/bus"
+	"github.com/Sevyn17/tenon/runtime/mail"
+	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/store/sqlite"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 // newHumanRig 用会触发确认的工具（Dangerous）搭一个宿主。

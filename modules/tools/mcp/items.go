@@ -13,7 +13,7 @@ import (
 	"encoding/json"
 	"strings"
 
-	"tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 // ItemID 某个 MCP 服务的权限项 id。

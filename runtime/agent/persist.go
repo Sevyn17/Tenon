@@ -17,10 +17,10 @@ import (
 	"encoding/json"
 	"errors"
 
-	"tenon/runtime/reqlog"
-	"tenon/runtime/session"
-	"tenon/runtime/store"
-	"tenon/runtime/useconf"
+	"github.com/Sevyn17/tenon/runtime/reqlog"
+	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/useconf"
 )
 
 // Open 打开会话：存在则恢复（返回 true），不存在则用 cfg 新建。

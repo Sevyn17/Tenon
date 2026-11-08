@@ -10,12 +10,12 @@ import (
 	"strings"
 	"testing"
 
-	"tenon/appapi"
-	"tenon/appapi/wire"
-	"tenon/runtime/bus"
-	"tenon/runtime/component"
-	"tenon/runtime/host"
-	"tenon/runtime/store/memstore"
+	"github.com/Sevyn17/tenon/appapi"
+	"github.com/Sevyn17/tenon/appapi/wire"
+	"github.com/Sevyn17/tenon/runtime/bus"
+	"github.com/Sevyn17/tenon/runtime/component"
+	"github.com/Sevyn17/tenon/runtime/host"
+	"github.com/Sevyn17/tenon/runtime/store/memstore"
 )
 
 // plugins.set 经真实文件：用户层写入、pending、if_revision 冲突、项目未受信不可写、强制插件、未知键、项目层禁设的键。

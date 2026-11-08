@@ -3,8 +3,8 @@ package component
 import (
 	"testing"
 
-	"tenon/runtime/callctx"
-	"tenon/runtime/inject"
+	"github.com/Sevyn17/tenon/runtime/callctx"
+	"github.com/Sevyn17/tenon/runtime/inject"
 )
 
 func TestRegistrarStatus(t *testing.T) {

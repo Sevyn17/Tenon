@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"tenon/appapi"
-	"tenon/appapi/wire"
+	"github.com/Sevyn17/tenon/appapi"
+	"github.com/Sevyn17/tenon/appapi/wire"
 )
 
 func wsCall[T any](t *testing.T, api *appapi.App, cmd string, args any) T {

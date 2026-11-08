@@ -1,0 +1,13 @@
+# 编译产物
+*.exe
+*.pdb
+bin/
+
+# 依赖
+node_modules/
+
+# 本地
+.env
+.DS_Store
+.tenon/
+.claude/

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/session"
 )
 
 func itemTool(name string, ids ...string) *Tool {

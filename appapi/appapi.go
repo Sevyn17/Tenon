@@ -13,15 +13,15 @@ import (
 	"errors"
 	"sync"
 
-	"tenon/runtime/agent"
-	"tenon/runtime/assemble"
-	"tenon/runtime/bus"
-	"tenon/runtime/component"
-	"tenon/runtime/host"
-	"tenon/runtime/pkgs"
-	"tenon/runtime/session"
-	"tenon/runtime/store"
-	"tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/runtime/agent"
+	"github.com/Sevyn17/tenon/runtime/assemble"
+	"github.com/Sevyn17/tenon/runtime/bus"
+	"github.com/Sevyn17/tenon/runtime/component"
+	"github.com/Sevyn17/tenon/runtime/host"
+	"github.com/Sevyn17/tenon/runtime/pkgs"
+	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 // Server hello 返回的服务端名。

@@ -13,8 +13,8 @@ import (
 	"strings"
 	"testing"
 
-	"tenon/appapi/wire"
-	"tenon/runtime/session"
+	"github.com/Sevyn17/tenon/appapi/wire"
+	"github.com/Sevyn17/tenon/runtime/session"
 )
 
 var updateWire = flag.Bool("update", false, "重录 testdata/wire 固定用例")

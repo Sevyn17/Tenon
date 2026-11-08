@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"tenon/runtime/session"
-	"tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/store"
 )
 
 // v2 带数据的库升级到 v3：旧列保留，新列取缺省值，会话照常可读（框架设计 09 9.2，迁移只加列）。

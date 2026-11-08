@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"tenon/runtime/callctx"
-	"tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/callctx"
+	"github.com/Sevyn17/tenon/runtime/session"
 )
 
 // —— 假存储 ——

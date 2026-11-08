@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"tenon/runtime/modelhub"
-	"tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/modelhub"
+	"github.com/Sevyn17/tenon/runtime/session"
 )
 
 // 缓存断点：工具末尾、系统末块、最后两条 user 消息各一个，合计不超过厂商上限 4

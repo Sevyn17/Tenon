@@ -5,7 +5,7 @@ import (
 	"sync"
 	"testing"
 
-	"tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/session"
 )
 
 // 推理强度只发给声明了推理能力的模型：降级到普通模型时去掉，不改调用方的请求。

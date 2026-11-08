@@ -9,7 +9,7 @@ import (
 	"log"
 	"os"
 
-	"tenon"
+	"github.com/Sevyn17/tenon"
 )
 
 type OrderArgs struct {

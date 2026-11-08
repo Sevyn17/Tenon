@@ -3,9 +3,9 @@ package codemode
 // 插件登记（thin-kernel-plan §2.2）：run_code。子调用回到同一会话 hub 的调用栈。
 
 import (
-	"tenon/runtime/assemble"
-	"tenon/runtime/component"
-	"tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/runtime/assemble"
+	"github.com/Sevyn17/tenon/runtime/component"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 type plug struct{}

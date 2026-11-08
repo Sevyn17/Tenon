@@ -8,10 +8,10 @@ import (
 	"errors"
 	"fmt"
 
-	"tenon/runtime/agentdef"
-	"tenon/runtime/host"
-	"tenon/runtime/mail"
-	"tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/agentdef"
+	"github.com/Sevyn17/tenon/runtime/host"
+	"github.com/Sevyn17/tenon/runtime/mail"
+	"github.com/Sevyn17/tenon/runtime/store"
 )
 
 // 错误（07 7.3；errors.Is 可判）。

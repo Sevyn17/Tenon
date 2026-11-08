@@ -16,8 +16,8 @@ import (
 	"sort"
 	"strings"
 
-	"tenon/runtime/modelhub"
-	"tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/modelhub"
+	"github.com/Sevyn17/tenon/runtime/session"
 )
 
 // OpenAIChat openai-chat 协议适配器。

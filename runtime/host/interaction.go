@@ -16,8 +16,8 @@ import (
 	"strings"
 	"time"
 
-	"tenon/runtime/mail"
-	"tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/mail"
+	"github.com/Sevyn17/tenon/runtime/store"
 )
 
 // 交互结果（与线上 outcome 同值）。

@@ -16,8 +16,8 @@ import (
 
 	"github.com/dop251/goja"
 
-	"tenon/runtime/session"
-	"tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 // 默认值。

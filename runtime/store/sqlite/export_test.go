@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"tenon/runtime/session"
-	"tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/store"
 )
 
 func TestExportJSONL(t *testing.T) {

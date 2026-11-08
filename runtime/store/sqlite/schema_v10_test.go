@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"tenon/runtime/session"
-	"tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/store"
 )
 
 // v10 给已有会话补历史事件：游标沿用原 sync_seq / rewind_seq，升级前保存的客户端游标继续有效（06 10.2.1 第 5 条）。

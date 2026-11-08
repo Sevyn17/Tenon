@@ -7,8 +7,8 @@ import (
 	"context"
 	"strings"
 
-	"tenon/runtime/assemble"
-	"tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/assemble"
+	"github.com/Sevyn17/tenon/runtime/session"
 )
 
 const titlePrompt = `给下面这条用户消息起一个会话标题：概括用户要做的事，用消息的语言，中文不超过 12 个字、英文不超过 6 个词，不加引号、句号或前缀。

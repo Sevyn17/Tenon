@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/session"
 )
 
 // Retry 遇到只读 / 损坏的会话要报错，不能当成"没有可重跑的内容"静默结束

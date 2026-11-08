@@ -11,10 +11,10 @@ import (
 	"context"
 	"sync"
 
-	"tenon/runtime/assemble"
-	"tenon/runtime/bus"
-	"tenon/runtime/host"
-	"tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/assemble"
+	"github.com/Sevyn17/tenon/runtime/bus"
+	"github.com/Sevyn17/tenon/runtime/host"
+	"github.com/Sevyn17/tenon/runtime/store"
 )
 
 // UI 事件化界面。零值不可用，用 NewUI 构造。

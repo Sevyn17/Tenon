@@ -12,7 +12,7 @@ import (
 	"fmt"
 	"sort"
 
-	"tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/session"
 )
 
 // ErrShape：最终请求违反 Transform 结构约束（前缀被改、工具被放宽），按 Guard 失败处理（R2）。

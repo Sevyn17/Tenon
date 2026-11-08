@@ -11,14 +11,14 @@ import (
 	"fmt"
 	"strings"
 
-	"tenon/appapi"
-	"tenon/appapi/wire"
-	"tenon/modules/security/permission"
-	"tenon/modules/tools/fs"
-	"tenon/runtime/assemble"
-	"tenon/runtime/component"
-	"tenon/runtime/store"
-	"tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/appapi"
+	"github.com/Sevyn17/tenon/appapi/wire"
+	"github.com/Sevyn17/tenon/modules/security/permission"
+	"github.com/Sevyn17/tenon/modules/tools/fs"
+	"github.com/Sevyn17/tenon/runtime/assemble"
+	"github.com/Sevyn17/tenon/runtime/component"
+	"github.com/Sevyn17/tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 // MaxScanFiles workspace.files 最多遍历的文件数（大仓库里 @ 文件只看前这么多个）。

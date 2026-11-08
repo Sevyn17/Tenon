@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"tenon/runtime/store"
-	"tenon/runtime/store/sqlite"
+	"github.com/Sevyn17/tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/store/sqlite"
 )
 
 // SQLite 存储自带 SQL 出口：SDK 装配不该因为"没有 store.SQL"把要建表的组件（workgroup）悄悄去掉

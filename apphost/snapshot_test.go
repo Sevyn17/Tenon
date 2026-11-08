@@ -19,11 +19,11 @@ import (
 	"testing"
 	"time"
 
-	"tenon/runtime/agent"
-	"tenon/runtime/agentdef"
-	"tenon/runtime/host"
-	"tenon/runtime/session"
-	"tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/agent"
+	"github.com/Sevyn17/tenon/runtime/agentdef"
+	"github.com/Sevyn17/tenon/runtime/host"
+	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/store"
 )
 
 var update = flag.Bool("update", false, "重录回归快照")

@@ -15,8 +15,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"tenon/runtime/modelhub"
-	"tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/modelhub"
+	"github.com/Sevyn17/tenon/runtime/session"
 )
 
 // 流式事件种类。

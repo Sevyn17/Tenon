@@ -6,8 +6,8 @@ import (
 	"context"
 	"time"
 
-	"tenon/runtime/store"
-	"tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 // ToolStore 把 store.ToolResultStore 包装成 toolhub.Store。

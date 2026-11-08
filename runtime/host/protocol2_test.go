@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"tenon/runtime/session"
-	"tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/store"
 )
 
 // protocol 2 G1：OpenExisting 不隐式新建；Create 已存在返回 ErrConflict。

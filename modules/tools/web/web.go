@@ -21,7 +21,7 @@ import (
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/charset"
 
-	"tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 // web 工具默认上限（部署配置，不是模型参数）。

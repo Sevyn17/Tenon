@@ -23,13 +23,13 @@ var updateAPI = flag.Bool("update-api", false, "重录 testdata/api.txt")
 
 // promised 在稳定承诺之内的包（docs/框架设计/07 - SDK 接口.md）。
 var promised = []string{
-	"tenon",
-	"tenon/tenontest",
-	"tenon/transport/web",
-	"tenon/transport/bind",
-	"tenon/adapters",
-	"tenon/apphost",
-	"tenon/appapi/wire",
+	"github.com/Sevyn17/tenon",
+	"github.com/Sevyn17/tenon/tenontest",
+	"github.com/Sevyn17/tenon/transport/web",
+	"github.com/Sevyn17/tenon/transport/bind",
+	"github.com/Sevyn17/tenon/adapters",
+	"github.com/Sevyn17/tenon/apphost",
+	"github.com/Sevyn17/tenon/appapi/wire",
 }
 
 func TestAPISnapshot(t *testing.T) {

@@ -5,9 +5,10 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"tenon/runtime/store"
 	"testing"
 	"time"
+
+	"github.com/Sevyn17/tenon/runtime/store"
 )
 
 func TestToolResultsStateMachine(t *testing.T) {

@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"tenon/runtime/session"
-	"tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/store"
 )
 
 // 写事务进行中，别的 goroutine 的读不排队、不报错（2026-11-04 审查 P1-33：原先单连接读写串行，

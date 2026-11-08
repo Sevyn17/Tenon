@@ -6,9 +6,9 @@ import (
 	"context"
 	"encoding/json"
 
-	"tenon/runtime/assemble"
-	"tenon/runtime/component"
-	"tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/runtime/assemble"
+	"github.com/Sevyn17/tenon/runtime/component"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 type plug struct{}

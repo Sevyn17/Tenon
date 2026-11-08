@@ -11,15 +11,15 @@ import (
 
 	"time"
 
-	"tenon/runtime/agentdef"
-	"tenon/runtime/callctx"
-	"tenon/runtime/inject"
-	"tenon/runtime/modelhub"
-	"tenon/runtime/reqlog"
-	"tenon/runtime/session"
-	"tenon/runtime/store"
-	"tenon/runtime/toolhub"
-	"tenon/runtime/useconf"
+	"github.com/Sevyn17/tenon/runtime/agentdef"
+	"github.com/Sevyn17/tenon/runtime/callctx"
+	"github.com/Sevyn17/tenon/runtime/inject"
+	"github.com/Sevyn17/tenon/runtime/modelhub"
+	"github.com/Sevyn17/tenon/runtime/reqlog"
+	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/runtime/useconf"
 )
 
 // Model 模型调用接口（modelhub.Session 实现；测试用假实现）。

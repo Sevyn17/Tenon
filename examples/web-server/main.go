@@ -20,10 +20,10 @@ import (
 	"os/signal"
 	"path/filepath"
 
-	"tenon"
-	"tenon/runtime/store/sqlite"
-	web "tenon/transport/web"
-	webui "tenon/web"
+	"github.com/Sevyn17/tenon"
+	"github.com/Sevyn17/tenon/runtime/store/sqlite"
+	web "github.com/Sevyn17/tenon/transport/web"
+	webui "github.com/Sevyn17/tenon/web"
 )
 
 func main() {

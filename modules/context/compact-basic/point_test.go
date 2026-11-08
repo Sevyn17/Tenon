@@ -5,9 +5,9 @@ import (
 	"errors"
 	"testing"
 
-	"tenon/runtime/assemble"
-	"tenon/runtime/component"
-	"tenon/runtime/modelhub"
+	"github.com/Sevyn17/tenon/runtime/assemble"
+	"github.com/Sevyn17/tenon/runtime/component"
+	"github.com/Sevyn17/tenon/runtime/modelhub"
 )
 
 // guardComp 另一个组件：在 before_compact 点位登记一条拒绝。

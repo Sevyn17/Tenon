@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"tenon/runtime/modelhub"
-	"tenon/runtime/store/memstore"
+	"github.com/Sevyn17/tenon/runtime/modelhub"
+	"github.com/Sevyn17/tenon/runtime/store/memstore"
 )
 
 // WithKernel 的宿主参数接到 Host 上：SDK 与应用走同一份接线（assemble.Wire，2026-11-04 审查 P1-51：

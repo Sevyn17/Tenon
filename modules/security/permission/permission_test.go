@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"tenon/runtime/callctx"
-	"tenon/runtime/session"
-	"tenon/runtime/store"
-	"tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/runtime/callctx"
+	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 func cx(name string, r toolhub.Risk) *toolhub.Cx {

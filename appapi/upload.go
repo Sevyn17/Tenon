@@ -12,8 +12,8 @@ import (
 	"net/http"
 	"strings"
 
-	"tenon/appapi/wire"
-	"tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/appapi/wire"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 // MaxUpload HTTP 上传的单文件上限。

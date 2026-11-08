@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"tenon/runtime/callctx"
-	"tenon/runtime/session"
-	"tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/runtime/callctx"
+	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 func put(t *testing.T, p, s string) {

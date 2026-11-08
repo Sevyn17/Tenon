@@ -10,13 +10,13 @@ import (
 	"testing"
 	"time"
 
-	"tenon/runtime/agent"
-	"tenon/runtime/bus"
-	"tenon/runtime/mail"
-	"tenon/runtime/session"
-	"tenon/runtime/store"
-	"tenon/runtime/store/sqlite"
-	"tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/runtime/agent"
+	"github.com/Sevyn17/tenon/runtime/bus"
+	"github.com/Sevyn17/tenon/runtime/mail"
+	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/store/sqlite"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 // admitEnvelope 直接往 inbox 写一封信封（绕过投递守卫，测信箱合并语义）。

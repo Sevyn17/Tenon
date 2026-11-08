@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"testing"
 
-	"tenon/runtime/session"
-	"tenon/runtime/store/memstore"
-	"tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/store/memstore"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 // 装配必须恰好有一个授权层（见 toolhub.Validate），测试里放一个直通的。

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/session"
 )
 
 // HTTPFailure 按状态码与错误体归一。

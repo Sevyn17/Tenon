@@ -16,7 +16,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 
-	"tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 // MaxBaseDepth base 继承链上限。

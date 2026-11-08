@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"log"
 
-	"tenon"
-	"tenon/tenontest"
+	"github.com/Sevyn17/tenon"
+	"github.com/Sevyn17/tenon/tenontest"
 )
 
 // 装配、启动、问一句。真实应用把 tenontest.Model 换成 WithOpenAI / WithAnthropic / WithModel。

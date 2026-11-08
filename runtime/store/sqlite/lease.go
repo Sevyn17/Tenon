@@ -10,7 +10,7 @@ import (
 	"errors"
 	"fmt"
 
-	"tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/store"
 )
 
 // AcquireLease 抢租约并返回新纪元（从 1 起）。会话不存在返回 ErrNotFound。

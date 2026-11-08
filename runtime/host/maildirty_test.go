@@ -8,8 +8,8 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"tenon/runtime/session"
-	"tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/store"
 )
 
 // inboxCounter 数信箱读取次数。

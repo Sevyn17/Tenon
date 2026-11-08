@@ -20,12 +20,12 @@ import (
 
 	"github.com/google/uuid"
 
-	"tenon/runtime/agent"
-	"tenon/runtime/bus"
-	"tenon/runtime/component"
-	"tenon/runtime/session"
-	"tenon/runtime/store"
-	"tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/runtime/agent"
+	"github.com/Sevyn17/tenon/runtime/bus"
+	"github.com/Sevyn17/tenon/runtime/component"
+	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 // 错误。

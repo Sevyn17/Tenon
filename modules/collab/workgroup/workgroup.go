@@ -17,10 +17,10 @@ import (
 	"sync"
 	"time"
 
-	"tenon/runtime/host"
-	"tenon/runtime/session"
-	"tenon/runtime/store"
-	"tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/runtime/host"
+	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 // MemberTimeout 单个成员回合的上限。

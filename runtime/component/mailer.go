@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 
-	"tenon/runtime/ext"
-	"tenon/runtime/mail"
+	"github.com/Sevyn17/tenon/runtime/ext"
+	"github.com/Sevyn17/tenon/runtime/mail"
 )
 
 // Sender 内核投递出口（由宿主实现）。装配期通过 service:host 注入。

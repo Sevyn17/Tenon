@@ -23,11 +23,11 @@ import (
 	"sync"
 	"time"
 
-	"tenon/appapi/wire"
-	"tenon/runtime/bus"
-	"tenon/runtime/host"
-	"tenon/runtime/session"
-	"tenon/runtime/store"
+	"github.com/Sevyn17/tenon/appapi/wire"
+	"github.com/Sevyn17/tenon/runtime/bus"
+	"github.com/Sevyn17/tenon/runtime/host"
+	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/store"
 )
 
 // 连接参数。

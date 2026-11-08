@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"tenon/runtime/store"
-	"tenon/runtime/store/memstore"
+	"github.com/Sevyn17/tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/store/memstore"
 )
 
 // 进程内工件可回收（2026-11-04 审查 P2 资源：原先只增不删）：会话还在的工件留着；会话没了、且过了宽限期的删掉；

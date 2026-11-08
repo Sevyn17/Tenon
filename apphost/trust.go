@@ -15,8 +15,8 @@ import (
 
 	"github.com/BurntSushi/toml"
 
-	"tenon/runtime/component"
-	"tenon/runtime/pkgs"
+	"github.com/Sevyn17/tenon/runtime/component"
+	"github.com/Sevyn17/tenon/runtime/pkgs"
 )
 
 // 信任级别。

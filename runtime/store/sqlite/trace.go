@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"time"
 
-	"tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/store"
 )
 
 var _ store.TraceStore = (*DB)(nil)

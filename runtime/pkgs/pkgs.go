@@ -19,8 +19,8 @@ import (
 
 	"github.com/BurntSushi/toml"
 
-	"tenon/runtime/component"
-	"tenon/runtime/ext"
+	"github.com/Sevyn17/tenon/runtime/component"
+	"github.com/Sevyn17/tenon/runtime/ext"
 )
 
 // ManifestName 清单文件名。

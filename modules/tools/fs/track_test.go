@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"tenon/runtime/session"
-	"tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 func callAs(t *testing.T, tl *toolhub.Tool, sid, args string) toolhub.Output {

@@ -13,8 +13,9 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"tenon/modules/internal/proc"
 	"time"
+
+	"github.com/Sevyn17/tenon/modules/internal/proc"
 )
 
 // StderrTail stdio 服务 stderr 保留的尾部字节数（诊断用）。

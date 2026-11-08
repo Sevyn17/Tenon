@@ -14,16 +14,16 @@ import (
 	"path"
 	"strings"
 
-	"tenon/runtime/agent"
-	"tenon/runtime/agentdef"
-	"tenon/runtime/callctx"
-	"tenon/runtime/component"
-	"tenon/runtime/inject"
-	"tenon/runtime/modelhub"
-	"tenon/runtime/session"
-	"tenon/runtime/store"
-	"tenon/runtime/toolhub"
-	"tenon/runtime/useconf"
+	"github.com/Sevyn17/tenon/runtime/agent"
+	"github.com/Sevyn17/tenon/runtime/agentdef"
+	"github.com/Sevyn17/tenon/runtime/callctx"
+	"github.com/Sevyn17/tenon/runtime/component"
+	"github.com/Sevyn17/tenon/runtime/inject"
+	"github.com/Sevyn17/tenon/runtime/modelhub"
+	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/runtime/useconf"
 )
 
 // SessionCx 构造一个会话时贡献函数拿到的上下文。

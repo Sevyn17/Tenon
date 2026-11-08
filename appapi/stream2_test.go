@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
-	"tenon/appapi/wire"
-	"tenon/runtime/agent"
-	"tenon/runtime/bus"
-	"tenon/runtime/session"
+	"github.com/Sevyn17/tenon/appapi/wire"
+	"github.com/Sevyn17/tenon/runtime/agent"
+	"github.com/Sevyn17/tenon/runtime/bus"
+	"github.com/Sevyn17/tenon/runtime/session"
 )
 
 // 流式与条目的关联（10.5）：turn.started 带吃进的 client_id；message.started 的 entry_id 等于随后 entry.appended 的

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"tenon/tenontest"
+	"github.com/Sevyn17/tenon/tenontest"
 )
 
 func TestRun(t *testing.T) {

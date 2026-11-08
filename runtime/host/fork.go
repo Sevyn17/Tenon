@@ -11,8 +11,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"tenon/runtime/session"
-	"tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/store"
 )
 
 // Fork 从 src 的 [0, upto) 分出新会话 dst；upto < 0 表示整段日志。返回新会话句柄。

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"tenon/runtime/store/memstore"
+	"github.com/Sevyn17/tenon/runtime/store/memstore"
 )
 
 func defFiles(id string) Files {

@@ -3,9 +3,9 @@ package redact
 // 插件登记（thin-kernel-plan §2.2）：工具结果脱敏 Transform 层（最外层），并给压缩器装上脱敏（可选依赖 service:compactor）。
 
 import (
-	"tenon/runtime/assemble"
-	"tenon/runtime/component"
-	"tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/runtime/assemble"
+	"github.com/Sevyn17/tenon/runtime/component"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 type plug struct{}

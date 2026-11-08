@@ -5,12 +5,12 @@ package tenon
 // 在这里换成 SDK 自己的定义 + 转换，不影响应用。
 
 import (
-	"tenon/runtime/agentdef"
-	"tenon/runtime/assemble"
-	"tenon/runtime/component"
-	"tenon/runtime/modelhub"
-	"tenon/runtime/session"
-	"tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/agentdef"
+	"github.com/Sevyn17/tenon/runtime/assemble"
+	"github.com/Sevyn17/tenon/runtime/component"
+	"github.com/Sevyn17/tenon/runtime/modelhub"
+	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/store"
 )
 
 type (

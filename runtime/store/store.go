@@ -15,8 +15,8 @@ import (
 	"io"
 	"time"
 
-	"tenon/runtime/bus"
-	"tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/bus"
+	"github.com/Sevyn17/tenon/runtime/session"
 )
 
 // Tenant 当前租户（单机固定）。

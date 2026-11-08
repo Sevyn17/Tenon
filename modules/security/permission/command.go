@@ -5,8 +5,8 @@ package permission
 import (
 	"encoding/json"
 
-	"tenon/modules/internal/cmdline"
-	"tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/modules/internal/cmdline"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 // 命令拆分与安全段判断与 shell 插件共用一份（modules/internal/cmdline，审查 P1-61）。

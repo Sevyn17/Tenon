@@ -11,8 +11,8 @@ import (
 	"fmt"
 	"time"
 
-	"tenon/runtime/bus"
-	"tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/bus"
+	"github.com/Sevyn17/tenon/runtime/store"
 )
 
 const pendingCols = `corr, session_id, reply_to, trace, issued_idx, deadline, used, created_at,

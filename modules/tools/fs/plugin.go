@@ -3,9 +3,9 @@ package fs
 // 插件登记（thin-kernel-plan §2.2）：read_file / grep / glob / edit / write_file / list_dir。
 
 import (
-	"tenon/runtime/assemble"
-	"tenon/runtime/component"
-	"tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/runtime/assemble"
+	"github.com/Sevyn17/tenon/runtime/component"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 type plug struct{}

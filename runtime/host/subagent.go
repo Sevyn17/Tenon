@@ -9,9 +9,9 @@ import (
 	"errors"
 	"fmt"
 
-	"tenon/runtime/agent"
-	"tenon/runtime/session"
-	"tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/agent"
+	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/store"
 )
 
 // Get 返回已打开会话的句柄。

@@ -1,4 +1,4 @@
-module tenon
+module github.com/Sevyn17/tenon
 
 go 1.26.0
 

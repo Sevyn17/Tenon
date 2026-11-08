@@ -11,9 +11,9 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"tenon/appapi/wire"
-	"tenon/runtime/host"
-	"tenon/runtime/store"
+	"github.com/Sevyn17/tenon/appapi/wire"
+	"github.com/Sevyn17/tenon/runtime/host"
+	"github.com/Sevyn17/tenon/runtime/store"
 )
 
 // Respond 以本机身份回答交互（进程内调用；连接上的调用经 Conn.Call 带连接身份）。

@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 // Mode 档位名（档位文件名，不含 .toml）。

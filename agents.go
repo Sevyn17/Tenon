@@ -12,13 +12,13 @@ import (
 
 	"github.com/BurntSushi/toml"
 
-	"tenon/runtime/agentdef"
-	"tenon/runtime/assemble"
-	"tenon/runtime/ext"
-	"tenon/runtime/store"
-	"tenon/runtime/store/memstore"
-	"tenon/runtime/store/sqlite"
-	"tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/runtime/agentdef"
+	"github.com/Sevyn17/tenon/runtime/assemble"
+	"github.com/Sevyn17/tenon/runtime/ext"
+	"github.com/Sevyn17/tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/store/memstore"
+	"github.com/Sevyn17/tenon/runtime/store/sqlite"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 // Agent 一个智能体定义，等同目录里的 agent.toml。

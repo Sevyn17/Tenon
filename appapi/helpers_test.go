@@ -8,12 +8,12 @@ import (
 	"testing"
 	"time"
 
-	"tenon/runtime/agent"
-	"tenon/runtime/bus"
-	"tenon/runtime/host"
-	"tenon/runtime/session"
-	"tenon/runtime/store/sqlite"
-	"tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/runtime/agent"
+	"github.com/Sevyn17/tenon/runtime/bus"
+	"github.com/Sevyn17/tenon/runtime/host"
+	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/store/sqlite"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 // fakeModel：最后一条是 user → 含 "tool" 调 echo，否则回 "re:<文本>"（经 onText 流式）；最后一条是 tool → 回 "done"。

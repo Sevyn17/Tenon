@@ -12,7 +12,7 @@ import (
 	"log"
 	"os"
 
-	"tenon"
+	"github.com/Sevyn17/tenon"
 )
 
 func main() {

@@ -3,8 +3,8 @@ package adapters
 import (
 	"testing"
 
-	"tenon/runtime/assemble"
-	"tenon/runtime/modelhub"
+	"github.com/Sevyn17/tenon/runtime/assemble"
+	"github.com/Sevyn17/tenon/runtime/modelhub"
 )
 
 func TestModelListAvailability(t *testing.T) {

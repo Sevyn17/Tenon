@@ -6,7 +6,7 @@ package skills
 // 所以四个内置档位都放行；仍然登记成权限项（而不是声明 NoAuth），这样自定义档位
 // 可以把它关掉。
 
-import "tenon/runtime/toolhub"
+import "github.com/Sevyn17/tenon/runtime/toolhub"
 
 // ItemLoad 权限项 id。
 const ItemLoad = "skills.load"

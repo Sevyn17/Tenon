@@ -9,8 +9,8 @@ import (
 	"sort"
 	"time"
 
-	"tenon/runtime/session"
-	"tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 // Kernel 解析后的 [kernel] 节。

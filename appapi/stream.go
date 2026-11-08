@@ -8,9 +8,9 @@ import (
 	"sync"
 	"time"
 
-	"tenon/runtime/agent"
-	"tenon/runtime/bus"
-	"tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/agent"
+	"github.com/Sevyn17/tenon/runtime/bus"
+	"github.com/Sevyn17/tenon/runtime/session"
 )
 
 // 易失事件类型（宿主发的 turn_start / turn_end / turn_denied / human_requested 之外由本层发的）。

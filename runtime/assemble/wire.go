@@ -8,14 +8,14 @@ import (
 	"context"
 	"time"
 
-	"tenon/runtime/agent"
-	"tenon/runtime/agentdef"
-	"tenon/runtime/bus"
-	"tenon/runtime/component"
-	"tenon/runtime/host"
-	"tenon/runtime/session"
-	"tenon/runtime/store"
-	"tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/runtime/agent"
+	"github.com/Sevyn17/tenon/runtime/agentdef"
+	"github.com/Sevyn17/tenon/runtime/bus"
+	"github.com/Sevyn17/tenon/runtime/component"
+	"github.com/Sevyn17/tenon/runtime/host"
+	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 // BlobGrace 工件回收的宽限期：没有引用的文件超过这么久未被触碰才删（约束清单「存储」）。

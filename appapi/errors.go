@@ -3,7 +3,7 @@ package appapi
 import (
 	"fmt"
 
-	"tenon/appapi/wire"
+	"github.com/Sevyn17/tenon/appapi/wire"
 )
 
 // 错误码：与线上的 wire.Code* 同值（06 10.7），这里给应用层（apps、适配层）一个短名字。

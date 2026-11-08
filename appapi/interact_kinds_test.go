@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"tenon/appapi/wire"
-	"tenon/runtime/host"
+	"github.com/Sevyn17/tenon/appapi/wire"
+	"github.com/Sevyn17/tenon/runtime/host"
 )
 
 // openKind 在已打开的会话上发起一次交互（后台等回答），返回交互 id 与回答通道。

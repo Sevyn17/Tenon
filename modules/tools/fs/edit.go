@@ -19,8 +19,8 @@ import (
 
 	"golang.org/x/text/unicode/norm"
 
-	"tenon/runtime/session"
-	"tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 // EditSchema edit 工具参数。

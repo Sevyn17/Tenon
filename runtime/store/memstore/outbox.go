@@ -5,7 +5,7 @@ import (
 	"sort"
 	"time"
 
-	"tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/store"
 )
 
 // ClaimOutbox 原子认领待派发信封（见 store.OutboxStore）。

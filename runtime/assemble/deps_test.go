@@ -12,7 +12,7 @@ import (
 	"testing"
 )
 
-const module = "tenon"
+const module = "github.com/Sevyn17/tenon"
 
 // pending 暂留的例外（保持为空）。
 var pending = map[string]bool{}

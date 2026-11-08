@@ -17,12 +17,12 @@ import (
 	"sync"
 	"testing"
 
-	"tenon"
-	"tenon/runtime/modelhub"
-	"tenon/runtime/session"
-	"tenon/runtime/store"
-	"tenon/runtime/store/memstore"
-	"tenon/runtime/store/sqlite"
+	"github.com/Sevyn17/tenon"
+	"github.com/Sevyn17/tenon/runtime/modelhub"
+	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/store/memstore"
+	"github.com/Sevyn17/tenon/runtime/store/sqlite"
 )
 
 const (

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"tenon/runtime/pkgs"
+	"github.com/Sevyn17/tenon/runtime/pkgs"
 )
 
 func writePkg(t *testing.T, root, name, body string) string {

@@ -9,8 +9,9 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"tenon/runtime/modelhub"
 	"time"
+
+	"github.com/Sevyn17/tenon/runtime/modelhub"
 )
 
 //go:embed builtin.toml

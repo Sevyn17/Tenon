@@ -16,7 +16,7 @@ import (
 	"fmt"
 	"strings"
 
-	"tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/store"
 )
 
 // defaultKind 定义类缺省值（definitions.kind）。

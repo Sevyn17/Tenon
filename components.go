@@ -6,8 +6,8 @@ package tenon
 import (
 	"strings"
 
-	"tenon/runtime/component"
-	"tenon/runtime/ext"
+	"github.com/Sevyn17/tenon/runtime/component"
+	"github.com/Sevyn17/tenon/runtime/ext"
 )
 
 // ComponentInfo 组件的可选声明。组件再实现 Info() ComponentInfo 时按它装配；不实现等于全空。

@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 // 权限项 id。

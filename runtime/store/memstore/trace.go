@@ -5,7 +5,7 @@ import (
 	"sort"
 	"time"
 
-	"tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/store"
 )
 
 var _ store.TraceStore = (*Store)(nil)

@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"tenon/runtime/agent"
-	"tenon/runtime/session"
-	"tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/agent"
+	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/store"
 )
 
 // 父会话回退时取消子会话：全库会话很多时较老的子会话也要被取消

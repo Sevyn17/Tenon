@@ -11,13 +11,13 @@ import (
 	"sort"
 	"time"
 
-	"tenon/runtime/agent"
-	"tenon/runtime/component"
-	"tenon/runtime/ext"
-	"tenon/runtime/inject"
-	"tenon/runtime/session"
-	"tenon/runtime/store"
-	"tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/runtime/agent"
+	"github.com/Sevyn17/tenon/runtime/component"
+	"github.com/Sevyn17/tenon/runtime/ext"
+	"github.com/Sevyn17/tenon/runtime/inject"
+	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 // 点位名与实现类型。

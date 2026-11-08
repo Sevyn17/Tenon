@@ -9,8 +9,8 @@ import (
 	"fmt"
 	"sort"
 
-	"tenon/runtime/bus"
-	"tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/bus"
+	"github.com/Sevyn17/tenon/runtime/store"
 )
 
 // OpenInteraction 登记一次交互并写 interaction_opened 事件。

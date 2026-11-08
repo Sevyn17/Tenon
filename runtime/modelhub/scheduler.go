@@ -18,7 +18,7 @@ import (
 	"sync"
 	"time"
 
-	"tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/session"
 )
 
 // Policy 调度默认值（§4.6）。

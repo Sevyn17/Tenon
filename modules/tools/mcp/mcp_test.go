@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	"tenon/runtime/session"
-	"tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 // 假服务：处理 initialize / tools/list / tools/call。

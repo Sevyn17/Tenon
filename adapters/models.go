@@ -3,8 +3,8 @@ package adapters
 // 切换模型（appapi.Models）：models 插件的目录 → models.list；session.settings {model} 前按目录校验。
 
 import (
-	"tenon/appapi/wire"
-	"tenon/runtime/assemble"
+	"github.com/Sevyn17/tenon/appapi/wire"
+	"github.com/Sevyn17/tenon/runtime/assemble"
 )
 
 // ModelList 实现 appapi.Models。

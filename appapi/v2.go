@@ -26,15 +26,15 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"tenon/appapi/wire"
-	"tenon/runtime/agentdef"
-	"tenon/runtime/bus"
-	"tenon/runtime/component"
-	"tenon/runtime/host"
-	"tenon/runtime/reqlog"
-	"tenon/runtime/session"
-	"tenon/runtime/store"
-	"tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/appapi/wire"
+	"github.com/Sevyn17/tenon/runtime/agentdef"
+	"github.com/Sevyn17/tenon/runtime/bus"
+	"github.com/Sevyn17/tenon/runtime/component"
+	"github.com/Sevyn17/tenon/runtime/host"
+	"github.com/Sevyn17/tenon/runtime/reqlog"
+	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 // LocalPrincipal 桌面端与单机网页服务的连接身份（10.8）。

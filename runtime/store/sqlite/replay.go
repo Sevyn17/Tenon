@@ -10,8 +10,8 @@ import (
 	"fmt"
 	"time"
 
-	"tenon/runtime/bus"
-	"tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/bus"
+	"github.com/Sevyn17/tenon/runtime/store"
 )
 
 // OnCommit 设置提交成功后的持久事件回调（应用把它接到 bus.Publish，供 Follow 的实时部分）。

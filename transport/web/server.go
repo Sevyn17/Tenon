@@ -23,8 +23,8 @@ import (
 
 	"golang.org/x/net/websocket"
 
-	"tenon/appapi"
-	"tenon/appapi/wire"
+	"github.com/Sevyn17/tenon/appapi"
+	"github.com/Sevyn17/tenon/appapi/wire"
 )
 
 const (

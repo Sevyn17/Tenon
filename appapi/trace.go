@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strings"
 
-	"tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/store"
 )
 
 // RenderTrace 渲染一次任务的路径：经过的会话、信封、工具与拒绝原因。CLI 的 `tenon explain trace` 与 trace.explain 共用。

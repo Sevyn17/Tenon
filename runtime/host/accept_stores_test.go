@@ -12,13 +12,13 @@ import (
 	"strings"
 	"testing"
 
-	"tenon/runtime/agent"
-	"tenon/runtime/mail"
-	"tenon/runtime/session"
-	"tenon/runtime/store"
-	"tenon/runtime/store/memstore"
-	"tenon/runtime/store/sqlite"
-	"tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/runtime/agent"
+	"github.com/Sevyn17/tenon/runtime/mail"
+	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/store/memstore"
+	"github.com/Sevyn17/tenon/runtime/store/sqlite"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 type acceptStore interface {

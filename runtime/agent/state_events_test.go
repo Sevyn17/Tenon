@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"testing"
 
-	"tenon/runtime/session"
-	"tenon/runtime/store"
-	"tenon/runtime/store/memstore"
+	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/store/memstore"
 )
 
 // 会话状态的每个变化都是持久事件（protocol 2，06 10.2.2 规则 2）：运行状态、Ext、设置变化随检查点写进事件表，

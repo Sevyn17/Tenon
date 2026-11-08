@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"tenon/runtime/bus"
-	"tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/bus"
+	"github.com/Sevyn17/tenon/runtime/store"
 )
 
 // waitInteraction 等到 human_requested，返回其中的交互 id。

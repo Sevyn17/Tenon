@@ -10,7 +10,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 
-	"tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 // Config 权限配置文件（用户级 ~/.tenon/permissions.toml、项目级 <dir>/.tenon/permissions.toml）。

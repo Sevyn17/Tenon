@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"tenon/runtime/modelhub"
-	"tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/modelhub"
+	"github.com/Sevyn17/tenon/runtime/session"
 )
 
 // 支持图片的端点：user 消息与函数结果都用 input_image（data URL）；函数结果带图片时 output 写成数组

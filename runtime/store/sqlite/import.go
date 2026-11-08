@@ -12,7 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/store"
 )
 
 // ImportResult 并库结果。

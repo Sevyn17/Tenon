@@ -3,8 +3,8 @@ package tenon
 import (
 	"testing"
 
-	"tenon/runtime/assemble"
-	"tenon/runtime/store/memstore"
+	"github.com/Sevyn17/tenon/runtime/assemble"
+	"github.com/Sevyn17/tenon/runtime/store/memstore"
 )
 
 // 工作目录缺省不受信：嵌入方指向任意目录时，不执行其中的 .tenon/hooks.toml、mcp.toml，

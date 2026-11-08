@@ -3,7 +3,7 @@ package host
 import (
 	"context"
 
-	"tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/store"
 )
 
 // recordTrace 记一条 trace 事件（08 8.7）：记录失败不影响投递本身。渲染在 appapi.RenderTrace。

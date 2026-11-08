@@ -9,10 +9,10 @@ import (
 	"os"
 	"path/filepath"
 
-	"tenon/runtime/assemble"
-	"tenon/runtime/component"
-	"tenon/runtime/pkgs"
-	"tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/assemble"
+	"github.com/Sevyn17/tenon/runtime/component"
+	"github.com/Sevyn17/tenon/runtime/pkgs"
+	"github.com/Sevyn17/tenon/runtime/session"
 )
 
 // Default 缺省系统提示词（原 cmd/tenon/main.go systemPrompt，文字不变以保持缓存）。

@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"tenon/runtime/session"
-	"tenon/runtime/store"
-	"tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 // Ask 向人询问是否批准一次调用（CLI 实现）。

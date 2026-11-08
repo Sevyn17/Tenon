@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"tenon/runtime/callctx"
-	"tenon/runtime/session"
-	"tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/runtime/callctx"
+	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 func TestString(t *testing.T) {

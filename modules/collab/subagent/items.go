@@ -5,7 +5,7 @@ package subagent
 // subagent.spawn：派子智能体。子会话用同一套档位，它自己的每次工具调用由子会话各自判定，
 // 所以这一项管的是“能不能派”，不是“子智能体能做什么”。
 
-import "tenon/runtime/toolhub"
+import "github.com/Sevyn17/tenon/runtime/toolhub"
 
 // ItemSpawn 权限项 id。
 const ItemSpawn = "subagent.spawn"

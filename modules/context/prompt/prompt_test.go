@@ -6,12 +6,12 @@ import (
 	"strings"
 	"testing"
 
-	"tenon/runtime/agentdef"
-	"tenon/runtime/assemble"
-	"tenon/runtime/component"
-	"tenon/runtime/session"
-	"tenon/runtime/store/memstore"
-	"tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/runtime/agentdef"
+	"github.com/Sevyn17/tenon/runtime/assemble"
+	"github.com/Sevyn17/tenon/runtime/component"
+	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/store/memstore"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 // authLayer 测试用的授权层（toolhub 要求恰好一个）。

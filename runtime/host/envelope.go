@@ -11,11 +11,11 @@ import (
 	"strings"
 	"time"
 
-	"tenon/runtime/agent"
-	"tenon/runtime/component"
-	"tenon/runtime/mail"
-	"tenon/runtime/session"
-	"tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/agent"
+	"github.com/Sevyn17/tenon/runtime/component"
+	"github.com/Sevyn17/tenon/runtime/mail"
+	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/store"
 )
 
 // agentSessionID 不带会话键的 agent: 投递所建会话的 id：由（定义, 创建者, 信封 id）确定，重投得到同一个 id（P1-17）。

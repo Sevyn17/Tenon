@@ -5,9 +5,9 @@ import (
 	"errors"
 	"testing"
 
-	"tenon"
-	"tenon/runtime/component"
-	"tenon/runtime/host"
+	"github.com/Sevyn17/tenon"
+	"github.com/Sevyn17/tenon/runtime/component"
+	"github.com/Sevyn17/tenon/runtime/host"
 )
 
 // denyOpen 应用组件：拒绝一切新建会话（会话打开守卫）。

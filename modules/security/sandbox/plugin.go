@@ -6,10 +6,10 @@ package sandbox
 import (
 	"context"
 
-	"tenon/runtime/assemble"
-	"tenon/runtime/component"
-	"tenon/runtime/ext"
-	"tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/runtime/assemble"
+	"github.com/Sevyn17/tenon/runtime/component"
+	"github.com/Sevyn17/tenon/runtime/ext"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 // Service 本插件提供的服务键。

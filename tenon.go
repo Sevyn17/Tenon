@@ -10,17 +10,17 @@ import (
 	"sync"
 	"time"
 
-	"tenon/adapters"
-	"tenon/appapi"
-	"tenon/runtime/agent"
-	"tenon/runtime/agentdef"
-	"tenon/runtime/assemble"
-	"tenon/runtime/bus"
-	"tenon/runtime/component"
-	"tenon/runtime/host"
-	"tenon/runtime/store"
-	"tenon/runtime/toolhub"
-	"tenon/runtime/useconf"
+	"github.com/Sevyn17/tenon/adapters"
+	"github.com/Sevyn17/tenon/appapi"
+	"github.com/Sevyn17/tenon/runtime/agent"
+	"github.com/Sevyn17/tenon/runtime/agentdef"
+	"github.com/Sevyn17/tenon/runtime/assemble"
+	"github.com/Sevyn17/tenon/runtime/bus"
+	"github.com/Sevyn17/tenon/runtime/component"
+	"github.com/Sevyn17/tenon/runtime/host"
+	"github.com/Sevyn17/tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/runtime/useconf"
 )
 
 // Component 应用自带的组件（04 4.2：Name + Setup），需要后台工作的实现 Start。

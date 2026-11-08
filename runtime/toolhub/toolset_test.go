@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/session"
 )
 
 // D1：工具少时全量显露、不出现 tool_search；超预算时 Deferred 工具移出显露集，

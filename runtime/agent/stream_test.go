@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	"tenon/runtime/modelhub"
-	"tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/modelhub"
+	"github.com/Sevyn17/tenon/runtime/session"
 )
 
 // sinkModel：第一步先流推理、一个工具调用的片段，再回这个调用；第二步（工具结果之后）流正文。

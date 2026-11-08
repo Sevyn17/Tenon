@@ -8,7 +8,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"errors"
-	"tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/store"
 	"time"
 )
 

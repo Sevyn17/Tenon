@@ -10,8 +10,8 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"tenon/runtime/assemble"
-	"tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/assemble"
+	"github.com/Sevyn17/tenon/runtime/session"
 )
 
 // FollowupTimeout 一次生成最多等多久。

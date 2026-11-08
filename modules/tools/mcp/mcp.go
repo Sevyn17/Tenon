@@ -19,8 +19,8 @@ import (
 
 	"github.com/BurntSushi/toml"
 
-	"tenon/runtime/session"
-	"tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 // ProtocolVersion 请求的协议版本。

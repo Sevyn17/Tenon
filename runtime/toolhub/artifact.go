@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"strings"
 
-	"tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/session"
 )
 
 // ArtifactPrefix 工件引用前缀。

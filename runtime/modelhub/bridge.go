@@ -7,7 +7,7 @@ import (
 	"context"
 	"errors"
 
-	"tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/session"
 )
 
 // Session 一个会话对 Hub 的调用视图。

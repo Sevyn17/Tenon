@@ -3,7 +3,7 @@ package memstore
 import (
 	"context"
 
-	"tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/store"
 )
 
 // Tx（05：与 sqlite 同形）。

@@ -10,7 +10,7 @@ import (
 	"context"
 	"encoding/json"
 
-	"tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 // InstallCapsGuard 给本会话的工具栈装一层 caps 守卫（只装一次；Host 在会话打开时调用）。

@@ -11,9 +11,9 @@ import (
 	"strings"
 	"testing"
 
-	"tenon/runtime/agentdef"
-	"tenon/runtime/session"
-	"tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/agentdef"
+	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/store"
 )
 
 func TestChildInheritsParentLimits(t *testing.T) {

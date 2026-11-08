@@ -7,11 +7,11 @@ import (
 	"strings"
 	"testing"
 
-	"tenon/runtime/agent"
-	"tenon/runtime/mail"
-	"tenon/runtime/session"
-	"tenon/runtime/store/sqlite"
-	"tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/runtime/agent"
+	"github.com/Sevyn17/tenon/runtime/mail"
+	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/store/sqlite"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 // newExplainRig 像运行时那样接上 toolhub → agent 的 span 观测，才能记录工具 trace 事件。

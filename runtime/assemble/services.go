@@ -8,10 +8,10 @@ import (
 	"os"
 	"strings"
 
-	"tenon/runtime/ext"
-	"tenon/runtime/modelhub"
-	"tenon/runtime/store"
-	"tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/runtime/ext"
+	"github.com/Sevyn17/tenon/runtime/modelhub"
+	"github.com/Sevyn17/tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 // SlotSecrets 凭证解析插槽（models 组件消费；缺省 EnvSecrets，应用可覆盖）。

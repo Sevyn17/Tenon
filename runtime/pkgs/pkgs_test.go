@@ -10,7 +10,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 
-	"tenon/runtime/component"
+	"github.com/Sevyn17/tenon/runtime/component"
 )
 
 type nopPlugin struct{}

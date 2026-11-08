@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"tenon/runtime/modelhub"
-	"tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/modelhub"
+	"github.com/Sevyn17/tenon/runtime/session"
 )
 
 // redacted_thinking 块原样保留并在下一次请求里回传（2026-11-04 审查 P1-31：原先整块丢掉，

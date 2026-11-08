@@ -5,11 +5,11 @@ package tenon
 // 完整的点位列表见 runtime/assemble。
 
 import (
-	"tenon/runtime/assemble"
-	"tenon/runtime/component"
-	"tenon/runtime/ext"
-	"tenon/runtime/session"
-	"tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/runtime/assemble"
+	"github.com/Sevyn17/tenon/runtime/component"
+	"github.com/Sevyn17/tenon/runtime/ext"
+	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 // Point 类型化点位：T 是这个点位上登记项的类型。

@@ -15,7 +15,7 @@ import (
 	"strings"
 	"sync"
 
-	"tenon"
+	"github.com/Sevyn17/tenon"
 )
 
 type OrderArgs struct {

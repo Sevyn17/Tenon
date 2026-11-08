@@ -6,7 +6,7 @@ import (
 	"errors"
 	"testing"
 
-	"tenon/appapi/wire"
+	"github.com/Sevyn17/tenon/appapi/wire"
 )
 
 // session.update：改标题、置顶；session.updated 持久事件与 sessions.changed；不改列表顺序。

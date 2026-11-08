@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/session"
 )
 
 // 嵌套指令的"已装载"按会话历史推导（2026-11-04 审查 P1-26：原先只在内存里记，

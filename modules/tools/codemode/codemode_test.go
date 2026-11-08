@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"tenon/runtime/callctx"
-	"tenon/runtime/session"
-	"tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/runtime/callctx"
+	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 func setup(t *testing.T) (*toolhub.Hub, *toolhub.Toolset, *[]string) {

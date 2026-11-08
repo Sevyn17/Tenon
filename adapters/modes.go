@@ -6,9 +6,9 @@ import (
 	"encoding/json"
 	"strings"
 
-	"tenon/appapi"
-	"tenon/modules/security/permission"
-	"tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/appapi"
+	"github.com/Sevyn17/tenon/modules/security/permission"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 // ModeApprovals 项目档位放宽权限的确认记录：记在哪由应用决定（apphost 记在 ~/.tenon/trust.toml，按项目）。

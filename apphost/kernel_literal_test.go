@@ -3,7 +3,7 @@ package apphost
 import (
 	"testing"
 
-	"tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 // 内核参数按 profile 接上（缺省值）：原先 [kernel] 解析结果存在私有字段里，命令行另拼 Runtime 时拿到零值——

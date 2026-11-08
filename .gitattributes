@@ -1,0 +1,2 @@
+# 仓库内与 checkout 都用 LF：gofmt 与 shell 脚本在 Windows 上也直接可用
+* text=auto eol=lf

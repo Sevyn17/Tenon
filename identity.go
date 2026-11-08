@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 
-	"tenon/runtime/assemble"
-	"tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/assemble"
+	"github.com/Sevyn17/tenon/runtime/store"
 )
 
 // ctxKey 身份在 context 里的键。

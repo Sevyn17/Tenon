@@ -3,7 +3,7 @@ package component
 import (
 	"testing"
 
-	"tenon/runtime/ext"
+	"github.com/Sevyn17/tenon/runtime/ext"
 )
 
 type sbx interface{ Mode() string }

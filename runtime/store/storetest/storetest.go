@@ -16,9 +16,9 @@ import (
 	"testing"
 	"time"
 
-	"tenon/runtime/bus"
-	"tenon/runtime/session"
-	"tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/bus"
+	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/store"
 )
 
 // Run 跑全部一致性用例。

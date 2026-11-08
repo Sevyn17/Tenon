@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"tenon/runtime/modelhub"
-	"tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/modelhub"
+	"github.com/Sevyn17/tenon/runtime/session"
 )
 
 // 只流工具参数、不出文本，总时长超过调度器的首事件超时：适配器要发心跳，调用成功不重试

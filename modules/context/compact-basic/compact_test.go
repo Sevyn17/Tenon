@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/session"
 )
 
 func txt(s string) session.Content { return session.Content{session.NewTextPart(s)} }

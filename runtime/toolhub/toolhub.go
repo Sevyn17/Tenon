@@ -15,8 +15,8 @@ import (
 	"fmt"
 	"time"
 
-	"tenon/runtime/callctx"
-	"tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/callctx"
+	"github.com/Sevyn17/tenon/runtime/session"
 )
 
 // Risk 风险档。

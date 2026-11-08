@@ -7,16 +7,16 @@ package tenon
 import (
 	"fmt"
 
-	"tenon/adapters"
-	"tenon/appapi"
-	"tenon/runtime/agent"
-	"tenon/runtime/agentdef"
-	"tenon/runtime/assemble"
-	"tenon/runtime/bus"
-	"tenon/runtime/component"
-	"tenon/runtime/host"
-	"tenon/runtime/store"
-	"tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/adapters"
+	"github.com/Sevyn17/tenon/appapi"
+	"github.com/Sevyn17/tenon/runtime/agent"
+	"github.com/Sevyn17/tenon/runtime/agentdef"
+	"github.com/Sevyn17/tenon/runtime/assemble"
+	"github.com/Sevyn17/tenon/runtime/bus"
+	"github.com/Sevyn17/tenon/runtime/component"
+	"github.com/Sevyn17/tenon/runtime/host"
+	"github.com/Sevyn17/tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 // WithProfile 按 profile 装配：开哪些组件按各组件声明的缺省（Meta.Default）加 profile 里的开关，

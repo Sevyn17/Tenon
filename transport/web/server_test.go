@@ -17,14 +17,14 @@ import (
 
 	"golang.org/x/net/websocket"
 
-	"tenon/appapi"
-	"tenon/appapi/wire"
-	"tenon/runtime/agent"
-	"tenon/runtime/bus"
-	"tenon/runtime/host"
-	"tenon/runtime/session"
-	"tenon/runtime/store/sqlite"
-	"tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/appapi"
+	"github.com/Sevyn17/tenon/appapi/wire"
+	"github.com/Sevyn17/tenon/runtime/agent"
+	"github.com/Sevyn17/tenon/runtime/bus"
+	"github.com/Sevyn17/tenon/runtime/host"
+	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/store/sqlite"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 type fakeModel struct{}

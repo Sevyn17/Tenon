@@ -7,7 +7,7 @@ package workgroup
 // team.board：改看板（新建 / 领取 / 完成任务）。
 // team.view：读看板，只读。
 
-import "tenon/runtime/toolhub"
+import "github.com/Sevyn17/tenon/runtime/toolhub"
 
 // 权限项 id。
 const (

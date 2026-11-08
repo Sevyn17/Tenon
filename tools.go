@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
-	"tenon/runtime/assemble"
-	"tenon/runtime/component"
-	"tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/runtime/assemble"
+	"github.com/Sevyn17/tenon/runtime/component"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 // Tool 一个工具。用 Func 或 Raw 构造；修饰方法返回新值，不改原来的。

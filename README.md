@@ -1,31 +1,49 @@
 # Tenon
 
-Go 智能体框架（Go 模块 `tenon`）。运行时（`runtime/`）只提供机制：会话、信封、检查点、崩溃恢复、守卫；工具、权限、沙箱、提示词等能力由标准模块（`modules/`）的组件提供，应用经 SDK（模块根 `package tenon`）或 profile 装配。CLI、桌面端、网页服务在 `client/`。
+Go 智能体框架。运行时（`runtime/`）只提供机制：会话、信封、检查点、崩溃恢复、守卫；工具、权限、沙箱、提示词等能力由标准模块（`modules/`）的组件提供，应用经 SDK（根包 `tenon`）装配。
 
-## 运行
-
-```powershell
-# 推荐：加载 framework/.env 中的 DEEPSEEK_API_KEY，编译到 %LOCALAPPDATA%\tenon 后启动
-./scripts/tenon.ps1 -dir D:\Code
+```bash
+go get github.com/Sevyn17/tenon
 ```
 
-常用参数：`-dir` 工作目录、`-session` 会话名（同名续聊）、`-model`、`-mode`（read-only / ask / auto / full / custom，缺省 auto）、`-max-steps`、`-trust-project`。会话内命令：`/mode` `/max-steps` `/plugins` `/rewind` `/compact` `/fork` `/stats` `/exit`。子命令：`tenon explain`（看装配结果）、`tenon trust`、`tenon sandbox-reset`、`tenon export`。
+```go
+import "github.com/Sevyn17/tenon"
+
+app, err := tenon.New(tenon.Default(),
+    tenon.WithStore(tenon.MemoryStore()),
+    tenon.WithTools(lookup),
+    tenon.WithOpenAI(baseURL, model, tenon.Env("TENON_API_KEY")))
+```
+
+要求 Go 1.26 及以上。v0 期间接口可能变，每次变动记在[决策日志](<docs/计划/02 - 决策日志.md>)里。
+
+## 上手
+
+1. [十分钟：带工具的智能体](<docs/上手/01 - 十分钟：带工具的智能体.md>)
+2. [多轮与流式](<docs/上手/02 - 多轮与流式.md>)
+3. [写组件](<docs/上手/03 - 写组件.md>)
+4. [测试](<docs/上手/04 - 测试.md>)
+5. [接前端](<docs/上手/05 - 接前端.md>)
+
+示例在 [examples/](examples/)：`chat`、`hello`、`tools`、`component`、`web-server`。公开面（哪些包、哪些名字在稳定承诺里）见 [07 SDK 接口](<docs/框架设计/07 - SDK 接口.md>)。
 
 ## 文档
 
-从 [00 - 索引](<docs/00 - 索引.md>) 读起，它说明各目录的用途和以哪篇为准：
+从 [00 - 索引](<docs/00 - 索引.md>) 读起：
 
 | 目录 / 文件 | 内容 |
 |---|---|
-| [框架设计](<docs/框架设计/00 - 索引.md>) | 框架目标态设计，总方案 |
+| [上手](<docs/上手/>) | 用框架写应用 |
+| [框架设计](<docs/框架设计/00 - 索引.md>) | 框架目标态设计 |
 | [计划](<docs/计划/01 - 开发计划.md>) | 开发计划、进度与决策日志 |
 | [03 - 约束清单](<docs/03 - 约束清单.md>) | 内核与插件的分界原则、所有限制和可调参数 |
-| [调研报告](<docs/调研报告/>) | 外部文章与产品调研 |
-| [90 - 归档](<docs/90 - 归档/>) | 旧总体架构、路线图、任务清单、模块与插件文档，只读 |
+| [06 - 应用协议契约](<docs/06 - 应用协议契约.md>) | 前端与服务端之间的协议 |
+| [web/](web/) | 前端：协议客户端、hooks、组件、工作台 |
 
-## 测试
+## 检查
 
-```powershell
-go vet ./...
-go test -race ./...
+```bash
+bash scripts/ci.sh   # gofmt、vet、全部测试（含示例与公开面快照）、-race
 ```
+
+不需要网络与 API 密钥。

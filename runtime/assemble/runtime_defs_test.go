@@ -5,11 +5,11 @@ import (
 	"strings"
 	"testing"
 
-	"tenon/runtime/agentdef"
-	"tenon/runtime/modelhub"
-	"tenon/runtime/session"
-	"tenon/runtime/store"
-	"tenon/runtime/store/memstore"
+	"github.com/Sevyn17/tenon/runtime/agentdef"
+	"github.com/Sevyn17/tenon/runtime/modelhub"
+	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/store/memstore"
 )
 
 // defsSource 造一个内存定义来源（平台命名空间，最小 manifest）。

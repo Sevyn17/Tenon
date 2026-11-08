@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"tenon/runtime/modelhub"
-	"tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/modelhub"
+	"github.com/Sevyn17/tenon/runtime/session"
 )
 
 // 支持图片的端点：工具结果里的媒体引用按 Request.Media 取回，发成 image 块（2026-11-04 审查 P2：原先一律丢弃）；

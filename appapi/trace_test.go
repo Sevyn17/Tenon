@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"tenon/runtime/store"
-	"tenon/runtime/store/memstore"
+	"github.com/Sevyn17/tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/store/memstore"
 )
 
 // RenderTrace 按时间列出事件，种类换成中文标签，会话汇总在头部（从 host.ExplainTrace 移来）。

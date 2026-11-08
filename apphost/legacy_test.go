@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"tenon/appapi/wire"
+	"github.com/Sevyn17/tenon/appapi/wire"
 )
 
 // 旧版每个项目一个会话库：打开工作区时并入用户级库、记上工作区、旧库改名；再打开不会重复并。

@@ -7,12 +7,12 @@ import (
 	"testing"
 	"time"
 
-	"tenon/runtime/agentdef"
-	"tenon/runtime/callctx"
-	"tenon/runtime/store"
-	"tenon/runtime/store/sqlite"
-	"tenon/runtime/toolhub"
-	"tenon/runtime/useconf"
+	"github.com/Sevyn17/tenon/runtime/agentdef"
+	"github.com/Sevyn17/tenon/runtime/callctx"
+	"github.com/Sevyn17/tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/store/sqlite"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/runtime/useconf"
 )
 
 // memoryUse 记忆组件的使用配置原型（06 6.2 的例子）。

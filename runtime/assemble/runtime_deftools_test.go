@@ -6,11 +6,11 @@ import (
 	"strings"
 	"testing"
 
-	"tenon/runtime/agentdef"
-	"tenon/runtime/callctx"
-	"tenon/runtime/session"
-	"tenon/runtime/store/memstore"
-	"tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/runtime/agentdef"
+	"github.com/Sevyn17/tenon/runtime/callctx"
+	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/store/memstore"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 func defWithTools(t *testing.T, name string, tools ...string) agentdef.Source {

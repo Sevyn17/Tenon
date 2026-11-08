@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/session"
 )
 
 // 目录里没有的模型名报 CodeUnknownModel，不归为 CodeNoAdapter（2026-11-04 审查 P2 错误一致性：

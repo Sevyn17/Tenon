@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	"tenon/runtime/session"
-	"tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 func TestEffective(t *testing.T) {

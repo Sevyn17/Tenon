@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/session"
 )
 
 func TestCrashRecovery(t *testing.T) {

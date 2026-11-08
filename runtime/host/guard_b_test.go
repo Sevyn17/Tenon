@@ -8,13 +8,13 @@ import (
 	"strings"
 	"testing"
 
-	"tenon/runtime/agent"
-	"tenon/runtime/callctx"
-	"tenon/runtime/mail"
-	"tenon/runtime/session"
-	"tenon/runtime/store"
-	"tenon/runtime/store/sqlite"
-	"tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/runtime/agent"
+	"github.com/Sevyn17/tenon/runtime/callctx"
+	"github.com/Sevyn17/tenon/runtime/mail"
+	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/store/sqlite"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 // B4：request / notify 随便带一个 corr 不能绕过联系名单；只有回信凭 corr 进门，且要通过核对。

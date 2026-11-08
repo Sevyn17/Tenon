@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"tenon/appapi/wire"
+	"github.com/Sevyn17/tenon/appapi/wire"
 )
 
 // 交互（10.6）：确认登记成交互，出现在快照与 interactions.list 里，打开 / 结束都是持久事件；

@@ -13,7 +13,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/session"
 )
 
 var update = flag.Bool("update", false, "重录回归快照")

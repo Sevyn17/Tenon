@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 // ask_user 把发起调用的会话 id 交给提问方（2026-11-04 审查 P1-28：原先不带会话 id，

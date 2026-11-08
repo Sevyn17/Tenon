@@ -18,8 +18,8 @@ import (
 	"net/http"
 	"strings"
 
-	"tenon/runtime/modelhub"
-	"tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/modelhub"
+	"github.com/Sevyn17/tenon/runtime/session"
 )
 
 // AnthropicVersion 请求头 anthropic-version。

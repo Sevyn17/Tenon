@@ -8,7 +8,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/store"
 	"time"
 )
 

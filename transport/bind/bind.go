@@ -11,8 +11,8 @@ import (
 	"errors"
 	"sync"
 
-	"tenon/appapi"
-	"tenon/appapi/wire"
+	"github.com/Sevyn17/tenon/appapi"
+	"github.com/Sevyn17/tenon/appapi/wire"
 )
 
 // EventName 前端订阅的 Wails 事件名；数据为 wire.Envelope。

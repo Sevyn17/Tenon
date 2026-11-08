@@ -18,9 +18,9 @@ import (
 	"sync"
 	"time"
 
-	"tenon/runtime/bus"
-	"tenon/runtime/session"
-	"tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/bus"
+	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/store"
 )
 
 // 编译期断言：*Store 实现 store.Store。

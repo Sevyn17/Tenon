@@ -8,11 +8,11 @@ import (
 	"testing"
 	"time"
 
-	"tenon"
-	"tenon/appapi"
-	"tenon/appapi/wire"
-	"tenon/runtime/store/memstore"
-	"tenon/tenontest"
+	"github.com/Sevyn17/tenon"
+	"github.com/Sevyn17/tenon/appapi"
+	"github.com/Sevyn17/tenon/appapi/wire"
+	"github.com/Sevyn17/tenon/runtime/store/memstore"
+	"github.com/Sevyn17/tenon/tenontest"
 )
 
 func protoCall[T any](t *testing.T, c *appapi.Conn, cmd string, args any) T {

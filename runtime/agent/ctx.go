@@ -3,8 +3,8 @@ package agent
 // 调用上下文（框架设计 04 §4.4）：会话构造时建 Ctx，Open 时用会话行填全。
 
 import (
-	"tenon/runtime/callctx"
-	"tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/callctx"
+	"github.com/Sevyn17/tenon/runtime/store"
 )
 
 // toolCtx 本次工具调用与层用的上下文；没配时按会话 id 兜底（测试与嵌入方）。

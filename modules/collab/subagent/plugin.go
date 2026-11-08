@@ -4,11 +4,11 @@ package subagent
 // 子会话经 service:host 的 Child 构造（可空 = New）。
 
 import (
-	"tenon/runtime/agentdef"
-	"tenon/runtime/assemble"
-	"tenon/runtime/component"
-	"tenon/runtime/host"
-	"tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/runtime/agentdef"
+	"github.com/Sevyn17/tenon/runtime/assemble"
+	"github.com/Sevyn17/tenon/runtime/component"
+	"github.com/Sevyn17/tenon/runtime/host"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 // Definition 子智能体会话的内置定义名（09 9.3、计划/01 T1b-2c）：模板归平台命名空间，

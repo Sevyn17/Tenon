@@ -8,7 +8,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 
-	"tenon/runtime/pkgs"
+	"github.com/Sevyn17/tenon/runtime/pkgs"
 )
 
 func init() {

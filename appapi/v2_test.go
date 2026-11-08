@@ -11,8 +11,8 @@ import (
 	"sync"
 	"testing"
 
-	"tenon/appapi/wire"
-	"tenon/runtime/host"
+	"github.com/Sevyn17/tenon/appapi/wire"
+	"github.com/Sevyn17/tenon/runtime/host"
 )
 
 // memArt 测试用工件存储。

@@ -5,8 +5,8 @@ import (
 	"sort"
 	"testing"
 
-	"tenon/runtime/assemble"
-	"tenon/runtime/component"
+	"github.com/Sevyn17/tenon/runtime/assemble"
+	"github.com/Sevyn17/tenon/runtime/component"
 )
 
 // 两种入口的插件缺省（计划/07 阶段三）：按 profile 装配（WithProfile，apphost 走这条）时按各插件的 Meta.Default；

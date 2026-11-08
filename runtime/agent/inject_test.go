@@ -8,10 +8,10 @@ import (
 	"sync"
 	"testing"
 
-	"tenon/runtime/callctx"
-	"tenon/runtime/inject"
-	"tenon/runtime/reqlog"
-	"tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/callctx"
+	"github.com/Sevyn17/tenon/runtime/inject"
+	"github.com/Sevyn17/tenon/runtime/reqlog"
+	"github.com/Sevyn17/tenon/runtime/session"
 )
 
 // recordModel：单次调用直接回文本的模型，保留每次请求便于断言（T2b 验收）。

@@ -8,9 +8,9 @@ import (
 	"sync"
 	"time"
 
-	"tenon/runtime/host"
-	"tenon/runtime/session"
-	"tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/runtime/host"
+	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 // SubagentTimeout 委派工具默认超时（子回合可能很长）。

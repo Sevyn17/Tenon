@@ -21,7 +21,7 @@ import (
 	"slices"
 	"sync/atomic"
 
-	"tenon"
+	"github.com/Sevyn17/tenon"
 )
 
 // Catalog 订单目录服务：catalog 组件提供，support 组件使用。

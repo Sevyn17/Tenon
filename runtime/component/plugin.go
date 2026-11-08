@@ -12,10 +12,10 @@ import (
 	"strings"
 	"sync"
 
-	"tenon/runtime/agentdef"
-	"tenon/runtime/ext"
-	"tenon/runtime/inject"
-	"tenon/runtime/useconf"
+	"github.com/Sevyn17/tenon/runtime/agentdef"
+	"github.com/Sevyn17/tenon/runtime/ext"
+	"github.com/Sevyn17/tenon/runtime/inject"
+	"github.com/Sevyn17/tenon/runtime/useconf"
 )
 
 // Meta 插件元数据。Requires / Provides 用 "slot:<名>" / "service:<名>"。

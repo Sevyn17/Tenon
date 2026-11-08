@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"tenon"
+	"github.com/Sevyn17/tenon"
 )
 
 // 内核错误包成 SDK 的哨兵，errors.Is 可判（2026-11-04 审查 P1-52：原先 History 查不到会话返回 store.ErrNotFound，

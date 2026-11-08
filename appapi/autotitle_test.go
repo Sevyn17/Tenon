@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"tenon/appapi/wire"
+	"github.com/Sevyn17/tenon/appapi/wire"
 )
 
 func TestTitleFromText(t *testing.T) {

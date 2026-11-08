@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/store"
 )
 
 // IssueCorr 登记一条待回复（11 11.2 待回复表 / 13 13.3 D3）。

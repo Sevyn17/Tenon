@@ -9,7 +9,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/store"
 	"time"
 )
 

@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"strings"
 
-	"tenon/adapters"
-	"tenon/appapi"
-	"tenon/runtime/assemble"
-	"tenon/runtime/component"
+	"github.com/Sevyn17/tenon/adapters"
+	"github.com/Sevyn17/tenon/appapi"
+	"github.com/Sevyn17/tenon/runtime/assemble"
+	"github.com/Sevyn17/tenon/runtime/component"
 )
 
 // Meta 会话业务 meta（写进会话行，组件经 *Ctx 读）。

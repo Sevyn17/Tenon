@@ -3,8 +3,8 @@ package anthropic
 // 插件登记：adapter-anthropic（标准模块，缺省开）。在 Setup 里向 service:modelhub 的 Hub 登记 anthropic-messages 协议适配器。
 
 import (
-	"tenon/runtime/assemble"
-	"tenon/runtime/component"
+	"github.com/Sevyn17/tenon/runtime/assemble"
+	"github.com/Sevyn17/tenon/runtime/component"
 )
 
 type adapterPlugin struct{}

@@ -6,8 +6,8 @@ package toolhub
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/Sevyn17/tenon/runtime/ext"
 	"os/exec"
-	"tenon/runtime/ext"
 )
 
 const (

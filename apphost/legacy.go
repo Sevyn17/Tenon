@@ -11,7 +11,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"tenon/runtime/store/sqlite"
+	"github.com/Sevyn17/tenon/runtime/store/sqlite"
 )
 
 // LegacyImportedSuffix 并入后旧库文件的新后缀。

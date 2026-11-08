@@ -3,9 +3,7 @@ package apphost
 // v1 整体验收（计划/01 第三节第 2 条）里能自动跑的部分：真实模型、经应用接口层（protocol 2）驱动，
 // 与桌面端 / 网页端走同一条路径。需要网络与 API key，缺省跳过：
 //
-//	TENON_LIVE=1 go test -run TestLive -v -timeout 30m ./apphost/   （在 framework/ 下；key 等读环境变量）
-//
-// 或者用 framework/scripts/accept_v1.sh（读 framework/.env，再跑"中途杀进程后重启续跑"）。
+//	TENON_LIVE=1 go test -run TestLive -v -timeout 30m ./apphost/   （在仓库根；key 等读环境变量）
 
 import (
 	"context"
@@ -20,8 +18,8 @@ import (
 
 	_ "modernc.org/sqlite"
 
-	"tenon/appapi"
-	"tenon/runtime/agentdef"
+	"github.com/Sevyn17/tenon/appapi"
+	"github.com/Sevyn17/tenon/runtime/agentdef"
 )
 
 type live struct {

@@ -8,10 +8,10 @@ import (
 	"path/filepath"
 	"slices"
 
-	"tenon/appapi"
-	"tenon/appapi/wire"
-	"tenon/runtime/assemble"
-	"tenon/runtime/component"
+	"github.com/Sevyn17/tenon/appapi"
+	"github.com/Sevyn17/tenon/appapi/wire"
+	"github.com/Sevyn17/tenon/runtime/assemble"
+	"github.com/Sevyn17/tenon/runtime/component"
 )
 
 // Profiles 实现 appapi.Profiles。

@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"tenon"
-	"tenon/appapi"
-	"tenon/appapi/wire"
-	"tenon/tenontest"
+	"github.com/Sevyn17/tenon"
+	"github.com/Sevyn17/tenon/appapi"
+	"github.com/Sevyn17/tenon/appapi/wire"
+	"github.com/Sevyn17/tenon/tenontest"
 )
 
 type orderArgs struct {

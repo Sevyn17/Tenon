@@ -18,7 +18,7 @@ import (
 	"strconv"
 	"strings"
 
-	"tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 // 读取与搜索的输出上限。

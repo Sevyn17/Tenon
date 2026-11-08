@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 
-	"tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/session"
 )
 
 // Simple 构造只读、返回纯文本的工具：call 出错时作为工具错误返回给模型。

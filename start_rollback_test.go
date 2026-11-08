@@ -5,9 +5,9 @@ import (
 	"errors"
 	"testing"
 
-	"tenon"
-	"tenon/runtime/assemble"
-	"tenon/runtime/component"
+	"github.com/Sevyn17/tenon"
+	"github.com/Sevyn17/tenon/runtime/assemble"
+	"github.com/Sevyn17/tenon/runtime/component"
 )
 
 // flaky 第一次 ready 失败；记录 Start 次数与作用域是否被关。

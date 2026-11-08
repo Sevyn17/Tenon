@@ -6,7 +6,7 @@ package sqlite
 
 import (
 	"context"
-	"tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/store"
 	"time"
 )
 

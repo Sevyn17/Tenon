@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"tenon/runtime/agentdef"
+	"github.com/Sevyn17/tenon/runtime/agentdef"
 )
 
 // defSource 造一个内存定义来源（平台命名空间，minimal manifest）。

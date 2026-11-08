@@ -9,10 +9,10 @@ import (
 	"os"
 	"path/filepath"
 
-	"tenon/runtime/assemble"
-	"tenon/runtime/component"
-	"tenon/runtime/pkgs"
-	"tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/runtime/assemble"
+	"github.com/Sevyn17/tenon/runtime/component"
+	"github.com/Sevyn17/tenon/runtime/pkgs"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 // PluginConfig hooks 插件配置。

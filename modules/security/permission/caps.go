@@ -13,7 +13,7 @@ import (
 	"fmt"
 	"sort"
 
-	"tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 // Caps 封顶表：档位 → 类别 → 最宽取值。

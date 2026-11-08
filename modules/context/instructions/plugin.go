@@ -3,10 +3,10 @@ package instructions
 // 插件登记（thin-kernel-plan §2.2）：AGENTS.md 系统块 + 嵌套指令 Transform 层（每会话一份，已装载集合属于本会话）。
 
 import (
-	"tenon/runtime/assemble"
-	"tenon/runtime/component"
-	"tenon/runtime/session"
-	"tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/runtime/assemble"
+	"github.com/Sevyn17/tenon/runtime/component"
+	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 const valueKey = "instructions"

@@ -10,9 +10,9 @@ import (
 	"sync"
 	"time"
 
-	"tenon/modules/internal/workspace"
-	"tenon/runtime/session"
-	"tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/modules/internal/workspace"
+	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 // AGENTS.md 默认预算（docs/90 - 归档/20 - 插件/01 - AGENTS.md 指令.md）。

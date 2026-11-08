@@ -5,9 +5,9 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"tenon/runtime/callctx"
-	"tenon/runtime/inject"
-	"tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/callctx"
+	"github.com/Sevyn17/tenon/runtime/inject"
+	"github.com/Sevyn17/tenon/runtime/session"
 )
 
 func TestCollectFillsDefaults(t *testing.T) {

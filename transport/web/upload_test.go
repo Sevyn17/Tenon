@@ -16,8 +16,8 @@ import (
 	"sync"
 	"testing"
 
-	"tenon/appapi"
-	"tenon/appapi/wire"
+	"github.com/Sevyn17/tenon/appapi"
+	"github.com/Sevyn17/tenon/appapi/wire"
 )
 
 type memArt struct {

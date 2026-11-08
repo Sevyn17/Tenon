@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"strings"
 
-	"tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/session"
 )
 
 // MaxImageBytes 单张图片发给模型的上限，超出留占位文字。

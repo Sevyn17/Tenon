@@ -4,10 +4,10 @@ import (
 	"context"
 	"testing"
 
-	"tenon/runtime/component"
-	"tenon/runtime/reqlog"
-	"tenon/runtime/session"
-	"tenon/runtime/store/memstore"
+	"github.com/Sevyn17/tenon/runtime/component"
+	"github.com/Sevyn17/tenon/runtime/reqlog"
+	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/store/memstore"
 )
 
 type stubCompactor struct{}

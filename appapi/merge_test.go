@@ -3,7 +3,7 @@ package appapi
 import (
 	"testing"
 
-	"tenon/runtime/agent"
+	"github.com/Sevyn17/tenon/runtime/agent"
 )
 
 // MergeHooks 要并入全部钩子：漏掉 OnStream 时应用自己设了钩子（如 CLI）就收不到 protocol 2 的分段流式事件。

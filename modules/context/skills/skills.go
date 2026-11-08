@@ -10,9 +10,9 @@ import (
 	"sort"
 	"strings"
 
-	"tenon/modules/internal/workspace"
-	"tenon/runtime/session"
-	"tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/modules/internal/workspace"
+	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 // 技能默认预算（docs/90 - 归档/20 - 插件/03 - 技能.md）。

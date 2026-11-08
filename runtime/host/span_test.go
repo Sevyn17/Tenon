@@ -6,10 +6,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"tenon/runtime/agent"
-	"tenon/runtime/session"
-	"tenon/runtime/store/sqlite"
-	"tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/runtime/agent"
+	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/store/sqlite"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 // M4.7：span 层级 turn → step → attempt / tool，全部落 trace_spans。

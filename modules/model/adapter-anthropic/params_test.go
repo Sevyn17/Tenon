@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"tenon/runtime/modelhub"
-	"tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/modelhub"
+	"github.com/Sevyn17/tenon/runtime/session"
 )
 
 // ToolChoice 与 Reasoning 映射到请求体（2026-11-04 审查 P1-32：原先都没映射）。

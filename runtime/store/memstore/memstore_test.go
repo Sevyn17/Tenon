@@ -3,8 +3,8 @@ package memstore
 import (
 	"testing"
 
-	"tenon/runtime/store"
-	"tenon/runtime/store/storetest"
+	"github.com/Sevyn17/tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/store/storetest"
 )
 
 func TestConformance(t *testing.T) {

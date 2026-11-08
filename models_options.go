@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	"tenon/runtime/assemble"
+	"github.com/Sevyn17/tenon/runtime/assemble"
 )
 
 // KeyRef 密钥引用，如 env:DEEPSEEK_API_KEY。不是密钥本身。

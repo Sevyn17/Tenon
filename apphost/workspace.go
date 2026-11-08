@@ -18,8 +18,8 @@ import (
 	"sync"
 	"time"
 
-	"tenon/appapi"
-	"tenon/appapi/wire"
+	"github.com/Sevyn17/tenon/appapi"
+	"github.com/Sevyn17/tenon/appapi/wire"
 )
 
 // MaxRecentWorkspaces 最近列表最多记几个目录。

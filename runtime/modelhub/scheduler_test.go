@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/session"
 )
 
 // fakeAdapter 按脚本逐次返回结果；script[i] 为第 i 次调用（跨模型累计）的行为。

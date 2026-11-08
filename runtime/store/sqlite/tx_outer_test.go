@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/store"
 )
 
 // C8：Tx 的 fn 里误用外层句柄不再卡死（写连接只有一个，事务占着它）：写在 TxConnWait 内返回错误；

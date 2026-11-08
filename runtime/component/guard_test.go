@@ -3,7 +3,7 @@ package component
 import (
 	"testing"
 
-	"tenon/runtime/mail"
+	"github.com/Sevyn17/tenon/runtime/mail"
 )
 
 // TestRegistrarGuard：组件通过 Registrar.Guard 登记规则，装配后按装配顺序可取回，

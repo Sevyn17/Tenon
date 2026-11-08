@@ -14,7 +14,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 // Mode 沙箱模式（词汇定义在 toolhub，工具与权限插件不必 import 本包）。

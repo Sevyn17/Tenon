@@ -13,8 +13,8 @@ import (
 	"sync"
 	"time"
 
-	"tenon/runtime/callctx"
-	"tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/callctx"
+	"github.com/Sevyn17/tenon/runtime/session"
 )
 
 // UnknownOutcome 崩溃时已开始执行、结果未知的调用回给模型的文案（DSH TOOL_OUTCOME_UNKNOWN 分级写法）。

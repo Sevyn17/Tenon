@@ -11,7 +11,7 @@ import (
 	"net/url"
 	"strings"
 
-	"tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 // 权限项 id。

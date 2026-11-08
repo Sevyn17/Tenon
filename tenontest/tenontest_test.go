@@ -5,12 +5,12 @@ import (
 	"encoding/json"
 	"testing"
 
-	"tenon"
-	"tenon/runtime/assemble"
-	"tenon/runtime/component"
-	"tenon/runtime/session"
-	"tenon/runtime/toolhub"
-	"tenon/tenontest"
+	"github.com/Sevyn17/tenon"
+	"github.com/Sevyn17/tenon/runtime/assemble"
+	"github.com/Sevyn17/tenon/runtime/component"
+	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/tenontest"
 )
 
 // echo 测试组件：登记一个无需授权的只读工具。

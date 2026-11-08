@@ -18,9 +18,9 @@ import (
 
 	"github.com/BurntSushi/toml"
 
-	"tenon/modules/internal/proc"
-	"tenon/runtime/session"
-	"tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/modules/internal/proc"
+	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 // 事件名。
