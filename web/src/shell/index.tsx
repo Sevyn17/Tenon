@@ -8,7 +8,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { createClient, listed, type Client } from "../client";
 import { backendPack } from "./backend-ui";
 import { ClientProvider, useStore } from "../client/react";
-import { Button, Dialog, Input, ToastProvider, applyDensity, applyTheme, isMac, useToast, type ThemePref } from "../ui";
+import { Button, Dialog, Input, ToastProvider, applyAccent, applyDensity, applyTheme, isMac, useToast, type ThemePref } from "../ui";
 import { createShellBus } from "./bus";
 import { useKeybindings } from "./commands";
 import { ShellProvider, slotDebug, type Brand, type ShellState } from "./context";
@@ -212,6 +212,7 @@ export function createShell(o: ShellOptions = {}): Shell {
     const toast = useToast();
     useEffect(() => applyTheme(p.theme), [p.theme]);
     useEffect(() => applyDensity(p.density), [p.density]);
+    useEffect(() => applyAccent(p.accent), [p.accent]);
     useEffect(() => {
       document.documentElement.style.setProperty("--conv-width", `${p.chatWidth}px`);
     }, [p.chatWidth]);

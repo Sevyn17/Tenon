@@ -2,10 +2,12 @@
 // 键带命名空间（嵌入方可改），读不到或解析失败时用缺省值。后端的东西（会话设置、插件配置）不在这里。
 
 import { createStore, type ReadStore } from "../client";
-import type { Density, ThemePref } from "../ui";
+import type { Accent, Density, ThemePref } from "../ui";
 
 export interface Prefs {
   theme: ThemePref;
+  /** 强调色。 */
+  accent: Accent;
   density: Density;
   /** 对话最大宽度（px）。 */
   chatWidth: number;
@@ -39,8 +41,9 @@ export interface Prefs {
 
 export const DEFAULT_PREFS: Prefs = {
   theme: "system",
+  accent: "indigo",
   density: "comfortable",
-  chatWidth: 760,
+  chatWidth: 720,
   sendKey: "enter",
   thinkingOpen: false,
   toolsAutoCollapse: true,

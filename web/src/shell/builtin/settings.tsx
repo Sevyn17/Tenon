@@ -51,6 +51,7 @@ function General({ sh }: { sh: ShellState }) {
 
 function Appearance({ sh }: { sh: ShellState }) {
   const [theme, setTheme] = usePref(sh, "theme");
+  const [accent, setAccent] = usePref(sh, "accent");
   const [density, setDensity] = usePref(sh, "density");
   const [width, setWidth] = usePref(sh, "chatWidth");
   const [thinking, setThinking] = usePref(sh, "thinkingOpen");
@@ -73,6 +74,23 @@ function Appearance({ sh }: { sh: ShellState }) {
                 { value: "system", label: "跟随系统" },
                 { value: "light", label: "浅色" },
                 { value: "dark", label: "深色" },
+              ]}
+            />
+          }
+        />
+        <SettingsRow
+          id="accent"
+          title="强调色"
+          control={
+            <Segmented
+              label="强调色"
+              value={accent}
+              onChange={setAccent}
+              options={[
+                { value: "indigo", label: "靛青" },
+                { value: "pine", label: "松绿" },
+                { value: "amber", label: "琥珀" },
+                { value: "slate", label: "石板" },
               ]}
             />
           }
@@ -182,6 +200,7 @@ export function settingsPack(sh: ShellState): ContributionPack {
         group: "app",
         entries: [
           { id: "theme", title: "配色", keywords: ["主题", "深色", "浅色", "theme", "dark"] },
+          { id: "accent", title: "强调色", keywords: ["颜色", "靛青", "松绿", "accent"] },
           { id: "density", title: "密度", keywords: ["紧凑"] },
           { id: "chatWidth", title: "对话宽度" },
           { id: "thinkingOpen", title: "推理默认展开", keywords: ["思考"] },

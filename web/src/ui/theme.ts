@@ -3,6 +3,8 @@
 
 export type ThemePref = "system" | "light" | "dark";
 export type Density = "comfortable" | "compact";
+/** 强调色（06 6.2：四套配色方案）。 */
+export type Accent = "indigo" | "pine" | "amber" | "slate";
 
 let mq: MediaQueryList | null = null;
 let onChange: (() => void) | null = null;
@@ -30,4 +32,8 @@ export function applyTheme(pref: ThemePref, root: HTMLElement = document.documen
 
 export function applyDensity(d: Density, root: HTMLElement = document.documentElement): void {
   root.dataset.density = d;
+}
+
+export function applyAccent(a: Accent, root: HTMLElement = document.documentElement): void {
+  root.dataset.accent = a;
 }
