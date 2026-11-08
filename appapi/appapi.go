@@ -49,6 +49,8 @@ type Options struct {
 	Artifacts toolhub.Artifacts
 	// Models 可选模型（models.list、session.settings {model}）；nil = 不能换模型。
 	Models Models
+	// Workspaces 工作区切换（workspace.list / workspace.open）；nil = 只有启动时的这一个工作区。
+	Workspaces Workspaces
 	// Profiles 可写的 profile 层（plugins.set）；nil = 只读（plugins.set 返回 unsupported）。
 	Profiles Profiles
 	// Followups 生成建议追问（session.followups）；nil = 不提供。

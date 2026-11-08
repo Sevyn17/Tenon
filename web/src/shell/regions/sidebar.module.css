@@ -204,6 +204,23 @@
   color: var(--fg-2);
   font-size: var(--text-sm);
 }
+.projectButton {
+  height: 28px;
+  border: 0;
+  border-radius: var(--radius-sm, 6px);
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.projectButton:hover {
+  background: var(--bg-hover, rgba(0, 0, 0, 0.05));
+  color: var(--fg-1);
+}
+.projectButton:focus-visible {
+  outline: 2px solid var(--accent, currentColor);
+  outline-offset: -2px;
+}
 .projectIcon {
   flex: none;
   color: var(--fg-3);

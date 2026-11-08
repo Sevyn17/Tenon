@@ -547,6 +547,27 @@ export interface ModelsListResult {
   default: string;
 }
 
+export interface WorkspaceInfo {
+  path: string;
+  name: string;
+  trusted?: boolean;
+  current?: boolean;
+  opened_at?: number;
+  missing?: boolean;
+}
+
+export interface WorkspaceListResult {
+  items: WorkspaceInfo[];
+}
+
+export interface WorkspaceOpenArgs {
+  path: string;
+}
+
+export interface WorkspaceOpenResult {
+  workspace: WorkspaceInfo;
+}
+
 export interface Response {
   approve?: boolean;
   scope?: string;

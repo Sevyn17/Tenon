@@ -25,7 +25,7 @@ var tsTypes = []any{
 	ToolEnded{}, Notice{}, CursorRef{}, SessionsChanged{},
 	ProtocolRange{}, HelloArgs{}, HelloResult{}, SessionArgs{}, ListArgs{}, ListResult{}, UpdateArgs{}, FeedbackArgs{}, Feedback{}, FeedbackListResult{}, FollowupsArgs{}, FollowupsResult{}, CreateArgs{},
 	SubscribeArgs{}, EntriesArgs{}, EntriesResult{}, SendArgs{}, SendResult{}, SteerArgs{}, RewindArgs{},
-	RewindResult{}, CompactArgs{}, CompactResult{}, ForkArgs{}, SettingsArgs{}, SettingsResult{}, ModelInfo{}, ModelsListResult{}, Response{},
+	RewindResult{}, CompactArgs{}, CompactResult{}, ForkArgs{}, SettingsArgs{}, SettingsResult{}, ModelInfo{}, ModelsListResult{}, WorkspaceInfo{}, WorkspaceListResult{}, WorkspaceOpenArgs{}, WorkspaceOpenResult{}, Response{},
 	RespondArgs{}, RespondResult{}, InteractionsResult{}, ModeInfo{}, ModeListResult{}, ModeSetArgs{},
 	ModeSetResult{}, ModeShowArgs{}, ModeItem{}, ModeShowResult{}, ArtifactGetArgs{}, ArtifactGetResult{},
 	ArtifactPutArgs{}, ArtifactPutResult{}, TraceArgs{}, TraceResult{}, FilesArgs{}, FileInfo{}, FilesResult{}, ConfigField{}, PluginInfo{},

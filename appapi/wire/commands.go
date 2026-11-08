@@ -192,6 +192,32 @@ type SettingsArgs struct {
 	Reasoning *string `json:"reasoning,omitempty"`
 }
 
+// WorkspaceInfo 一个工作区（项目目录）。workspace.list 的一项、workspace.open 的结果。
+type WorkspaceInfo struct {
+	Path    string `json:"path"` // 绝对路径
+	Name    string `json:"name"` // 最后一级目录名
+	Trusted bool   `json:"trusted,omitempty"`
+	Current bool   `json:"current,omitempty"`
+	// OpenedAt 最近一次打开（毫秒）；0 = 没记录。
+	OpenedAt int64 `json:"opened_at,omitempty"`
+	// Missing 目录已经不存在（最近列表里的旧记录）。
+	Missing bool `json:"missing,omitempty"`
+}
+
+// WorkspaceListResult workspace.list：当前工作区在前，其余按最近打开倒序。
+type WorkspaceListResult struct {
+	Items []WorkspaceInfo `json:"items"`
+}
+
+// WorkspaceOpenArgs workspace.open：切到另一个目录。成功后旧工作区的连接会被断开，客户端重连后 hello 报新的 workdir。
+type WorkspaceOpenArgs struct {
+	Path string `json:"path"`
+}
+
+type WorkspaceOpenResult struct {
+	Workspace WorkspaceInfo `json:"workspace"`
+}
+
 // ModelInfo models.list 的一项。
 type ModelInfo struct {
 	ID            string `json:"id"`

@@ -18,6 +18,7 @@ import (
 	"maps"
 	"net/http"
 	"os"
+	"path/filepath"
 	"slices"
 	"sort"
 	"strings"
@@ -105,6 +106,8 @@ var commands = map[string]handler{
 	"plugins.set":         bind((*App).PluginsSet),
 	"workspace.files":     bind((*App).WorkspaceFiles),
 	"models.list":         bind((*App).ModelsList),
+	"workspace.list":      bind((*App).WorkspaceList),
+	"workspace.open":      bind((*App).WorkspaceOpen),
 }
 
 // Commands protocol 2 支持的命令名（排序后）。
@@ -218,6 +221,9 @@ func (v *App) capabilities() []string {
 	}
 	if o.Models != nil {
 		out = append(out, "models")
+	}
+	if o.Workspaces != nil {
+		out = append(out, "workspaces")
 	}
 	if o.Followups != nil {
 		out = append(out, "followups")
@@ -1126,6 +1132,58 @@ func (v *App) Settings(ctx context.Context, in wire.SettingsArgs) (wire.Settings
 		cur.Reasoning = *in.Reasoning
 	}
 	return wire.SettingsResult{Settings: cur, Committed: ok}, nil
+}
+
+// WorkspaceList 当前与最近打开的工作区。没有工作区管理器时只报当前目录。
+func (v *App) WorkspaceList(_ context.Context, _ wire.Empty) (wire.WorkspaceListResult, error) {
+	if v.o.Workspaces == nil {
+		return wire.WorkspaceListResult{Items: []wire.WorkspaceInfo{{Path: v.o.Workdir, Name: filepath.Base(v.o.Workdir), Trusted: v.o.Trusted, Current: true}}}, nil
+	}
+	items := v.o.Workspaces.List()
+	if items == nil {
+		items = []wire.WorkspaceInfo{}
+	}
+	return wire.WorkspaceListResult{Items: items}, nil
+}
+
+// WorkspaceOpen 切换工作区。有会话正在跑回合时拒绝（not_idle）：切换会关掉本工作区的运行时，进行中的回合会被打断。
+func (v *App) WorkspaceOpen(ctx context.Context, in wire.WorkspaceOpenArgs) (wire.WorkspaceOpenResult, error) {
+	if v.o.Workspaces == nil {
+		return wire.WorkspaceOpenResult{}, Errorf(wire.CodeUnsupported, "这个应用不支持切换工作区")
+	}
+	if strings.TrimSpace(in.Path) == "" {
+		return wire.WorkspaceOpenResult{}, invalid("path 不能为空")
+	}
+	if n, err := v.runningSessions(ctx); err != nil {
+		return wire.WorkspaceOpenResult{}, err
+	} else if n > 0 {
+		return wire.WorkspaceOpenResult{}, Errorf(wire.CodeNotIdle, "还有 %d 个会话正在运行：先停止或等它们结束再切换工作区", n)
+	}
+	ws, err := v.o.Workspaces.Open(ctx, in.Path)
+	if err != nil {
+		return wire.WorkspaceOpenResult{}, invalid("打不开工作区：%v", err)
+	}
+	return wire.WorkspaceOpenResult{Workspace: ws}, nil
+}
+
+// runningSessions 正在跑回合的会话数（含子会话）。
+func (v *App) runningSessions(ctx context.Context) (int, error) {
+	n := 0
+	for before := int64(0); ; {
+		rows, err := v.o.DB.ListSessions(ctx, before, 200, false)
+		if err != nil {
+			return 0, err
+		}
+		for _, r := range rows {
+			if wireRun(r.RunState) == wire.RunRunning {
+				n++
+			}
+		}
+		if len(rows) < 200 {
+			return n, nil
+		}
+		before = rows[len(rows)-1].UpdatedAt
+	}
 }
 
 // ModelsList 可选模型（别名在前）与新会话的缺省模型。没有装配目录时返回 unsupported。

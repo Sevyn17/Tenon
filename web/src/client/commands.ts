@@ -35,6 +35,8 @@ export const COMMANDS = [
   "plugins.set",
   "packages.list",
   "workspace.files",
+  "workspace.list",
+  "workspace.open",
   "models.list",
   "artifact.get",
   "artifact.put",
@@ -75,6 +77,8 @@ export interface CommandMap {
   "plugins.set": [W.PluginsSetArgs, W.PluginsSetResult];
   "packages.list": [W.Empty, W.PackagesListResult];
   "workspace.files": [W.FilesArgs, W.FilesResult];
+  "workspace.list": [W.Empty, W.WorkspaceListResult];
+  "workspace.open": [W.WorkspaceOpenArgs, W.WorkspaceOpenResult];
   "models.list": [W.Empty, W.ModelsListResult];
   "artifact.get": [W.ArtifactGetArgs, W.ArtifactGetResult];
   "artifact.put": [W.ArtifactPutArgs, W.ArtifactPutResult];

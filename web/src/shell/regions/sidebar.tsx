@@ -3,8 +3,8 @@
 // 可折叠成图标条（Mod+B），宽度可拖。
 
 import { useMemo, useRef, useState, type ReactNode } from "react";
-import { FolderClosed, Info, Keyboard, MoreHorizontal, PanelLeftClose, PanelLeftOpen, Plus, Puzzle, Search, Settings, Sun } from "lucide-react";
-import { groupByDate, type SessionInfo } from "../../client";
+import { ChevronsUpDown, FolderClosed, FolderOpen, Info, Keyboard, MoreHorizontal, PanelLeftClose, PanelLeftOpen, Plus, Puzzle, Search, Settings, Sun } from "lucide-react";
+import { groupByDate, type SessionInfo, type WorkspaceInfo } from "../../client";
 import { useInteractions, useSessions, useStore } from "../../client/react";
 import { Count, IconButton, Kbd, Menu, MenuList, Popover, Spinner, Tooltip, cx, type MenuGroupSpec } from "../../ui";
 import { Slot, useCommandContext, useRegistry, useShell, whenState } from "../context";
@@ -271,10 +271,97 @@ function SessionRow({ row, active, pending }: { row: SessionInfo; active: boolea
   );
 }
 
-function Footer({ collapsed }: { collapsed: boolean }) {
+/** 左下角工作区：后端有 workspaces 能力时是切换菜单（最近打开的目录 + 打开其他目录），否则只显示名字。
+ * 切换会在后端换一整套运行时（会话库、工具、权限都跟着目录走），所以成功后整页重载、重新 hello。 */
+function WorkspaceSwitcher() {
   const sh = useShell();
   const t = sh.t;
   const hello = useStore(sh.client.hello);
+  const [items, setItems] = useState<WorkspaceInfo[] | null>(null);
+  const label = (
+    <>
+      <FolderClosed size={14} className={s.projectIcon} />
+      <span className={s.projectName}>{projectName(hello?.workdir)}</span>
+    </>
+  );
+  if (!sh.client.can("workspaces")) {
+    return (
+      <span className={s.project} title={hello?.workdir ?? undefined}>
+        {label}
+      </span>
+    );
+  }
+  const open = async (path: string) => {
+    try {
+      await sh.client.call("workspace.open", { path });
+      sh.api.toast(t("workspace.switching", { name: projectName(path) }));
+      // 后端随后断开旧连接；整页重载，丢掉旧工作区的会话、草稿与缓存。
+      setTimeout(() => location.reload(), 300);
+    } catch (e) {
+      sh.api.toast(e instanceof Error ? e.message : String(e), "danger");
+    }
+  };
+  const groups = (): MenuGroupSpec[] => {
+    const list = items ?? [];
+    return [
+      {
+        id: "recent",
+        label: t("workspace.recent"),
+        items: list.map((w) => ({
+          id: w.path,
+          label: w.name || w.path,
+          description: w.missing ? t("workspace.missing") : w.path,
+          icon: <FolderClosed size={14} />,
+          checked: w.current,
+          disabled: w.missing,
+          reason: w.missing ? t("workspace.missing") : undefined,
+          run: () => (w.current ? undefined : void open(w.path)),
+        })),
+      },
+      {
+        id: "other",
+        items: [
+          {
+            id: "open",
+            label: t("workspace.openOther"),
+            icon: <FolderOpen size={14} />,
+            run: async () => {
+              const p = (await sh.api.prompt({ title: t("workspace.openOther"), label: t("workspace.pathLabel"), initial: hello?.workdir ?? "" }))?.trim();
+              if (p) await open(p);
+            },
+          },
+        ],
+      },
+    ];
+  };
+  return (
+    <Menu
+      placement="top-start"
+      groups={groups}
+      trigger={({ ref, toggle }) => (
+        <button
+          ref={ref}
+          type="button"
+          className={cx(s.project, s.projectButton)}
+          title={hello?.workdir ?? undefined}
+          aria-label={t("workspace.switch", { name: projectName(hello?.workdir) })}
+          onClick={() => {
+            // 每次打开菜单都重新取：别的窗口可能刚切过。
+            sh.client.call("workspace.list", {}).then((r) => setItems(r.items), () => setItems([]));
+            toggle();
+          }}
+        >
+          {label}
+          <ChevronsUpDown size={12} className={s.projectIcon} />
+        </button>
+      )}
+    />
+  );
+}
+
+function Footer({ collapsed }: { collapsed: boolean }) {
+  const sh = useShell();
+  const t = sh.t;
   const extra = useMenuGroups("avatar.menu");
   const groups = (): MenuGroupSpec[] => [
     {
@@ -290,12 +377,7 @@ function Footer({ collapsed }: { collapsed: boolean }) {
   ];
   return (
     <div className={s.footer}>
-      {!collapsed && (
-        <span className={s.project} title={hello?.workdir ?? undefined}>
-          <FolderClosed size={14} className={s.projectIcon} />
-          <span className={s.projectName}>{projectName(hello?.workdir)}</span>
-        </span>
-      )}
+      {!collapsed && <WorkspaceSwitcher />}
       <Menu
         placement="top-end"
         groups={groups}

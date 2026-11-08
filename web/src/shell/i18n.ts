@@ -91,6 +91,12 @@ const zh: Messages = {
   "settings.noMatch": "没有匹配的设置",
   "settings.noPages": "没有设置页",
   "settings.emptyPage": "这一页还没有内容",
+  "workspace.switch": "工作区：{name}，点击切换",
+  "workspace.recent": "工作区",
+  "workspace.openOther": "打开其他目录…",
+  "workspace.pathLabel": "目录的完整路径",
+  "workspace.missing": "目录已不存在",
+  "workspace.switching": "正在切换到 {name}…",
 };
 
 const en: Messages = {
@@ -180,6 +186,12 @@ const en: Messages = {
   "settings.noMatch": "No matching settings",
   "settings.noPages": "No settings pages",
   "settings.emptyPage": "Nothing on this page yet",
+  "workspace.switch": "Workspace: {name}, click to switch",
+  "workspace.recent": "Workspaces",
+  "workspace.openOther": "Open another folder…",
+  "workspace.pathLabel": "Full path of the folder",
+  "workspace.missing": "Folder no longer exists",
+  "workspace.switching": "Switching to {name}…",
 };
 
 export const BUILTIN_MESSAGES: Record<Locale, Messages> = { zh, en };

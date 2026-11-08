@@ -84,6 +84,13 @@ type Models interface {
 	Check(id string) error
 }
 
+// Workspaces 工作区切换（应用层的工作区管理器）。一个 App 只服务一个工作区：Open 在新目录上装配一套新的运行时
+// 并换上去，旧的（含本 App）随后关闭；调用方据此断开旧连接，客户端重连到新的 App。
+type Workspaces interface {
+	List() []wire.WorkspaceInfo
+	Open(ctx context.Context, path string) (wire.WorkspaceInfo, error)
+}
+
 // Followups 按一个回合的输入与回答生成建议追问（模型侧调用）；model 是会话的模型。
 type Followups func(ctx context.Context, model, input, answer string) ([]string, error)
 
