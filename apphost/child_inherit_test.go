@@ -11,10 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"tenon/appapi"
 	"tenon/runtime/agentdef"
-	"tenon/runtime/assemble"
-	"tenon/runtime/bus"
 	"tenon/runtime/session"
 	"tenon/runtime/store"
 )
@@ -24,18 +21,17 @@ func TestChildInheritsParentLimits(t *testing.T) {
 	t.Setenv("TENON_HOME", t.TempDir())
 	t.Setenv("TENON_BASE_URL", "")
 	t.Setenv("TENON_MODEL", "")
-	var ui *appapi.UI
 	extra := root + "/extra.toml"
 	if err := os.WriteFile(extra, []byte("[[plugin]]\nname = \"subagent\"\nenabled = true\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	rt, err := Start(StartOptions{Flags: Flags{Workdir: root, Profile: extra, Yes: true, MaxSteps: -1},
-		UI: func(b *bus.Bus) assemble.UI { ui = appapi.NewUI(b); return ui }})
+		App: AppOptions{MaxSteps: -1, ModesWorkdir: root}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer rt.Close()
-	built, err := rt.BuildApp(AppOptions{MaxSteps: -1, UI: ui, ModesWorkdir: root})
+	built, err := rt.BuildApp()
 	if err != nil {
 		t.Fatal(err)
 	}

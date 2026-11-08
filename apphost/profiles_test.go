@@ -52,8 +52,8 @@ func TestPluginsSetEndToEnd(t *testing.T) {
 		if x.Name == "compact-basic" {
 			compact = x
 		}
-		if x.Name == "store-sqlite" && !x.Mandatory {
-			t.Fatal("store-sqlite 应为强制插件")
+		if x.Name == "store-sqlite" && (x.Mandatory || !x.On) {
+			t.Fatalf("store-sqlite 不再锁定，但缺省开着：%+v", x)
 		}
 	}
 	if compact.Name == "" || compact.Pending != nil {
@@ -133,4 +133,26 @@ func newPluginsApp(t *testing.T, p *component.Profile, pr Profiles) *appapi.App 
 		t.Fatal(err)
 	}
 	return a
+}
+
+// 存储不锁定是哪个插件，但 plugins.set 不能把最后一个提供 service:db 的插件关掉（关了下次启动就起不来）。
+func TestPluginsSetKeepsAStore(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("TENON_HOME", home)
+	root := t.TempDir()
+	p, _, err := LoadProfiles("", "", root, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := newPluginsApp(t, p, Profiles{Root: root})
+	off := false
+	b, _ := json.Marshal(wire.PluginsSetArgs{Name: "store-sqlite", Scope: "user", Enabled: &off})
+	_, err = a.Call(context.Background(), "plugins.set", b)
+	var e *appapi.Error
+	if !errors.As(err, &e) || e.Code != wire.CodeInvalid {
+		t.Fatalf("关掉唯一的存储插件应报 invalid：%v", err)
+	}
+	if _, err := os.Stat(filepath.Join(home, "profile.toml")); err == nil {
+		t.Fatal("被拒绝时不应写文件")
+	}
 }

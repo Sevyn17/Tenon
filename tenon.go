@@ -25,7 +25,9 @@ import (
 	"sync"
 	"time"
 
+	"tenon/adapters"
 	"tenon/appapi"
+	"tenon/runtime/agent"
 	"tenon/runtime/agentdef"
 	"tenon/runtime/assemble"
 	"tenon/runtime/bus"
@@ -78,6 +80,14 @@ type config struct {
 	projectTrust bool
 	// kernel 内核与宿主参数（WithKernel；键同 profile 的 [kernel] 节）。
 	kernel map[string]any
+	// 应用宿主用的（host_options.go）。
+	profile   *component.Profile
+	services  map[string]any
+	workspace string
+	hooks     func(*assemble.SessionCx) agent.Hooks
+	approvals adapters.ModeApprovals
+	protocol  []func(*appapi.Options)
+	readyErrs func([]error)
 }
 
 // Default 标准组件预设（10 10.2）：内核、上下文、模型、工具、权限、沙箱、协作。
@@ -276,11 +286,17 @@ func New(opts ...Option) (*App, error) {
 // build 把选项变成装配结果。
 func build(c *config) (*App, error) {
 	var errs []error
-	if c.store == nil {
-		errs = append(errs, fmt.Errorf("%w: 需要 WithStore（预设不含存储）", ErrInvalid))
-	}
-	if len(c.components) == 0 {
-		errs = append(errs, fmt.Errorf("%w: 没有组件（先选 Default() 或 Minimal()）", ErrInvalid))
+	if c.profile != nil {
+		if len(c.components) > 0 || len(c.without) > 0 {
+			errs = append(errs, fmt.Errorf("%w: WithProfile 与 Default() / Minimal() / Without 二选一", ErrInvalid))
+		}
+	} else {
+		if c.store == nil {
+			errs = append(errs, fmt.Errorf("%w: 需要 WithStore（预设不含存储）", ErrInvalid))
+		}
+		if len(c.components) == 0 {
+			errs = append(errs, fmt.Errorf("%w: 没有组件（先选 Default() 或 Minimal()）", ErrInvalid))
+		}
 	}
 	// 预设组件名 → 去重、应用 Without、WithModels 替换 models 组。
 	preset := make([]string, 0, len(c.components))
@@ -310,7 +326,7 @@ func build(c *config) (*App, error) {
 			names = append(names, n)
 		}
 	}
-	if c.models != nil {
+	if c.models != nil && c.profile == nil {
 		drop := map[string]bool{"models": true, "adapter-anthropic": true, "adapter-openai-chat": true, "adapter-openai-responses": true}
 		kept := names[:0]
 		for _, n := range names {
@@ -336,7 +352,7 @@ func build(c *config) (*App, error) {
 	}
 	// 外部存储没有 SQL 出口时，要求 SQL 的组件起不来：直接去掉并记录说明（不悄悄报错）。
 	sql, hasSQL := c.store.(store.SQL)
-	if !hasSQL || c.store == nil {
+	if c.profile == nil && !hasSQL {
 		kept := names[:0]
 		for _, n := range names {
 			if n == "workgroup" {
@@ -346,7 +362,16 @@ func build(c *config) (*App, error) {
 		}
 		names = kept
 	}
-	kern, err := assemble.ParseKernel(c.kernel)
+	kv := map[string]any{} // 内核参数：profile 的 [kernel] 节在下、WithKernel 在上
+	if c.profile != nil {
+		for k, v := range c.profile.Kernel {
+			kv[k] = v
+		}
+	}
+	for k, v := range c.kernel {
+		kv[k] = v
+	}
+	kern, err := assemble.ParseKernel(kv)
 	if err != nil {
 		errs = append(errs, fmt.Errorf("%w: WithKernel: %v", ErrInvalid, err))
 	}
@@ -369,7 +394,10 @@ func build(c *config) (*App, error) {
 		return nil, fmt.Errorf("%w: 工作目录 %s: %v", ErrInvalid, workdir, err)
 	}
 	workdir = abs
-	st := &storeHandle{db: c.store, blobs: newMemArtifacts(c.store.Exists)}
+	var st assemble.DBHandle // 存储：WithStore 给的包一层；否则由组件提供（装配后取 service:db）
+	if c.store != nil {
+		st = &storeHandle{db: c.store, blobs: newMemArtifacts(c.store.Exists)}
+	}
 	b := bus.New(0)
 	ui := c.ui
 	var pui *appapi.UI
@@ -382,13 +410,18 @@ func build(c *config) (*App, error) {
 	case ui == nil:
 		ui = nopUI{}
 	}
-	h := &host.Host{Bus: b}
+	h := &host.Host{Bus: b, Workspace: c.workspace}
 	inject := map[string]any{
 		assemble.ServiceHost:    h,
 		assemble.ServiceUI:      ui,
 		assemble.ServiceWorkdir: workdir,
 		assemble.ServiceTrust:   c.projectTrust,
-		assemble.ServiceDB:      assemble.DBHandle(st),
+	}
+	for k, v := range c.services {
+		inject[k] = v
+	}
+	if st != nil {
+		inject[assemble.ServiceDB] = st
 	}
 	if hasSQL {
 		inject[component.ServiceSQL] = sql
@@ -398,16 +431,38 @@ func build(c *config) (*App, error) {
 	}
 	// 定义来源：组件模板（装配期登记）+ 应用来源；平台同名冲突在这里报。
 	appDefs := agentdef.Multi(c.agents...)
-	spec := component.Spec{
-		Plugins:   make([]component.Entry, 0, len(names)+len(extra)),
-		Inject:    inject,
-		Instances: extra,
-		Defaults:  assemble.SlotDefaults(),
-	}
+	var spec component.Spec
 	inSpec := map[string]bool{}
-	for _, n := range names {
-		spec.Plugins = append(spec.Plugins, component.Entry{Name: n, Config: c.configs[n]})
-		inSpec[n] = true
+	if c.profile != nil { // 按 profile：开关、强制项、各组件配置（WithConfig 的键覆盖 profile 的）
+		spec = c.profile.Spec(assemble.SlotDefaults())
+		for i, e := range spec.Plugins {
+			if ov := c.configs[e.Name]; len(ov) > 0 {
+				cfg := map[string]any{}
+				for k, v := range e.Config {
+					cfg[k] = v
+				}
+				for k, v := range ov {
+					cfg[k] = v
+				}
+				spec.Plugins[i].Config = cfg
+			}
+			inSpec[e.Name] = true
+		}
+		for _, n := range component.Registered() { // 关着的组件也能带配置：开了才生效
+			inSpec[n] = true
+		}
+		spec.Inject, spec.Instances = inject, extra
+	} else {
+		spec = component.Spec{
+			Plugins:   make([]component.Entry, 0, len(names)+len(extra)),
+			Inject:    inject,
+			Instances: extra,
+			Defaults:  assemble.SlotDefaults(),
+		}
+		for _, n := range names {
+			spec.Plugins = append(spec.Plugins, component.Entry{Name: n, Config: c.configs[n]})
+			inSpec[n] = true
+		}
 	}
 	for n := range c.configs {
 		if !inSpec[n] {
@@ -425,7 +480,16 @@ func build(c *config) (*App, error) {
 	if err != nil {
 		return nil, fmt.Errorf("tenon: 定义: %w", err)
 	}
-	app := &App{asm: asm, defs: defs, host: h, bus: b, handle: st, workdir: workdir, ui: ui, pui: pui, trusted: c.projectTrust, kern: kern}
+	if st == nil {
+		if v, ok := asm.Value(assemble.ServiceDB); ok {
+			st, _ = v.(assemble.DBHandle)
+		}
+		if st == nil {
+			return nil, fmt.Errorf("%w: 没有存储：WithStore，或在 profile 里开一个提供 %s 的组件（如 store-sqlite）", ErrInvalid, assemble.ServiceDB)
+		}
+	}
+	app := &App{asm: asm, defs: defs, host: h, bus: b, handle: st, own: c.store, workdir: workdir, ui: ui, pui: pui,
+		trusted: c.projectTrust, kern: kern, hooks: c.hooks, approvals: c.approvals, protocol: c.protocol, readyErrs: c.readyErrs}
 	if v, ok := asm.Value(assemble.ServiceModelhub); ok {
 		app.models, _ = v.(*assemble.Models)
 	}
@@ -465,20 +529,26 @@ func validateDefinitions(asm *component.Assembly, defs agentdef.Source) error {
 
 // App 一个装配好的应用；Start 之后才能跑会话。
 type App struct {
-	mu      sync.Mutex
-	asm     *component.Assembly
-	defs    agentdef.Source
-	host    *host.Host
-	bus     *bus.Bus
-	handle  *storeHandle
-	models  *assemble.Models
-	workdir string
-	ui      assemble.UI
-	pui     *appapi.UI // WithProtocolUI 时的协议界面
-	trusted bool
-	api     *appapi.App // 应用协议层：Start 里建
-	scope   *component.Scope
-	builder *assemble.Builder
+	mu        sync.Mutex
+	asm       *component.Assembly
+	defs      agentdef.Source
+	host      *host.Host
+	bus       *bus.Bus
+	handle    assemble.DBHandle
+	own       store.Store // WithStore 给的存储（Close 时关；组件提供的由组件作用域关）
+	hooks     func(*assemble.SessionCx) agent.Hooks
+	approvals adapters.ModeApprovals
+	protocol  []func(*appapi.Options)
+	readyErrs func([]error)
+	opened    bool // 组件已启动（Open）
+	models    *assemble.Models
+	workdir   string
+	ui        assemble.UI
+	pui       *appapi.UI // WithProtocolUI 时的协议界面
+	trusted   bool
+	api       *appapi.App // 应用协议层：Start 里建
+	scope     *component.Scope
+	builder   *assemble.Builder
 	// kern 内核与宿主参数（WithKernel、WithSleepAfter）；bgStop 后台循环的取消函数。
 	kern    assemble.Kernel
 	bgStop  context.CancelFunc

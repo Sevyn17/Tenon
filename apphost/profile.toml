@@ -1,5 +1,5 @@
-# 终端 tenon 的内置 profile（plugin-switch-plan §2.1 / §3.1）。
-# 插件开关按各插件声明的缺省（Meta.Default）；这里只写强制插件。
+# 框架缺省的 base profile（apphost.DefaultProfileTOML；产品经 Flags.BaseProfile 换成自己的）。
+# 插件开关按各插件声明的缺省（Meta.Default）；这里只写和缺省不同的。
 # 叠加顺序：内置 < ~/.tenon/profile.toml < <dir>/.tenon/profile.toml（项目受信时）< -profile。
 # 开关示例：
 #   [[plugin]]
@@ -7,4 +7,5 @@
 #   enabled = true
 # 内核参数写在 [kernel] 节（键见 framework/docs/03 - 约束清单.md）。
 
-mandatory = ["store-sqlite"]
+# 存储不锁定是哪个插件：装配时必须有一个组件提供 service:db（缺省开着的 store-sqlite），否则启动报错。
+# 换存储：关掉 store-sqlite、开别的存储插件。

@@ -26,8 +26,38 @@ type Reply struct {
 	SessionID string
 }
 
-// Start 启动组件、接上会话构造器与 [kernel] 宿主参数（assemble.Wire，与应用同一条路径）、
-// 接上应用接口层、跑 ready 点位，最后启动后台循环（兜底扫描、存储清理、启动时派发发件箱）。
+// Open 只启动组件（打开存储等），不接会话构造器、不起后台循环。只读的一次性操作（查轨迹、列装配）用它；
+// 要跑会话调 Start（没 Open 过时 Start 会先 Open）。失败时已启动的组件全部回收。
+func (a *App) Open(ctx context.Context) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.open(ctx)
+}
+
+// open 见 Open；调用方持有 a.mu。
+func (a *App) open(ctx context.Context) error {
+	if a.closed {
+		return ErrNotStarted
+	}
+	if a.opened {
+		return nil
+	}
+	scope := component.NewRoot("tenon")
+	if err := a.asm.Start(scope); err != nil {
+		_ = scope.Close(ctx)
+		return fmt.Errorf("tenon: 启动组件: %w", err)
+	}
+	if a.handle.DB() == nil {
+		_ = scope.Close(ctx)
+		return fmt.Errorf("%w: 存储没有打开", ErrInvalid)
+	}
+	a.host.DB = a.handle.DB() // 存储由组件提供时，启动之后才有
+	a.scope, a.opened = scope, true
+	return nil
+}
+
+// Start 启动组件（没 Open 过时）、接上会话构造器与 [kernel] 宿主参数（assemble.Wire，与应用同一条路径）、
+// 接上应用协议层、跑 ready 点位，最后启动后台循环（兜底扫描、存储清理、启动时派发发件箱）。
 // 后台循环放在构造器接上之后：派发发件箱会打开会话，要用 Host.New（审查 P1-51）。
 func (a *App) Start(ctx context.Context) (err error) {
 	a.mu.Lock()
@@ -38,26 +68,22 @@ func (a *App) Start(ctx context.Context) (err error) {
 	if a.started {
 		return nil
 	}
-	scope := component.NewRoot("tenon")
-	if err := a.asm.Start(scope); err != nil {
-		_ = scope.Close(ctx)
-		return fmt.Errorf("tenon: 启动组件: %w", err)
-	}
-	// 中途失败整体回滚：关组件作用域，再 Start 从头来（审查 P1-23：原先留着已启动的
-	// 作用域和后台协程，再次 Start 会让组件启动两次）。
-	defer func() {
-		if err != nil {
-			_ = scope.Close(context.WithoutCancel(ctx))
-			a.scope = nil
+	if !a.opened {
+		if err := a.open(ctx); err != nil {
+			return err
 		}
-	}()
-	a.scope = scope
-	db := a.handle.DB()
-	if db == nil {
-		return fmt.Errorf("%w: 存储没有打开", ErrInvalid)
+		// 这次 Start 里才启动的组件：中途失败整体回滚，再 Start 从头来（审查 P1-23：原先留着已启动的
+		// 作用域和后台协程，再次 Start 会让组件启动两次）。
+		defer func() {
+			if err != nil {
+				_ = a.scope.Close(context.WithoutCancel(ctx))
+				a.scope, a.opened = nil, false
+			}
+		}()
 	}
+	db := a.handle.DB()
 	w, err := assemble.Wire(assemble.WireOptions{Asm: a.asm, Host: a.host, DB: db, Blobs: a.handle.Blobs(),
-		Models: a.models, Workdir: a.workdir, Kernel: a.kern, Definitions: a.defs, MaxSteps: -1})
+		Models: a.models, Workdir: a.workdir, Kernel: a.kern, Definitions: a.defs, MaxSteps: -1, Hooks: a.hooks})
 	if err != nil {
 		return fmt.Errorf("tenon: 接线: %w", err)
 	}
@@ -65,7 +91,11 @@ func (a *App) Start(ctx context.Context) (err error) {
 	// 与应用宿主（apphost）同一套；App.API() 交给 transport/web 或 transport/bind 就能接框架的前端。
 	ao := appapi.Options{Host: a.host, Bus: a.bus, DB: db, Builder: w.Builder,
 		Model: a.models.Model, Workdir: a.workdir, Trusted: a.trusted, UI: a.pui}
-	if _, err := adapters.Fill(&ao, adapters.Parts{Asm: a.asm, Models: a.models, Blobs: a.handle.Blobs(), Workdir: a.workdir}); err != nil {
+	for _, f := range a.protocol {
+		f(&ao)
+	}
+	if _, err := adapters.Fill(&ao, adapters.Parts{Asm: a.asm, Models: a.models, Blobs: a.handle.Blobs(),
+		Workdir: a.workdir, Approvals: a.approvals}); err != nil {
 		return fmt.Errorf("tenon: 应用接口: %w", err)
 	}
 	api, err := appapi.New(ao)
@@ -73,7 +103,10 @@ func (a *App) Start(ctx context.Context) (err error) {
 		return fmt.Errorf("tenon: 应用接口: %w", err)
 	}
 	if errs := w.Ready(ctx); len(errs) > 0 {
-		return fmt.Errorf("tenon: ready: %w", errors.Join(errs...))
+		if a.readyErrs == nil {
+			return fmt.Errorf("tenon: ready: %w", errors.Join(errs...))
+		}
+		a.readyErrs(errs)
 	}
 	a.builder = w.Builder
 	a.api = api
@@ -113,8 +146,8 @@ func (a *App) Close(ctx context.Context) error {
 			errs = append(errs, err)
 		}
 	}
-	if a.handle != nil && a.handle.db != nil {
-		if err := a.handle.db.Close(); err != nil {
+	if a.own != nil {
+		if err := a.own.Close(); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -198,7 +231,7 @@ func (a *App) History(ctx context.Context, id string) ([]*Entry, error) {
 	if err := checkTenant(ctx); err != nil {
 		return nil, err
 	}
-	l, err := handle.db.Load(ctx, id, nil)
+	l, err := handle.DB().Load(ctx, id, nil)
 	if err != nil {
 		return nil, wrapErr(err)
 	}
@@ -209,7 +242,7 @@ func (a *App) History(ctx context.Context, id string) ([]*Entry, error) {
 }
 
 // lastAssistant 读会话条目，取最后一条有文本的助手消息。
-func lastAssistant(ctx context.Context, db *storeHandle, id string) (string, error) {
+func lastAssistant(ctx context.Context, db assemble.DBHandle, id string) (string, error) {
 	l, err := db.DB().Load(ctx, id, nil)
 	if err != nil {
 		return "", err

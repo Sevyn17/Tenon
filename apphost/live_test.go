@@ -22,8 +22,6 @@ import (
 
 	"tenon/appapi"
 	"tenon/runtime/agentdef"
-	"tenon/runtime/assemble"
-	"tenon/runtime/bus"
 )
 
 type live struct {
@@ -49,15 +47,14 @@ func startLive(t *testing.T) *live {
 	if err := os.WriteFile(filepath.Join(root, "note.txt"), []byte("hello tenon\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	var ui *appapi.UI
 	rt, err := Start(StartOptions{Flags: Flags{Workdir: root, Profile: extra, Yes: true, MaxSteps: -1,
 		Base: os.Getenv("TENON_BASE_URL"), Model: os.Getenv("TENON_MODEL")},
-		UI: func(b *bus.Bus) assemble.UI { ui = appapi.NewUI(b); return ui }})
+		App: AppOptions{MaxSteps: -1, ModesWorkdir: root}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(rt.Close)
-	built, err := rt.BuildApp(AppOptions{MaxSteps: -1, UI: ui, ModesWorkdir: root})
+	built, err := rt.BuildApp()
 	if err != nil {
 		t.Fatal(err)
 	}

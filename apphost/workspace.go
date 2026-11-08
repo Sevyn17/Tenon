@@ -20,8 +20,6 @@ import (
 
 	"tenon/appapi"
 	"tenon/appapi/wire"
-	"tenon/runtime/assemble"
-	"tenon/runtime/bus"
 )
 
 // MaxRecentWorkspaces 最近列表最多记几个目录。
@@ -91,16 +89,13 @@ func (m *WorkspaceManager) Close() {
 func (m *WorkspaceManager) start(dir string) (*Workspace, error) {
 	f := m.o.Flags
 	f.Workdir = dir
-	var ui *appapi.UI
-	// 网页端、桌面端都没有终端可问：无信任记录的项目按不受信（同启动时）。
-	rt, err := Start(StartOptions{Flags: f, SleepAfter: m.o.SleepAfter, UI: func(b *bus.Bus) assemble.UI {
-		ui = appapi.NewUI(b)
-		return ui
-	}})
+	// 网页端、桌面端都没有终端可问：无信任记录的项目按不受信（同启动时）；界面走协议（UI 为 nil）。
+	rt, err := Start(StartOptions{Flags: f, SleepAfter: m.o.SleepAfter,
+		App: AppOptions{MaxSteps: f.MaxSteps, Upload: m.o.Upload, Workspaces: m}})
 	if err != nil {
 		return nil, err
 	}
-	built, err := rt.BuildApp(AppOptions{MaxSteps: f.MaxSteps, UI: ui, ModesWorkdir: rt.Root, Upload: m.o.Upload, Workspaces: m})
+	built, err := rt.BuildApp()
 	if err != nil {
 		rt.Close()
 		return nil, err

@@ -6,8 +6,11 @@ package apphost
 import (
 	"fmt"
 	"path/filepath"
+	"slices"
 
+	"tenon/appapi"
 	"tenon/appapi/wire"
+	"tenon/runtime/assemble"
 	"tenon/runtime/component"
 )
 
@@ -60,7 +63,26 @@ func (p Profiles) Edit(scope string, e component.PluginEdit, ifRevision *string)
 	if err != nil {
 		return "", err
 	}
+	if e.Enabled != nil && !*e.Enabled && providesDB(e.Name) { // 存储不锁定是哪个插件，但不能一个都不剩
+		cur, err := p.Reload()
+		if err != nil {
+			return "", err
+		}
+		left := false
+		for _, st := range cur.States() {
+			left = left || (st.On && st.Name != e.Name && providesDB(st.Name))
+		}
+		if !left {
+			return "", appapi.Errorf(wire.CodeInvalid, "关掉 %s 就没有存储组件了：先开另一个提供 %s 的插件", e.Name, assemble.ServiceDB)
+		}
+	}
 	return component.EditProfile(path, e, ifRevision)
+}
+
+// providesDB 插件是否提供会话存储（service:db）。
+func providesDB(name string) bool {
+	m, ok := component.MetaOf(name)
+	return ok && slices.Contains(m.Provides, assemble.ServiceDB)
 }
 
 // Reload 与启动时同一套叠加（LoadAll）。

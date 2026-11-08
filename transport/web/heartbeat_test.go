@@ -41,7 +41,8 @@ func TestHeartbeatPong(t *testing.T) {
 
 // 空闲超过 Idle 没收到任何帧，服务端关连接；期间一直发心跳则不关。
 func TestIdleConnectionClosed(t *testing.T) {
-	const idle = 400 * time.Millisecond
+	// 心跳间隔是 idle/4；全量 -race 跑时 CPU 很忙，400 ms 的窗口偶尔被调度延迟撑破（2026-11-08 CI 遇到），放宽到 1 s。
+	const idle = time.Second
 	base := newIdleServer(t, idle)
 
 	alive := dial(t, base)

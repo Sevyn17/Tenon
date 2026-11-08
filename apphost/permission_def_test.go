@@ -9,10 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"tenon/appapi"
 	"tenon/runtime/agentdef"
-	"tenon/runtime/assemble"
-	"tenon/runtime/bus"
 	"tenon/runtime/session"
 	"tenon/runtime/store"
 )
@@ -22,14 +19,13 @@ func TestDefinitionToolsAndUsePermissionEnforced(t *testing.T) {
 	t.Setenv("TENON_HOME", t.TempDir())
 	t.Setenv("TENON_BASE_URL", "")
 	t.Setenv("TENON_MODEL", "")
-	var ui *appapi.UI
 	rt, err := Start(StartOptions{Flags: Flags{Workdir: root, Yes: true, MaxSteps: -1}, // -yes：会话档位 full
-		UI: func(b *bus.Bus) assemble.UI { ui = appapi.NewUI(b); return ui }})
+		App: AppOptions{MaxSteps: -1, ModesWorkdir: root}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer rt.Close()
-	built, err := rt.BuildApp(AppOptions{MaxSteps: -1, UI: ui, ModesWorkdir: root})
+	built, err := rt.BuildApp()
 	if err != nil {
 		t.Fatal(err)
 	}

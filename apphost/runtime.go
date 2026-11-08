@@ -8,10 +8,11 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"tenon"
 	"time"
 
-	"tenon/adapters"
 	"tenon/appapi"
+	compact "tenon/modules/context/compact-basic"
 	"tenon/modules/security/permission"
 	"tenon/runtime/agent"
 	"tenon/runtime/assemble"
@@ -65,14 +66,16 @@ func Overrides(f Flags, root string) map[string]map[string]any {
 	return ov
 }
 
-// Runtime 装配好且已启动的进程：插件运行时 + 应用预置给插件的服务。用完调 Close。
+// Runtime 打开了的工作区：建在 SDK 的 tenon.App 上（计划/07 阶段三），这里加上 profile 分层、项目信任、
+// 插件包与命令行覆盖。组件已启动（存储已打开）；跑会话要再调 BuildApp。用完调 Close。
 type Runtime struct {
+	App     *tenon.App
 	Rt      *Assembled
 	Profile *component.Profile
 	Root    string
 	Bus     *bus.Bus
 	Host    *host.Host
-	UI      assemble.UI
+	UI      assemble.UI // StartOptions.UI；nil = 协议界面（提问经协议回答）
 	// 项目信任结果与装配提示（横幅 / explain 显示）。
 	Trusted  bool
 	TrustWhy string
@@ -84,9 +87,7 @@ type Runtime struct {
 	// BaseProfile 产品内置的 base profile 原文（同 Flags.BaseProfile）。
 	BaseProfile string
 
-	proc       *component.Scope
-	sleepAfter time.Duration
-	bgStop     context.CancelFunc // 后台循环（兜底扫描、存储清理、发件箱）的取消函数；BuildApp 之后才有
+	readyErrs []error // ready 点位的错误（BuildApp 时跑，Built.Ready 交出）
 }
 
 // StartOptions Start 的参数。
@@ -94,13 +95,29 @@ type StartOptions struct {
 	Flags Flags
 	// AskTrust 无信任记录且项目带 .tenon 配置时询问用户；nil = 按不受信。
 	AskTrust func(key string) bool
-	// UI 用总线构造界面服务（service:ui）；必填。
-	UI func(b *bus.Bus) assemble.UI
+	// UI 插件的界面（service:ui），如终端界面；nil = 协议界面：输出发成 notice、提问登记成交互，由前端回答。
+	UI assemble.UI
 	// SleepAfter 空闲会话的休眠超时（0 = 不休眠，02 2.2）。>0 时同时启动兜底扫描。
 	SleepAfter time.Duration
+	// App 跑会话时的选项（BuildApp 用；会话钩子等要在装配时给，所以放在这里）。
+	App AppOptions
 }
 
-// Start 读信任与 profile、装配并启动进程作用域。失败时已建的资源全部回收。
+// AppOptions 跑会话时的选项。
+type AppOptions struct {
+	MaxSteps int // -1 = 用 profile [kernel] 的缺省
+	// Hooks 应用自己的会话钩子（CLI 打印正文）；可空。appapi 的流式事件钩子总会并入。
+	Hooks func(*assemble.SessionCx) agent.Hooks
+	// ModesWorkdir 项目档位确认记录（trust.toml）用的目录；空 = 工作目录。
+	ModesWorkdir string
+	// Upload 传输层会挂 appapi.UploadHandler（网页服务、桌面端）：hello 报 upload 能力。
+	Upload bool
+	// Workspaces 工作区管理器（workspace.list / workspace.open）；nil = 不能切换。
+	Workspaces appapi.Workspaces
+}
+
+// Start 读信任与 profile，用 SDK 按 profile 装配（tenon.WithProfile）并启动组件（打开存储）。
+// 失败时已建的资源全部回收。
 func Start(o StartOptions) (*Runtime, error) {
 	root, err := filepath.Abs(o.Flags.Workdir)
 	if err != nil {
@@ -114,33 +131,58 @@ func Start(o StartOptions) (*Runtime, error) {
 	if err != nil {
 		return nil, fmt.Errorf("读 profile: %w", err)
 	}
-	b := bus.New(0)
-	r := &Runtime{Profile: p, Root: root, Bus: b, Host: &host.Host{Bus: b, Workspace: WorkspaceKey(root)}, UI: o.UI(b),
-		Trusted: trusted, TrustWhy: why, Notes: notes, Packages: ps, ExtraProfile: o.Flags.Profile, BaseProfile: o.Flags.BaseProfile}
-	r.Rt, err = Assemble(p, Overrides(o.Flags, root), map[string]any{
-		assemble.ServiceWorkdir: root,
-		assemble.ServiceHost:    r.Host,
-		assemble.ServiceUI:      r.UI,
-		assemble.ServiceTrust:   trusted,
-		pkgs.Service:            ps,
-	})
+	r := &Runtime{Profile: p, Root: root, UI: o.UI, Trusted: trusted, TrustWhy: why, Notes: notes, Packages: ps,
+		ExtraProfile: o.Flags.Profile, BaseProfile: o.Flags.BaseProfile}
+	modesWD := o.App.ModesWorkdir
+	if modesWD == "" {
+		modesWD = root
+	}
+	opts := []tenon.Option{
+		tenon.WithProfile(p), tenon.WithWorkdir(root), tenon.WithProjectTrust(trusted),
+		tenon.WithWorkspace(WorkspaceKey(root)), tenon.WithService(pkgs.Service, ps),
+		tenon.WithSleepAfter(o.SleepAfter), tenon.WithModeApprovals(TrustApprovals{Root: modesWD}),
+		tenon.WithReadyErrors(func(errs []error) { r.readyErrs = errs }),
+		tenon.WithProtocolOptions(func(ao *appapi.Options) {
+			ao.Profile, ao.Packages = p, ps
+			ao.Profiles = Profiles{Base: o.Flags.BaseProfile, Extra: o.Flags.Profile, Root: root, Trusted: trusted}
+			ao.Upload, ao.Workspaces = o.App.Upload, o.App.Workspaces
+		}),
+	}
+	for name, kv := range Overrides(o.Flags, root) { // 命令行参数：叠在 profile 的组件配置上
+		opts = append(opts, tenon.WithConfig(name, kv))
+	}
+	if o.App.MaxSteps >= 0 {
+		opts = append(opts, tenon.WithKernel(map[string]any{"max_steps": o.App.MaxSteps}))
+	}
+	if o.App.Hooks != nil {
+		opts = append(opts, tenon.WithSessionHooks(o.App.Hooks))
+	}
+	if o.UI != nil {
+		opts = append(opts, tenon.WithUI(o.UI))
+	} else {
+		opts = append(opts, tenon.WithProtocolUI())
+	}
+	app, err := tenon.New(opts...)
 	if err != nil {
-		b.Close()
 		return nil, fmt.Errorf("装配: %w", err)
 	}
-	r.proc = component.NewRoot("process")
-	if err := r.Rt.Asm.Start(r.proc); err != nil {
-		r.Close()
+	if err := app.Open(context.Background()); err != nil {
+		_ = app.Close(context.Background())
 		return nil, err
 	}
-	r.Host.DB = r.Rt.Store.DB()                                        // 数据库在 store-sqlite 启动后才打开
-	r.Notes = append(r.Notes, r.importLegacy(context.Background())...) // 旧版项目里的会话库并入用户级库
-	// 宿主参数来自 profile 的 [kernel] 节：这里先校验（写错启动即报），BuildApp 里再按 Profile 解析接上。
-	if _, err = assemble.ParseKernel(p.Kernel); err != nil {
-		r.Close()
-		return nil, fmt.Errorf("profile [kernel]: %w", err)
+	r.App, r.Bus, r.Host = app, app.Bus(), app.Host()
+	r.Rt = &Assembled{Asm: app.Assembly(), Models: app.Models(), Defs: app.Definitions()}
+	if v, ok := app.Assembly().Value(assemble.ServiceDB); ok {
+		r.Rt.Store, _ = v.(assemble.DBHandle)
 	}
-	r.sleepAfter = o.SleepAfter
+	if v, ok := app.Assembly().Value(assemble.ServiceCompactor); ok {
+		r.Rt.Compact, _ = v.(*compact.Compactor)
+	}
+	if r.Rt.Store == nil { // WithStore 不在这条路上：存储一定来自组件
+		r.Close()
+		return nil, fmt.Errorf("装配: 没有提供 %s 的存储组件", assemble.ServiceDB)
+	}
+	r.Notes = append(r.Notes, r.importLegacy(context.Background())...) // 旧版项目里的会话库并入用户级库
 	return r, nil
 }
 
@@ -148,34 +190,11 @@ func Start(o StartOptions) (*Runtime, error) {
 // 同一个目录换种写法打开也要落到同一组会话上。
 func WorkspaceKey(root string) string { return NormPath(root) }
 
-// Close 关闭进程作用域与总线（先插件后总线，与原 withRuntime 的 defer 顺序一致）。
+// Close 关闭组件、存储与总线。可重复调用。
 func (r *Runtime) Close() {
-	if r.bgStop != nil {
-		r.bgStop()
-		r.bgStop = nil
+	if r.App != nil {
+		_ = r.App.Close(context.Background())
 	}
-	if r.proc != nil {
-		r.proc.Close(context.Background())
-		r.proc = nil
-	}
-	if r.Bus != nil {
-		r.Bus.Close()
-	}
-}
-
-// AppOptions BuildApp 的参数。
-type AppOptions struct {
-	MaxSteps int // -1 = 用 profile [kernel] 的缺省
-	// Hooks 应用自己的会话钩子（CLI 打印正文）；可空。appapi 的流式事件钩子总会并入。
-	Hooks func(*assemble.SessionCx) agent.Hooks
-	// UI 事件化界面（桌面端 / api-server）；CLI 用终端界面，传 nil。
-	UI *appapi.UI
-	// ModesWorkdir 项目档位确认记录（trust.toml）用的目录；CLI 沿用 -dir 原值。
-	ModesWorkdir string
-	// Upload 传输层会挂 appapi.UploadHandler（网页服务、桌面端）：hello 报 upload 能力。
-	Upload bool
-	// Workspaces 工作区管理器（workspace.list / workspace.open）；nil = 不能切换。
-	Workspaces appapi.Workspaces
 }
 
 // Built BuildApp 的结果。
@@ -185,50 +204,25 @@ type Built struct {
 	Model   string
 	Perms   *permission.Sessions // 未装 permission 插件时为 nil
 	Builder *assemble.Builder
-	wired   *assemble.Wired
+	ready   []error
 }
 
-// Ready 跑 ready 点位（构造器就绪后再跑：如工作组补投会打开领导会话），返回各自的错误。
-func (b *Built) Ready(ctx context.Context) []error { return b.wired.Ready(ctx) }
+// Ready ready 点位（如工作组补投会打开领导会话）的错误。点位在 BuildApp 里已经跑过；这里交出错误，
+// 调用方当提示显示（不让启动失败）。
+func (b *Built) Ready(context.Context) []error { return b.ready }
 
-// BuildApp 接线（assemble.Wire：会话构造器与 [kernel] 宿主参数）、构造应用接口层，再启动后台循环。
-// 不跑 ready，调用方在接好输出后调 Built.Ready。只跑一次性子命令（export / explain）的不调它，也就不起后台循环。
-func (r *Runtime) BuildApp(o AppOptions) (*Built, error) {
-	rt := r.Rt
-	if rt.Models == nil {
+// BuildApp 接上会话构造器与 [kernel] 宿主参数、应用协议层，跑 ready 点位，再启动后台循环（tenon.App.Start）。
+// 只跑一次性子命令（export / explain）的不调它，也就不起后台循环。
+func (r *Runtime) BuildApp() (*Built, error) {
+	if r.App.Models() == nil {
 		return nil, fmt.Errorf("profile 中没有 models 插件")
 	}
-	// 每次从 Profile 解析，不存在 Runtime 里：CLI 自己拼 Runtime（不走 Start），存字段的话它拿到的是零值——
-	// 存工件阈值、工具超时、确认期限全为 0，3 行的结果也被当成"结果过大"（2026-11-08 v1 验收发现）。
-	kern, err := assemble.ParseKernel(r.Profile.Kernel)
-	if err != nil {
-		return nil, fmt.Errorf("profile [kernel]: %w", err)
-	}
-	db := rt.Store.DB()
-	w, err := assemble.Wire(assemble.WireOptions{Asm: rt.Asm, Host: r.Host, DB: db, Blobs: rt.Store.Blobs(),
-		Models: rt.Models, Workdir: r.Root, Kernel: kern, Definitions: rt.Defs,
-		MaxSteps: o.MaxSteps, SleepAfter: r.sleepAfter, Hooks: o.Hooks})
-	if err != nil {
+	if err := r.App.Start(context.Background()); err != nil {
 		return nil, err
 	}
-	// 应用接口层：在构造器钩子上并入流式事件、把提交事件接到总线、档位变化提示发 notice。
-	ao := appapi.Options{Host: r.Host, Bus: r.Bus, DB: db, Builder: w.Builder, Model: rt.Models.Model, Workdir: r.Root,
-		Trusted: r.Trusted, Profile: r.Profile, Packages: r.Packages, UI: o.UI, Artifacts: rt.Store.Blobs()}
-	ao.Profiles = Profiles{Base: r.BaseProfile, Extra: r.ExtraProfile, Root: r.Root, Trusted: r.Trusted}
-	ao.Upload = o.Upload
-	ao.Workspaces = o.Workspaces
-	// 插件能力 → 协议：模型、档位（确认记在 trust.toml）、追问、标题、文件、压缩、删除清理。
-	perms, err := adapters.Fill(&ao, adapters.Parts{Asm: rt.Asm, Models: rt.Models, Workdir: r.Root,
-		Approvals: TrustApprovals{Root: o.ModesWorkdir}})
-	if err != nil {
-		return nil, err
+	b := &Built{API: r.App.API(), DB: r.App.DB(), Model: r.App.Models().Model, Builder: r.App.Builder(), ready: r.readyErrs}
+	if v, ok := r.App.Assembly().Value(permission.Service); ok {
+		b.Perms, _ = v.(*permission.Sessions)
 	}
-	api, err := appapi.New(ao)
-	if err != nil {
-		return nil, err
-	}
-	if r.bgStop == nil {
-		r.bgStop = w.Background()
-	}
-	return &Built{API: api, DB: db, Model: rt.Models.Model, Perms: perms, Builder: w.Builder, wired: w}, nil
+	return b, nil
 }
