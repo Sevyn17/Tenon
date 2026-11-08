@@ -105,6 +105,7 @@
   scrollbar-width: none;
 }
 .tab {
+  flex: none; /* 不收缩：放不下时标签行横向滚动，不截断文字 */
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
@@ -126,6 +127,10 @@
 .tab[aria-selected="true"] {
   background: var(--bg-active);
   color: var(--fg);
+}
+/* 只有当前标签显示标题，其余只显示图标（悬停看标题）：标签多时不再被截断成半个字。 */
+.tab:not([aria-selected="true"]) .tabTitle {
+  display: none;
 }
 .tab[data-dragging] {
   opacity: 0.4;

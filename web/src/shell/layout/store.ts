@@ -1,5 +1,6 @@
 // 布局状态的 store：reducer + 持久化（localStorage，键带命名空间）。读回时按已注册的面板清洗（插件没了的面板去掉）。
 // 写入做 300ms 节流：拖分隔条时不每帧写存储。
+// v2（2026-11-08）：缺省不开右侧面板；旧 v1 存档里开着的面板不再沿用，按缺省重来一次。
 
 import { createStore, type ReadStore } from "../../client";
 import { EMPTY_LAYOUT, layoutReducer, sanitize, type LayoutAction, type LayoutState } from "./reducer";
@@ -13,7 +14,7 @@ export interface LayoutStore extends ReadStore<LayoutState> {
 }
 
 export function createLayoutStore(ns = "tenon", init: LayoutState = EMPTY_LAYOUT, storage: Storage | null = safe()): LayoutStore {
-  const key = `${ns}.layout.v1`;
+  const key = `${ns}.layout.v2`;
   let raw: unknown = null;
   try {
     const t = storage?.getItem(key);

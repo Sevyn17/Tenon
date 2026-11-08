@@ -785,6 +785,7 @@ func (v *App) Send(ctx context.Context, in wire.SendArgs) (wire.SendResult, erro
 	if err := hd.Do(host.Command{Kind: host.Send, ItemID: in.ClientID, Content: content}); err != nil {
 		return wire.SendResult{}, err
 	}
+	v.autoTitle(ctx, in.Session, content)
 	return wire.SendResult{ClientID: in.ClientID, Queued: queued}, nil
 }
 

@@ -195,7 +195,8 @@ function GroupView(p: DockProps & { group: GroupNode }) {
                   data-active={id === group.active || undefined}
                   className={s.tab}
                   draggable
-                  title={pn.keybind ? `${pn.title}` : pn.title}
+                  title={pn.title}
+                  aria-label={pn.title}
                   onDragStart={(e) => {
                     e.dataTransfer.setData(PANEL_MIME, id);
                     e.dataTransfer.effectAllowed = "move";
@@ -210,7 +211,7 @@ function GroupView(p: DockProps & { group: GroupNode }) {
                   onAuxClick={(e) => e.button === 1 && p.dispatch({ type: "close", panel: id })}
                 >
                   {pn.icon}
-                  <span>{pn.title}</span>
+                  <span className={s.tabTitle}>{pn.title}</span>
                   <span
                     className={s.tabClose}
                     role="button"

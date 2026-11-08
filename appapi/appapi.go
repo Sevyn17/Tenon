@@ -53,6 +53,8 @@ type Options struct {
 	Profiles Profiles
 	// Followups 生成建议追问（session.followups）；nil = 不提供。
 	Followups Followups
+	// Titler 生成会话短标题（第一条消息后在后台调用，替换兜底标题）；nil = 只用兜底标题。
+	Titler Titler
 	// Files 列工作区文件（workspace.files，界面 @ 文件用）；nil = 不提供。
 	Files Files
 	// Upload 传输层挂了 UploadHandler（HTTP 上传大附件）：hello 的能力清单带 upload。

@@ -68,6 +68,27 @@ export function MainArea() {
 function EmptyMain() {
   const sh = useShell();
   const vp = useViewport();
+  const prefs = useStore(sh.prefs);
+  const [draft, setDraft] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [focusSig, setFocusSig] = useState(0);
+  // 首页直接输入：发送时先建会话、打开它，再把这条消息发出去（不先留下一个空会话）。
+  const send = async () => {
+    const t = draft.trim();
+    if (!t || busy) return;
+    setBusy(true);
+    try {
+      const snap = await sh.client.call("session.create", {});
+      sh.client.sessions.upsert({ id: snap.id, title: snap.title, preview: "", run_state: snap.run_state, origin: snap.origin, updated_at: Date.now() });
+      sh.api.openSession(snap.id);
+      setDraft("");
+      await sh.client.session(snap.id).send(t);
+    } catch (e) {
+      sh.api.toast(e instanceof Error ? e.message : String(e), "danger");
+    } finally {
+      setBusy(false);
+    }
+  };
   return (
     <main className={s.conv}>
       {vp === "sm" && (
@@ -79,10 +100,22 @@ function EmptyMain() {
         </header>
       )}
       <div className={s.body}>
-        <Hero onPick={async (t) => {
-          await sh.api.newSession();
-          setTimeout(() => sh.api.insert(t), 0);
+        <Hero onPick={(t) => {
+          setDraft(t);
+          setFocusSig((n) => n + 1);
         }} />
+      </div>
+      <div className={s.composerWrap}>
+        <Composer
+          value={draft}
+          onChange={setDraft}
+          onSend={() => void send()}
+          busy={busy}
+          placeholder={sh.t("conv.placeholder")}
+          sendKey={prefs.sendKey}
+          autoFocus
+          focusSignal={focusSig}
+        />
       </div>
     </main>
   );
