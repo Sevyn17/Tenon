@@ -60,6 +60,15 @@
   background: var(--bg-active);
   color: var(--fg);
 }
+/* 新会话是主操作（06 §3.2）。 */
+.navPrimary {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.navPrimary:hover:not(:disabled) {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
 .navLabel {
   flex: 1;
   min-width: 0;
@@ -79,38 +88,11 @@
 .collapsed .navLabel,
 .collapsed .navKey,
 .collapsed .brandName,
-.collapsed .list,
-.collapsed .filters,
-.collapsed .footerText {
+.collapsed .list {
   display: none;
 }
 .collapsed .navItem {
   justify-content: center;
-}
-
-.filters {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  padding: var(--space-2) var(--space-3) var(--space-1);
-  color: var(--fg-3);
-  font-size: var(--text-xs);
-}
-.filters button {
-  border: 0;
-  background: none;
-  color: var(--fg-3);
-  padding: 2px 6px;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  font-size: var(--text-xs);
-}
-.filters button[aria-pressed="true"] {
-  background: var(--bg-active);
-  color: var(--fg);
-}
-.filters .grow {
-  flex: 1;
 }
 
 .list {
@@ -141,16 +123,28 @@
   background: var(--bg-hover);
   color: var(--fg);
 }
-.row[aria-current="true"] {
+.row[aria-current="page"] {
   background: var(--bg-active);
   color: var(--fg);
 }
 .rowChild {
   padding-left: var(--space-6);
 }
-.rowPin {
+/* 需要你处理：行首强调色圆点（06 §3.2）。 */
+.rowPending {
   flex: none;
-  color: var(--fg-3);
+  width: 6px;
+  height: 6px;
+  margin: 0 1px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+/* 右键菜单的锚点：放在鼠标位置，不占布局。 */
+.ctxAnchor {
+  position: fixed;
+  width: 1px;
+  height: 1px;
+  pointer-events: none;
 }
 
 .rowTitle {
@@ -195,71 +189,29 @@
 .footer {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-1);
   padding: var(--space-2);
   border-top: 1px solid var(--border);
 }
-.avatar {
+/* 底部只留项目名与设置入口（06 §3.2）；身份与模型在设置 › 关于。 */
+.project {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-1);
   flex: 1;
   min-width: 0;
-  padding: var(--space-1) var(--space-2);
-  border: 0;
-  border-radius: var(--radius-md);
-  background: none;
-  color: var(--fg);
-  cursor: pointer;
-  text-align: left;
-}
-.avatar:hover {
-  background: var(--bg-hover);
-}
-.avatarImg {
-  position: relative;
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-full);
-  background: var(--accent-soft);
-  color: var(--accent);
-  font-weight: 600;
+  padding: 0 var(--space-1);
+  color: var(--fg-2);
   font-size: var(--text-sm);
+}
+.projectIcon {
   flex: none;
+  color: var(--fg-3);
 }
-.avatarDot {
-  position: absolute;
-  right: -1px;
-  bottom: -1px;
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  border: 2px solid var(--bg-sidebar);
-  background: var(--success);
-}
-.avatarDot[data-state="connecting"],
-.avatarDot[data-state="reconnecting"] {
-  background: var(--warning);
-}
-.avatarDot[data-state="closed"] {
-  background: var(--danger);
-}
-.footerText {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  line-height: 1.25;
-}
-.footerText span {
+.projectName {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-.footerSub {
-  color: var(--fg-3);
-  font-size: var(--text-xs);
 }
 .resize {
   position: absolute;

@@ -1,12 +1,12 @@
 // 左栏（前端方案第五节 ① ② ⑧）：顶部菜单区（新建会话、搜索、插件市场 + 插件贡献的 nav.primary 菜单项），
-// 中间会话列表（按今天 / 昨天 / 7 天 / 更早分组，运行中呼吸点、待确认角标），底部头像菜单（avatar.menu）。
+// 中间会话列表（按置顶 / 今天 / 昨天 / 本周 / 更早分组，运行中转圈、待确认强调色圆点），底部项目名与设置入口（avatar.menu 贡献仍从齿轮打开）。
 // 可折叠成图标条（Mod+B），宽度可拖。
 
 import { useMemo, useRef, useState, type ReactNode } from "react";
-import { MoreHorizontal, Pin, PanelLeftClose, PanelLeftOpen, Plus, Puzzle, Search, Settings, Keyboard, Sun, Info } from "lucide-react";
+import { FolderClosed, Info, Keyboard, MoreHorizontal, PanelLeftClose, PanelLeftOpen, Plus, Puzzle, Search, Settings, Sun } from "lucide-react";
 import { groupByDate, type SessionInfo } from "../../client";
 import { useInteractions, useSessions, useStore } from "../../client/react";
-import { Count, Dot, IconButton, Kbd, Menu, Tooltip, cx, type MenuGroupSpec } from "../../ui";
+import { Count, IconButton, Kbd, Menu, MenuList, Popover, Spinner, Tooltip, cx, type MenuGroupSpec } from "../../ui";
 import { Slot, useCommandContext, useRegistry, useShell, whenState } from "../context";
 import type { MenuItem, MenuPlace } from "../contributions";
 import { bindingOf } from "../commands";
@@ -105,7 +105,7 @@ function NavMenu({ collapsed }: { collapsed: boolean }) {
   const cx0 = useCommandContext();
   return (
     <nav className={s.nav} aria-label={t("sidebar.menu")}>
-      <NavItem collapsed={collapsed} icon={<Plus size={16} />} label={t("nav.new")} keybind={bindingOf(sh, "session.new")} onClick={() => sh.api.run("session.new")} />
+      <NavItem collapsed={collapsed} primary icon={<Plus size={16} />} label={t("nav.new")} keybind={bindingOf(sh, "session.new")} onClick={() => sh.api.run("session.new")} />
       <NavItem collapsed={collapsed} icon={<Search size={16} />} label={t("nav.search")} keybind={bindingOf(sh, "shell.searchSessions")} onClick={() => sh.api.run("shell.searchSessions")} />
       {items.map((it) => {
         const w = whenState(it.when?.(cx0));
@@ -131,6 +131,7 @@ function NavMenu({ collapsed }: { collapsed: boolean }) {
 
 function NavItem(p: {
   collapsed: boolean;
+  primary?: boolean;
   icon: ReactNode;
   label: string;
   keybind?: string;
@@ -140,7 +141,7 @@ function NavItem(p: {
   onClick: () => void;
 }) {
   const btn = (
-    <button type="button" className={s.navItem} onClick={p.onClick} disabled={p.disabled} title={p.disabled ? p.reason : undefined} aria-label={p.label}>
+    <button type="button" className={cx(s.navItem, p.primary && s.navPrimary)} onClick={p.onClick} disabled={p.disabled} title={p.disabled ? p.reason : undefined} aria-label={p.label}>
       {p.icon}
       {!p.collapsed && <span className={s.navLabel}>{p.label}</span>}
       {!p.collapsed && p.badge ? <Count n={p.badge} /> : null}
@@ -162,7 +163,6 @@ function SessionList() {
   const v = useSessions();
   const inter = useInteractions();
   const current = useStore(sh.nav).session;
-  const [filter, setFilter] = useState<"all" | "running" | "pending">("all");
 
   const pendingBy = useMemo(() => {
     const m = new Map<string, number>();
@@ -173,11 +173,7 @@ function SessionList() {
     return m;
   }, [inter.open]);
 
-  const keep = (x: SessionInfo) =>
-    filter === "running" ? x.run_state === "running" : filter === "pending" ? pendingBy.has(x.id) : true;
-  const items = v.items.filter(keep);
-  const pinned = v.pinned.filter(keep);
-  const groups = [...(pinned.length ? [{ bucket: "pinned", items: pinned }] : []), ...groupByDate(items)];
+  const groups = [...(v.pinned.length ? [{ bucket: "pinned", items: v.pinned }] : []), ...groupByDate(v.items)];
   const label: Record<string, string> = {
     pinned: t("sessions.pinned"),
     today: t("sessions.today"),
@@ -188,14 +184,6 @@ function SessionList() {
 
   return (
     <div className={s.list} role="navigation" aria-label={t("sidebar.sessions")}>
-      <div className={s.filters}>
-        {(["all", "running", "pending"] as const).map((f) => (
-          <button key={f} type="button" aria-pressed={filter === f} onClick={() => setFilter(f)}>
-            {t(`sidebar.filter.${f}`)}
-            {f === "pending" && pendingBy.size > 0 && <Count n={[...pendingBy.values()].reduce((a, b) => a + b, 0)} />}
-          </button>
-        ))}
-      </div>
       {groups.length === 0 && !v.loading && <div className={s.empty}>{v.error ?? t("sessions.empty")}</div>}
       {groups.map((g) => (
         <div key={g.bucket}>
@@ -220,38 +208,64 @@ function SessionRow({ row, active, pending }: { row: SessionInfo; active: boolea
   const groups = useMenuGroups("session.row.menu", { row });
   const running = row.run_state === "running";
   const child = !!row.parent;
+  // 右键菜单：锚点放在鼠标位置，与悬停的 ⋯ 用同一份菜单项。
+  const [ctx, setCtx] = useState<{ x: number; y: number } | null>(null);
+  const anchor = useRef<HTMLDivElement>(null);
+  const closeCtx = () => setCtx(null);
   return (
-    <div
-      className={cx(s.row, child && s.rowChild)}
-      aria-current={active ? "page" : undefined}
-      role="button"
-      tabIndex={0}
-      onClick={() => sh.api.openSession(row.id)}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") sh.api.openSession(row.id);
-      }}
-      title={row.preview || row.id}
-    >
-      <Slot at="session.row.leading" props={{ row }} fallback={<Dot state={pending ? "warning" : running ? "running" : "idle"} />} />
-      {row.pinned && <Pin size={12} className={s.rowPin} aria-label={sh.t("sessions.pinned")} />}
-      <span className={s.rowTitle}>{row.title || row.id}</span>
-      <span className={s.rowBadges}>
-        {pending > 0 && <Count n={pending} />}
-        <Slot at="session.row.badge" props={{ row }} />
-      </span>
-      <span className={s.rowHover} onClick={(e) => e.stopPropagation()}>
-        <Slot at="session.row.hover" props={{ row }} />
-        <Menu
-          placement="bottom-end"
-          groups={groups}
-          trigger={({ ref, toggle }) => (
-            <IconButton ref={ref} label={sh.t("sidebar.more")} size="sm" onClick={toggle}>
-              <MoreHorizontal size={14} />
-            </IconButton>
-          )}
+    <>
+      <div
+        className={cx(s.row, child && s.rowChild)}
+        aria-current={active ? "page" : undefined}
+        role="button"
+        tabIndex={0}
+        onClick={() => sh.api.openSession(row.id)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") sh.api.openSession(row.id);
+        }}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          setCtx({ x: e.clientX, y: e.clientY });
+        }}
+        title={row.preview || row.id}
+      >
+        <Slot
+          at="session.row.leading"
+          props={{ row }}
+          fallback={
+            pending ? (
+              <span className={s.rowPending} title={sh.t("sidebar.pending")} aria-label={sh.t("sidebar.pending")} />
+            ) : running ? (
+              <Spinner size={12} />
+            ) : null
+          }
         />
-      </span>
-    </div>
+        <span className={s.rowTitle}>{row.title || row.id}</span>
+        <span className={s.rowBadges}>
+          <Slot at="session.row.badge" props={{ row }} />
+        </span>
+        <span className={s.rowHover} onClick={(e) => e.stopPropagation()}>
+          <Slot at="session.row.hover" props={{ row }} />
+          <Menu
+            placement="bottom-end"
+            groups={groups}
+            trigger={({ ref, toggle }) => (
+              <IconButton ref={ref} label={sh.t("sidebar.more")} size="sm" onClick={toggle}>
+                <MoreHorizontal size={14} />
+              </IconButton>
+            )}
+          />
+        </span>
+      </div>
+      {ctx && (
+        <>
+          <div ref={anchor} className={s.ctxAnchor} style={{ left: ctx.x, top: ctx.y }} />
+          <Popover anchor={anchor} open placement="bottom-start" onClose={closeCtx}>
+            <MenuList groups={groups()} onDone={closeCtx} />
+          </Popover>
+        </>
+      )}
+    </>
   );
 }
 
@@ -259,9 +273,7 @@ function Footer({ collapsed }: { collapsed: boolean }) {
   const sh = useShell();
   const t = sh.t;
   const hello = useStore(sh.client.hello);
-  const conn = useStore(sh.client.conn.state);
   const extra = useMenuGroups("avatar.menu");
-  const who = hello?.principal.id ?? "…";
   const groups = (): MenuGroupSpec[] => [
     {
       id: "core",
@@ -274,28 +286,33 @@ function Footer({ collapsed }: { collapsed: boolean }) {
     ...extra(),
     { id: "about", items: [{ id: "about", label: t("avatar.about"), icon: <Info size={14} />, run: () => sh.api.openSettings("about") }] },
   ];
-  const dot = conn === "open" ? "success" : conn === "closed" ? "danger" : "warning";
   return (
     <div className={s.footer}>
+      {!collapsed && (
+        <span className={s.project} title={hello?.workdir ?? undefined}>
+          <FolderClosed size={14} className={s.projectIcon} />
+          <span className={s.projectName}>{projectName(hello?.workdir)}</span>
+        </span>
+      )}
       <Menu
-        placement="top-start"
+        placement="top-end"
         groups={groups}
         trigger={({ ref, toggle }) => (
-          <button ref={ref} type="button" className={s.avatar} onClick={toggle} aria-label={t("avatar.menu")}>
-            <span className={s.avatarImg}>{who.slice(0, 1).toUpperCase()}</span>
-            <span className={s.avatarDot} data-state={dot} />
-            {!collapsed && (
-              <span className={s.footerText}>
-                <span>{who}</span>
-                <span className={s.footerSub}>{hello ? hello.model : t("avatar.connecting")}</span>
-              </span>
-            )}
-          </button>
+          <IconButton ref={ref} label={t("avatar.menu")} size="sm" onClick={toggle}>
+            <Settings size={16} />
+          </IconButton>
         )}
       />
       {!collapsed && <Slot at="sidebar.footer" />}
     </div>
   );
+}
+
+/** 工作目录只显示最后一级（06 §3.2）。 */
+function projectName(workdir?: string): string {
+  if (!workdir) return "…";
+  const parts = workdir.split(/[\\/]/).filter(Boolean);
+  return parts[parts.length - 1] ?? workdir;
 }
 
 /** 右缘拖动改宽度（264–420）。 */
