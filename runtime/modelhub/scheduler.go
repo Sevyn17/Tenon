@@ -255,8 +255,14 @@ func (h *Hub) runStep(ctx context.Context, r *Request, si int, step PlanStep, ou
 	// 熔断按「请求」计数，不按「尝试」（C9）：本项重试的中间失败不记；本项最终成功记一次成功、
 	// 最终以可重试错误失败记一次失败。否则单个请求自己的 5 次重试就能把熔断打开，殃及所有会话，
 	// 而且第 5 次重试会因为熔断已开被跳过。
+	// 推理强度只发给声明了推理能力的模型：会话换到普通模型后不必清设置，也不会因多出的参数被厂商拒绝。
+	// 降级计划里各项模型不同，所以按计划项判断。
+	base := *r
+	if base.Req.Params.Reasoning != nil && (m.Caps.Reasoning == nil || !*m.Caps.Reasoning) {
+		base.Req.Params.Reasoning = nil
+	}
 	for at := 0; at <= retries; at++ {
-		rr := *r
+		rr := base
 		rr.AttemptKey = attemptKey
 		f := h.attempt(ctx, &rr, ad, ep, out, emitted, AttemptSpan{RequestID: r.RequestID, AttemptKey: attemptKey,
 			Model: step.Model, Provider: m.Provider, ShellHash: shell, Step: si, Attempt: at})

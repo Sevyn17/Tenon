@@ -1,8 +1,8 @@
-// 输入框工具栏的内置贡献（core 包注册到 composer.toolbar.left / .right）：模型、权限档位、上下文用量。
-// 首页草稿（session 为 null，会话还没建）也能选模型与档位：选择记在 sh.draft，建会话时应用。
+// 输入框工具栏的内置贡献（core 包注册到 composer.toolbar.left / .right）：模型、推理强度、权限档位、上下文用量。
+// 首页草稿（session 为 null，会话还没建）也能选模型、推理强度与档位：选择记在 sh.draft，建会话时应用。
 // 嵌入方要换掉或关掉某一项：同 id 更小的 priority 替换，或 disable 掉 core 包里对应的插槽。
 
-import { Cpu, Gauge, ShieldCheck } from "lucide-react";
+import { Brain, Cpu, Gauge, ShieldCheck } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { Client, ModeInfo, ModelsListResult } from "../../client";
 import { useSession, useStore } from "../../client/react";
@@ -128,6 +128,72 @@ function ModelMenu({ list, current, onPick }: { list: ModelsListResult; current:
       trigger={({ ref, toggle }) => (
         <Button ref={ref} size="sm" variant="ghost" onClick={toggle} aria-label={`模型：${current}，点击切换`} title={current}>
           <Cpu size={12} /> {short}
+        </Button>
+      )}
+    />
+  );
+}
+
+// ---- 推理强度 ----
+
+const EFFORT_LABEL: Record<string, string> = { low: "低", medium: "中", high: "高" };
+
+/** 推理强度：当前模型在 models.list 里给了 efforts 才显示。会话态改 session.settings {reasoning}，草稿态记进 sh.draft。
+ * 换到不支持推理的模型时设置保留，后端不下发（换回来还在）。 */
+export function ReasoningPicker({ session }: { session: string | null }) {
+  return session ? <SessionReasoningPicker session={session} /> : <DraftReasoningPicker />;
+}
+
+function SessionReasoningPicker({ session }: { session: string }) {
+  const sh = useShell();
+  const [st] = useSession(session);
+  const list = useModels();
+  const efforts = list?.models.find((m) => m.id === (st.model || list.default))?.efforts;
+  if (!efforts?.length) return null;
+  return (
+    <ReasoningMenu
+      efforts={efforts}
+      current={st.reasoning}
+      onPick={async (v) => {
+        try {
+          const r = await sh.client.call("session.settings", { session, reasoning: v });
+          if (!r.committed) sh.api.toast(`回合结束后推理强度换成 ${EFFORT_LABEL[v] ?? "自动"}`);
+        } catch (e) {
+          sh.api.toast(errText(e), "danger");
+        }
+      }}
+    />
+  );
+}
+
+function DraftReasoningPicker() {
+  const sh = useShell();
+  const draft = useStore(sh.draft);
+  const list = useModels();
+  const efforts = list?.models.find((m) => m.id === (draft.model || list.default))?.efforts;
+  if (!efforts?.length) return null;
+  return <ReasoningMenu efforts={efforts} current={draft.reasoning ?? ""} onPick={(v) => sh.draft.update((d) => ({ ...d, reasoning: v || undefined }))} />;
+}
+
+function ReasoningMenu({ efforts, current, onPick }: { efforts: string[]; current: string; onPick: (v: string) => void }) {
+  const groups = (): MenuGroupSpec[] => [
+    {
+      id: "reasoning",
+      label: "推理强度",
+      items: [
+        { id: "auto", label: "自动", description: "用模型厂商的缺省", checked: !current, run: () => onPick("") },
+        ...efforts.map((e) => ({ id: e, label: EFFORT_LABEL[e] ?? e, checked: e === current, run: () => onPick(e) })),
+      ],
+    },
+  ];
+  const label = current ? `推理 ${EFFORT_LABEL[current] ?? current}` : "推理";
+  return (
+    <Menu
+      placement="top-start"
+      groups={groups}
+      trigger={({ ref, toggle }) => (
+        <Button ref={ref} size="sm" variant="ghost" onClick={toggle} aria-label={`推理强度：${current ? EFFORT_LABEL[current] ?? current : "自动"}，点击切换`} title="推理强度">
+          <Brain size={12} /> {label}
         </Button>
       )}
     />

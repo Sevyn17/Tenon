@@ -48,7 +48,7 @@ const (
 	Confirm Kind = "confirm"
 	Record  Kind = "record"
 	SetExt  Kind = "set_ext"
-	// SetConfig 改会话配置（外部白名单：只开放 MaxSteps 与 Model）；Idle 立即生效，回合中到步边界生效。
+	// SetConfig 改会话配置（外部白名单：MaxSteps、Model 与推理强度 Reasoning，其余 Params 不开放）；Idle 立即生效，回合中到步边界生效。
 	SetConfig Kind = "set_config"
 	Compact   Kind = "compact"
 	Rewind    Kind = "rewind"
@@ -77,6 +77,8 @@ type Command struct {
 	Value    any     // SetExt
 	MaxSteps *uint32 // SetConfig：单回合步数上限，0 = 不限
 	Model    *string // SetConfig：模型别名（调用方先按目录校验）
+	// Reasoning SetConfig：推理强度（low / medium / high，"" = 厂商缺省；调用方先校验取值）。
+	Reasoning *string
 	// IfCursor Rewind / Compact：非空时执行前核对会话事件游标，不符返回 ErrStale（多端同时操作时防止拿着过期界面改日志）。
 	IfCursor *int64
 	// ToTurn Rewind：非零时按回合号截断（保留 ToTurn 之前的回合），在 actor 里解析成下标，代替 To（protocol 2 rewind {to_turn}）。
@@ -856,7 +858,7 @@ func (a *actor) idle(ctx context.Context, c Command) (bool, error) {
 		}
 		return false, markCommitted(c, a.ag.Commit(ctx))
 	case SetConfig:
-		if _, err := core.SetConfig(session.ConfigPatch{MaxSteps: c.MaxSteps, Model: c.Model}); err != nil {
+		if _, err := core.SetConfig(session.ConfigPatch{MaxSteps: c.MaxSteps, Model: c.Model, Reasoning: c.Reasoning}); err != nil {
 			return false, err
 		}
 		return false, markCommitted(c, a.ag.Commit(ctx))
@@ -1288,7 +1290,7 @@ func (a *actor) between(need *session.Need) (*session.Need, error) {
 				reply(c, a.insertInput(context.Background()))
 			}
 		case SetConfig: // 内核暂存到下一个步边界，随下次 checkpoint 落库
-			_, err := a.ag.Core.SetConfig(session.ConfigPatch{MaxSteps: c.MaxSteps, Model: c.Model})
+			_, err := a.ag.Core.SetConfig(session.ConfigPatch{MaxSteps: c.MaxSteps, Model: c.Model, Reasoning: c.Reasoning})
 			reply(c, err)
 		case SetExt: // 只改头部 Ext，随下次 checkpoint 落库；不必等回合结束
 			reply(c, a.ag.Core.SetExt(c.Key, c.Value))

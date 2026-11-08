@@ -122,14 +122,15 @@ export function useSessionComposer(o: SessionComposerOptions): SessionComposer {
   };
 }
 
-/** 建草稿会话并应用工具栏里选的模型与档位（失败只提示，不挡住发消息）；清空草稿设置。 */
+/** 建草稿会话并应用工具栏里选的模型、推理强度与档位（失败只提示，不挡住发消息）；清空草稿设置。 */
 async function createDraftSession(sh: ShellState): Promise<string> {
   const snap = await sh.client.call("session.create", {});
   sh.client.sessions.upsert({ id: snap.id, title: snap.title, preview: "", run_state: snap.run_state, origin: snap.origin, updated_at: Date.now() });
   const d = sh.draft.get();
   sh.draft.set({});
   const fail = (what: string) => (e: unknown) => sh.api.toast(`${what}没有生效：${e instanceof Error ? e.message : String(e)}`, "warning");
-  if (d.model) await sh.client.call("session.settings", { session: snap.id, model: d.model }).catch(fail("模型"));
+  if (d.model || d.reasoning)
+    await sh.client.call("session.settings", { session: snap.id, model: d.model || undefined, reasoning: d.reasoning || undefined }).catch(fail("模型设置"));
   if (d.mode) await sh.client.call("mode.set", { session: snap.id, mode: d.mode, confirm: d.modeConfirmed || undefined }).catch(fail("档位"));
   return snap.id;
 }

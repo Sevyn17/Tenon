@@ -14,7 +14,8 @@ type fakeAdapter struct {
 	mu     sync.Mutex
 	calls  []string // 记录 ep.Model + "|" + AttemptKey
 	script func(n int, ep Endpoint) []Event
-	hang   bool // 不发任何事件，直到 ctx 取消
+	hang   bool                          // 不发任何事件，直到 ctx 取消
+	onReq  func(r *Request, ep Endpoint) // 可空：看每次调用收到的请求
 }
 
 func (f *fakeAdapter) Protocol() string { return "fake" }
@@ -23,6 +24,9 @@ func (f *fakeAdapter) Stream(ctx context.Context, r *Request, ep Endpoint) <-cha
 	f.mu.Lock()
 	n := len(f.calls)
 	f.calls = append(f.calls, ep.Model+"|"+r.AttemptKey)
+	if f.onReq != nil {
+		f.onReq(r, ep)
+	}
 	f.mu.Unlock()
 	ch := make(chan Event, 16)
 	go func() {

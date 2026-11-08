@@ -216,6 +216,43 @@ func TestV2SwitchModel(t *testing.T) {
 	sendWait(t, app, "m1", "hi", "c1") // 换了模型后照常能跑回合（fakeModel 不看别名）
 }
 
+// session.settings {reasoning}：取值校验、落库、settings_changed 与快照带上、"" 清回厂商缺省、不动模型。
+func TestV2Reasoning(t *testing.T) {
+	app := newApp(t)
+	if _, e := call2(t, app, "session.create", `{"session":"r1"}`); e != nil {
+		t.Fatal(e)
+	}
+	c := app.NewConn(context.Background(), LocalPrincipal)
+	defer c.Close()
+	if err := c.Subscribe(context.Background(), wire.SubscribeArgs{Session: "r1"}); err != nil {
+		t.Fatal(err)
+	}
+	waitKind(t, c, wire.EvSynced)
+	_, e := call2(t, app, "session.settings", `{"session":"r1","reasoning":"max"}`)
+	wantCode(t, e, wire.CodeInvalid, "")
+	r, e := call2(t, app, "session.settings", `{"session":"r1","reasoning":"high"}`)
+	if e != nil || r.(wire.SettingsResult).Settings.Reasoning != "high" || !r.(wire.SettingsResult).Committed {
+		t.Fatalf("settings：%+v %v", r, e)
+	}
+	got := waitKind(t, c, wire.EvSettingsChanged)
+	if d := got[len(got)-1].Data.(wire.SettingsChanged); d.Settings.Reasoning != "high" {
+		t.Fatalf("settings_changed：%+v", d)
+	}
+	snap, _ := call2(t, app, "session.get", `{"session":"r1"}`)
+	if st := snap.(wire.SessionSnapshot).Settings; st.Reasoning != "high" {
+		t.Fatalf("快照：%+v", st)
+	}
+	model := snap.(wire.SessionSnapshot).Settings.Model
+	if _, e := call2(t, app, "session.settings", `{"session":"r1","reasoning":""}`); e != nil {
+		t.Fatal(e)
+	}
+	snap, _ = call2(t, app, "session.get", `{"session":"r1"}`)
+	if st := snap.(wire.SessionSnapshot).Settings; st.Reasoning != "" || st.Model != model {
+		t.Fatalf("清空后：%+v", st)
+	}
+	sendWait(t, app, "r1", "hi", "c1")
+}
+
 // feedback.set / list：打分、改分、撤销；按连接身份记 by；不改列表顺序；随会话删除。
 func TestV2Feedback(t *testing.T) {
 	app := newApp(t)

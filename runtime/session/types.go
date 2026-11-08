@@ -330,6 +330,9 @@ type ConfigPatch struct {
 	Params *Params
 	// MaxSteps：单回合步数上限（0 = 不限）；用户可改，等待态暂存到步边界生效。
 	MaxSteps *uint32
+	// Reasoning：只改 Params.Reasoning（推理强度，"" = 回到厂商缺省），不动其余参数；用户可改，规则同 MaxSteps。
+	// 与 Params 同时给出时先整体替换 Params 再改这一项。
+	Reasoning *string
 	// AddTools：只追加、按名去重（tool-hub D1 显露集追加）；只开放给工具管理器，外部命令不可用。
 	AddTools []ToolSpec
 }

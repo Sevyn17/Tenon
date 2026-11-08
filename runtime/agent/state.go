@@ -187,11 +187,12 @@ type commitBuf struct {
 	events    []store.Event      // 宿主附加的持久事件（会话关闭、分叉等，06 10.5 表一），排在状态事件之后
 
 	// 已提交的会话状态（protocol 2，06 10.2.2 规则 2）：检查点按它与新头部比较，变了就随检查点写持久事件。
-	known    bool
-	run      string
-	maxSteps uint32
-	model    string
-	ext      map[string]string // 键 → 值的 JSON
+	known     bool
+	run       string
+	maxSteps  uint32
+	model     string
+	reasoning string
+	ext       map[string]string // 键 → 值的 JSON
 }
 
 // reset 提交成功后清空缓冲。
@@ -202,7 +203,7 @@ func (b *commitBuf) reset(logLen int) {
 
 // remember 记下已提交的运行状态、设置与 Ext（打开会话与每次提交后调用）。
 func (b *commitBuf) remember(run string, h session.Header) {
-	b.known, b.run, b.maxSteps, b.model, b.ext = true, run, maxStepsOf(h), modelOf(h), extJSON(h.Ext)
+	b.known, b.run, b.maxSteps, b.model, b.reasoning, b.ext = true, run, maxStepsOf(h), modelOf(h), reasoningOf(h), extJSON(h.Ext)
 }
 
 // stateEvents 新头部相对已提交状态的变化 → 持久事件（运行状态、设置、Ext 各项）。
@@ -215,8 +216,8 @@ func (b *commitBuf) stateEvents(run string, h session.Header) []store.Event {
 		d, _ := json.Marshal(map[string]any{"run_state": run})
 		out = append(out, store.Event{Kind: store.EventRunState, Data: d})
 	}
-	if ms, md := maxStepsOf(h), modelOf(h); ms != b.maxSteps || md != b.model {
-		d, _ := json.Marshal(map[string]any{"max_steps": ms, "model": md})
+	if ms, md, rs := maxStepsOf(h), modelOf(h), reasoningOf(h); ms != b.maxSteps || md != b.model || rs != b.reasoning {
+		d, _ := json.Marshal(map[string]any{"max_steps": ms, "model": md, "reasoning": rs})
 		out = append(out, store.Event{Kind: store.EventSettings, Data: d})
 	}
 	now := extJSON(h.Ext)
@@ -249,6 +250,14 @@ func maxStepsOf(h session.Header) uint32 {
 		return 0
 	}
 	return h.Config.Policy.MaxSteps
+}
+
+// reasoningOf 推理强度（"" = 厂商缺省）。
+func reasoningOf(h session.Header) string {
+	if h.Config == nil || h.Config.Params.Reasoning == nil {
+		return ""
+	}
+	return *h.Config.Params.Reasoning
 }
 
 func modelOf(h session.Header) string {

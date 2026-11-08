@@ -79,6 +79,8 @@ export interface SessionState {
   maxSteps: number;
   /** 会话的模型（别名或 provider/model）；空 = 快照里没给。 */
   model: string;
+  /** 推理强度（low / medium / high）；空 = 厂商缺省。 */
+  reasoning: string;
   base: number; // 压缩点
   len: number; // 日志长度（已知的最大）
   cursor: number; // 最后收到的持久游标
@@ -101,6 +103,7 @@ export function initialState(id: string): SessionState {
     runState: "idle",
     maxSteps: 0,
     model: "",
+    reasoning: "",
     base: 0,
     len: 0,
     cursor: 0,
@@ -126,6 +129,7 @@ export function applySnapshot(s: SessionState, snap: SessionSnapshot, now = Date
     mode: snap.mode,
     maxSteps: snap.settings.max_steps,
     model: snap.settings.model ?? "",
+    reasoning: snap.settings.reasoning ?? "",
     base: snap.log.base,
     len: Math.max(s.len, snap.log.len),
     cursor: snap.cursor,
@@ -192,7 +196,7 @@ export function reduce(s: SessionState, ev: Envelope, now = Date.now()): Session
     }
     case "session.settings_changed": {
       const st = (ev.data as SettingsChanged).settings;
-      return { ...s, maxSteps: st.max_steps, model: st.model ?? s.model };
+      return { ...s, maxSteps: st.max_steps, model: st.model ?? s.model, reasoning: st.reasoning ?? "" };
     }
     case "session.mode_changed":
       return { ...s, mode: ev.data as Mode };

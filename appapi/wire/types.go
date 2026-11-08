@@ -122,6 +122,8 @@ type Mode struct {
 type Settings struct {
 	MaxSteps uint32 `json:"max_steps"`       // 0 = 不限
 	Model    string `json:"model,omitempty"` // 模型别名或 provider/model
+	// Reasoning 推理强度（ReasoningEfforts 之一）；空 = 厂商缺省。只对声明了推理能力的模型下发。
+	Reasoning string `json:"reasoning,omitempty"`
 }
 
 // Interaction 一次等人回答（10.6）。
@@ -241,6 +243,27 @@ type SessionSnapshot struct {
 	Interactions []Interaction `json:"interactions"`
 	Live         *Live         `json:"live,omitempty"`
 	Cursor       int64         `json:"cursor"`
+}
+
+// 推理强度（Settings.reasoning / ModelInfo.efforts）：三档通用取值，各适配器自己映射
+// （openai reasoning_effort、responses reasoning.effort、anthropic thinking 预算）。
+const (
+	ReasoningLow    = "low"
+	ReasoningMedium = "medium"
+	ReasoningHigh   = "high"
+)
+
+// ReasoningEfforts 可选推理强度，从低到高。
+var ReasoningEfforts = []string{ReasoningLow, ReasoningMedium, ReasoningHigh}
+
+// ValidReasoning 是否为可选的推理强度。
+func ValidReasoning(s string) bool {
+	for _, e := range ReasoningEfforts {
+		if e == s {
+			return true
+		}
+	}
+	return false
 }
 
 // 运行状态。

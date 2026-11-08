@@ -345,6 +345,14 @@ func (c *Core) applyConfigPatch(p ConfigPatch) error {
 	if p.Params != nil {
 		cp.Params = *p.Params
 	}
+	if p.Reasoning != nil {
+		if *p.Reasoning == "" {
+			cp.Params.Reasoning = nil
+		} else {
+			r := *p.Reasoning
+			cp.Params.Reasoning = &r
+		}
+	}
 	if p.MaxSteps != nil {
 		cp.Policy.MaxSteps = *p.MaxSteps
 	}

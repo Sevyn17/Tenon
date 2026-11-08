@@ -39,6 +39,7 @@ var tsConsts = []struct {
 }{
 	{"ItemKinds", []string{KindUser, KindAssistant, KindToolResult, KindCompaction, KindContext, KindUnknown}},
 	{"RunStates", []string{RunIdle, RunRunning}},
+	{"ReasoningEfforts", ReasoningEfforts},
 	{"Roles", []string{RoleViewer, RoleOperator}},
 	{"InteractionKinds", []string{InteractionApproval, InteractionQuestion, InteractionChoice, InteractionForm, InteractionConfirm}},
 	{"Outcomes", []string{OutcomeApproved, OutcomeDenied, OutcomeAnswered, OutcomeExpired, OutcomeVoided}},

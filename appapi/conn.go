@@ -300,8 +300,9 @@ func (c *Conn) translate(e bus.Envelope) []wire.Envelope {
 		return []wire.Envelope{c.envelope(e.Session, wire.EvStateChanged, e.Seq, 0, wire.StateChanged{RunState: wireRun(s)})}
 	case store.EventSettings:
 		model, _ := m["model"].(string)
+		reasoning, _ := m["reasoning"].(string)
 		return []wire.Envelope{c.envelope(e.Session, wire.EvSettingsChanged, e.Seq, 0,
-			wire.SettingsChanged{Settings: wire.Settings{MaxSteps: uint32(intOf(m["max_steps"])), Model: model}})}
+			wire.SettingsChanged{Settings: wire.Settings{MaxSteps: uint32(intOf(m["max_steps"])), Model: model, Reasoning: reasoning}})}
 	case store.EventInteractionOpened: // 载荷是宿主登记时生成的线上 Interaction；子会话的也写在根会话上
 		var it wire.Interaction
 		if raw, err := json.Marshal(m); err != nil || json.Unmarshal(raw, &it) != nil {

@@ -8,6 +8,9 @@ export type ItemKind = (typeof ItemKinds)[number];
 export const RunStates = ["idle", "running"] as const;
 export type RunState = (typeof RunStates)[number];
 
+export const ReasoningEfforts = ["low", "medium", "high"] as const;
+export type ReasoningEffort = (typeof ReasoningEfforts)[number];
+
 export const Roles = ["viewer", "operator"] as const;
 export type Role = (typeof Roles)[number];
 
@@ -107,6 +110,7 @@ export interface Mode {
 export interface Settings {
   max_steps: number;
   model?: string;
+  reasoning?: string;
 }
 
 export interface Interaction {
@@ -517,6 +521,7 @@ export interface SettingsArgs {
   session: string;
   max_steps?: number;
   model?: string;
+  reasoning?: string;
 }
 
 export interface SettingsResult {
@@ -532,6 +537,7 @@ export interface ModelInfo {
   context_window?: number;
   images?: boolean;
   reasoning?: boolean;
+  efforts?: string[];
   available: boolean;
   reason?: string;
 }

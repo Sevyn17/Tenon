@@ -709,7 +709,11 @@ func settingsOf(h session.Header) wire.Settings {
 	if h.Config == nil {
 		return wire.Settings{}
 	}
-	return wire.Settings{MaxSteps: h.Config.Policy.MaxSteps, Model: h.Config.Model}
+	st := wire.Settings{MaxSteps: h.Config.Policy.MaxSteps, Model: h.Config.Model}
+	if r := h.Config.Params.Reasoning; r != nil {
+		st.Reasoning = *r
+	}
+	return st
 }
 
 // Entries 读已提交日志，条目按 10.3 翻译；工具结果超过 MaxWireText 时截断，有工件存储时给全文引用。
@@ -1090,7 +1094,7 @@ func (v *App) Settings(ctx context.Context, in wire.SettingsArgs) (wire.Settings
 		return wire.SettingsResult{}, err
 	}
 	cur := settingsOf(l.Snapshot.Header)
-	if in.MaxSteps == nil && in.Model == nil {
+	if in.MaxSteps == nil && in.Model == nil && in.Reasoning == nil {
 		return wire.SettingsResult{Settings: cur, Committed: true}, nil
 	}
 	if in.Model != nil {
@@ -1105,7 +1109,10 @@ func (v *App) Settings(ctx context.Context, in wire.SettingsArgs) (wire.Settings
 	if err != nil {
 		return wire.SettingsResult{}, err
 	}
-	ok, err := v.apply(in.Session, hd, host.Command{Kind: host.SetConfig, MaxSteps: in.MaxSteps, Model: in.Model})
+	if in.Reasoning != nil && *in.Reasoning != "" && !wire.ValidReasoning(*in.Reasoning) {
+		return wire.SettingsResult{}, invalid("推理强度 %q 不认识（可选：%s）", *in.Reasoning, strings.Join(wire.ReasoningEfforts, " / "))
+	}
+	ok, err := v.apply(in.Session, hd, host.Command{Kind: host.SetConfig, MaxSteps: in.MaxSteps, Model: in.Model, Reasoning: in.Reasoning})
 	if err != nil {
 		return wire.SettingsResult{}, err
 	}
@@ -1114,6 +1121,9 @@ func (v *App) Settings(ctx context.Context, in wire.SettingsArgs) (wire.Settings
 	}
 	if in.Model != nil {
 		cur.Model = *in.Model
+	}
+	if in.Reasoning != nil {
+		cur.Reasoning = *in.Reasoning
 	}
 	return wire.SettingsResult{Settings: cur, Committed: ok}, nil
 }

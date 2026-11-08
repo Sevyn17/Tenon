@@ -3,7 +3,7 @@
 
 import { MessageSquareQuote, Copy, CornerUpLeft, FileText, GitBranch, MessagesSquare, Paperclip, Pencil, Pin, PinOff, Quote, RotateCcw, Trash2 } from "lucide-react";
 import { copyText } from "../../ui";
-import { ContextMeter, ModelPicker, ModePicker } from "./toolbar";
+import { ContextMeter, ModelPicker, ModePicker, ReasoningPicker } from "./toolbar";
 import { listed } from "../../client";
 import type { ContributionPack } from "../registry";
 import type { Registries } from "../contributions";
@@ -67,7 +67,8 @@ export function corePack(reg: Registries): ContributionPack {
       // 输入框工具栏：模型、权限档位（左）与上下文用量（右）。首页草稿时 session 为 null，模型与档位记进 sh.draft。
       const sid = (p: Record<string, unknown>) => (typeof p.session === "string" && p.session ? p.session : null);
       ctx.add(reg.slots, { id: "composer.model", at: "composer.toolbar.left", order: 10, render: (p) => <ModelPicker session={sid(p)} /> });
-      ctx.add(reg.slots, { id: "composer.mode", at: "composer.toolbar.left", order: 20, render: (p) => <ModePicker session={sid(p)} /> });
+      ctx.add(reg.slots, { id: "composer.reasoning", at: "composer.toolbar.left", order: 15, render: (p) => <ReasoningPicker session={sid(p)} /> });
+  ctx.add(reg.slots, { id: "composer.mode", at: "composer.toolbar.left", order: 20, render: (p) => <ModePicker session={sid(p)} /> });
       ctx.add(reg.slots, { id: "composer.context", at: "composer.toolbar.right", order: 10, render: (p) => <ContextMeter session={sid(p)} /> });
 
       // ---- 命令 ----
