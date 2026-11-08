@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# 改完前端后看效果：构建前端 → 重建网页服务（前端经 go:embed 编进二进制，只跑 pnpm build 不会生效）→ 启动。
+# 改完前端后看效果：检查框架前端 → 构建产品前端（client/web，引用框架的 @tenon/web）→ 重建网页服务
+# （前端经 go:embed 编进二进制，只跑 pnpm build 不会生效）→ 启动。
 #
 #   bash framework/scripts/serve-web.sh                       # 缺省：127.0.0.1:8765，工作目录 = 当前目录
 #   bash framework/scripts/serve-web.sh -dir D:/proj -profile p.toml   # 其余参数原样交给 tenon-server
@@ -19,8 +20,10 @@ if command -v netstat >/dev/null 2>&1 && netstat -an 2>/dev/null | grep -E "[:.]
   exit 1
 fi
 
-echo "== 构建前端"
-(cd "$ROOT/framework/web" && pnpm build)
+echo "== 框架前端：依赖方向 + 类型检查"
+(cd "$ROOT/framework/web" && pnpm typecheck)
+echo "== 构建产品前端（client/web）"
+(cd "$ROOT/client/web" && { [ -d node_modules ] || pnpm install --prefer-offline; } && pnpm build)
 echo "== 重建网页服务 → $OUT"
 mkdir -p "$(dirname "$OUT")"
 (cd "$ROOT/client" && go build -o "$OUT" ./server)

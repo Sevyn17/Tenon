@@ -30,7 +30,7 @@ pnpm build       # 产物在 dist/，由 embed.go 嵌进 Go 二进制
 - **另写界面**（Vue、原生 JS、移动端、TUI）：只用 L0，`createClient()` 拿到会话状态，自己渲染。
 - **自己的组件库**：L0 + L1。
 - **一个简单聊天窗**：L0–L2，拼 `MessageList` + `Composer` + `InteractionCard`。L2 不依赖协议客户端，组件按 `ui/conversation/types.ts` 的最小视图类型工作。
-- **完整工作台**：`createShell()`。
+- **完整工作台**：`createShell()`。产品自己的前端入口以包名 `@tenon/web` 引用（`exports` 按层给出源码入口：`@tenon/web/client`、`/client/react`、`/ui`、`/shell`、`/shell/embed`），在入口里传品牌、示例与贡献包；本目录的 `src/main.tsx` 只是中性的缺省入口。例子见 `client/web`（`link:` 引用，`vite` 配 `resolve.dedupe: ["react", "react-dom"]`，React 只留一份）。
 - **单会话嵌入**：`<TenonConversation session="…" />`（`shell/embed.tsx`）：只有对话区、输入框与交互卡，面板以浮层打开，不读写地址栏，存储用独立命名空间 `tenon.embed`。和完整工作台用同一套贡献包。
 
 ```tsx

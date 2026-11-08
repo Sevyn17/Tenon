@@ -1,8 +1,16 @@
 {
-  "name": "tenon-web",
+  "name": "@tenon/web",
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "description": "Tenon 的前端：L0 协议客户端、L1 hooks、L2 组件、L3 工作台。产品在自己的前端入口里 createShell({brand, contributions})。",
+  "exports": {
+    "./client": "./src/client/index.ts",
+    "./client/react": "./src/client/react/index.ts",
+    "./ui": "./src/ui/index.ts",
+    "./shell": "./src/shell/index.tsx",
+    "./shell/embed": "./src/shell/embed.tsx"
+  },
   "scripts": {
     "dev": "vite",
     "deps": "node scripts/check-deps.mjs",
