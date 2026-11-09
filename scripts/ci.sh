@@ -6,6 +6,9 @@ cd "$(dirname "$0")/.."
 echo "== gofmt"
 bad=$(gofmt -l .)
 if [ -n "$bad" ]; then echo "未 gofmt：$bad"; exit 1; fi
+echo "== 文件名（Go 模块 zip 只收字母、数字和 ASCII !#\$%&()+,-.=@[]^_{}~ 空格，全角标点会让 go get 失败）"
+badpaths=$(git ls-files -z | perl -CS -0ne 'chomp; for $c (split //) { if (ord($c) < 128) { next if $c =~ m{[A-Za-z0-9!#$%&()+,\-.=@\[\]^_{}~ /]} } else { next if $c =~ /\p{L}/ } print "  $_\n"; last }')
+if [ -n "$badpaths" ]; then echo "文件名含 go 模块不接受的字符："; echo "$badpaths"; exit 1; fi
 echo "== go vet"
 go vet ./...
 echo "== go test"
