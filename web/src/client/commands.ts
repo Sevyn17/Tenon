@@ -1,5 +1,5 @@
 // protocol 2 的命令表（docs/06 - 应用协议契约.md 10.4）。线上类型全部来自 wire.gen.ts（由 Go 生成，不手写）；
-// 这里只把命令名对到参数与结果类型。COMMANDS 由 Go 测试 framework/transport/bind/bind_test.go（TestProtocolCommands）
+// 这里只把命令名对到参数与结果类型。COMMANDS 由 Go 测试 transport/bind/bind_test.go（TestProtocolCommands）
 // 校验与 appapi.ConnCommands() 一致。
 
 import type * as W from "./wire.gen";

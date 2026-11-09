@@ -189,8 +189,8 @@ args = { session = "{{session}}" }
 ## 六、本地运行
 
 ```bash
-go build -C ../client -o ../framework/bin/tenon-server.exe ./server   # 在 framework/ 下，先 pnpm build，dist/ 会嵌进去
-bin/tenon-server.exe -addr 127.0.0.1:8765 -dir <工作目录>
+(cd web && pnpm install && pnpm build)   # 在仓库根；dist/ 经 go:embed 编进二进制，要先构建
+go run ./examples/web-server -addr 127.0.0.1:8771 -dir <工作目录>
 ```
 
 启动后终端会打印带 `?token=` 的地址，用它打开。

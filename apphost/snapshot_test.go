@@ -3,7 +3,7 @@ package apphost
 // 真实装配回归快照（计划/01 T1b-0）：走 apphost.Start + BuildApp（profile 缺省插件 + subagent + workgroup，
 // 即 assemble.Builder 与全部会话点位），只把模型换成假模型，录四种场景的完整模型请求：
 // 主会话、子智能体、工作组组长、工作组成员。T1b-1 改插件装配时靠它证明"模型看到的内容不变"。
-// 有意变化时用 `go test ./apphost（在 framework/ 下） -run TestAssembledSnapshot -update` 重录。
+// 有意变化时用 `go test ./apphost -run TestAssembledSnapshot -update` 重录。
 
 import (
 	"context"

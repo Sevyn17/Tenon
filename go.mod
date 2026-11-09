@@ -2,6 +2,9 @@ module github.com/Sevyn17/tenon
 
 go 1.26.0
 
+// v0.1.0 的文档文件名含全角标点，Go 模块 zip 不接受，go get 下载不了。
+retract v0.1.0
+
 require (
 	github.com/BurntSushi/toml v1.6.0
 	github.com/dop251/goja v0.0.0-20261028213108-85be1416108e
