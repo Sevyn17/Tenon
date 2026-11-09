@@ -180,7 +180,7 @@ func TestConfirmWithoutUI(t *testing.T) {
 	app := tenontest.New(t, ask, ops, tenontest.Model(
 		tenontest.Reply("跑").CallTool("shell", `{"command":"echo hi"}`), tenontest.Reply("没跑成"),
 		tenontest.Reply("再跑").CallTool("shell", `{"command":"echo hi"}`), tenontest.Reply("跑完了")))
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second) // 机器负载高时（两个仓库同时跑 CI）20 s 不够
 	defer cancel()
 	s, _ := app.NewSession(ctx, "", nil)
 	if _, err := s.Send(ctx, "跑一下"); err != nil {
