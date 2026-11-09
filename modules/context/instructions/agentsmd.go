@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Sevyn17/tenon/modules/internal/workspace"
+	"github.com/Sevyn17/tenon/runtime/appid"
 	"github.com/Sevyn17/tenon/runtime/session"
 	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
@@ -97,16 +98,10 @@ func (in *Instructions) sync() {
 	}
 }
 
-// NewInstructions 以工作目录构造；Home 取 $TENON_HOME 或 ~/.tenon。
+// NewInstructions 以工作目录构造；Home 取应用的用户级目录（appid.Home，缺省 $TENON_HOME 或 ~/.tenon）。
 func NewInstructions(workdir string) *Instructions {
 	workdir, _ = filepath.Abs(workdir)
-	home := os.Getenv("TENON_HOME")
-	if home == "" {
-		if h, err := os.UserHomeDir(); err == nil {
-			home = filepath.Join(h, ".tenon")
-		}
-	}
-	return &Instructions{Workdir: workdir, Home: home}
+	return &Instructions{Workdir: workdir, Home: appid.Home()}
 }
 
 func (in *Instructions) init() {

@@ -6,9 +6,9 @@ package permission
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 
+	"github.com/Sevyn17/tenon/runtime/appid"
 	"github.com/Sevyn17/tenon/runtime/assemble"
 	"github.com/Sevyn17/tenon/runtime/component"
 	"github.com/Sevyn17/tenon/runtime/ext"
@@ -154,25 +154,17 @@ func (*plug) Setup(cx *component.Registrar) error {
 
 func (*plug) Start(*component.Scope) error { return nil }
 
-// userHome 用户全局目录：$TENON_HOME 或 ~/.tenon；取不到返回空。
-func userHome() string {
-	if h := os.Getenv("TENON_HOME"); h != "" {
-		return h
-	}
-	if home, err := os.UserHomeDir(); err == nil {
-		return filepath.Join(home, ".tenon")
-	}
-	return ""
-}
+// userHome 用户全局目录：应用的用户级目录（appid.Home）；取不到返回空。
+func userHome() string { return appid.Home() }
 
-// ModeDirs 自定义档位目录：用户级 <home>/modes，项目受信时再加 <project>/.tenon/modes（同名覆盖用户级）。
+// ModeDirs 自定义档位目录：用户级 <home>/modes，项目受信时再加 <project>/<数据目录>/modes（同名覆盖用户级）。
 func ModeDirs(project string) []string {
 	var dirs []string
 	if h := userHome(); h != "" {
 		dirs = append(dirs, filepath.Join(h, "modes"))
 	}
 	if project != "" {
-		dirs = append(dirs, filepath.Join(project, ".tenon", "modes"))
+		dirs = append(dirs, filepath.Join(appid.Project(project), "modes"))
 	}
 	return dirs
 }
@@ -190,7 +182,7 @@ func Open(root, project, force, fixedSandbox string, db func() store.Store) (*Se
 		cfgs = append(cfgs, c)
 	}
 	if project != "" {
-		p := filepath.Join(project, ".tenon", "permissions.toml")
+		p := filepath.Join(appid.Project(project), "permissions.toml")
 		c, err := LoadConfig(p)
 		if err != nil {
 			return nil, err

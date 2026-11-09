@@ -16,6 +16,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 
+	"github.com/Sevyn17/tenon/runtime/appid"
 	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
@@ -369,7 +370,7 @@ func (r *Registry) Copy(src, dst Mode, dir string) (string, error) {
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "name = %q\nbase = %q\ndescription = %q\n\n", string(dst), string(src), "复制自 "+d.Title)
-	b.WriteString("# 只写要覆盖的权限项；没写的项沿 base 继承（tenon mode show " + string(src) + " 看完整取值表）。\n[items]\n")
+	b.WriteString("# 只写要覆盖的权限项；没写的项沿 base 继承（" + appid.Command("mode show") + " " + string(src) + " 看完整取值表）。\n[items]\n")
 	ids := make([]string, 0, len(d.Items))
 	for id := range d.Items {
 		ids = append(ids, id)

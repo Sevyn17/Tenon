@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/Sevyn17/tenon/modules/internal/workspace"
+	"github.com/Sevyn17/tenon/runtime/appid"
 	"github.com/Sevyn17/tenon/runtime/session"
 	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
@@ -63,7 +64,7 @@ func newSkills(workdir string, trusted bool, extra ...string) *Skills {
 	roots := []string{}
 	if trusted {
 		for _, d := range []string{workdir, root} {
-			roots = append(roots, filepath.Join(d, ".tenon", "skills"), filepath.Join(d, ".agents", "skills"))
+			roots = append(roots, filepath.Join(appid.Project(d), "skills"), filepath.Join(d, ".agents", "skills"))
 		}
 	}
 	if h := userHome(); h != "" {

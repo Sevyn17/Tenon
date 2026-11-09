@@ -24,7 +24,7 @@ import (
 	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
-// Server hello 返回的服务端名。
+// Server 缺省服务端名。hello 实际返回应用身份的程序名（tenon.SetAppID，缺省即本值）。
 const Server = "tenon"
 
 // Options 应用装配好的部件。Host、Bus、DB 必填，其余可空。

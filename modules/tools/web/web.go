@@ -21,6 +21,7 @@ import (
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/charset"
 
+	"github.com/Sevyn17/tenon/runtime/appid"
 	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
@@ -535,14 +536,14 @@ type DeepSeekSearch struct {
 }
 
 // NewDeepSeekSearch 从环境读 DEEPSEEK_API_KEY；没有 key 返回 nil（不提供 web_search 后端）。
-// 不读通用的 TENON_API_KEY：它可能是别家模型的 key（CLI 搭配任意 -base 用），发给 DeepSeek 就是泄露
+// 不读通用的 <前缀>_API_KEY：它可能是别家模型的 key（CLI 搭配任意 -base 用），发给 DeepSeek 就是泄露
 // （2026-11-04 审查 P0-16）。
 func NewDeepSeekSearch() SearchProvider {
 	key := func() string { return os.Getenv("DEEPSEEK_API_KEY") }
 	if key() == "" {
 		return nil
 	}
-	base := os.Getenv("TENON_SEARCH_BASE_URL")
+	base := appid.Getenv("SEARCH_BASE_URL")
 	return &DeepSeekSearch{BaseURL: base, Key: key}
 }
 

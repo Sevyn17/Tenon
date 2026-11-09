@@ -10,6 +10,7 @@ import (
 
 	"github.com/Sevyn17/tenon/appapi"
 	"github.com/Sevyn17/tenon/appapi/wire"
+	"github.com/Sevyn17/tenon/runtime/appid"
 	"github.com/Sevyn17/tenon/runtime/assemble"
 	"github.com/Sevyn17/tenon/runtime/component"
 )
@@ -27,11 +28,11 @@ func (p Profiles) path(scope string) (string, error) {
 	case "user":
 		h := Home()
 		if h == "" {
-			return "", fmt.Errorf("取不到用户目录（可设 TENON_HOME）")
+			return "", fmt.Errorf("取不到用户目录（可设 %s）", appid.EnvName("HOME"))
 		}
 		return filepath.Join(h, "profile.toml"), nil
 	case "project":
-		return filepath.Join(p.Root, ".tenon", "profile.toml"), nil
+		return filepath.Join(appid.Project(p.Root), "profile.toml"), nil
 	}
 	return "", fmt.Errorf("未知 scope %q", scope)
 }
@@ -51,7 +52,7 @@ func (p Profiles) Scopes() []wire.ProfileScope {
 			sc.Reason = err.Error()
 		}
 		if s == "project" && !p.Trusted {
-			sc.Writable, sc.Reason = false, "项目未受信，不读项目 profile（tenon trust 可信任）"
+			sc.Writable, sc.Reason = false, "项目未受信，不读项目 profile（"+appid.Command("trust")+" 可信任）"
 		}
 		out = append(out, sc)
 	}

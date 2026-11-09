@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 
+	"github.com/Sevyn17/tenon/runtime/appid"
 	"github.com/Sevyn17/tenon/runtime/assemble"
 	"github.com/Sevyn17/tenon/runtime/component"
 	"github.com/Sevyn17/tenon/runtime/pkgs"
@@ -46,7 +47,7 @@ func (p *plug) Setup(cx *component.Registrar) error {
 	}
 	path := pc.Config
 	if path == "" && assemble.ProjectTrusted(cx) { // 不受信项目：不读 <dir>/.tenon/mcp.toml
-		path = filepath.Join(root, ".tenon", "mcp.toml")
+		path = filepath.Join(appid.Project(root), "mcp.toml")
 	}
 	if path != "" {
 		if p.cfg, err = LoadConfig(path); err != nil {

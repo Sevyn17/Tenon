@@ -18,6 +18,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Sevyn17/tenon/runtime/appid"
 	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
@@ -728,7 +729,7 @@ func ListFiles(ctx context.Context, root, query string, limit, maxScan int) (hit
 
 // listSkip 界面文件列表另外不列的：框架自己的状态目录（会话库、工件），对用户没有意义。
 func listSkip(rel string) bool {
-	return strings.HasPrefix(rel, ".tenon/")
+	return strings.HasPrefix(rel, appid.DirName()+"/")
 }
 
 // fuzzyScore query 是否为 p 的子序列；分数：每个命中字符 1 分，紧接上一个命中再加 2，落在文件名里再加 3，

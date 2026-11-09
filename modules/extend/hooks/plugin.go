@@ -6,9 +6,9 @@ package hooks
 
 import (
 	"context"
-	"os"
 	"path/filepath"
 
+	"github.com/Sevyn17/tenon/runtime/appid"
 	"github.com/Sevyn17/tenon/runtime/assemble"
 	"github.com/Sevyn17/tenon/runtime/component"
 	"github.com/Sevyn17/tenon/runtime/pkgs"
@@ -53,7 +53,7 @@ func (p *plug) Setup(cx *component.Registrar) error {
 	// 项目级钩子：显式 project_hooks，或应用明确预置“项目受信”（未预置信任服务时不自动加载）。
 	trusted, known, _ := component.UseOptional[bool](cx, assemble.ServiceTrust)
 	if cfg.ProjectHooks || (known && trusted) {
-		c, err := LoadConfig(filepath.Join(root, ".tenon", "hooks.toml"))
+		c, err := LoadConfig(filepath.Join(appid.Project(root), "hooks.toml"))
 		if err != nil {
 			return err
 		}
@@ -111,13 +111,5 @@ func (p *plug) Start(sc *component.Scope) error {
 	return nil
 }
 
-// userHome 用户全局目录：$TENON_HOME 或 ~/.tenon；取不到返回空（与权限、技能、指令组件同一约定）。
-func userHome() string {
-	if h := os.Getenv("TENON_HOME"); h != "" {
-		return h
-	}
-	if home, err := os.UserHomeDir(); err == nil {
-		return filepath.Join(home, ".tenon")
-	}
-	return ""
-}
+// userHome 用户全局目录：应用的用户级目录（appid.Home）；取不到返回空（与权限、技能、指令组件同一约定）。
+func userHome() string { return appid.Home() }

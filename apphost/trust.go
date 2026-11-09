@@ -15,6 +15,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 
+	"github.com/Sevyn17/tenon/runtime/appid"
 	"github.com/Sevyn17/tenon/runtime/component"
 	"github.com/Sevyn17/tenon/runtime/pkgs"
 )
@@ -70,7 +71,7 @@ func writeTrustFile(f trustFile) error {
 	}
 	sort.Strings(keys)
 	var b strings.Builder
-	b.WriteString("# 项目信任记录（tenon trust 维护）\n")
+	b.WriteString("# 项目信任记录（" + appid.Command("trust") + " 维护）\n")
 	for _, k := range keys {
 		fmt.Fprintf(&b, "\n[projects.%q]\ntrust = %q\n", k, f.Projects[k].Trust)
 	}
@@ -113,13 +114,8 @@ func ApproveMode(root, mode, widened string) error {
 	return writeTrustFile(f)
 }
 
-// Home 用户级目录：$TENON_HOME，缺省 ~/.tenon；取不到返回空。
-func Home() string {
-	if tp := TrustPath(); tp != "" {
-		return filepath.Dir(tp)
-	}
-	return ""
-}
+// Home 用户级目录：$<前缀>_HOME，缺省 ~/<数据目录>（应用身份见 tenon.SetAppID，缺省 $TENON_HOME、~/.tenon）；取不到返回空。
+func Home() string { return appid.Home() }
 
 // PackageNotices 插件包带了内容、但负责的内置插件没开时的提示（插件包不替用户开插件）。
 func PackageNotices(p *component.Profile, ps []*pkgs.Package) []string {
@@ -148,16 +144,12 @@ func PackageNotices(p *component.Profile, ps []*pkgs.Package) []string {
 	return out
 }
 
-// TrustPath trust.toml 位置：$TENON_HOME/trust.toml，缺省 ~/.tenon/trust.toml。
+// TrustPath trust.toml 位置：用户级目录（Home）下的 trust.toml；取不到用户目录返回空。
 func TrustPath() string {
-	if h := os.Getenv("TENON_HOME"); h != "" {
+	if h := Home(); h != "" {
 		return filepath.Join(h, "trust.toml")
 	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ""
-	}
-	return filepath.Join(home, ".tenon", "trust.toml")
+	return ""
 }
 
 // ProjectKey 信任记录的键：向上找 .git，找不到用工作目录本身。
@@ -238,11 +230,11 @@ func SaveTrust(key, level string) error {
 // HasProjectConfig 工作目录下是否有会被信任规则影响的项目配置。
 func HasProjectConfig(root string) bool {
 	for _, n := range []string{"profile.toml", "permissions.toml", "hooks.toml", "mcp.toml"} {
-		if _, err := os.Stat(filepath.Join(root, ".tenon", n)); err == nil {
+		if _, err := os.Stat(filepath.Join(appid.Project(root), n)); err == nil {
 			return true
 		}
 	}
-	return pkgs.HasAny(filepath.Join(root, ".tenon", "plugins"))
+	return pkgs.HasAny(filepath.Join(appid.Project(root), "plugins"))
 }
 
 // ResolveTrust 决定本次运行是否信任项目。force（-trust-project / -project-hooks）只对本次生效。
@@ -344,13 +336,13 @@ func LoadAll(base, extra, root string, trusted bool) (*component.Profile, []*pkg
 			return nil, nil, nil, err
 		}
 	}
-	proj := filepath.Join(root, ".tenon", "profile.toml")
+	proj := filepath.Join(appid.Project(root), "profile.toml")
 	if trusted {
 		if err := layer(proj, true); err != nil {
 			return nil, nil, nil, err
 		}
 	} else if _, err := os.Stat(proj); err == nil {
-		notes = append(notes, "项目未受信，未读 "+proj+"（tenon trust 可信任）")
+		notes = append(notes, "项目未受信，未读 "+proj+"（"+appid.Command("trust")+" 可信任）")
 	}
 	if extra != "" {
 		q, err := component.LoadProfile(extra)

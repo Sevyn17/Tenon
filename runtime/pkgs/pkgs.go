@@ -19,6 +19,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 
+	"github.com/Sevyn17/tenon/runtime/appid"
 	"github.com/Sevyn17/tenon/runtime/component"
 	"github.com/Sevyn17/tenon/runtime/ext"
 )
@@ -210,7 +211,7 @@ func Load(home, root string, trusted bool) ([]*Package, []string, error) {
 		}
 		all, notes = append(all, ps...), append(notes, ns...)
 	}
-	projDir := filepath.Join(root, ".tenon", "plugins")
+	projDir := filepath.Join(appid.Project(root), "plugins")
 	if trusted {
 		ps, ns, err := Discover(projDir, ScopeProject)
 		if err != nil {
@@ -228,7 +229,7 @@ func Load(home, root string, trusted bool) ([]*Package, []string, error) {
 			all = append(all, p)
 		}
 	} else if HasAny(projDir) {
-		notes = append(notes, "项目未受信，跳过项目插件包 "+projDir+"（tenon trust 可信任）")
+		notes = append(notes, "项目未受信，跳过项目插件包 "+projDir+"（"+appid.Command("trust")+" 可信任）")
 	}
 	return all, notes, nil
 }

@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/Sevyn17/tenon/runtime/appid"
 	"github.com/Sevyn17/tenon/runtime/store/sqlite"
 )
 
@@ -32,7 +33,7 @@ func (r *Runtime) importLegacy(ctx context.Context) []string {
 	if r.Rt == nil || r.Rt.Store == nil {
 		return nil
 	}
-	dir := filepath.Join(r.Root, ".tenon")
+	dir := appid.Project(r.Root)
 	old := filepath.Join(dir, "state.db")
 	st, err := os.Stat(old)
 	if err != nil || st.IsDir() {

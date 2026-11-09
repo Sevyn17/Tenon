@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/Sevyn17/tenon/runtime/appid"
 	"github.com/Sevyn17/tenon/runtime/assemble"
 	"github.com/Sevyn17/tenon/runtime/component"
 	"github.com/Sevyn17/tenon/runtime/modelhub"
@@ -18,7 +19,7 @@ type Config struct {
 	Catalog string `cfg:"catalog" title:"用户目录 models.toml" description:"整条覆盖内置目录（model-hub D3）" widget:"file"`
 	BaseURL string `cfg:"base_url" title:"临时端点" description:"非空时注册提供方 cli（协议见 protocol，密钥见 api_key）"`
 	// APIKey 端点的密钥引用（env:NAME 或 slot:secrets 认得的其他引用），只写引用，不写明文。
-	APIKey string `cfg:"api_key" default:"env:TENON_API_KEY" title:"端点密钥引用" description:"如 env:DEEPSEEK_API_KEY；不写明文密钥"`
+	APIKey string `cfg:"api_key" title:"端点密钥引用" description:"如 env:DEEPSEEK_API_KEY；空 = env:<前缀>_API_KEY（缺省 TENON_API_KEY）；不写明文密钥"`
 	// Protocol 端点的协议：openai-chat（缺省）、openai-responses、anthropic-messages。
 	Protocol string `cfg:"protocol" default:"openai-chat" title:"端点协议" description:"openai-chat / openai-responses / anthropic-messages"`
 	Discover bool   `cfg:"discover_ollama" title:"发现本地 Ollama 模型" widget:"switch"`
@@ -67,6 +68,9 @@ func (modelsPlugin) Setup(cx *component.Registrar) error {
 	}
 	model := cfg.Model
 	if cfg.BaseURL != "" {
+		if strings.TrimSpace(cfg.APIKey) == "" {
+			cfg.APIKey = "env:" + appid.EnvName("API_KEY")
+		}
 		switch cfg.Protocol {
 		case "openai-chat", "openai-responses", "anthropic-messages":
 		default:

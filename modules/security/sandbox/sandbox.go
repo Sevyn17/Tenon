@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/Sevyn17/tenon/runtime/appid"
 	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
@@ -61,17 +62,17 @@ type Sandbox struct {
 func PlatformSupported() bool { return platformSupported }
 
 // DefaultProtect 缺省受保护路径：
-//   - .tenon：本框架的项目配置（权限档位、钩子、MCP）；
+//   - 应用的项目数据目录（appid.DirName，缺省 .tenon）：项目配置（权限档位、钩子、MCP）；
 //   - .git：沙箱里写进 .git/hooks、.git/config 的东西，会在用户之后于沙箱外执行 git 时以完整权限运行，
 //     等于逃出沙箱（2026-11-04 审查 P0-14）。代价：workspace-write 里不能 git commit，需要时申请更宽沙箱。
-var DefaultProtect = []string{".tenon", ".git"}
+func DefaultProtect() []string { return []string{appid.DirName(), ".git"} }
 
 // existingOnly 只在已存在时才保护、不存在不新建的路径（新建空 .git 会让 git 误以为这是仓库）。
 func existingOnly(p string) bool { return filepath.Clean(p) == ".git" }
 
 func (s *Sandbox) protect() []string {
 	if s.Protect == nil {
-		return DefaultProtect
+		return DefaultProtect()
 	}
 	return s.Protect
 }

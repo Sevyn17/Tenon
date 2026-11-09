@@ -13,11 +13,18 @@ github.com/Sevyn17/tenon: method (App) NewSession(ctx context.Context, agentName
 github.com/Sevyn17/tenon: method (App) Open(ctx context.Context) error
 github.com/Sevyn17/tenon: method (App) Session(ctx context.Context, id string) (*Session, error)
 github.com/Sevyn17/tenon: method (App) Start(ctx context.Context) (err error)
+github.com/Sevyn17/tenon: type AppID = github.com/Sevyn17/tenon/runtime/appid.ID struct{Name string; Dir string; Env string}
+github.com/Sevyn17/tenon: method (AppID) Command(sub string) string
+github.com/Sevyn17/tenon: method (AppID) EnvName(suffix string) string
+github.com/Sevyn17/tenon: method (AppID) Getenv(suffix string) string
+github.com/Sevyn17/tenon: method (AppID) Home() string
+github.com/Sevyn17/tenon: method (AppID) Project(root string) string
 github.com/Sevyn17/tenon: type BlockEntry = github.com/Sevyn17/tenon/runtime/assemble.BlockEntry struct{Order int; Func github.com/Sevyn17/tenon/runtime/assemble.BlockFunc}
 github.com/Sevyn17/tenon: type CallInfo struct{Session string; CallID string; Agent string; Tenant string; User string; Meta Meta}
 github.com/Sevyn17/tenon: func CallInfoFrom(ctx context.Context) (CallInfo, bool)
 github.com/Sevyn17/tenon: type Component interface{Name() string; Setup(cx *Registrar) error; Start(sc *Scope) error}
 github.com/Sevyn17/tenon: type ComponentInfo struct{Config any; Provides []string; Requires []string}
+github.com/Sevyn17/tenon: func CurrentAppID() AppID
 github.com/Sevyn17/tenon: func Default() Option
 github.com/Sevyn17/tenon: const DefaultAgent untyped string
 github.com/Sevyn17/tenon: const Deny github.com/Sevyn17/tenon/runtime/component.Verdict
@@ -112,6 +119,7 @@ github.com/Sevyn17/tenon: method (Session) ID() string
 github.com/Sevyn17/tenon: method (Session) Send(ctx context.Context, text string) (*Reply, error)
 github.com/Sevyn17/tenon: method (Session) Stream(ctx context.Context, text string) iter.Seq[Event]
 github.com/Sevyn17/tenon: type SessionCx = github.com/Sevyn17/tenon/runtime/assemble.SessionCx struct{ID string; Workdir string; Hub *github.com/Sevyn17/tenon/runtime/toolhub.Hub; Agent *github.com/Sevyn17/tenon/runtime/agent.Agent; Ctx *github.com/Sevyn17/tenon/runtime/callctx.Ctx; Child bool; Def *github.com/Sevyn17/tenon/runtime/agentdef.Agent; Parent *github.com/Sevyn17/tenon/runtime/assemble.ParentLimits; Values map[string]any}
+github.com/Sevyn17/tenon: func SetAppID(id AppID)
 github.com/Sevyn17/tenon: type Store = github.com/Sevyn17/tenon/runtime/store.Store
 github.com/Sevyn17/tenon: type SystemBlock = github.com/Sevyn17/tenon/runtime/session.SystemBlock struct{Text string; Breakpoint bool; Source string}
 github.com/Sevyn17/tenon: type Tool struct{}

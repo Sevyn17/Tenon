@@ -24,6 +24,7 @@ import (
 	"syscall"
 	"unsafe"
 
+	"github.com/Sevyn17/tenon/runtime/appid"
 	"golang.org/x/sys/windows"
 )
 
@@ -272,14 +273,14 @@ func grantWorkspace(s *Sandbox, root string, cap *windows.SID) (string, error) {
 	return tmp, nil
 }
 
-// sandboxTemp <dir>\<工作区哈希>；dir 空 = %LOCALAPPDATA%\tenon\sbtmp。
+// sandboxTemp <dir>\<工作区哈希>；dir 空 = %LOCALAPPDATA%\<程序名>\sbtmp（程序名见 appid，缺省 tenon）。
 func sandboxTemp(dir, root string) (string, error) {
 	if dir == "" {
 		base, err := windows.KnownFolderPath(windows.FOLDERID_LocalAppData, 0)
 		if err != nil {
 			return "", err
 		}
-		dir = filepath.Join(base, "tenon", "sbtmp")
+		dir = filepath.Join(base, appid.Name(), "sbtmp")
 	}
 	h := sha256.Sum256([]byte(strings.ToLower(root)))
 	d := filepath.Join(dir, hex.EncodeToString(h[:6]))
@@ -303,7 +304,7 @@ func Reset(root string, protect []string) error {
 	revoke := grant(cap, 0, windows.NO_INHERITANCE)
 	revoke.AccessMode = windows.REVOKE_ACCESS
 	if protect == nil {
-		protect = DefaultProtect
+		protect = DefaultProtect()
 	}
 	paths := []string{root}
 	for _, p := range protect {

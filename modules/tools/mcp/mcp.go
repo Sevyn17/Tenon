@@ -19,6 +19,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 
+	"github.com/Sevyn17/tenon/runtime/appid"
 	"github.com/Sevyn17/tenon/runtime/session"
 	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
@@ -202,7 +203,7 @@ func (c *Client) connect(ctx context.Context) error {
 	res, err := tr.call(ictx, c.next, "initialize", map[string]any{
 		"protocolVersion": ProtocolVersion,
 		"capabilities":    map[string]any{},
-		"clientInfo":      map[string]any{"name": "tenon", "version": "0.1"},
+		"clientInfo":      map[string]any{"name": appid.Name(), "version": "0.1"},
 	})
 	if err != nil {
 		tr.close()
@@ -493,7 +494,7 @@ func renderResult(res json.RawMessage, put func(mime string, data []byte) (sessi
 	return out
 }
 
-// scrubEnv 去掉名字像密钥的环境变量与 TENON_* 变量（DSH 同规则）。
+// scrubEnv 去掉名字像密钥的环境变量、TENON_* 与应用前缀的变量（DSH 同规则）。
 var secretName = regexp.MustCompile(`(?i)KEY|PASSWORD|SECRET|TOKEN`)
 
 func scrubEnv(environ []string, extra map[string]string) []string {
@@ -505,7 +506,7 @@ func scrubEnvWith(environ []string, extra map[string]string, expand func(string)
 	var out []string
 	for _, kv := range environ {
 		k, _, _ := strings.Cut(kv, "=")
-		if secretName.MatchString(k) || strings.HasPrefix(strings.ToUpper(k), "TENON_") {
+		if secretName.MatchString(k) || appPrefixed(k) {
 			continue
 		}
 		if _, over := extra[k]; over {
@@ -587,4 +588,10 @@ func clipUTF8(s string, n int) string {
 		n--
 	}
 	return s[:n]
+}
+
+// appPrefixed 框架前缀 TENON_ 或应用前缀（appid.Env）的变量。
+func appPrefixed(k string) bool {
+	u := strings.ToUpper(k)
+	return strings.HasPrefix(u, "TENON_") || strings.HasPrefix(u, appid.EnvName(""))
 }

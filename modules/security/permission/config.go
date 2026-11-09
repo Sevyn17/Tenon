@@ -10,6 +10,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 
+	"github.com/Sevyn17/tenon/runtime/appid"
 	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
@@ -45,7 +46,7 @@ func LoadConfig(path string) (Config, error) {
 	}
 	// §9.7 公共规则只能加严：放宽一律写进有名字的档位。
 	if len(c.Allow) > 0 {
-		return c, fmt.Errorf("permission: %s：公共规则只认 deny / ask，allow 请写进自定义档位的 [items]（tenon mode copy <基础档位> <新名>）", path)
+		return c, fmt.Errorf("permission: %s：公共规则只认 deny / ask，allow 请写进自定义档位的 [items]（%s <基础档位> <新名>）", path, appid.Command("mode copy"))
 	}
 	if _, err := c.Parsed(); err != nil {
 		return c, fmt.Errorf("permission: %s: %w", path, err)

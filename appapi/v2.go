@@ -28,6 +28,7 @@ import (
 
 	"github.com/Sevyn17/tenon/appapi/wire"
 	"github.com/Sevyn17/tenon/runtime/agentdef"
+	"github.com/Sevyn17/tenon/runtime/appid"
 	"github.com/Sevyn17/tenon/runtime/bus"
 	"github.com/Sevyn17/tenon/runtime/component"
 	"github.com/Sevyn17/tenon/runtime/host"
@@ -198,7 +199,7 @@ func (v *App) Hello(_ context.Context, in wire.HelloArgs) (wire.HelloResult, err
 		return wire.HelloResult{}, Errorf(wire.CodeUnsupported, "协议区间 [%d, %d] 不含服务端支持的 %d", lo, hi, wire.Protocol)
 	}
 	o := v.o
-	return wire.HelloResult{Protocol: wire.Protocol, Server: Server, Principal: LocalPrincipal,
+	return wire.HelloResult{Protocol: wire.Protocol, Server: appid.Name(), Principal: LocalPrincipal,
 		Capabilities: v.capabilities(), Model: o.Model, Workdir: o.Workdir, Trusted: o.Trusted, MaxOutput: MaxWireText}, nil
 }
 

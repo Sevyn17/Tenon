@@ -19,6 +19,7 @@ import (
 	"github.com/BurntSushi/toml"
 
 	"github.com/Sevyn17/tenon/modules/internal/proc"
+	"github.com/Sevyn17/tenon/runtime/appid"
 	"github.com/Sevyn17/tenon/runtime/session"
 	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
@@ -54,12 +55,12 @@ type Hook struct {
 // secretName 像密钥的环境变量名（与 mcp 的 scrubEnv 同规则；组件之间不互相 import，各留一份）。
 var secretName = regexp.MustCompile(`(?i)KEY|PASSWORD|SECRET|TOKEN`)
 
-// scrubEnv 去掉像密钥的变量与 TENON_* 变量。
+// scrubEnv 去掉像密钥的变量、TENON_* 与应用前缀（appid.Env）的变量。
 func scrubEnv(environ []string) []string {
 	out := make([]string, 0, len(environ))
 	for _, kv := range environ {
 		k, _, _ := strings.Cut(kv, "=")
-		if secretName.MatchString(k) || strings.HasPrefix(strings.ToUpper(k), "TENON_") {
+		if secretName.MatchString(k) || appPrefixed(k) {
 			continue
 		}
 		out = append(out, kv)
@@ -419,4 +420,10 @@ func (b *capBuf) Write(p []byte) (int, error) {
 		}
 	}
 	return len(p), nil
+}
+
+// appPrefixed 框架前缀 TENON_ 或应用前缀（appid.Env）的变量。
+func appPrefixed(k string) bool {
+	u := strings.ToUpper(k)
+	return strings.HasPrefix(u, "TENON_") || strings.HasPrefix(u, appid.EnvName(""))
 }

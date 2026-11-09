@@ -5,7 +5,7 @@ package apphost
 // 各工作区共用，会话行记着所属工作区（Host.Workspace），列表只列当前工作区的。
 //
 // 传输层（网页服务 / 桌面端）通过 Current 取当前的 App；OnSwitch 在换上新 App 之后调用，传输层据此断开旧连接，
-// 客户端重连后 hello 报新的 workdir。最近打开的目录记在 $TENON_HOME/workspaces.json。
+// 客户端重连后 hello 报新的 workdir。最近打开的目录记在用户级目录（Home）的 workspaces.json。
 
 import (
 	"context"
@@ -33,7 +33,7 @@ type WorkspaceOptions struct {
 	Upload bool
 	// OnSwitch 新工作区的 App 换上之后调用（传输层断开旧连接、改用新 App）；可空。
 	OnSwitch func(api *appapi.App)
-	// RecentPath 最近列表文件；空 = $TENON_HOME/workspaces.json（取不到用户目录时不记）。
+	// RecentPath 最近列表文件；空 = 用户级目录（Home）的 workspaces.json（取不到用户目录时不记）。
 	RecentPath string
 }
 
