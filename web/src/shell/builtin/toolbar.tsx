@@ -2,11 +2,11 @@
 // 首页草稿（session 为 null，会话还没建）也能选模型、推理强度与档位：选择记在 sh.draft，建会话时应用。
 // 嵌入方要换掉或关掉某一项：同 id 更小的 priority 替换，或 disable 掉 core 包里对应的插槽。
 
-import { Brain, Cpu, Gauge, ShieldCheck } from "lucide-react";
+import { Brain, Cpu, ShieldCheck } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { Client, ModeInfo, ModelsListResult } from "../../client";
 import { useSession, useStore } from "../../client/react";
-import { Badge, Button, Menu, type MenuGroupSpec } from "../../ui";
+import { Button, Menu, ProgressRing, type MenuGroupSpec } from "../../ui";
 import { useShell } from "../context";
 import { confirmProjectMode, setSessionMode, shortModeLabel } from "../modes";
 
@@ -214,11 +214,12 @@ function SessionModePicker({ session, modes }: { session: string; modes: ModeInf
   const sh = useShell();
   const [st] = useSession(session);
   const cur = st.mode?.mode;
+  const short = modes.find((m) => m.id === cur)?.short;
   return (
     <ModeMenu
       modes={modes}
       current={cur}
-      label={st.mode ? shortModeLabel(st.mode.label, st.mode.mode) : "档位"}
+      label={short || (st.mode ? shortModeLabel(st.mode.label, st.mode.mode) : "档位")}
       title={st.mode?.label}
       onPick={async (m) => {
         try {
@@ -239,7 +240,7 @@ function DraftModePicker({ modes }: { modes: ModeInfo[] }) {
     <ModeMenu
       modes={modes}
       current={draft.mode}
-      label={chosen ? shortModeLabel(chosen.label, chosen.id) : "默认档位"}
+      label={chosen?.short || (chosen ? shortModeLabel(chosen.label, chosen.id) : "默认档位")}
       title={chosen ? chosen.label : "新会话用后端的缺省档位"}
       onPick={async (m) => {
         if (m.project && !(await confirmProjectMode(sh.api, m))) return;
@@ -256,8 +257,11 @@ function ModeMenu(p: { modes: ModeInfo[]; current?: string; label: string; title
       label: "权限档位",
       items: p.modes.map((m) => ({
         id: m.id,
-        label: m.label,
-        description: m.widened?.length ? `项目档位，放宽：${m.widened.join("、")}` : m.project ? "项目档位" : undefined,
+        label: m.short || m.label,
+        description:
+          [m.label !== (m.short || m.label) ? m.label : undefined, m.widened?.length ? `项目档位，放宽：${m.widened.join("、")}` : m.project ? "项目档位" : undefined]
+            .filter(Boolean)
+            .join(" · ") || undefined,
         checked: m.id === p.current,
         run: () => p.onPick(m),
       })),
@@ -278,8 +282,9 @@ function ModeMenu(p: { modes: ModeInfo[]; current?: string; label: string; title
 
 // ---- 上下文用量 ----
 
-/** 上一次模型请求的上下文占用：知道模型的上下文窗口（models.list 的 context_window）时显示百分比，80% 起提醒；
- * 否则显示 tokens 数。点开"上下文与用量"面板。草稿态没有用量，不显示。 */
+/** 上下文占用环（06 第五节）：上一次请求的占用超过模型上下文窗口 80% 时，发送按钮旁出现小环
+ * （models.list 的 context_window），95% 转红；点开"上下文与用量"面板。占用不高时不出现在工具栏，
+ * 明细随时可在面板看。草稿态没有用量，不显示。 */
 export function ContextMeter({ session }: { session: string | null }) {
   return session ? <SessionContextMeter session={session} /> : null;
 }
@@ -299,12 +304,13 @@ function SessionContextMeter({ session }: { session: string }) {
   if (!used) return null;
   const model = st.model || list?.default;
   const win = list?.models.find((m) => m.id === model)?.context_window;
-  const pct = win ? Math.min(100, Math.round((used / win) * 100)) : null;
-  const text = pct !== null ? `${pct}%` : fmtK(used);
-  const title = `上下文 ${fmtK(used)}${win ? ` / ${fmtK(win)}` : ""} tokens（点开看明细）`;
+  if (!win) return null;
+  const pct = used / win;
+  if (pct < 0.8) return null;
+  const title = `上下文 ${fmtK(used)} / ${fmtK(win)} tokens（点开看明细）`;
   return (
     <Button size="sm" variant="ghost" onClick={() => sh.api.openPanel("usage")} title={title} aria-label={title}>
-      <Gauge size={12} /> {pct !== null && pct >= 80 ? <Badge tone="warning">{text}</Badge> : text}
+      <ProgressRing value={pct} />
     </Button>
   );
 }

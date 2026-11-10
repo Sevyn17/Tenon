@@ -381,7 +381,7 @@ github.com/Sevyn17/tenon/appapi/wire: type MessageDelta struct{StreamID string; 
 github.com/Sevyn17/tenon/appapi/wire: type MessageStarted struct{StreamID string; EntryID string; Part string; Attempt int}
 github.com/Sevyn17/tenon/appapi/wire: type Mode struct{Mode string; Label string; Sandbox string}
 github.com/Sevyn17/tenon/appapi/wire: type ModeChanged = Mode struct{Mode string; Label string; Sandbox string}
-github.com/Sevyn17/tenon/appapi/wire: type ModeInfo struct{ID string; Label string; Builtin bool; Project bool; Widened []string}
+github.com/Sevyn17/tenon/appapi/wire: type ModeInfo struct{ID string; Label string; Short string; Builtin bool; Project bool; Widened []string}
 github.com/Sevyn17/tenon/appapi/wire: type ModeItem struct{Item string; Title string; Value string; Source string; Bounded bool}
 github.com/Sevyn17/tenon/appapi/wire: type ModeListResult struct{Modes []ModeInfo}
 github.com/Sevyn17/tenon/appapi/wire: type ModeSetArgs struct{Session string; Mode string; Confirm bool}

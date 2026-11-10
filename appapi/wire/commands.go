@@ -271,6 +271,7 @@ type InteractionsResult struct {
 type ModeInfo struct {
 	ID      string   `json:"id"`
 	Label   string   `json:"label"`
+	Short   string   `json:"short,omitempty"` // 工具栏等窄处的简称；空 = 用 Label
 	Builtin bool     `json:"builtin"`
 	Project bool     `json:"project"`
 	Widened []string `json:"widened,omitempty"`

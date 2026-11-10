@@ -30,7 +30,7 @@ func (m PermModes) List() []appapi.ModeInfo {
 	items := m.P.Items()
 	var out []appapi.ModeInfo
 	for _, d := range m.P.Registry().List() {
-		out = append(out, appapi.ModeInfo{ID: string(d.ID), Label: permission.Label(d, items), Builtin: d.Builtin,
+		out = append(out, appapi.ModeInfo{ID: string(d.ID), Label: permission.Label(d, items), Short: permission.Short(d), Builtin: d.Builtin,
 			Project: d.Project, Widened: permission.Widened(d, items)})
 	}
 	return out

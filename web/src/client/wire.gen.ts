@@ -594,6 +594,7 @@ export interface InteractionsResult {
 export interface ModeInfo {
   id: string;
   label: string;
+  short?: string;
   builtin: boolean;
   project: boolean;
   widened?: string[];

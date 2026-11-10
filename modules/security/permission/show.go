@@ -121,6 +121,18 @@ func Label(d *ModeDef, items []toolhub.Item) string {
 	return fmt.Sprintf("%s（%s，放宽 %d 项：%s）", name, base, len(w), strings.Join(w, "、"))
 }
 
+// Short 档位的简称（工具栏等窄处显示）：显示名与 id 不同时用显示名，否则用 id。
+// 内置档位的显示名是中文短名（仅可查看、每次询问、工作区允许、完全权限）。
+func Short(d *ModeDef) string {
+	if d == nil {
+		return ""
+	}
+	if d.Title != "" && d.Title != string(d.ID) {
+		return d.Title
+	}
+	return string(d.ID)
+}
+
 // Show 档位解析后的完整取值表：每个权限项一行，含取值、模式清单与来源。
 func Show(d *ModeDef, items []toolhub.Item) string {
 	var b strings.Builder

@@ -1239,7 +1239,7 @@ func (v *App) ModeList(_ context.Context, _ wire.Empty) (wire.ModeListResult, er
 	}
 	out := wire.ModeListResult{Modes: []wire.ModeInfo{}}
 	for _, d := range m.List() {
-		out.Modes = append(out.Modes, wire.ModeInfo{ID: d.ID, Label: d.Label, Builtin: d.Builtin, Project: d.Project, Widened: d.Widened})
+		out.Modes = append(out.Modes, wire.ModeInfo{ID: d.ID, Label: d.Label, Short: d.Short, Builtin: d.Builtin, Project: d.Project, Widened: d.Widened})
 	}
 	return out, nil
 }

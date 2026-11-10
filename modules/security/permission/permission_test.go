@@ -509,3 +509,58 @@ func TestSessionsNotice(t *testing.T) {
 		t.Fatalf("档位删除后按 ask: %q", n)
 	}
 }
+
+func TestShortLabel(t *testing.T) {
+	r, err := NewRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 内置档位：简称用显示名（中文短名）；完整标签是 "id 显示名"
+	for id, want := range map[Mode]string{
+		ReadOnly:  "仅可查看",
+		Ask:       "每次询问",
+		Workspace: "工作区允许",
+		Full:      "完全权限",
+	} {
+		d, ok := r.Get(id)
+		if !ok {
+			t.Fatalf("缺内置档位 %s", id)
+		}
+		if got := Short(d); got != want {
+			t.Errorf("Short(%s) = %q, 要 %q", id, got, want)
+		}
+		if got := Label(d, nil); got != string(id)+" "+want {
+			t.Errorf("Label(%s) = %q, 要 %q", id, got, string(id)+" "+want)
+		}
+	}
+	// 自定义档位：没写 name 时显示名就是 id，简称回 id
+	user := t.TempDir()
+	if err := os.WriteFile(filepath.Join(user, "dev.toml"), []byte("base = \"workspace\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r2, err := NewRegistry(user)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, _ := r2.Get("dev")
+	if got := Short(d); got != "dev" {
+		t.Errorf("无 name 的自定义档位 Short = %q, 要 \"dev\"", got)
+	}
+	// 写了 name 时简称用 name
+	if err := os.WriteFile(filepath.Join(user, "dev.toml"), []byte("name = \"开发\"\nbase = \"workspace\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	later := time.Now().Add(2 * time.Second)
+	os.Chtimes(filepath.Join(user, "dev.toml"), later, later)
+	r3, err := NewRegistry(user)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d3, _ := r3.Get("dev")
+	if got := Short(d3); got != "开发" {
+		t.Errorf("带 name 的自定义档位 Short = %q, 要 \"开发\"", got)
+	}
+	if Short(nil) != "" {
+		t.Error("nil 定义简称应为空")
+	}
+}
