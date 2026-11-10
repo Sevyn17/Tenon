@@ -212,4 +212,15 @@ var coreMigrations = []migration{
 			version INTEGER NOT NULL,
 			PRIMARY KEY(tenant, owner, name))`,
 	}},
+	// v14：组件事件日志（框架设计 04 4.6，T4b）。component_events 全局一条序号，只追加；
+	// component_cursors 记订阅者读到哪，只前进。与 session_events 分开：那张表按会话、服务界面订阅。
+	{version: 14, stmts: []string{
+		`CREATE TABLE component_events(
+			tenant TEXT NOT NULL, seq INTEGER NOT NULL,
+			at INTEGER NOT NULL, source TEXT NOT NULL, name TEXT NOT NULL, data TEXT NOT NULL,
+			PRIMARY KEY(tenant, seq))`,
+		`CREATE TABLE component_cursors(
+			tenant TEXT NOT NULL, name TEXT NOT NULL, seq INTEGER NOT NULL,
+			PRIMARY KEY(tenant, name))`,
+	}},
 }

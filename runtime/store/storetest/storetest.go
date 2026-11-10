@@ -66,6 +66,10 @@ func Run(t *testing.T, open func(t *testing.T) store.Store) {
 		{"CollectionPartition", testCollectionPartition},
 		{"CollectionTx", testCollectionTx},
 		{"CollectionSpecStable", testCollectionSpecStable},
+		{"EventLogRoundTrip", testEventLogRoundTrip},
+		{"EventLogCursor", testEventLogCursor},
+		{"EventLogTx", testEventLogTx},
+		{"EventLogLimit", testEventLogLimit},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) { c.f(t, open(t)) })

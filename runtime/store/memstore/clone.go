@@ -18,6 +18,8 @@ type snapshot struct {
 	collSpecs map[string]store.CollectionSpec
 	collDocs  map[string]map[string]*collDoc
 	collVers  map[string]int
+	compEvents  []store.ComponentEvent
+	compCursors map[string]int64
 }
 
 // snap 复制当前状态；调用方持 s.mu。
@@ -34,6 +36,8 @@ func (s *Store) snap() snapshot {
 		collSpecs: make(map[string]store.CollectionSpec, len(s.collSpecs)),
 		collDocs:  make(map[string]map[string]*collDoc, len(s.collDocs)),
 		collVers:  make(map[string]int, len(s.collVers)),
+		compEvents:  append([]store.ComponentEvent(nil), s.compEvents...),
+		compCursors: make(map[string]int64, len(s.compCursors)),
 	}
 	for k, x := range s.sessions {
 		c := *x
@@ -85,6 +89,9 @@ func (s *Store) snap() snapshot {
 	for k, v := range s.collVers {
 		sn.collVers[k] = v
 	}
+	for k, v := range s.compCursors {
+		sn.compCursors[k] = v
+	}
 	return sn
 }
 
@@ -93,4 +100,5 @@ func (s *Store) restore(sn snapshot) {
 	s.clock, s.sessions, s.shells, s.defs = sn.clock, sn.sessions, sn.shells, sn.defs
 	s.inbox, s.tools, s.pending, s.outbox, s.traces = sn.inbox, sn.tools, sn.pending, sn.outbox, sn.traces
 	s.collSpecs, s.collDocs, s.collVers = sn.collSpecs, sn.collDocs, sn.collVers
+	s.compEvents, s.compCursors = sn.compEvents, sn.compCursors
 }

@@ -48,6 +48,9 @@ type Store struct {
 	collSpecs map[string]store.CollectionSpec
 	collDocs  map[string]map[string]*collDoc // 集合键 → part\x00key → 文档
 	collVers  map[string]int                 // 集合键 → 迁移跑到的版本
+	// 组件事件日志（04 4.6，T4b）。events 只追加，cursors 是订阅者读位点。
+	compEvents  []store.ComponentEvent
+	compCursors map[string]int64
 
 	cbMu     sync.Mutex
 	onCommit func(bus.Envelope)
@@ -144,7 +147,8 @@ type def struct {
 func New() *Store {
 	return &Store{sessions: map[string]*sess{}, shells: map[string][]byte{}, defs: map[string][]def{},
 		inbox: map[string][]inboxRow{}, tools: map[string]map[string]*toolRow{}, pending: map[string]store.Pending{},
-		collSpecs: map[string]store.CollectionSpec{}, collDocs: map[string]map[string]*collDoc{}, collVers: map[string]int{}}
+		collSpecs: map[string]store.CollectionSpec{}, collDocs: map[string]map[string]*collDoc{}, collVers: map[string]int{},
+		compCursors: map[string]int64{}}
 }
 
 // Close 关闭；之后的调用返回 ErrClosed。

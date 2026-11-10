@@ -3,7 +3,7 @@
 // core/ 只应依赖本包；具体实现（runtime/store/sqlite、runtime/store/memstore）在装配处选定。
 // 两个实现共用 runtime/store/storetest 一致性测试，语义以 sqlite 为准。
 // SQL() / Migrate / Blobs 等实现专有能力不在接口上（插件声明 SQL 需求时直接拿 *sqlite.DB）。
-// Collection 为 T4 内容，此处不定义。
+// 集合与组件事件日志是可选能力，见 collection.go 与 eventlog.go。
 package store
 
 import (
