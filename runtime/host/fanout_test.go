@@ -30,6 +30,14 @@ func (p *fanoutPlug) Setup(cx *component.Registrar) error {
 	if err := cx.ResourceType(component.ResourceType{Name: "group"}); err != nil {
 		return err
 	}
+	// 只放行"本组件转发、via 为本组件"的信封。名字缺省时记成本组件名。
+	cx.Guard(component.GuardRule{On: component.GuardDeliver, Check: func(req component.GuardRequest) (component.Verdict, string) {
+		env := req.Envelope
+		if env != nil && env.Via == cx.Plugin() && env.Origin == mail.OriginExternal {
+			return component.Allow, ""
+		}
+		return component.Abstain, ""
+	}})
 	p.mailer = cx.Mailer()
 	return nil
 }
@@ -83,7 +91,8 @@ func TestFanoutAcceptance(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r.h.Guards = asm.GuardRules()
+	// 先不接放行规则：u2 不是创建者，匹配的订阅者也收不到。
+	r.h.Guards = nil
 
 	rec := component.ResourceRecord{
 		Resource: "group:g1", Seq: 1,
@@ -120,17 +129,12 @@ func TestFanoutAcceptance(t *testing.T) {
 		t.Fatalf("拒绝载荷不对：%v", data)
 	}
 
-	// 登记一条只放行"本组件转发、via 为本组件"的规则，再投一次。
-	r.h.Guards = []component.GuardRule{{
-		Name: "board-relay", On: component.GuardDeliver,
-		Check: func(req component.GuardRequest) (component.Verdict, string) {
-			env := req.Envelope
-			if env != nil && env.Via == "board" && env.Origin == mail.OriginExternal {
-				return component.Allow, ""
-			}
-			return component.Abstain, ""
-		},
-	}}
+	// 接上组件经 Registrar.Guard 登记的规则，再投一次。
+	rules := asm.GuardRules()
+	if len(rules) != 1 || rules[0].Name != "board" {
+		t.Fatalf("规则应记成本组件名：%+v", rules)
+	}
+	r.h.Guards = rules
 	rec.Seq = 2
 	result, err = plug.mailer.Fanout(ctx, rec, subs)
 	if err != nil {

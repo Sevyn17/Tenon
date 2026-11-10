@@ -175,7 +175,7 @@ func matchList(rec ResourceRecord, params map[string]string) (Match, error) {
 	if err != nil {
 		return Match{}, err
 	}
-	for _, item := range strings.Split(value, ",") {
+	for _, item := range splitList(value) {
 		if rec.Fields[field] == item {
 			return Match{Matched: true}, nil
 		}
@@ -197,9 +197,9 @@ type Subscription struct {
 // FanoutResult 一次扇出的结果。错误的订阅记在这里，不作为 Fanout 的返回错误。
 type FanoutResult struct {
 	Delivered int      // 投出的信封数
-	Skipped   int      // 未命中、被排除或地址不对的订阅数
-	Denied    []string // 被投递服务拒绝的订阅 id（联系名单、守卫、跳数）
-	Errors    []string // 订阅本身不合法或匹配器报错，格式 "<订阅 id>: <原因>"
+	Skipped   int      // 未命中或来源被排除的订阅数
+	Denied    []string // 投递服务返回错误的订阅 id（联系名单、守卫、跳数，也含会话不存在）
+	Errors    []string // 订阅本身不合法（地址不是 session:、匹配器未登记）或匹配器报错、返回非法 mode，格式 "<订阅 id>: <原因>"
 }
 
 // Fanout 把一条资源记录按订阅投给会话（04 4.7）。
@@ -234,7 +234,8 @@ func (m *Mailer) Fanout(ctx context.Context, rec ResourceRecord, subs []Subscrip
 	return out, nil
 }
 
-// errFanoutSkip 表示这条订阅本条不投，且不是错误：未命中、来源被排除、或地址不是 session:。
+// errFanoutSkip 表示这条订阅本条不投，且不是错误：未命中或来源被排除。
+// 地址不是 session: 是订阅本身的错误，不走这里。
 var errFanoutSkip = fmt.Errorf("跳过")
 
 // fanoutOne 处理一条订阅。返回 nil 表示已投出。
@@ -252,6 +253,9 @@ func (m *Mailer) fanoutOne(ctx context.Context, rec ResourceRecord, sub Subscrip
 			return err
 		}
 		return errFanoutSkip
+	}
+	if !validMatchMode(match.Mode) {
+		return fmt.Errorf("匹配器 %s 返回的 mode %q 不合法（只能是 wake、context、notice 或空）", sub.Matcher, match.Mode)
 	}
 	env := mail.Envelope{
 		From:   rec.From,
@@ -271,7 +275,17 @@ func (m *Mailer) fanoutOne(ctx context.Context, rec ResourceRecord, sub Subscrip
 	return nil
 }
 
-// deniedError 投递服务拒绝了这一封（联系名单、守卫、跳数）。
+// validMatchMode 匹配器能给的 mode：空（= notice）、wake、context、notice。
+// control 不行：扇出信封是 notify，不能控制会话。
+func validMatchMode(m mail.Mode) bool {
+	switch m {
+	case "", mail.ModeWake, mail.ModeContext, mail.ModeNotice:
+		return true
+	}
+	return false
+}
+
+// deniedError 投递服务返回了错误（联系名单、守卫、跳数，也含会话不存在）。
 // Fanout 把它收进 FanoutResult.Denied，不与订阅本身的错误混在一起。
 type deniedError struct {
 	id  string
@@ -321,14 +335,23 @@ func renderRecord(rec ResourceRecord, t ResourceType) string {
 
 // excluded 看来源地址是否在订阅的排除名单里。名单是逗号分隔的地址字符串，空名单不排除。
 func excluded(from mail.Address, list string) bool {
-	if list == "" {
-		return false
-	}
 	want := from.String()
-	for _, item := range strings.Split(list, ",") {
+	for _, item := range splitList(list) {
 		if item == want {
 			return true
 		}
 	}
 	return false
+}
+
+// splitList 拆逗号分隔的名单：每项去掉首尾空白，丢掉空项。
+// "human:u1, human:u2" 与 "human:u1,human:u2" 等价。
+func splitList(s string) []string {
+	var out []string
+	for _, item := range strings.Split(s, ",") {
+		if item = strings.TrimSpace(item); item != "" {
+			out = append(out, item)
+		}
+	}
+	return out
 }

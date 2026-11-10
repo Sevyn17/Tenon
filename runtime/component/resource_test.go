@@ -225,3 +225,60 @@ func TestFanoutUsesMatcherModeAndRender(t *testing.T) {
 		t.Fatalf("mode/body = %s/%q", env.Mode, env.Body)
 	}
 }
+
+// TestFanoutTrimsListWhitespace：exclude 与 list 的逗号分隔项去掉首尾空白。
+func TestFanoutTrimsListWhitespace(t *testing.T) {
+	sender := &fakeSender{}
+	var result FanoutResult
+	name := reg(t, "board", &fake{setup: func(cx *Registrar) error {
+		rec := ResourceRecord{Resource: "group:g1", Seq: 1,
+			From: mail.Address{Kind: mail.AddrHuman, ID: "u1"}, Body: "x",
+			Fields: map[string]string{"tag": "beta"}}
+		subs := []Subscription{
+			{ID: "spaced", Subscriber: "session:s1", Matcher: MatcherList,
+				Params: map[string]string{"field": "tag", "value": "alpha, beta, gamma"}},
+			{ID: "excluded", Subscriber: "session:s2", Matcher: MatcherList,
+				Params: map[string]string{"field": "tag", "value": "beta"}, Exclude: "human:u9, human:u1"},
+		}
+		var err error
+		result, err = cx.Mailer().Fanout(context.Background(), rec, subs)
+		return err
+	}})
+	if _, err := Assemble(Spec{Plugins: entries(name), Inject: map[string]any{ext.ServiceHost: sender}}); err != nil {
+		t.Fatal(err)
+	}
+	if result.Delivered != 1 || result.Skipped != 1 || len(result.Errors) != 0 {
+		t.Fatalf("带空格的名单应正常命中与排除：%+v", result)
+	}
+	if len(sender.envs) != 1 || sender.envs[0].To.ID != "s1" {
+		t.Fatalf("应只投给 s1：%v", sender.envs)
+	}
+}
+
+// TestFanoutRejectsBadMatcherMode：匹配器给了非法 mode 记进 Errors，不投出。
+func TestFanoutRejectsBadMatcherMode(t *testing.T) {
+	sender := &fakeSender{}
+	var result FanoutResult
+	name := reg(t, "board", &fake{setup: func(cx *Registrar) error {
+		if err := cx.Matcher("bad_mode", func(ResourceRecord, map[string]string) (Match, error) {
+			return Match{Matched: true, Mode: mail.Mode("nope")}, nil
+		}); err != nil {
+			return err
+		}
+		rec := ResourceRecord{Resource: "group:g1", Seq: 1, From: mail.Address{Kind: mail.AddrHuman, ID: "u1"}, Body: "x"}
+		var err error
+		result, err = cx.Mailer().Fanout(context.Background(), rec, []Subscription{
+			{ID: "bad", Subscriber: "session:s1", Matcher: "bad_mode"},
+		})
+		return err
+	}})
+	if _, err := Assemble(Spec{Plugins: entries(name), Inject: map[string]any{ext.ServiceHost: sender}}); err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Errors) != 1 || !strings.Contains(result.Errors[0], "mode") || result.Delivered != 0 {
+		t.Fatalf("非法 mode 应记入错误：%+v", result)
+	}
+	if len(sender.envs) != 0 {
+		t.Fatalf("非法 mode 不应投出：%d", len(sender.envs))
+	}
+}
