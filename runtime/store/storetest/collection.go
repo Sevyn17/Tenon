@@ -17,6 +17,14 @@ func openCollection(t *testing.T, db store.Store, spec store.CollectionSpec) sto
 	if !ok {
 		t.Skip("存储不支持集合")
 	}
+	spec, err := spec.Normalize()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Open 要求迁移版本与结构版本一致；一致性测试不跑迁移，直接把版本记上。
+	if err := cs.SetCollectionVersion(context.Background(), "local", "demo", "items", spec.Version); err != nil {
+		t.Fatal(err)
+	}
 	c, err := cs.Open(context.Background(), "local", "demo", "items", spec)
 	if err != nil {
 		t.Fatal(err)
@@ -134,7 +142,14 @@ func testCollectionPartition(t *testing.T, db store.Store) {
 func testCollectionTx(t *testing.T, db store.Store) {
 	ctx := context.Background()
 	cs := db.(store.CollectionStore)
-	err := db.Tx(ctx, func(tx store.Store) error {
+	spec, err := demoSpec().Normalize()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cs.SetCollectionVersion(ctx, "local", "demo", "items", spec.Version); err != nil {
+		t.Fatal(err)
+	}
+	err = db.Tx(ctx, func(tx store.Store) error {
 		c, err := tx.(store.CollectionStore).Open(ctx, "local", "demo", "items", demoSpec())
 		if err != nil {
 			return err

@@ -68,6 +68,13 @@ type Collection interface {
 type CollectionStore interface {
 	// Open 打开或登记一个集合。同名再次打开时 spec 必须相同，否则返回错误，原数据不变。
 	Open(ctx context.Context, tenant, owner, name string, spec CollectionSpec) (Collection, error)
+	// CollectionVersion 读集合迁移跑到的版本。没有记录返回 0。
+	CollectionVersion(ctx context.Context, tenant, owner, name string) (int, error)
+	// SetCollectionVersion 记下集合迁移跑到的版本。调用方负责把它放进与数据写入同一个事务。
+	SetCollectionVersion(ctx context.Context, tenant, owner, name string, version int) error
+	// BindCollection 返回一个按 spec 校验的句柄，不写集合登记。
+	// 给迁移用：迁移期间结构还没定，不能走 Open 把过渡结构写进登记表。
+	BindCollection(ctx context.Context, tenant, owner, name string, spec CollectionSpec) (Collection, error)
 }
 
 // collectionName 集合名与索引名的字符集（约束清单「集合」）。

@@ -51,6 +51,31 @@ func (s *Store) Open(ctx context.Context, tenant, owner, name string, spec store
 		}
 	} else {
 		s.collSpecs[id] = spec
+		if s.collDocs[id] == nil {
+			s.collDocs[id] = map[string]*collDoc{}
+		}
+	}
+	if s.collVers[id] != spec.Version {
+		return nil, fmt.Errorf("store: 集合 %s.%s 迁移停在版本 %d，登记的是 %d", owner, name, s.collVers[id], spec.Version)
+	}
+	return &collection{s: s, spec: spec, id: id, owner: owner, name: name}, nil
+}
+
+// BindCollection 返回句柄，不写集合登记（store.CollectionStore）。迁移用。
+func (s *Store) BindCollection(ctx context.Context, tenant, owner, name string, spec store.CollectionSpec) (store.Collection, error) {
+	spec, err := spec.Normalize()
+	if err != nil {
+		return nil, err
+	}
+	if err := store.CheckCollectionID(tenant, owner, name); err != nil {
+		return nil, err
+	}
+	if err := s.lock(); err != nil {
+		return nil, err
+	}
+	defer s.mu.Unlock()
+	id := collKey(tenant, owner, name)
+	if s.collDocs[id] == nil {
 		s.collDocs[id] = map[string]*collDoc{}
 	}
 	return &collection{s: s, spec: spec, id: id, owner: owner, name: name}, nil

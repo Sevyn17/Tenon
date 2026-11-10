@@ -57,7 +57,27 @@ func (db *DB) Open(ctx context.Context, tenant, owner, name string, spec store.C
 			return nil, fmt.Errorf("store: 集合 %s.%s 已按不同结构登记", owner, name)
 		}
 	}
+	// 迁移没跑完不能按新结构打开：数据还是旧形状，按新版本读会读错。
+	got, err := db.CollectionVersion(ctx, tenant, owner, name)
+	if err != nil {
+		return nil, err
+	}
+	if got != spec.Version {
+		return nil, fmt.Errorf("store: 集合 %s.%s 迁移停在版本 %d，登记的是 %d", owner, name, got, spec.Version)
+	}
 	return c, nil
+}
+
+// BindCollection 返回句柄，不写集合登记（store.CollectionStore）。迁移用。
+func (db *DB) BindCollection(ctx context.Context, tenant, owner, name string, spec store.CollectionSpec) (store.Collection, error) {
+	spec, err := spec.Normalize()
+	if err != nil {
+		return nil, err
+	}
+	if err := store.CheckCollectionID(tenant, owner, name); err != nil {
+		return nil, err
+	}
+	return &collection{db: db, spec: spec, tenant: tenant, owner: owner, name: name}, nil
 }
 
 func (c *collection) Get(ctx context.Context, part, key string) (store.Doc, error) {

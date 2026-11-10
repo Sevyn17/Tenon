@@ -90,6 +90,8 @@ github.com/Sevyn17/tenon: func Raw(name string, desc string, schema string, fn f
 github.com/Sevyn17/tenon: func RegisterAt[T any](cx *Registrar, p Point[T], name string, impl T)
 github.com/Sevyn17/tenon: type Registrar = github.com/Sevyn17/tenon/runtime/component.Registrar struct{}
 github.com/Sevyn17/tenon: method (Registrar) AgentConfig(proto any) error
+github.com/Sevyn17/tenon: method (Registrar) Collection(name string, spec github.com/Sevyn17/tenon/runtime/store.CollectionSpec) (github.com/Sevyn17/tenon/runtime/store.Collection, error)
+github.com/Sevyn17/tenon: method (Registrar) CollectionMigration(m github.com/Sevyn17/tenon/runtime/component.CollectionMigration) error
 github.com/Sevyn17/tenon: method (Registrar) Config() any
 github.com/Sevyn17/tenon: method (Registrar) FillSlot(name string, impl any) error
 github.com/Sevyn17/tenon: method (Registrar) Guard(g github.com/Sevyn17/tenon/runtime/component.GuardRule)

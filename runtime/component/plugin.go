@@ -15,6 +15,7 @@ import (
 	"github.com/Sevyn17/tenon/runtime/agentdef"
 	"github.com/Sevyn17/tenon/runtime/ext"
 	"github.com/Sevyn17/tenon/runtime/inject"
+	"github.com/Sevyn17/tenon/runtime/store"
 	"github.com/Sevyn17/tenon/runtime/useconf"
 )
 
@@ -310,6 +311,10 @@ type Assembly struct {
 	templates []agentdef.Template
 	// guards 组件登记的守卫规则（04 4.2、08 D4）；装配结束后只读。
 	guards []GuardRule
+	// collections 组件登记的集合（05 5.6，T4a）；OpenCollections 之前句柄不可用。
+	collections []collectionReg
+	// collMigrations 集合迁移登记，按 After 拓扑排序后跑。
+	collMigrations []collectionMigration
 }
 
 // 装配错误。
@@ -524,7 +529,19 @@ func (a *Assembly) Definitions(app agentdef.Source) (agentdef.Source, error) {
 }
 
 // Start 按装配顺序启动插件，各自在 root 下开插件作用域。失败时已启动的倒序关闭。
+//
+// 集合在第一个用到它的插件 Start 之前打开（T4a）：存储由 WithStore 预置时，启动前就打开；
+// 存储由插件提供时，在该插件 Start 之后、依赖它的插件 Start 之前打开。
 func (a *Assembly) Start(root *Scope) error {
+	if a.injected[ext.ServiceDB] {
+		db, err := a.openedDB()
+		if err != nil {
+			return err
+		}
+		if err := a.OpenCollections(root.Context(), db); err != nil {
+			return err
+		}
+	}
 	for _, n := range a.order {
 		sc := root.Child("plugin:" + n)
 		a.scopes[n] = sc
@@ -532,8 +549,42 @@ func (a *Assembly) Start(root *Scope) error {
 			_ = root.Close(root.Context())
 			return fmt.Errorf("插件 %s Start: %w", n, err)
 		}
+		if a.metas[n].providesDB() && !a.injected[ext.ServiceDB] {
+			db, err := a.openedDB()
+			if err != nil {
+				_ = root.Close(root.Context())
+				return err
+			}
+			if err := a.OpenCollections(root.Context(), db); err != nil {
+				_ = root.Close(root.Context())
+				return err
+			}
+		}
 	}
 	return nil
+}
+
+// providesDB 这个插件是否提供存储服务。
+func (m Meta) providesDB() bool {
+	for _, p := range m.Provides {
+		if p == ext.ServiceDB {
+			return true
+		}
+	}
+	return false
+}
+
+// openedDB 取已打开的存储。Start 之前为 nil，报"尚未启动"。
+func (a *Assembly) openedDB() (store.Store, error) {
+	v, ok := a.values[ext.ServiceDB]
+	if !ok {
+		return nil, fmt.Errorf("装配: 没有提供 %s 的存储", ext.ServiceDB)
+	}
+	h, ok := v.(interface{ DB() store.Store })
+	if !ok || h.DB() == nil {
+		return nil, fmt.Errorf("装配: 存储 %s 尚未打开", ext.ServiceDB)
+	}
+	return h.DB(), nil
 }
 
 // Degraded 后台任务重启耗尽的插件（explain 可见）。
