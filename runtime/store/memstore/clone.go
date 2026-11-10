@@ -13,8 +13,11 @@ type snapshot struct {
 	inbox    map[string][]inboxRow
 	tools    map[string]map[string]*toolRow
 	pending  map[string]store.Pending
-	outbox   []outboxRow
-	traces   []store.TraceEvent
+	outbox    []outboxRow
+	traces    []store.TraceEvent
+	collSpecs map[string]store.CollectionSpec
+	collDocs  map[string]map[string]*collDoc
+	collVers  map[string]int
 }
 
 // snap 复制当前状态；调用方持 s.mu。
@@ -26,8 +29,11 @@ func (s *Store) snap() snapshot {
 		inbox:    make(map[string][]inboxRow, len(s.inbox)),
 		tools:    make(map[string]map[string]*toolRow, len(s.tools)),
 		pending:  make(map[string]store.Pending, len(s.pending)),
-		outbox:   append([]outboxRow(nil), s.outbox...),
-		traces:   append([]store.TraceEvent(nil), s.traces...),
+		outbox:    append([]outboxRow(nil), s.outbox...),
+		traces:    append([]store.TraceEvent(nil), s.traces...),
+		collSpecs: make(map[string]store.CollectionSpec, len(s.collSpecs)),
+		collDocs:  make(map[string]map[string]*collDoc, len(s.collDocs)),
+		collVers:  make(map[string]int, len(s.collVers)),
 	}
 	for k, x := range s.sessions {
 		c := *x
@@ -65,6 +71,20 @@ func (s *Store) snap() snapshot {
 	for k, v := range s.pending {
 		sn.pending[k] = v
 	}
+	for k, v := range s.collSpecs {
+		sn.collSpecs[k] = v
+	}
+	for k, m := range s.collDocs {
+		cm := make(map[string]*collDoc, len(m))
+		for id, d := range m {
+			cd := *d
+			cm[id] = &cd
+		}
+		sn.collDocs[k] = cm
+	}
+	for k, v := range s.collVers {
+		sn.collVers[k] = v
+	}
 	return sn
 }
 
@@ -72,4 +92,5 @@ func (s *Store) snap() snapshot {
 func (s *Store) restore(sn snapshot) {
 	s.clock, s.sessions, s.shells, s.defs = sn.clock, sn.sessions, sn.shells, sn.defs
 	s.inbox, s.tools, s.pending, s.outbox, s.traces = sn.inbox, sn.tools, sn.pending, sn.outbox, sn.traces
+	s.collSpecs, s.collDocs, s.collVers = sn.collSpecs, sn.collDocs, sn.collVers
 }

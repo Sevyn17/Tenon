@@ -60,6 +60,12 @@ func Run(t *testing.T, open func(t *testing.T) store.Store) {
 		{"Interactions", testInteractions},
 		{"SessionMetaUpdate", testSessionMetaUpdate},
 		{"Workspace", testWorkspace},
+		{"CollectionRoundTrip", testCollectionRoundTrip},
+		{"CollectionConflict", testCollectionConflict},
+		{"CollectionQueryPage", testCollectionQueryPage},
+		{"CollectionPartition", testCollectionPartition},
+		{"CollectionTx", testCollectionTx},
+		{"CollectionSpecStable", testCollectionSpecStable},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) { c.f(t, open(t)) })

@@ -44,6 +44,10 @@ type Store struct {
 	pending map[string]store.Pending
 	outbox  []outboxRow        // 发件箱（08 9.6）：派发后保留行（sent），与 sqlite 一致
 	traces  []store.TraceEvent // trace 事件（08 8.7 explain）
+	// 集合（05 5.6，T4a）。specs 的键是 tenant\x00owner\x00name。
+	collSpecs map[string]store.CollectionSpec
+	collDocs  map[string]map[string]*collDoc // 集合键 → part\x00key → 文档
+	collVers  map[string]int                 // 集合键 → 迁移跑到的版本
 
 	cbMu     sync.Mutex
 	onCommit func(bus.Envelope)
@@ -139,7 +143,8 @@ type def struct {
 // New 创建空存储。
 func New() *Store {
 	return &Store{sessions: map[string]*sess{}, shells: map[string][]byte{}, defs: map[string][]def{},
-		inbox: map[string][]inboxRow{}, tools: map[string]map[string]*toolRow{}, pending: map[string]store.Pending{}, outbox: nil}
+		inbox: map[string][]inboxRow{}, tools: map[string]map[string]*toolRow{}, pending: map[string]store.Pending{},
+		collSpecs: map[string]store.CollectionSpec{}, collDocs: map[string]map[string]*collDoc{}, collVers: map[string]int{}}
 }
 
 // Close 关闭；之后的调用返回 ErrClosed。

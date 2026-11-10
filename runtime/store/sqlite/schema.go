@@ -195,4 +195,21 @@ var coreMigrations = []migration{
 		`ALTER TABLE sessions ADD COLUMN workspace TEXT NOT NULL DEFAULT ''`,
 		`CREATE INDEX sessions_workspace ON sessions(tenant, workspace, status, updated_at)`,
 	}},
+	// v13：集合（框架设计 05 5.6，T4a）。collections 记结构，collection_docs 存文档，
+	// collection_versions 记组件迁移跑到哪一版。索引字段在 body JSON 里，不预建索引（见 collection.go）。
+	{version: 13, stmts: []string{
+		`CREATE TABLE collections(
+			tenant TEXT NOT NULL, owner TEXT NOT NULL, name TEXT NOT NULL,
+			spec TEXT NOT NULL, version INTEGER NOT NULL,
+			PRIMARY KEY(tenant, owner, name))`,
+		`CREATE TABLE collection_docs(
+			tenant TEXT NOT NULL, owner TEXT NOT NULL, name TEXT NOT NULL,
+			part TEXT NOT NULL, key TEXT NOT NULL,
+			version INTEGER NOT NULL, body TEXT NOT NULL, updated_at INTEGER NOT NULL,
+			PRIMARY KEY(tenant, owner, name, part, key))`,
+		`CREATE TABLE collection_versions(
+			tenant TEXT NOT NULL, owner TEXT NOT NULL, name TEXT NOT NULL,
+			version INTEGER NOT NULL,
+			PRIMARY KEY(tenant, owner, name))`,
+	}},
 }
