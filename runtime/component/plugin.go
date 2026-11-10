@@ -320,6 +320,10 @@ type Assembly struct {
 	subscriptions []subscription
 	// eventBackoff 订阅失败重试的起始间隔。零值取 EventRetryBackoff；测试调小。
 	eventBackoff time.Duration
+	// resources 组件登记的资源类型（04 4.7，T4c）。键是地址类型名。
+	resources map[string]ResourceType
+	// matchers 订阅匹配器（04 4.7，T4c）。内置三个在组件 Setup 之前登记，组件同名登记拒绝。
+	matchers map[string]matcherReg
 }
 
 // 装配错误。
@@ -336,7 +340,8 @@ func Assemble(spec Spec) (*Assembly, error) {
 	a := &Assembly{metas: map[string]Meta{}, configs: map[string]any{}, sources: map[string]map[string]string{},
 		values: map[string]any{}, fromDef: map[string]bool{}, injected: map[string]bool{}, items: map[string][]Item{},
 		mandatory: map[string]bool{}, plugins: map[string]Component{}, scopes: map[string]*Scope{},
-		agentSchemas: map[string]useconf.Schema{}}
+		agentSchemas: map[string]useconf.Schema{}, resources: map[string]ResourceType{}, matchers: map[string]matcherReg{}}
+	a.installBuiltinMatchers()
 	enabled := map[string]Entry{}
 	for _, e := range spec.Plugins {
 		enabled[e.Name] = e
