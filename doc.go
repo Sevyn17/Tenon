@@ -1,6 +1,6 @@
 // Package tenon 是 Tenon 智能体框架的 SDK 入口。应用只 import 本包（测试再加 tenon/tenontest）。
 //
-// 公开面清单与版本规则见 docs/框架设计/07 - SDK 接口.md，上手教程见 docs/上手/。
+// 公开面清单与版本规则见 docs/01 - 设计文档/框架设计/07 - SDK 接口.md，上手教程见 docs/00 - 上手指南/。
 //
 // # 建应用
 //

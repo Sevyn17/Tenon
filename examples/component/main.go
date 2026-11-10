@@ -1,4 +1,4 @@
-// component：一个应用自己的组件（docs/上手/03）。只 import tenon，演示：
+// component：一个应用自己的组件（docs/00 - 上手指南/03）。只 import tenon，演示：
 //
 //   - Info 声明配置（WithConfig 给值，Setup 里 cx.Config() 取）和提供的服务；
 //

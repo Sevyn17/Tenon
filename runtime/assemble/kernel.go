@@ -1,6 +1,6 @@
 package assemble
 
-// [kernel] 配置节（plugin-switch-plan §1，登记见 docs/03 - 约束清单.md「[kernel] 配置节」）：
+// [kernel] 配置节（plugin-switch-plan §1，登记见 docs/01 - 设计文档/03 - 约束清单.md「[kernel] 配置节」）：
 // 内核机制参数，不改会话语义；未写的键用内核缺省值。
 
 import (

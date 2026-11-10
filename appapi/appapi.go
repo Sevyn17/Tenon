@@ -1,6 +1,6 @@
 // Package appapi 应用接口层（docs/90 - 归档/10 - 框架模块/12 - 应用接口层.md）。
 //
-// CLI、桌面端（Wails）、api-server 都只调这一层。线上协议见 docs/06 - 应用协议契约.md：命令经 Call2(cmd, args JSON)
+// CLI、桌面端（Wails）、api-server 都只调这一层。线上协议见 docs/01 - 设计文档/06 - 应用协议契约.md：命令经 Call2(cmd, args JSON)
 // 分发（进程内可直接调 V2() 的方法），传输层每个客户端连接一个 Conn（订阅、按身份过滤、背压，conn.go）。
 // 进程内的消费者（CLI）也可以直接用 Events（易失）与 Follow（可靠，回放 + 实时）。
 //

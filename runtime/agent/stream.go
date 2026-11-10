@@ -1,6 +1,6 @@
 package agent
 
-// 分段流式（protocol 2，docs/06 - 应用协议契约.md 10.5）：一步模型调用的流式事件经 Hooks.OnStream 交给展示层。
+// 分段流式（protocol 2，docs/01 - 设计文档/06 - 应用协议契约.md 10.5）：一步模型调用的流式事件经 Hooks.OnStream 交给展示层。
 //
 // 关联规则：
 //   - 一步开始时发 step，EntryID 是这一步 assistant 条目将用的 id（= 请求 id，见 session.Core.PendingEntryID），

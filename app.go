@@ -115,7 +115,7 @@ func (a *App) Start(ctx context.Context) (err error) {
 	return nil
 }
 
-// API 应用协议层（protocol 2，docs/06）：交给 transport/web（网页）或 transport/bind（桌面等绑定式宿主），
+// API 应用协议层（protocol 2，docs/01 - 设计文档/06）：交给 transport/web（网页）或 transport/bind（桌面等绑定式宿主），
 // 框架的前端或任何协议客户端就能连上来列会话、发消息、看流式输出、回答确认。Start 之前、Close 之后返回 nil。
 func (a *App) API() *appapi.App {
 	a.mu.Lock()

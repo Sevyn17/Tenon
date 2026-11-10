@@ -1,4 +1,4 @@
-// hello：最短的应用。装配、启动、问一句（docs/上手/01）。
+// hello：最短的应用。装配、启动、问一句（docs/00 - 上手指南/01）。
 //
 //	TENON_BASE_URL=https://api.deepseek.com/v1 TENON_MODEL=deepseek-chat TENON_API_KEY=… go run ./examples/hello
 //

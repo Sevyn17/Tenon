@@ -1,4 +1,4 @@
-// 一个会话的客户端状态（protocol 2，docs/06 - 应用协议契约.md 10.2）。负责 I/O，状态合成交给纯 reducer（session-reducer.ts）。
+// 一个会话的客户端状态（protocol 2，docs/01 - 设计文档/06 - 应用协议契约.md 10.2）。负责 I/O，状态合成交给纯 reducer（session-reducer.ts）。
 //
 // 一致性：先 session.get 取快照，再取日志尾部，再从快照的 cursor 往后 session.subscribe——快照之后的变化一定在 cursor 之后，
 // 订阅回放不漏不重。session.lagged（背压断开）与 local.reconnected（断线重连）时从最后收到的持久游标重新订阅；

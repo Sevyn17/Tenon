@@ -21,7 +21,7 @@ import (
 
 var updateAPI = flag.Bool("update-api", false, "重录 testdata/api.txt")
 
-// promised 在稳定承诺之内的包（docs/框架设计/07 - SDK 接口.md）。
+// promised 在稳定承诺之内的包（docs/01 - 设计文档/框架设计/07 - SDK 接口.md）。
 var promised = []string{
 	"github.com/Sevyn17/tenon",
 	"github.com/Sevyn17/tenon/tenontest",

@@ -1,4 +1,4 @@
-// 会话列表（protocol 2，docs/06 - 应用协议契约.md 10.4 sessions.list、10.5 sessions.changed）。
+// 会话列表（protocol 2，docs/01 - 设计文档/06 - 应用协议契约.md 10.4 sessions.list、10.5 sessions.changed）。
 // sessions.list 是分页查询；置顶的会话另查一次（sessions.list {pinned}，不分页），排在最前。
 // 连接级的 sessions.changed（易失）刷新列表里的一行（含删除）；重连后重新查第一页。
 

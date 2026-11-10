@@ -1,6 +1,6 @@
 package appapi
 
-// 应用协议命令（protocol 2，docs/06 - 应用协议契约.md 10.4）：参数与结果全部用 appapi/wire 的线上类型，错误码按 10.7。
+// 应用协议命令（protocol 2，docs/01 - 设计文档/06 - 应用协议契约.md 10.4）：参数与结果全部用 appapi/wire 的线上类型，错误码按 10.7。
 // 入口是 App.Call2（进程内直接调用用 App.V2() 的方法）；订阅（session.subscribe / unsubscribe）与按连接身份回答交互
 // 在 Conn 上（conn.go）。protocol 1 已在 10.11 S8 删除。
 //

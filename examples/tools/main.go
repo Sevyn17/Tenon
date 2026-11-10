@@ -1,4 +1,4 @@
-// tools：自定义工具、会改东西的工具要确认、流式输出（docs/上手/01、02）。
+// tools：自定义工具、会改东西的工具要确认、流式输出（docs/00 - 上手指南/01、02）。
 //
 //	TENON_BASE_URL=https://api.deepseek.com/v1 TENON_MODEL=deepseek-chat TENON_API_KEY=… go run ./examples/tools
 //

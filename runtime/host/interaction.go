@@ -1,6 +1,6 @@
 package host
 
-// 交互（protocol 2，docs/06 - 应用协议契约.md 10.6）：工具确认与模块提问都登记成交互（store.InteractionStore），
+// 交互（protocol 2，docs/01 - 设计文档/06 - 应用协议契约.md 10.6）：工具确认与模块提问都登记成交互（store.InteractionStore），
 // 打开与结束都是持久事件；交互 id 公开，corr 只用于回信路径、不推给订阅者。
 //
 // 结束的路径与结果：

@@ -109,7 +109,7 @@ func WithReadyErrors(f func([]error)) Option {
 
 // Internals 内核对象：给建在 SDK 上的应用宿主用（列插件、查轨迹、打开会话等）。
 //
-// 这些类型来自 runtime/*，不在稳定承诺之内（见 docs/框架设计/07 - SDK 接口.md）：升级时可能改名、改签名。
+// 这些类型来自 runtime/*，不在稳定承诺之内（见 docs/01 - 设计文档/框架设计/07 - SDK 接口.md）：升级时可能改名、改签名。
 // 只用 Ask / Session / API 的应用用不到它。
 type Internals struct {
 	Host        *host.Host          // 会话宿主

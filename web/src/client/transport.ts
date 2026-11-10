@@ -1,4 +1,4 @@
-// 传输层（protocol 2，docs/06 - 应用协议契约.md 10.9）：对上只暴露 call(cmd, args) 与 onEvent(fn)，外加连接状态。
+// 传输层（protocol 2，docs/01 - 设计文档/06 - 应用协议契约.md 10.9）：对上只暴露 call(cmd, args) 与 onEvent(fn)，外加连接状态。
 // 两种实现：
 //   - Wails（桌面端）：绑定方法 main.Service.Call(cmd, argsJSON) + Wails 事件 "tenon:event"；不走网络端口。
 //   - WebSocket（网页服务）：请求帧 {"id","cmd","args"}，应答帧 {"id","ok","result"|"error"}，事件帧 {"event": Envelope}。

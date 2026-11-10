@@ -375,7 +375,7 @@ func looksDenied(s string) bool {
 }
 
 // stripANSI 去掉终端控制序列（颜色、光标移动、OSC 标题等），只影响返回给模型的文本
-// （docs/03 - 约束清单.md“shell / job_output 输出清洗”）。
+// （docs/01 - 设计文档/03 - 约束清单.md“shell / job_output 输出清洗”）。
 func stripANSI(s string) string {
 	if !strings.ContainsRune(s, 0x1b) && !strings.ContainsRune(s, 0x9b) {
 		return s

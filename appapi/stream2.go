@@ -1,6 +1,6 @@
 package appapi
 
-// 分段流式事件（protocol 2，docs/06 - 应用协议契约.md 10.5 表二）：agent.Hooks.OnStream / OnToolCall / OnToolResult
+// 分段流式事件（protocol 2，docs/01 - 设计文档/06 - 应用协议契约.md 10.5 表二）：agent.Hooks.OnStream / OnToolCall / OnToolResult
 // → 总线上的 message.* / tool.* 事件（data 是 v2Event，Conn.translate 原样上线），同时维护快照的 live（10.2.2 规则 7）。
 //
 // 关联：message.started / tool.started 带本步 assistant 条目的 entry_id；每段（text / reasoning）每次尝试一个 stream_id；

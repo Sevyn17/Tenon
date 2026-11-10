@@ -1,6 +1,6 @@
 # Tenon 前端
 
-Tenon 的前端和后端 SDK 一样是框架：可以直接用内置的工作台，也可以只用其中一层，或者按[应用协议契约](<../docs/06 - 应用协议契约.md>)另写一套界面。
+Tenon 的前端和后端 SDK 一样是框架：可以直接用内置的工作台，也可以只用其中一层，或者按[应用协议契约](<../docs/01 - 设计文档/06 - 应用协议契约.md>)另写一套界面。
 
 ```bash
 pnpm install
@@ -184,7 +184,7 @@ args = { session = "{{session}}" }
 
 - 线上类型 `src/client/wire.gen.ts` 由 Go 生成：`go test ./appapi/wire -run TestTypeScript -update`，不要手改。
 - 命令表 `src/client/commands.ts` 的 `COMMANDS` 由 `transport/bind/bind_test.go` 的 `TestProtocolCommands` 校验与服务端一致。
-- 语义（快照 + 游标、易失事件、交互、错误码）以 [docs/06](<../docs/06 - 应用协议契约.md>) 为准。
+- 语义（快照 + 游标、易失事件、交互、错误码）以 [docs/06](<../docs/01 - 设计文档/06 - 应用协议契约.md>) 为准。
 
 ## 六、本地运行
 

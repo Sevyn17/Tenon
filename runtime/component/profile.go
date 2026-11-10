@@ -5,7 +5,7 @@ package component
 //	include   = ["base.toml"]          # 相对本文件
 //	mandatory = ["permission"]         # 与父 profile 取并集，子 profile 不能移除（P18）
 //
-//	[kernel]                           # 内核参数（kernel/docs/03 - 约束清单.md「[kernel] 配置节」），按键合并
+//	[kernel]                           # 内核参数（kernel/docs/01 - 设计文档/03 - 约束清单.md「[kernel] 配置节」），按键合并
 //	max_tool_calls_per_step = 16
 //
 //	[[plugin]]

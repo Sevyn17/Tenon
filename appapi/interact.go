@@ -1,6 +1,6 @@
 package appapi
 
-// 交互命令（protocol 2，docs/06 - 应用协议契约.md 10.6）：interaction.respond、interactions.list、快照里的 interactions。
+// 交互命令（protocol 2，docs/01 - 设计文档/06 - 应用协议契约.md 10.6）：interaction.respond、interactions.list、快照里的 interactions。
 //
 // 规则：回答者由连接身份决定（不在 responders 里返回 forbidden）；只收第一条回答，之后返回 conflict（answered，
 // details.outcome 带已有结果），同一 client_id 的重发返回第一次的结果；会话由别的进程持有时返回 conflict（leased）。

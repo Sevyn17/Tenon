@@ -117,7 +117,7 @@ type InboxStore interface {
 //
 // 抢占是"后打开者胜 + 纪元 fencing"：AcquireLease 不看现有持有者、没有到期时间，旧持有者在下一次
 // 带纪元的写入时才得到 ErrLeaseLost。fencing 保证正确，但两个进程同时打开同一会话会互相抢、
-// 白跑模型调用。v1 只支持单进程独占一个库（docs/03 约束清单）；多节点前要加到期时间，
+// 白跑模型调用。v1 只支持单进程独占一个库（docs/01 - 设计文档/03 约束清单）；多节点前要加到期时间，
 // 让 Acquire 只抢已释放或已过期的租约、RenewLease 续期（2026-11-04 审查 P1-18）。
 type LeaseStore interface {
 	// AcquireLease 抢租约：holder 成为持有者并返回新纪元（从 1 起）。会话不存在返回 ErrNotFound。

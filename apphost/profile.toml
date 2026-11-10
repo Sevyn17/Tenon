@@ -5,7 +5,7 @@
 #   [[plugin]]
 #   name = "web"
 #   enabled = true
-# 内核参数写在 [kernel] 节（键见 docs/03 - 约束清单.md）。
+# 内核参数写在 [kernel] 节（键见 docs/01 - 设计文档/03 - 约束清单.md）。
 
 # 存储不锁定是哪个插件：装配时必须有一个组件提供 service:db（缺省开着的 store-sqlite），否则启动报错。
 # 换存储：关掉 store-sqlite、开别的存储插件。
