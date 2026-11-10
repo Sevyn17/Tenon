@@ -96,6 +96,7 @@ github.com/Sevyn17/tenon: method (Registrar) Config() any
 github.com/Sevyn17/tenon: method (Registrar) FillSlot(name string, impl any) error
 github.com/Sevyn17/tenon: method (Registrar) Guard(g github.com/Sevyn17/tenon/runtime/component.GuardRule)
 github.com/Sevyn17/tenon: method (Registrar) Mailer() *github.com/Sevyn17/tenon/runtime/component.Mailer
+github.com/Sevyn17/tenon: method (Registrar) On(name string, fn github.com/Sevyn17/tenon/runtime/component.EventHandler) error
 github.com/Sevyn17/tenon: method (Registrar) Plugin() string
 github.com/Sevyn17/tenon: method (Registrar) PointItems(point string) func() []github.com/Sevyn17/tenon/runtime/component.Item
 github.com/Sevyn17/tenon: method (Registrar) Provide(name string, svc any) error

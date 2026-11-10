@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/Sevyn17/tenon/runtime/agentdef"
 	"github.com/Sevyn17/tenon/runtime/ext"
@@ -315,6 +316,10 @@ type Assembly struct {
 	collections []collectionReg
 	// collMigrations 集合迁移登记，按 After 拓扑排序后跑。
 	collMigrations []collectionMigration
+	// subscriptions 组件登记的事件订阅（04 4.6，T4b）；deliverEvents 在 Start 里按读位点投递。
+	subscriptions []subscription
+	// eventBackoff 订阅失败重试的起始间隔。零值取 EventRetryBackoff；测试调小。
+	eventBackoff time.Duration
 }
 
 // 装配错误。
@@ -541,6 +546,9 @@ func (a *Assembly) Start(root *Scope) error {
 		if err := a.OpenCollections(root.Context(), db); err != nil {
 			return err
 		}
+		if err := a.deliverEvents(root.Context(), root, db); err != nil {
+			return err
+		}
 	}
 	for _, n := range a.order {
 		sc := root.Child("plugin:" + n)
@@ -556,6 +564,10 @@ func (a *Assembly) Start(root *Scope) error {
 				return err
 			}
 			if err := a.OpenCollections(root.Context(), db); err != nil {
+				_ = root.Close(root.Context())
+				return err
+			}
+			if err := a.deliverEvents(root.Context(), root, db); err != nil {
 				_ = root.Close(root.Context())
 				return err
 			}
