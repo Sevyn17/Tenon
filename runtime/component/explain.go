@@ -10,6 +10,20 @@ import (
 	"strings"
 )
 
+// PackageInfo 一个已加载插件包的摘要，explain 用（T4d）。
+type PackageInfo struct {
+	Name     string
+	Scope    string   // user / project
+	File     string   // 清单路径
+	Contents string   // 内容摘要
+	Agents   []string // 贡献的定义，如 "platform:helper"
+}
+
+// SetPackages 记下已加载的插件包（explain 用）。应用在装配后调。
+func (a *Assembly) SetPackages(ps []PackageInfo) {
+	a.packages = append([]PackageInfo(nil), ps...)
+}
+
 // Explain 把装配结果写成可读文本。profileSources 可为 nil。
 func (a *Assembly) Explain(w io.Writer, profileSources map[string]string) {
 	fmt.Fprintln(w, "插件（装配顺序）：")
@@ -30,6 +44,18 @@ func (a *Assembly) Explain(w io.Writer, profileSources map[string]string) {
 				_ = i
 				fv := fieldByKey(v, f.Key)
 				fmt.Fprintf(w, "      %s = %v（%s）\n", f.Key, fv, orDefault(a.sources[n][f.Key], "零值"))
+			}
+		}
+	}
+	if len(a.packages) > 0 {
+		fmt.Fprintln(w, "插件包：")
+		for _, p := range a.packages {
+			fmt.Fprintf(w, "  %s（%s）  ← %s\n", p.Name, orDefault(p.Scope, "未知来源"), p.File)
+			if p.Contents != "" {
+				fmt.Fprintf(w, "      内容：%s\n", p.Contents)
+			}
+			if len(p.Agents) > 0 {
+				fmt.Fprintf(w, "      定义：%s\n", strings.Join(p.Agents, "、"))
 			}
 		}
 	}

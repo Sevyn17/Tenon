@@ -46,6 +46,7 @@ type Manifest struct {
 	Description string   `toml:"description"`
 	Skills      string   `toml:"skills"` // 技能目录（相对包目录），格式同 ~/.tenon/skills
 	Prompt      []string `toml:"prompt"` // 提示词片段文件（相对包目录），按顺序拼成一个系统块
+	Agents      string   `toml:"agents"` // 定义目录（相对包目录），布局同 agentdef.Dir：platform/<名字>/agent.toml 等
 	// Config 内置插件的缺省配置：[config.<插件名>] 键 = 值。不能开关插件。
 	Config map[string]map[string]any `toml:"config"`
 }
@@ -58,6 +59,7 @@ type Package struct {
 	Scope     string   // user / project
 	SkillsDir string   // 空 = 无
 	Prompts   []string // 提示词片段文件
+	AgentsDir string   // 定义目录（绝对路径），空 = 不带定义
 	// Sections 组件登记的段解码后的值（段名 → 值，见 RegisterSection / SectionValue）。
 	Sections map[string]any
 }
@@ -116,6 +118,14 @@ func Parse(dir, scope string) (*Package, error) {
 			return nil, fail("prompt 文件 %s 不存在", f)
 		}
 		p.Prompts = append(p.Prompts, abs)
+	}
+	if m.Agents != "" {
+		if p.AgentsDir, err = within(dir, m.Agents); err != nil {
+			return nil, fail("agents：%v", err)
+		}
+		if st, err := os.Stat(p.AgentsDir); err != nil || !st.IsDir() {
+			return nil, fail("agents 目录 %s 不存在", m.Agents)
+		}
 	}
 	if p.Sections, err = decodeSections(file, dir); err != nil {
 		return nil, fail("%v", err)
@@ -273,6 +283,9 @@ func (p *Package) Contents() string {
 	if len(p.Prompts) > 0 {
 		out = append(out, fmt.Sprintf("提示词 %d 段", len(p.Prompts)))
 	}
+	if p.AgentsDir != "" {
+		out = append(out, "定义")
+	}
 	if len(p.Config) > 0 {
 		var ns []string
 		for n := range p.Config {
@@ -329,6 +342,10 @@ skills = "skills"
 
 # 提示词片段（相对包目录），按顺序拼成一个系统块。需开 prompt 插件（缺省开）。
 prompt = ["prompt.md"]
+
+# 定义目录（相对包目录），布局同 agentdef.Dir：platform/<名字>/agent.toml、
+# tenant/<租户>/<名字>/agent.toml、user/<租户>/<用户>/<名字>/agent.toml。
+# agents = "agents"
 
 # MCP 服务，字段同 mcp.toml 的 [[server]]。需开 mcp 插件。${TENON_PLUGIN_DIR} = 包目录。
 # [[server]]

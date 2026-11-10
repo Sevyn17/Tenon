@@ -15,6 +15,7 @@ import (
 	compact "github.com/Sevyn17/tenon/modules/context/compact-basic"
 	"github.com/Sevyn17/tenon/modules/security/permission"
 	"github.com/Sevyn17/tenon/runtime/agent"
+	"github.com/Sevyn17/tenon/runtime/agentdef"
 	"github.com/Sevyn17/tenon/runtime/assemble"
 	"github.com/Sevyn17/tenon/runtime/bus"
 	"github.com/Sevyn17/tenon/runtime/component"
@@ -140,6 +141,7 @@ func Start(o StartOptions) (*Runtime, error) {
 	opts := []tenon.Option{
 		tenon.WithProfile(p), tenon.WithWorkdir(root), tenon.WithProjectTrust(trusted),
 		tenon.WithWorkspace(WorkspaceKey(root)), tenon.WithService(pkgs.Service, ps),
+		tenon.WithAgents(pkgs.AgentSources(ps)...), // 包带的定义：用户级在前，同名时优先于项目级（T4d）
 		tenon.WithSleepAfter(o.SleepAfter), tenon.WithModeApprovals(TrustApprovals{Root: modesWD}),
 		tenon.WithReadyErrors(func(errs []error) { r.readyErrs = errs }),
 		tenon.WithProtocolOptions(func(ao *appapi.Options) {
@@ -171,6 +173,7 @@ func Start(o StartOptions) (*Runtime, error) {
 		return nil, err
 	}
 	in := app.Internals()
+	in.Assembly.SetPackages(pkgs.Infos(context.Background(), ps, agentdef.Scope{Tenant: store.Tenant}))
 	r.App, r.Bus, r.Host = app, in.Bus, in.Host
 	r.Rt = &Assembled{Asm: in.Assembly, Models: in.Models, Defs: in.Definitions}
 	if v, ok := in.Assembly.Value(assemble.ServiceDB); ok {

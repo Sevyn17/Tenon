@@ -215,9 +215,10 @@ func TestExplain(t *testing.T) {
 		t.Fatal(err)
 	}
 	var b strings.Builder
+	a.SetPackages([]PackageInfo{{Name: "demo", Scope: "user", File: "demo/tenon-plugin.toml", Contents: "定义", Agents: []string{"platform:helper"}}})
 	a.Explain(&b, map[string]string{n: "base.toml"})
 	out := b.String()
-	for _, want := range []string{"compact", "base.toml", "threshold", "default", "tool", "read", "session_layer", "compact-layer", "slot:Secrets"} {
+	for _, want := range []string{"compact", "base.toml", "threshold", "default", "tool", "read", "session_layer", "compact-layer", "slot:Secrets", "插件包", "demo", "platform:helper"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("explain 缺 %q:\n%s", want, out)
 		}

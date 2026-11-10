@@ -71,7 +71,7 @@ func (p *Package) SectionKeys() []string {
 }
 
 // builtinKeys 本包自己解析的顶层键（不能被组件登记成段）。
-var builtinKeys = map[string]bool{"name": true, "version": true, "description": true, "skills": true, "prompt": true, "config": true}
+var builtinKeys = map[string]bool{"name": true, "version": true, "description": true, "skills": true, "prompt": true, "agents": true, "config": true}
 
 // decodeSections 按登记解码清单里的段；未登记的未知顶层键报错。
 func decodeSections(file, dir string) (map[string]any, error) {

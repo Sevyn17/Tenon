@@ -324,6 +324,8 @@ type Assembly struct {
 	resources map[string]ResourceType
 	// matchers 订阅匹配器（04 4.7，T4c）。内置三个在组件 Setup 之前登记，组件同名登记拒绝。
 	matchers map[string]matcherReg
+	// packages 已加载插件包的摘要（T4d，explain 用）；应用在装配后经 SetPackages 填。
+	packages []PackageInfo
 }
 
 // 装配错误。
