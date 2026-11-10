@@ -7,7 +7,10 @@ package component
 // 匹配器是纯函数：只看这一条记录和本订阅的参数，不读存储、不调模型。
 
 import (
+	"context"
+	"errors"
 	"fmt"
+	"log"
 	"sort"
 	"strings"
 
@@ -178,4 +181,154 @@ func matchList(rec ResourceRecord, params map[string]string) (Match, error) {
 		}
 	}
 	return Match{}, nil
+}
+
+// Subscription 一条资源订阅。由持有资源的组件从自己的集合查出来传给 Fanout，
+// 内核不存、也不查组件的集合（07 执行方案 3.2）。
+type Subscription struct {
+	ID         string            // 订阅 id，组件自己分配
+	Resource   string            // 资源地址，如 "group:g1"
+	Subscriber string            // 收信地址，本步只接受 "session:<id>"
+	Matcher    string            // 已登记的匹配器名
+	Params     map[string]string // 匹配器参数
+	Exclude    string            // 可选，命中则跳过的来源地址，逗号分隔
+}
+
+// FanoutResult 一次扇出的结果。错误的订阅记在这里，不作为 Fanout 的返回错误。
+type FanoutResult struct {
+	Delivered int      // 投出的信封数
+	Skipped   int      // 未命中、被排除或地址不对的订阅数
+	Denied    []string // 被投递服务拒绝的订阅 id（联系名单、守卫、跳数）
+	Errors    []string // 订阅本身不合法或匹配器报错，格式 "<订阅 id>: <原因>"
+}
+
+// Fanout 把一条资源记录按订阅投给会话（04 4.7）。
+//
+// subs 是该资源的订阅，由调用方从自己的集合查好传进来：内核不查组件的集合，
+// 也不负责发现"有新记录"。写记录和调用本方法之间崩溃，由组件启动时按自己的序号补投。
+//
+// 返回错误只表示根本没投成，例如没有投递服务。单条订阅的问题记日志、跳过，
+// 收进 FanoutResult，不挡住其余订阅。
+func (m *Mailer) Fanout(ctx context.Context, rec ResourceRecord, subs []Subscription) (FanoutResult, error) {
+	if m.host == nil {
+		return FanoutResult{}, fmt.Errorf("plugin: 没有内核投递服务，无法扇出 %s", rec.Resource)
+	}
+	var out FanoutResult
+	for _, sub := range subs {
+		switch err := m.fanoutOne(ctx, rec, sub); {
+		case err == nil:
+			out.Delivered++
+		case err == errFanoutSkip:
+			out.Skipped++
+		default:
+			var denied deniedError
+			if errors.As(err, &denied) {
+				out.Denied = append(out.Denied, denied.id)
+				log.Printf("component: 组件 %s 扇出 %s#%d 给订阅 %s 被拒绝：%v", m.from.ID, rec.Resource, rec.Seq, sub.ID, err)
+				continue
+			}
+			out.Errors = append(out.Errors, sub.ID+": "+err.Error())
+			log.Printf("component: 组件 %s 扇出 %s#%d 给订阅 %s 失败：%v", m.from.ID, rec.Resource, rec.Seq, sub.ID, err)
+		}
+	}
+	return out, nil
+}
+
+// errFanoutSkip 表示这条订阅本条不投，且不是错误：未命中、来源被排除、或地址不是 session:。
+var errFanoutSkip = fmt.Errorf("跳过")
+
+// fanoutOne 处理一条订阅。返回 nil 表示已投出。
+func (m *Mailer) fanoutOne(ctx context.Context, rec ResourceRecord, sub Subscription) error {
+	if excluded(rec.From, sub.Exclude) {
+		return errFanoutSkip
+	}
+	to, err := mail.ParseAddress(sub.Subscriber)
+	if err != nil || to.Kind != mail.AddrSession {
+		return fmt.Errorf("收信地址 %q 不是 session:", sub.Subscriber)
+	}
+	match, err := m.runMatcher(rec, sub)
+	if err != nil || !match.Matched {
+		if err != nil {
+			return err
+		}
+		return errFanoutSkip
+	}
+	env := mail.Envelope{
+		From:   rec.From,
+		Via:    m.from.ID,
+		To:     to,
+		Kind:   mail.KindNotify,
+		Mode:   match.Mode,
+		Origin: mail.OriginExternal,
+		Body:   renderRecord(rec, m.resourceType(rec.Resource)),
+	}
+	if err := env.Normalize(); err != nil {
+		return err
+	}
+	if err := m.host.Deliver(ctx, env); err != nil {
+		return deniedError{id: sub.ID, err: err}
+	}
+	return nil
+}
+
+// deniedError 投递服务拒绝了这一封（联系名单、守卫、跳数）。
+// Fanout 把它收进 FanoutResult.Denied，不与订阅本身的错误混在一起。
+type deniedError struct {
+	id  string
+	err error
+}
+
+func (e deniedError) Error() string { return e.err.Error() }
+
+func (e deniedError) Unwrap() error { return e.err }
+
+// runMatcher 跑订阅指定的匹配器。没有登记的匹配器是订阅本身的错误。
+func (m *Mailer) runMatcher(rec ResourceRecord, sub Subscription) (Match, error) {
+	reg, ok := m.matchers[sub.Matcher]
+	if !ok {
+		return Match{}, fmt.Errorf("匹配器 %q 未登记", sub.Matcher)
+	}
+	return reg.fn(withDefaultFields(rec), sub.Params)
+}
+
+// withDefaultFields 补上缺省字段：from 是来源地址字符串，body 是记录正文。
+// 组件显式给的同名字段优先。不改调用方的 map。
+func withDefaultFields(rec ResourceRecord) ResourceRecord {
+	fields := map[string]string{"from": rec.From.String(), "body": rec.Body}
+	for k, v := range rec.Fields {
+		fields[k] = v
+	}
+	rec.Fields = fields
+	return rec
+}
+
+// resourceType 按资源地址的类型名取登记。没登记返回零值，渲染时退回记录正文。
+func (m *Mailer) resourceType(resource string) ResourceType {
+	name, _, _ := strings.Cut(resource, ":")
+	if m.asm == nil {
+		return ResourceType{}
+	}
+	return m.asm.resources[name]
+}
+
+// renderRecord 用资源类型的 Render 出正文；没有登记或没给 Render 时用记录自己的正文。
+func renderRecord(rec ResourceRecord, t ResourceType) string {
+	if t.Render == nil {
+		return rec.Body
+	}
+	return t.Render(rec)
+}
+
+// excluded 看来源地址是否在订阅的排除名单里。名单是逗号分隔的地址字符串，空名单不排除。
+func excluded(from mail.Address, list string) bool {
+	if list == "" {
+		return false
+	}
+	want := from.String()
+	for _, item := range strings.Split(list, ",") {
+		if item == want {
+			return true
+		}
+	}
+	return false
 }

@@ -16,13 +16,15 @@ type Sender interface {
 
 // Mailer 组件发信句柄：from 固定为本组件，调用方不能伪造发送者。
 type Mailer struct {
-	from mail.Address
-	host Sender
+	from     mail.Address
+	host     Sender
+	asm      *Assembly // 扇出时取匹配器与资源类型；测试直接构造时为空
+	matchers map[string]matcherReg
 }
 
 // Mailer 取当前组件的发信句柄（P4）。没有注入投递服务时 Send 返回错误。
 func (cx *Registrar) Mailer() *Mailer {
-	m := &Mailer{from: mail.Address{Kind: mail.AddrComponent, ID: cx.plugin}}
+	m := &Mailer{from: mail.Address{Kind: mail.AddrComponent, ID: cx.plugin}, asm: cx.asm, matchers: cx.asm.matchers}
 	if v, ok := cx.asm.values[ext.ServiceHost]; ok {
 		if s, ok := v.(Sender); ok {
 			m.host = s

@@ -1,9 +1,12 @@
 package component
 
 import (
+	"context"
+	"errors"
 	"strings"
 	"testing"
 
+	"github.com/Sevyn17/tenon/runtime/ext"
 	"github.com/Sevyn17/tenon/runtime/mail"
 )
 
@@ -90,5 +93,135 @@ func TestBuiltinMatchers(t *testing.T) {
 	}
 	if _, err := matchList(rec, map[string]string{}); err == nil {
 		t.Fatal("缺 field 与 value 应返回错误")
+	}
+}
+
+func TestFanoutDeliversOnlyMatches(t *testing.T) {
+	sender := &fakeSender{}
+	var result FanoutResult
+	var ferr error
+	name := reg(t, "board", &fake{setup: func(cx *Registrar) error {
+		rec := ResourceRecord{
+			Resource: "group:g1", Seq: 3,
+			From: mail.Address{Kind: mail.AddrHuman, ID: "u1"},
+			Body: "hello",
+		}
+		subs := []Subscription{
+			{ID: "hit", Subscriber: "session:s1", Matcher: MatcherExact,
+				Params: map[string]string{"field": "from", "value": "human:u1"}},
+			{ID: "miss", Subscriber: "session:s2", Matcher: MatcherExact,
+				Params: map[string]string{"field": "from", "value": "human:u2"}},
+			{ID: "self", Subscriber: "session:s3", Matcher: MatcherExact,
+				Params: map[string]string{"field": "from", "value": "human:u1"}, Exclude: "human:u1,human:u9"},
+			{ID: "bad", Subscriber: "human:u3", Matcher: MatcherExact,
+				Params: map[string]string{"field": "from", "value": "human:u1"}},
+		}
+		result, ferr = cx.Mailer().Fanout(context.Background(), rec, subs)
+		return nil
+	}})
+	if _, err := Assemble(Spec{Plugins: entries(name), Inject: map[string]any{ext.ServiceHost: sender}}); err != nil {
+		t.Fatal(err)
+	}
+	if ferr != nil {
+		t.Fatal(ferr)
+	}
+	if result.Delivered != 1 || result.Skipped != 2 || len(result.Errors) != 1 {
+		t.Fatalf("结果 = %+v，期望投出 1、跳过 2、错误 1", result)
+	}
+	if !strings.Contains(result.Errors[0], "bad:") || !strings.Contains(result.Errors[0], "session:") {
+		t.Fatalf("坏地址应记入错误：%v", result.Errors)
+	}
+	if len(sender.envs) != 1 {
+		t.Fatalf("投出 %d 封", len(sender.envs))
+	}
+	env := sender.envs[0]
+	if env.From != (mail.Address{Kind: mail.AddrHuman, ID: "u1"}) || env.Via != name {
+		t.Fatalf("from/via = %s/%s", env.From, env.Via)
+	}
+	if env.To != (mail.Address{Kind: mail.AddrSession, ID: "s1"}) {
+		t.Fatalf("to = %s", env.To)
+	}
+	if env.Kind != mail.KindNotify || env.Mode != mail.ModeNotice || env.Origin != mail.OriginExternal {
+		t.Fatalf("kind/mode/origin = %s/%s/%s", env.Kind, env.Mode, env.Origin)
+	}
+	if env.Body != "hello" || env.Hop != 0 || env.Trace != "" || env.Caps != nil {
+		t.Fatalf("body/hop/trace/caps = %q/%d/%q/%v", env.Body, env.Hop, env.Trace, env.Caps)
+	}
+}
+
+func TestFanoutWithoutHost(t *testing.T) {
+	var ferr error
+	name := reg(t, "nohost", &fake{setup: func(cx *Registrar) error {
+		_, ferr = cx.Mailer().Fanout(context.Background(), ResourceRecord{Resource: "group:g1"}, nil)
+		return nil
+	}})
+	if _, err := Assemble(Spec{Plugins: entries(name)}); err != nil {
+		t.Fatal(err)
+	}
+	if ferr == nil || !strings.Contains(ferr.Error(), "没有内核投递服务") {
+		t.Fatalf("没有投递服务应返回错误：%v", ferr)
+	}
+}
+
+func TestFanoutCollectsMatcherAndDeliveryErrors(t *testing.T) {
+	sender := &fakeSender{err: errors.New("联系名单拒绝")}
+	var result FanoutResult
+	name := reg(t, "board", &fake{setup: func(cx *Registrar) error {
+		rec := ResourceRecord{Resource: "group:g1", Seq: 1, From: mail.Address{Kind: mail.AddrHuman, ID: "u1"}, Body: "x"}
+		subs := []Subscription{
+			{ID: "unknown", Subscriber: "session:s1", Matcher: "no_such"},
+			{ID: "badparams", Subscriber: "session:s2", Matcher: MatcherExact, Params: map[string]string{"field": "from"}},
+			{ID: "denied", Subscriber: "session:s3", Matcher: MatcherExact,
+				Params: map[string]string{"field": "body", "value": "x"}},
+		}
+		var err error
+		result, err = cx.Mailer().Fanout(context.Background(), rec, subs)
+		if err != nil {
+			t.Fatalf("单条失败不应让 Fanout 返回错误：%v", err)
+		}
+		return nil
+	}})
+	if _, err := Assemble(Spec{Plugins: entries(name), Inject: map[string]any{ext.ServiceHost: sender}}); err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Denied) != 1 || result.Denied[0] != "denied" {
+		t.Fatalf("被拒 = %v", result.Denied)
+	}
+	if len(result.Errors) != 2 {
+		t.Fatalf("错误 = %v，期望 2 条", result.Errors)
+	}
+	if len(sender.envs) != 0 {
+		t.Fatalf("被拒的不应留下信封：%d", len(sender.envs))
+	}
+}
+
+func TestFanoutUsesMatcherModeAndRender(t *testing.T) {
+	sender := &fakeSender{}
+	name := reg(t, "board", &fake{setup: func(cx *Registrar) error {
+		if err := cx.ResourceType(ResourceType{Name: "group", Render: func(rec ResourceRecord) string {
+			return "渲染:" + rec.Body
+		}}); err != nil {
+			return err
+		}
+		if err := cx.Matcher("wake_on", func(ResourceRecord, map[string]string) (Match, error) {
+			return Match{Matched: true, Mode: mail.ModeWake}, nil
+		}); err != nil {
+			return err
+		}
+		rec := ResourceRecord{Resource: "group:g1", Seq: 1, From: mail.Address{Kind: mail.AddrHuman, ID: "u1"}, Body: "原文"}
+		_, err := cx.Mailer().Fanout(context.Background(), rec, []Subscription{
+			{ID: "s", Subscriber: "session:s1", Matcher: "wake_on"},
+		})
+		return err
+	}})
+	if _, err := Assemble(Spec{Plugins: entries(name), Inject: map[string]any{ext.ServiceHost: sender}}); err != nil {
+		t.Fatal(err)
+	}
+	if len(sender.envs) != 1 {
+		t.Fatalf("投出 %d 封", len(sender.envs))
+	}
+	env := sender.envs[0]
+	if env.Mode != mail.ModeWake || env.Body != "渲染:原文" {
+		t.Fatalf("mode/body = %s/%q", env.Mode, env.Body)
 	}
 }
