@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"path/filepath"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	"github.com/Sevyn17/tenon/runtime/mail"
 	"github.com/Sevyn17/tenon/runtime/session"
 	"github.com/Sevyn17/tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/store/sqlite"
 )
 
 // creatorRig 建一个创建者为 u1 的会话 s1。
@@ -72,6 +74,44 @@ func TestGuardRuleMerge(t *testing.T) {
 	})
 	if err := send(mail.Address{Kind: mail.AddrHuman, ID: "u2"}); !errors.Is(err, ErrNotAllowed) {
 		t.Fatalf("Deny 应胜过 Allow：%v", err)
+	}
+}
+
+// TestGuardDeniedPersists：守卫拒绝同时写进组件事件日志（04 4.6，T4b）。
+// 关掉再打开同一存储，订阅者从序号 0 续读仍能读到，不依赖易失的总线。
+func TestGuardDeniedPersists(t *testing.T) {
+	ctx := context.Background()
+	r := creatorRig(t)
+	r.h.Guards = []component.GuardRule{{
+		Name: "block", On: component.GuardDeliver,
+		Check: func(component.GuardRequest) (component.Verdict, string) { return component.Deny, "测试屏蔽" },
+	}}
+	err := r.h.Deliver(ctx, mail.Envelope{
+		From: mail.Address{Kind: mail.AddrHuman, ID: "u1"},
+		To:   mail.Address{Kind: mail.AddrSession, ID: "s1"}, Body: "hi"})
+	if !errors.Is(err, ErrNotAllowed) {
+		t.Fatalf("应被拒绝：%v", err)
+	}
+	r.db.Close()
+
+	reopened, err := sqlite.Open(ctx, r.path, sqlite.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	got, err := reopened.Read(ctx, 0, 0)
+	if err != nil || len(got) != 1 {
+		t.Fatalf("重启后应读到一条：%v %+v", err, got)
+	}
+	if got[0].Seq != 1 || got[0].Source != "guard" || got[0].Name != "guard.denied" {
+		t.Fatalf("事件不对：%+v", got[0])
+	}
+	var data map[string]string
+	if err := json.Unmarshal(got[0].Data, &data); err != nil {
+		t.Fatal(err)
+	}
+	if data["reason"] != "测试屏蔽" || data["to"] != "session:s1" {
+		t.Fatalf("载荷不对：%v", data)
 	}
 }
 

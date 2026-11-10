@@ -713,6 +713,9 @@ func (h *Host) recordTrace(trace, session, kind, detail string) {
 
 // guardDenied 记一次守卫拒绝：trace 事件 + guard.denied 事件（2026-11-04 审查 P2：原先这两行在本文件里抄了 9 遍）。
 // extra 是成对的附加键值（如 "corr", env.Corr）。
+//
+// 同时追加进组件事件日志（04 4.6，T4b）：总线事件是易失的，重启后订阅者从日志续读。
+// 存储没实现事件日志时只发总线，与没有订阅时一样。写日志失败不影响拒绝本身。
 func (h *Host) guardDenied(env mail.Envelope, session, reason string, extra ...string) {
 	h.recordTrace(env.Trace, session, "guard_denied", reason)
 	data := map[string]any{"from": env.From.String(), "to": env.To.String(), "reason": reason}
@@ -720,4 +723,20 @@ func (h *Host) guardDenied(env mail.Envelope, session, reason string, extra ...s
 		data[extra[i]] = extra[i+1]
 	}
 	h.publish(session, "guard.denied", data)
+	h.appendGuardDenied(data)
+}
+
+// appendGuardDenied 把一次守卫拒绝追加进组件事件日志。
+func (h *Host) appendGuardDenied(data map[string]any) {
+	el, ok := h.DB.(store.EventLog)
+	if !ok {
+		return
+	}
+	body, err := json.Marshal(data)
+	if err != nil {
+		return
+	}
+	if _, err := el.Append(context.Background(), store.ComponentEvent{Source: "guard", Name: "guard.denied", Data: body}); err != nil {
+		h.recordTrace("", "", "event_log", err.Error())
+	}
 }
