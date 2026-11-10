@@ -27,6 +27,24 @@ app, err := tenon.New(tenon.Default(),
 
 示例在 [examples/](examples/)：`chat`、`hello`、`tools`、`component`、`web-server`。公开面（哪些包、哪些名字在稳定承诺里）见 [07 SDK 接口](<docs/框架设计/07 - SDK 接口.md>)。
 
+## 代码目录
+
+| 目录 | 职责 |
+|---|---|
+| [runtime/](runtime/) | 内核机制：会话、宿主与回合循环、信封投递、注入、工具/模型枢纽、存储接口、装配 |
+| [modules/](modules/) | 标准组件（可选）：fs、shell、web、mcp、permission、sandbox、提示词、技能、脱敏、压缩、subagent、workgroup、三家模型适配器、sqlite 存储 |
+| [appapi/](appapi/) | 应用协议：命令、事件与线上类型（`wire`，前端 TS 类型由它生成） |
+| 根包（`*.go`） | SDK：应用只 import 这一个包，[doc.go](doc.go) 是目录页 |
+| [apphost/](apphost/) | 应用宿主装配：读 profile、装内置插件（命令行 / 桌面端 / 网页服务共用） |
+| [adapters/](adapters/) | 插件能力 → 协议接口的适配器（模型列表、权限档位、建议追问、自动标题） |
+| [transport/](transport/) | 协议载体：`web`（HTTP + WebSocket 服务）、`bind`（桌面壳进程内绑定） |
+| [tenontest/](tenontest/) | 应用端到端测试套件：内存存储 + 脚本模型 + 断言 |
+| [web/](web/) | 参考前端 `@tenon/web`：client（协议客户端）/ ui（设计系统）/ shell（工作台） |
+| [examples/](examples/) | 上手文档的可运行对应物，CI 里编译并跑 |
+| [docs/](docs/00%20-%20索引.md) | 框架设计、计划与决策日志、协议契约、约束清单 |
+
+依赖方向有测试强制（`runtime/assemble/deps_test.go`）：内核不 import 模块，模块之间不互相 import，装配层不被反向依赖。
+
 ## 文档
 
 从 [00 - 索引](<docs/00 - 索引.md>) 读起：
