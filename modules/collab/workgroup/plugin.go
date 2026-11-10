@@ -50,11 +50,12 @@ func TemplateSource() (agentdef.Source, error) {
 }
 
 type plug struct {
-	h   *host.Host
-	db  assemble.DBHandle
-	sql store.SQL
-	ui  assemble.UI
-	g   *Group
+	h     *host.Host
+	db    assemble.DBHandle
+	sql   store.SQL
+	tasks store.Collection // 任务板（集合 workgroup.tasks，Assembly.Start 前由框架打开）
+	ui    assemble.UI
+	g     *Group
 }
 
 func init() { component.Register("workgroup", func() component.Component { return &plug{} }) }
@@ -79,6 +80,15 @@ func (p *plug) Setup(cx *component.Registrar) error {
 		return err
 	}
 	if p.ui, err = component.Use[assemble.UI](cx, assemble.ServiceUI); err != nil {
+		return err
+	}
+	// 任务板（T4a）。句柄在 Assembly.Start 之前打开，Start 里的 New 才能用。
+	if p.tasks, err = cx.Collection("tasks", store.CollectionSpec{
+		Version: 1, Indexes: []string{"status", "owner"}, Partition: "team"}); err != nil {
+		return err
+	}
+	// 版本 1 没有集合内的数据要改：旧表 p_workgroup_tasks 的搬运在 Start 里，迁移函数拿不到 SQL。
+	if err := cx.CollectionMigration(component.CollectionMigration{Collection: "tasks", From: 0}); err != nil {
 		return err
 	}
 	for _, it := range Items() {
@@ -124,7 +134,7 @@ func (p *plug) Setup(cx *component.Registrar) error {
 }
 
 func (p *plug) Start(sc *component.Scope) error {
-	g, err := New(context.Background(), p.h, p.sql, p.db.DB(), p.h.ChildFactory())
+	g, err := New(context.Background(), p.h, p.sql, p.tasks, p.db.DB(), p.h.ChildFactory())
 	if err != nil {
 		return err
 	}

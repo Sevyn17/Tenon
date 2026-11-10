@@ -13,6 +13,7 @@ import (
 	"github.com/Sevyn17/tenon/runtime/agent"
 	"github.com/Sevyn17/tenon/runtime/host"
 	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/store"
 	"github.com/Sevyn17/tenon/runtime/store/sqlite"
 	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
@@ -87,7 +88,15 @@ func rig(t *testing.T) (*Group, *host.Host, *sqlite.DB, *echoModel) {
 		}
 	}
 	h.New = mk(true)
-	g, err = New(context.Background(), h, db, db, mk(false))
+	if err := db.SetCollectionVersion(context.Background(), store.Tenant, "workgroup", "tasks", 1); err != nil {
+		t.Fatal(err)
+	}
+	tasks, err := db.Open(context.Background(), store.Tenant, "workgroup", "tasks", store.CollectionSpec{
+		Version: 1, Indexes: []string{"status", "owner"}, Partition: "team"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	g, err = New(context.Background(), h, db, tasks, db, mk(false))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -213,6 +222,68 @@ func TestBoard(t *testing.T) {
 	}
 	if o := call(t, g, g.MemberTools(), "task_claim", "L/m-alice", `{"id":9}`); o.Status != session.ToolError {
 		t.Fatal("不存在的任务应报错")
+	}
+}
+
+// TestImportTasks 旧表 p_workgroup_tasks 在 Start（New）时搬进集合：行进去、表删掉、id 与 rev 保持原值。
+func TestImportTasks(t *testing.T) {
+	db, err := sqlite.Open(context.Background(), filepath.Join(t.TempDir(), "s.db"), sqlite.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+	ctx := context.Background()
+	if _, err := db.DB().ExecContext(ctx, `CREATE TABLE p_workgroup_tasks(
+		team TEXT NOT NULL, id INTEGER NOT NULL,
+		subject TEXT NOT NULL, description TEXT NOT NULL DEFAULT '',
+		owner TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'pending',
+		result TEXT NOT NULL DEFAULT '', rev INTEGER NOT NULL DEFAULT 1,
+		created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
+		PRIMARY KEY(team, id))`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.DB().ExecContext(ctx, `INSERT INTO p_workgroup_tasks
+		(team, id, subject, description, owner, status, result, rev, created_at, updated_at) VALUES
+		('L', 2, '写文档', '说明', 'alice', 'in_progress', '', 3, 1, 1),
+		('L', 5, '跑测试', '', '', 'pending', '', 1, 1, 1)`); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.SetCollectionVersion(ctx, store.Tenant, "workgroup", "tasks", 1); err != nil {
+		t.Fatal(err)
+	}
+	tasks, err := db.Open(ctx, store.Tenant, "workgroup", "tasks", store.CollectionSpec{
+		Version: 1, Indexes: []string{"status", "owner"}, Partition: "team"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	g, err := New(ctx, &host.Host{DB: db}, db, tasks, db, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(g.Close)
+
+	var left int
+	err = db.DB().QueryRowContext(ctx, `SELECT COUNT(*) FROM p_workgroup_tasks`).Scan(&left)
+	if err == nil {
+		t.Fatalf("旧表应已删除，还剩 %d 行", left)
+	}
+	if !strings.Contains(err.Error(), "no such table") {
+		t.Fatal(err)
+	}
+	got, err := g.List(ctx, "L")
+	if err != nil || len(got) != 2 {
+		t.Fatalf("搬迁后 = %+v %v", got, err)
+	}
+	if got[0].ID != 2 || got[0].Rev != 3 || got[0].Owner != "alice" || got[0].Status != "in_progress" || got[0].Description != "说明" {
+		t.Fatalf("第一行 id 与 rev 应保持原值：%+v", got[0])
+	}
+	if got[1].ID != 5 || got[1].Rev != 1 || got[1].Status != "pending" {
+		t.Fatalf("第二行：%+v", got[1])
+	}
+	// 计数器要抬到已搬的最大 id，否则下一个新建任务会与旧 id 撞车。
+	next, err := g.Create(ctx, "L", "新任务", "")
+	if err != nil || next.ID != 6 {
+		t.Fatalf("搬迁后新建 = %+v %v", next, err)
 	}
 }
 

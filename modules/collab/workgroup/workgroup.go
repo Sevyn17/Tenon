@@ -3,12 +3,12 @@
 // 成员是普通会话（origin=member，parent_id=领导会话 id，id=<领导>/m-<名字>），持久、可单独打开。
 // 领导用 team_spawn 异步派活：成员回合在后台跑，结束时把最终文本作为一条输入投递回领导 inbox
 // （领导空闲则立即开回合，忙则排队）。team_send 双向发消息（同样走 inbox，item id 幂等）。
-// 看板存插件自有表 p_workgroup_tasks，按领导会话 id 分组；领取 / 完成带修订号做条件写。
+// 看板存集合 workgroup.tasks（T4a），按领导会话 id 分区；领取 / 完成用文档版本做条件写。
+// 成员回合的投递账仍是 SQL 表 p_workgroup_runs。
 package workgroup
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -32,13 +32,8 @@ const MaxMembers = 8
 var nameRe = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
 
 var migrations = []store.Migration{{Version: 1, Stmts: []string{
-	`CREATE TABLE p_workgroup_tasks(
-		team TEXT NOT NULL, id INTEGER NOT NULL,
-		subject TEXT NOT NULL, description TEXT NOT NULL DEFAULT '',
-		owner TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'pending',
-		result TEXT NOT NULL DEFAULT '', rev INTEGER NOT NULL DEFAULT 1,
-		created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
-		PRIMARY KEY(team, id))`,
+	// 任务板建表曾在这里。T4a 起任务板改集合 workgroup.tasks，旧表由 importTasks 搬完删除。
+	// 版本号不能改：已发布的库 schema_versions 里记着 1，改了号已有库的后续迁移会被跳过。
 }}, {Version: 2, Stmts: []string{
 	// 成员回合的投递账：开始时记 running，结束时记 done + 结果；投递成功后删除。
 	// 重启后 Recover 补投（item id 固定，inbox 准入幂等，不会重复）。
@@ -51,7 +46,8 @@ var migrations = []store.Migration{{Version: 1, Stmts: []string{
 // Group 进程内工作组服务。
 type Group struct {
 	Host     *host.Host
-	SQL      store.SQL          // 自有 p_workgroup_* 表的 SQL（Requires{SQL: true}）
+	SQL      store.SQL          // 自有 p_workgroup_runs 表的 SQL（Requires{SQL: true}）
+	Tasks    store.Collection   // 任务板（集合 workgroup.tasks，Assembly.Start 前由框架打开）
 	Sessions store.SessionStore // 会话存在性检查
 	Member   host.Factory       // 成员会话工厂（成员工具集，不含 team_spawn）
 
@@ -62,13 +58,129 @@ type Group struct {
 	cancel  context.CancelFunc
 }
 
-// New 建表并返回服务。
-func New(ctx context.Context, h *host.Host, sq store.SQL, sessions store.SessionStore, member host.Factory) (*Group, error) {
+// New 建投递账表并返回服务。tasks 是已打开的任务板集合（T4a）。
+func New(ctx context.Context, h *host.Host, sq store.SQL, tasks store.Collection, sessions store.SessionStore, member host.Factory) (*Group, error) {
 	if err := sq.Migrate(ctx, "workgroup", migrations); err != nil {
 		return nil, err
 	}
-	c, cancel := context.WithCancel(context.Background())
-	return &Group{Host: h, SQL: sq, Sessions: sessions, Member: member, running: map[string]bool{}, ctx: c, cancel: cancel}, nil
+	g := &Group{Host: h, SQL: sq, Tasks: tasks, Sessions: sessions, Member: member, running: map[string]bool{}}
+	if err := g.importTasks(ctx); err != nil {
+		return nil, err
+	}
+	g.ctx, g.cancel = context.WithCancel(context.Background())
+	return g, nil
+}
+
+// importTasks 把旧表 p_workgroup_tasks 搬进集合（T4a）。
+//
+// v0.1.x 已发布，别人的库里可能有任务板，升级后要能直接用。表不存在就跳过（内存存储没有这张表，
+// 新库的迁移也不再建它）。失败返回错误且不删表，下次启动重跑；已搬过的行 Put 会冲突，按"已存在"跳过。
+// 计数器取已搬任务的最大 id，否则下一次 Create 会与旧 id 撞车。
+func (g *Group) importTasks(ctx context.Context) error {
+	rows, err := g.readOldTasks(ctx)
+	if err != nil || rows == nil {
+		return err
+	}
+	maxID := map[string]int{}
+	for _, r := range rows {
+		t := Task{ID: r.id, Subject: r.subject, Description: r.desc, Owner: r.owner, Status: r.status, Result: r.result}
+		if err := g.importTask(ctx, r.team, t, r.rev); err != nil {
+			return fmt.Errorf("workgroup: 搬任务 %s #%d：%w", r.team, r.id, err)
+		}
+		if r.id > maxID[r.team] {
+			maxID[r.team] = r.id
+		}
+	}
+	for team, n := range maxID {
+		if err := g.importSeq(ctx, team, n); err != nil {
+			return err
+		}
+	}
+	if _, err := g.SQL.DB().ExecContext(ctx, `DROP TABLE p_workgroup_tasks`); err != nil {
+		return fmt.Errorf("workgroup: 删除旧任务板：%w", err)
+	}
+	return nil
+}
+
+// oldTask 旧表 p_workgroup_tasks 的一行。
+type oldTask struct {
+	team, subject, desc, owner, status, result string
+	id, rev                                     int
+}
+
+// readOldTasks 读出旧任务板的全部行。表不存在返回 nil。
+// 写连接只有一条，必须读完关掉再写，否则后面的 Put 会和这次查询抢同一条连接。
+func (g *Group) readOldTasks(ctx context.Context) ([]oldTask, error) {
+	rows, err := g.SQL.DB().QueryContext(ctx, `SELECT team, id, subject, description, owner, status, result, rev
+		FROM p_workgroup_tasks`)
+	if err != nil {
+		if isNoSuchTable(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("workgroup: 读旧任务板：%w", err)
+	}
+	defer rows.Close()
+	var out []oldTask
+	for rows.Next() {
+		var r oldTask
+		if err := rows.Scan(&r.team, &r.id, &r.subject, &r.desc, &r.owner, &r.status, &r.result, &r.rev); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// importTask 搬一行。已搬过的行（版本已到旧 rev）按"已存在"跳过；搬到一半的补上修订号。
+// 旧表的 rev 是列，集合版本由存储从 1 起、每次写入加一，所以要补写到原值，读回时 Rev 才保持原值。
+func (g *Group) importTask(ctx context.Context, team string, t Task, rev int) error {
+	doc := store.Doc{Key: taskKey(t.ID), Body: taskBody(team, t)}
+	if err := g.Tasks.Put(ctx, team, doc, 0); err != nil && !errors.Is(err, store.ErrConflict) {
+		return err
+	}
+	for {
+		have, err := g.Tasks.Get(ctx, team, doc.Key)
+		if err != nil {
+			return err
+		}
+		if have.Version >= int64(rev) {
+			return nil
+		}
+		if err := g.Tasks.Put(ctx, team, doc, have.Version); err != nil {
+			if errors.Is(err, store.ErrConflict) {
+				continue
+			}
+			return err
+		}
+	}
+}
+
+// importSeq 把分区计数器至少抬到已搬任务的最大 id。重跑时取较大值，不回退。
+func (g *Group) importSeq(ctx context.Context, team string, n int) error {
+	for {
+		d, err := g.Tasks.Get(ctx, team, seqKey)
+		if errors.Is(err, store.ErrNotFound) {
+			d = store.Doc{Key: seqKey, Body: map[string]any{"team": team, seqMark: true, "n": int64(0), "status": "", "owner": ""}}
+		} else if err != nil {
+			return err
+		}
+		if numOf(d.Body["n"]) >= int64(n) {
+			return nil
+		}
+		d.Body["n"] = int64(n)
+		if err := g.Tasks.Put(ctx, team, d, d.Version); err != nil {
+			if errors.Is(err, store.ErrConflict) {
+				continue
+			}
+			return err
+		}
+		return nil
+	}
+}
+
+// isNoSuchTable 表不存在。SQLite 报 "no such table"；其他方言的存储没有这张表时同样跳过。
+func isNoSuchTable(err error) bool {
+	return strings.Contains(err.Error(), "no such table")
 }
 
 // Close 取消所有后台成员回合并等待退出。
@@ -390,47 +502,138 @@ var ErrConflict = errors.New("workgroup: 任务已被改动")
 // ErrNoTask 看板上没有这个任务。
 var ErrNoTask = errors.New("workgroup: 没有任务")
 
+// taskStatuses 任务状态的全集。List 按 status 索引分段查，这里是拼全量的顺序。
+var taskStatuses = []string{"pending", "in_progress", "completed"}
+
+// seqKey 分区内的自增计数器行。与任务行同集合，靠 seqMark 字段区分，List 时跳过。
+const seqKey = "__seq__"
+
+// seqMark 计数器行正文里的标记字段，任务行不会有。
+const seqMark = "_seq"
+
+// taskKey 任务 id 的集合 key：十进制固定 10 位补零。
+// Query 按 Key 字符串升序，不补零的话 10 排在 2 前面，List 的顺序就不是 id 序。
+func taskKey(id int) string { return fmt.Sprintf("%010d", id) }
+
+// taskBody 任务行的正文。team 是分区字段，status / owner 是索引字段，写入时必须在。
+func taskBody(team string, t Task) map[string]any {
+	return map[string]any{
+		"team": team, "id": t.ID, "subject": t.Subject, "description": t.Description,
+		"owner": t.Owner, "status": t.Status, "result": t.Result,
+	}
+}
+
+func taskFromDoc(d store.Doc) (Task, bool) {
+	if _, ok := d.Body[seqMark]; ok {
+		return Task{}, false
+	}
+	return Task{
+		ID: int(numOf(d.Body["id"])), Subject: strOf(d.Body["subject"]),
+		Description: strOf(d.Body["description"]), Owner: strOf(d.Body["owner"]),
+		Status: strOf(d.Body["status"]), Result: strOf(d.Body["result"]), Rev: int(d.Version),
+	}, true
+}
+
+func strOf(v any) string {
+	s, _ := v.(string)
+	return s
+}
+
+// numOf 读 JSON 往返后的数字（读回是 float64）或直接写入的整数。
+func numOf(v any) int64 {
+	switch n := v.(type) {
+	case float64:
+		return int64(n)
+	case int64:
+		return n
+	case int:
+		return int64(n)
+	}
+	return 0
+}
+
+// nextID 取分区内的下一个任务 id。计数器行与任务行同集合、固定 key，冲突重试。
+func (g *Group) nextID(ctx context.Context, team string) (int, error) {
+	for {
+		d, err := g.Tasks.Get(ctx, team, seqKey)
+		if errors.Is(err, store.ErrNotFound) {
+			d = store.Doc{Key: seqKey, Body: map[string]any{"team": team, seqMark: true, "n": int64(0), "status": "", "owner": ""}}
+		} else if err != nil {
+			return 0, err
+		}
+		n := numOf(d.Body["n"]) + 1
+		d.Body["n"] = n
+		if err := g.Tasks.Put(ctx, team, d, d.Version); err != nil {
+			if errors.Is(err, store.ErrConflict) {
+				continue
+			}
+			return 0, err
+		}
+		return int(n), nil
+	}
+}
+
 // Create 新建任务。
 func (g *Group) Create(ctx context.Context, team, subject, desc string) (Task, error) {
-	now := time.Now().UnixMilli()
-	var id int
-	err := g.SQL.DB().QueryRowContext(ctx, `INSERT INTO p_workgroup_tasks(team, id, subject, description, created_at, updated_at)
-		VALUES(?, (SELECT COALESCE(MAX(id),0)+1 FROM p_workgroup_tasks WHERE team = ?), ?, ?, ?, ?) RETURNING id`,
-		team, team, subject, desc, now, now).Scan(&id)
+	id, err := g.nextID(ctx, team)
 	if err != nil {
 		return Task{}, err
 	}
-	return Task{ID: id, Subject: subject, Description: desc, Status: "pending", Rev: 1}, nil
+	t := Task{ID: id, Subject: subject, Description: desc, Status: "pending", Rev: 1}
+	doc := store.Doc{Key: taskKey(id), Body: taskBody(team, t)}
+	if err := g.Tasks.Put(ctx, team, doc, 0); err != nil {
+		return Task{}, err
+	}
+	return t, nil
 }
 
-// List 列出任务。
+// List 列出任务，按 id 升序。集合没有"列出分区全部"的操作，按 status 索引分段查再归并。
 func (g *Group) List(ctx context.Context, team string) ([]Task, error) {
-	rows, err := g.SQL.DB().QueryContext(ctx, `SELECT id, subject, description, owner, status, result, rev
-		FROM p_workgroup_tasks WHERE team = ? ORDER BY id`, team)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
 	var out []Task
-	for rows.Next() {
-		var t Task
-		if err := rows.Scan(&t.ID, &t.Subject, &t.Description, &t.Owner, &t.Status, &t.Result, &t.Rev); err != nil {
-			return nil, err
+	for _, st := range taskStatuses {
+		page := store.Page{}
+		for {
+			docs, next, err := g.Tasks.Query(ctx, team, "status", st, page)
+			if err != nil {
+				return nil, err
+			}
+			for _, d := range docs {
+				if t, ok := taskFromDoc(d); ok {
+					out = append(out, t)
+				}
+			}
+			if next.After == "" {
+				break
+			}
+			page = next
 		}
-		out = append(out, t)
 	}
-	return out, rows.Err()
+	sortTasks(out)
+	return out, nil
+}
+
+// sortTasks 按 id 升序。分段查各段内部已按 key 有序，这里只归并三段。
+func sortTasks(ts []Task) {
+	for i := 1; i < len(ts); i++ {
+		for j := i; j > 0 && ts[j].ID < ts[j-1].ID; j-- {
+			ts[j], ts[j-1] = ts[j-1], ts[j]
+		}
+	}
 }
 
 func (g *Group) get(ctx context.Context, team string, id int) (Task, error) {
-	var t Task
-	err := g.SQL.DB().QueryRowContext(ctx, `SELECT id, subject, description, owner, status, result, rev
-		FROM p_workgroup_tasks WHERE team = ? AND id = ?`, team, id).
-		Scan(&t.ID, &t.Subject, &t.Description, &t.Owner, &t.Status, &t.Result, &t.Rev)
-	if err == sql.ErrNoRows {
-		return t, fmt.Errorf("%w #%d", ErrNoTask, id)
+	d, err := g.Tasks.Get(ctx, team, taskKey(id))
+	if errors.Is(err, store.ErrNotFound) {
+		return Task{}, fmt.Errorf("%w #%d", ErrNoTask, id)
 	}
-	return t, err
+	if err != nil {
+		return Task{}, err
+	}
+	t, ok := taskFromDoc(d)
+	if !ok {
+		return Task{}, fmt.Errorf("%w #%d", ErrNoTask, id)
+	}
+	return t, nil
 }
 
 // Claim 领取 pending 任务（或自己已领的任务）。
@@ -465,15 +668,15 @@ func (g *Group) Complete(ctx context.Context, team string, id int, who, result s
 }
 
 func (g *Group) update(ctx context.Context, team string, t Task, owner, status, result string) (Task, error) {
-	res, err := g.SQL.DB().ExecContext(ctx, `UPDATE p_workgroup_tasks SET owner = ?, status = ?, result = ?, rev = rev + 1, updated_at = ?
-		WHERE team = ? AND id = ? AND rev = ?`, owner, status, result, time.Now().UnixMilli(), team, t.ID, t.Rev)
-	if err != nil {
+	t.Owner, t.Status, t.Result = owner, status, result
+	doc := store.Doc{Key: taskKey(t.ID), Body: taskBody(team, t)}
+	if err := g.Tasks.Put(ctx, team, doc, int64(t.Rev)); err != nil {
+		if errors.Is(err, store.ErrConflict) {
+			return t, fmt.Errorf("%w：#%d", ErrConflict, t.ID)
+		}
 		return t, err
 	}
-	if n, _ := res.RowsAffected(); n != 1 {
-		return t, fmt.Errorf("%w：#%d", ErrConflict, t.ID)
-	}
-	t.Owner, t.Status, t.Result, t.Rev = owner, status, result, t.Rev+1
+	t.Rev++
 	return t, nil
 }
 

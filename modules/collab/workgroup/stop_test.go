@@ -11,6 +11,7 @@ import (
 	"github.com/Sevyn17/tenon/runtime/agent"
 	"github.com/Sevyn17/tenon/runtime/host"
 	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/store"
 	"github.com/Sevyn17/tenon/runtime/store/sqlite"
 	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
@@ -81,7 +82,15 @@ func TestTeamStopCancelsMember(t *testing.T) {
 		}
 	}
 	h.New = mk(true)
-	g, err = New(context.Background(), h, db, db, mk(false))
+	if err := db.SetCollectionVersion(context.Background(), store.Tenant, "workgroup", "tasks", 1); err != nil {
+		t.Fatal(err)
+	}
+	tasks, err := db.Open(context.Background(), store.Tenant, "workgroup", "tasks", store.CollectionSpec{
+		Version: 1, Indexes: []string{"status", "owner"}, Partition: "team"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	g, err = New(context.Background(), h, db, tasks, db, mk(false))
 	if err != nil {
 		t.Fatal(err)
 	}
