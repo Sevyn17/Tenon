@@ -13,6 +13,8 @@ import (
 // ToolStore 把 store.ToolResultStore 包装成 toolhub.Store。
 type ToolStore struct{ DB store.ToolResultStore }
 
+var _ toolhub.Store = ToolStore{}
+
 // Lookup 读记录。
 func (s ToolStore) Lookup(ctx context.Context, sid, cid string) (toolhub.Record, bool, error) {
 	r, err := s.DB.GetTool(ctx, sid, cid)

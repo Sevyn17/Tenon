@@ -76,6 +76,14 @@ func newSkills(workdir string, trusted bool, extra ...string) *Skills {
 	return s
 }
 
+// userHome 用户全局目录：应用的用户级目录（appid.Home，缺省 $TENON_HOME 或 ~/.tenon）；取不到返回空。
+func userHome() string { return appid.Home() }
+
+func fileExists(p string) bool {
+	st, err := os.Stat(p)
+	return err == nil && st.Mode().IsRegular()
+}
+
 func dedupe(xs []string) []string {
 	seen, out := map[string]bool{}, []string{}
 	for _, x := range xs {

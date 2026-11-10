@@ -696,6 +696,21 @@ func permanentDeliverErr(err error) bool {
 // ErrUnsupportedAddr 投递目标的地址类型还不支持（如 component:）。
 var ErrUnsupportedAddr = errors.New("host: 不支持投递到该地址")
 
+// evalGuard 跑完该点位的全部守卫规则并合并结论（04 4.2、08 D4）：任一条 Deny 即拒绝；全部 Abstain 走内核缺省；
+// Allow 只放开「往 session: 投递」的缺省限制，放不开联系名单、预算、跳数和租户边界。
+// h.Guards 由装配期从组件登记取来（component.Assembly.GuardRules），装配结束后只读。
+func (h *Host) evalGuard(req component.GuardRequest) (component.Verdict, string) {
+	return component.EvalGuards(h.Guards, req)
+}
+
+// recordTrace 记一条 trace 事件（08 8.7）：记录失败不影响投递本身。渲染在 appapi.RenderTrace。
+func (h *Host) recordTrace(trace, session, kind, detail string) {
+	if trace == "" || h.DB == nil {
+		return
+	}
+	_ = h.DB.RecordTrace(context.Background(), store.TraceEvent{Trace: trace, Session: session, Kind: kind, Detail: detail})
+}
+
 // guardDenied 记一次守卫拒绝：trace 事件 + guard.denied 事件（2026-11-04 审查 P2：原先这两行在本文件里抄了 9 遍）。
 // extra 是成对的附加键值（如 "corr", env.Corr）。
 func (h *Host) guardDenied(env mail.Envelope, session, reason string, extra ...string) {

@@ -9,7 +9,15 @@ package shell
 import (
 	"encoding/json"
 
+	"github.com/Sevyn17/tenon/modules/internal/cmdline"
 	"github.com/Sevyn17/tenon/runtime/toolhub"
+)
+
+// 命令拆分与启动器停止线在 modules/internal/cmdline（与 permission 共用，审查 P1-61），包内沿用短名。
+var (
+	SplitCommand = cmdline.SplitCommand
+	Safe         = cmdline.Safe
+	Launcher     = cmdline.Launcher
 )
 
 // 权限项 id。
