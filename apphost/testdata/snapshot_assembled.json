@@ -270,7 +270,7 @@
           },
           {
             "Name": "shell",
-            "Description": "在工作目录执行一条 PowerShell 命令（不是 bash：不支持 \u003c\u003c\u003c、heredoc、export、反引号命令替换；用 ; 分隔语句，用 $env:NAME 读写环境变量，用 2\u003e\u00261 合并输出）。返回合并的 stdout/stderr 与退出码。每次调用是新进程，已在工作目录执行（不必先 cd），cd 与环境变量不保留。timeout 秒（默认 120，最大 600），超时杀整个进程树。长时间运行（服务、监听）用 background:true，返回 job id，再用 job_output 读取输出、job_kill 终止。",
+            "Description": "<shell-intro>返回合并的 stdout/stderr 与退出码。每次调用是新进程，已在工作目录执行（不必先 cd），cd 与环境变量不保留。timeout 秒（默认 120，最大 600），超时杀整个进程树。长时间运行（服务、监听）用 background:true，返回 job id，再用 job_output 读取输出、job_kill 终止。",
             "Schema": {
               "type": "object",
               "properties": {
@@ -779,7 +779,7 @@
           },
           {
             "Name": "shell",
-            "Description": "在工作目录执行一条 PowerShell 命令（不是 bash：不支持 \u003c\u003c\u003c、heredoc、export、反引号命令替换；用 ; 分隔语句，用 $env:NAME 读写环境变量，用 2\u003e\u00261 合并输出）。返回合并的 stdout/stderr 与退出码。每次调用是新进程，已在工作目录执行（不必先 cd），cd 与环境变量不保留。timeout 秒（默认 120，最大 600），超时杀整个进程树。长时间运行（服务、监听）用 background:true，返回 job id，再用 job_output 读取输出、job_kill 终止。",
+            "Description": "<shell-intro>返回合并的 stdout/stderr 与退出码。每次调用是新进程，已在工作目录执行（不必先 cd），cd 与环境变量不保留。timeout 秒（默认 120，最大 600），超时杀整个进程树。长时间运行（服务、监听）用 background:true，返回 job id，再用 job_output 读取输出、job_kill 终止。",
             "Schema": {
               "type": "object",
               "properties": {
@@ -1310,7 +1310,7 @@
           },
           {
             "Name": "shell",
-            "Description": "在工作目录执行一条 PowerShell 命令（不是 bash：不支持 \u003c\u003c\u003c、heredoc、export、反引号命令替换；用 ; 分隔语句，用 $env:NAME 读写环境变量，用 2\u003e\u00261 合并输出）。返回合并的 stdout/stderr 与退出码。每次调用是新进程，已在工作目录执行（不必先 cd），cd 与环境变量不保留。timeout 秒（默认 120，最大 600），超时杀整个进程树。长时间运行（服务、监听）用 background:true，返回 job id，再用 job_output 读取输出、job_kill 终止。",
+            "Description": "<shell-intro>返回合并的 stdout/stderr 与退出码。每次调用是新进程，已在工作目录执行（不必先 cd），cd 与环境变量不保留。timeout 秒（默认 120，最大 600），超时杀整个进程树。长时间运行（服务、监听）用 background:true，返回 job id，再用 job_output 读取输出、job_kill 终止。",
             "Schema": {
               "type": "object",
               "properties": {
@@ -1797,7 +1797,7 @@
           },
           {
             "Name": "shell",
-            "Description": "在工作目录执行一条 PowerShell 命令（不是 bash：不支持 \u003c\u003c\u003c、heredoc、export、反引号命令替换；用 ; 分隔语句，用 $env:NAME 读写环境变量，用 2\u003e\u00261 合并输出）。返回合并的 stdout/stderr 与退出码。每次调用是新进程，已在工作目录执行（不必先 cd），cd 与环境变量不保留。timeout 秒（默认 120，最大 600），超时杀整个进程树。长时间运行（服务、监听）用 background:true，返回 job id，再用 job_output 读取输出、job_kill 终止。",
+            "Description": "<shell-intro>返回合并的 stdout/stderr 与退出码。每次调用是新进程，已在工作目录执行（不必先 cd），cd 与环境变量不保留。timeout 秒（默认 120，最大 600），超时杀整个进程树。长时间运行（服务、监听）用 background:true，返回 job id，再用 job_output 读取输出、job_kill 终止。",
             "Schema": {
               "type": "object",
               "properties": {
@@ -2301,7 +2301,7 @@
           },
           {
             "Name": "shell",
-            "Description": "在工作目录执行一条 PowerShell 命令（不是 bash：不支持 \u003c\u003c\u003c、heredoc、export、反引号命令替换；用 ; 分隔语句，用 $env:NAME 读写环境变量，用 2\u003e\u00261 合并输出）。返回合并的 stdout/stderr 与退出码。每次调用是新进程，已在工作目录执行（不必先 cd），cd 与环境变量不保留。timeout 秒（默认 120，最大 600），超时杀整个进程树。长时间运行（服务、监听）用 background:true，返回 job id，再用 job_output 读取输出、job_kill 终止。",
+            "Description": "<shell-intro>返回合并的 stdout/stderr 与退出码。每次调用是新进程，已在工作目录执行（不必先 cd），cd 与环境变量不保留。timeout 秒（默认 120，最大 600），超时杀整个进程树。长时间运行（服务、监听）用 background:true，返回 job id，再用 job_output 读取输出、job_kill 终止。",
             "Schema": {
               "type": "object",
               "properties": {
@@ -2831,7 +2831,7 @@
           },
           {
             "Name": "shell",
-            "Description": "在工作目录执行一条 PowerShell 命令（不是 bash：不支持 \u003c\u003c\u003c、heredoc、export、反引号命令替换；用 ; 分隔语句，用 $env:NAME 读写环境变量，用 2\u003e\u00261 合并输出）。返回合并的 stdout/stderr 与退出码。每次调用是新进程，已在工作目录执行（不必先 cd），cd 与环境变量不保留。timeout 秒（默认 120，最大 600），超时杀整个进程树。长时间运行（服务、监听）用 background:true，返回 job id，再用 job_output 读取输出、job_kill 终止。",
+            "Description": "<shell-intro>返回合并的 stdout/stderr 与退出码。每次调用是新进程，已在工作目录执行（不必先 cd），cd 与环境变量不保留。timeout 秒（默认 120，最大 600），超时杀整个进程树。长时间运行（服务、监听）用 background:true，返回 job id，再用 job_output 读取输出、job_kill 终止。",
             "Schema": {
               "type": "object",
               "properties": {
@@ -3318,7 +3318,7 @@
           },
           {
             "Name": "shell",
-            "Description": "在工作目录执行一条 PowerShell 命令（不是 bash：不支持 \u003c\u003c\u003c、heredoc、export、反引号命令替换；用 ; 分隔语句，用 $env:NAME 读写环境变量，用 2\u003e\u00261 合并输出）。返回合并的 stdout/stderr 与退出码。每次调用是新进程，已在工作目录执行（不必先 cd），cd 与环境变量不保留。timeout 秒（默认 120，最大 600），超时杀整个进程树。长时间运行（服务、监听）用 background:true，返回 job id，再用 job_output 读取输出、job_kill 终止。",
+            "Description": "<shell-intro>返回合并的 stdout/stderr 与退出码。每次调用是新进程，已在工作目录执行（不必先 cd），cd 与环境变量不保留。timeout 秒（默认 120，最大 600），超时杀整个进程树。长时间运行（服务、监听）用 background:true，返回 job id，再用 job_output 读取输出、job_kill 终止。",
             "Schema": {
               "type": "object",
               "properties": {
@@ -3744,7 +3744,7 @@
           },
           {
             "Name": "shell",
-            "Description": "在工作目录执行一条 PowerShell 命令（不是 bash：不支持 \u003c\u003c\u003c、heredoc、export、反引号命令替换；用 ; 分隔语句，用 $env:NAME 读写环境变量，用 2\u003e\u00261 合并输出）。返回合并的 stdout/stderr 与退出码。每次调用是新进程，已在工作目录执行（不必先 cd），cd 与环境变量不保留。timeout 秒（默认 120，最大 600），超时杀整个进程树。长时间运行（服务、监听）用 background:true，返回 job id，再用 job_output 读取输出、job_kill 终止。",
+            "Description": "<shell-intro>返回合并的 stdout/stderr 与退出码。每次调用是新进程，已在工作目录执行（不必先 cd），cd 与环境变量不保留。timeout 秒（默认 120，最大 600），超时杀整个进程树。长时间运行（服务、监听）用 background:true，返回 job id，再用 job_output 读取输出、job_kill 终止。",
             "Schema": {
               "type": "object",
               "properties": {

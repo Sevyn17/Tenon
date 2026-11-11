@@ -245,7 +245,14 @@ func normalizeIDs(reqs []session.Request) []session.Request {
 
 var subID = regexp.MustCompile(`/sub-[0-9A-Za-z_-]{1,8}`)
 
-// scrub 去掉随运行变化的部分：临时目录路径、子智能体会话 id 尾段。
+// shellIntroWindows / shellIntroUnix 是 shell 组件按平台生成的工具说明（shellIntro）。
+// 快照要跨平台稳定，把这两种文案都归一成 <shell-intro>，否则 Windows 录的快照在 Linux 上必不匹配。
+const (
+	shellIntroWindows = "在工作目录执行一条 PowerShell 命令（不是 bash：不支持 <<<、heredoc、export、反引号命令替换；用 ; 分隔语句，用 $env:NAME 读写环境变量，用 2>&1 合并输出）。"
+	shellIntroUnix    = "在工作目录执行一条 bash 命令。"
+)
+
+// scrub 去掉随运行变化的部分：临时目录路径、子智能体会话 id 尾段、按平台变化的 shell 说明。
 func scrub(b []byte, paths ...string) []byte {
 	s := string(b)
 	for i, p := range paths {
@@ -253,6 +260,13 @@ func scrub(b []byte, paths ...string) []byte {
 		esc, _ := json.Marshal(p)
 		s = strings.ReplaceAll(s, strings.Trim(string(esc), `"`), name)
 		s = strings.ReplaceAll(s, filepath.ToSlash(p), name)
+	}
+	// JSON 里中文与引号会转义，两种写法都替换一遍。
+	for _, intro := range []string{shellIntroWindows, shellIntroUnix} {
+		if esc, err := json.Marshal(intro); err == nil {
+			s = strings.ReplaceAll(s, strings.Trim(string(esc), `"`), "<shell-intro>")
+		}
+		s = strings.ReplaceAll(s, intro, "<shell-intro>")
 	}
 	return []byte(subID.ReplaceAllString(s, "/sub-X"))
 }
