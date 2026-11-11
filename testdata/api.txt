@@ -103,6 +103,7 @@ github.com/Sevyn17/tenon: method (Registrar) PointItems(point string) func() []g
 github.com/Sevyn17/tenon: method (Registrar) Provide(name string, svc any) error
 github.com/Sevyn17/tenon: method (Registrar) Register(point string, name string, impl any)
 github.com/Sevyn17/tenon: method (Registrar) ResourceType(t github.com/Sevyn17/tenon/runtime/component.ResourceType) error
+github.com/Sevyn17/tenon: method (Registrar) SetAuthorizer(a github.com/Sevyn17/tenon/runtime/component.Authorizer) error
 github.com/Sevyn17/tenon: method (Registrar) Status(key string, fn github.com/Sevyn17/tenon/runtime/inject.Func) error
 github.com/Sevyn17/tenon: method (Registrar) Template(src github.com/Sevyn17/tenon/runtime/agentdef.Source)
 github.com/Sevyn17/tenon: type Reply struct{Text string; SessionID string}

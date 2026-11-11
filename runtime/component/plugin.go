@@ -314,6 +314,11 @@ type Assembly struct {
 	guards []GuardRule
 	// middleware 洋葱式中间件（04 4.3）：点位名 → 按登记顺序的中间件。
 	middleware map[string][]mwReg
+	// guardsByPoint 判定区规则（04 4.3.1）：点位名 → 按登记顺序的判定。
+	guardsByPoint map[string][]guardReg
+	// authorizer 决策服务（04 4.3.1）：恰好一个，nil = 用内核缺省。
+	authorizer       Authorizer
+	authorizerPlugin string
 	// collections 组件登记的集合（05 5.6，T4a）；OpenCollections 之前句柄不可用。
 	collections []collectionReg
 	// collMigrations 集合迁移登记，按 After 拓扑排序后跑。
@@ -345,7 +350,7 @@ func Assemble(spec Spec) (*Assembly, error) {
 		values: map[string]any{}, fromDef: map[string]bool{}, injected: map[string]bool{}, items: map[string][]Item{},
 		mandatory: map[string]bool{}, plugins: map[string]Component{}, scopes: map[string]*Scope{},
 		agentSchemas: map[string]useconf.Schema{}, resources: map[string]ResourceType{}, matchers: map[string]matcherReg{},
-		middleware: map[string][]mwReg{}}
+		middleware: map[string][]mwReg{}, guardsByPoint: map[string][]guardReg{}}
 	a.installBuiltinMatchers()
 	enabled := map[string]Entry{}
 	for _, e := range spec.Plugins {
