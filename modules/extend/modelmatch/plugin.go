@@ -9,6 +9,7 @@ import (
 
 	"github.com/Sevyn17/tenon/runtime/assemble"
 	"github.com/Sevyn17/tenon/runtime/component"
+	"github.com/Sevyn17/tenon/runtime/host"
 	"github.com/Sevyn17/tenon/runtime/session"
 )
 
@@ -23,16 +24,22 @@ const MaxJudgments = 1000
 
 func init() { component.Register(ServiceName, func() component.Component { return &plug{} }) }
 
-type plug struct{ m *assemble.Models }
+type plug struct {
+	m *assemble.Models
+	h *host.Host
+}
 
 func (*plug) Meta() component.Meta {
 	return component.Meta{Name: ServiceName, Version: "0.1.0",
-		Requires: []string{"?" + assemble.ServiceModelhub}}
+		Requires: []string{"?" + assemble.ServiceModelhub, "?" + assemble.ServiceHost}}
 }
 
 func (p *plug) Setup(cx *component.Registrar) error {
 	if m, ok, err := component.UseOptional[*assemble.Models](cx, assemble.ServiceModelhub); err == nil && ok {
 		p.m = m
+	}
+	if h, ok, err := component.UseOptional[*host.Host](cx, assemble.ServiceHost); err == nil && ok {
+		p.h = h
 	}
 	judge := func(ctx context.Context, rec component.ResourceRecord, params map[string]string) (bool, error) {
 		if p.m == nil || p.m.Hub == nil {
@@ -58,7 +65,13 @@ func (p *plug) Setup(cx *component.Registrar) error {
 		}
 		return strings.HasPrefix(strings.ToLower(strings.TrimSpace(b.String())), "yes"), nil
 	}
-	if err := cx.Matcher(MatcherName, component.ModelMatcher(judge, MaxJudgments)); err != nil {
+	// 判断次数用尽时记一条 guard.denied 类事件（T5c：预算/次数用尽要可见）。
+	onExhausted := func() {
+		if p.h != nil {
+			p.h.Publish("", "guard.denied", map[string]any{"matcher": MatcherName, "reason": "judgments_exhausted"})
+		}
+	}
+	if err := cx.Matcher(MatcherName, component.ModelMatcher(judge, MaxJudgments, onExhausted)); err != nil {
 		return err
 	}
 	return nil

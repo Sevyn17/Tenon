@@ -15,14 +15,18 @@ import (
 type Judge func(ctx context.Context, rec ResourceRecord, params map[string]string) (bool, error)
 
 // ModelMatcher 把判断函数包成 Matcher：失败按不匹配（不阻塞扇出）；max>0 时判断次数用尽即判不匹配
-// （本地兜底，先于预算账本；真正的按订阅者预算扣减随预算账本，v1 后）。
-func ModelMatcher(j Judge, max int) Matcher {
+// 并回调 onExhausted（组件用它记 guard.denied 类事件；可为空）。
+func ModelMatcher(j Judge, max int, onExhausted func()) Matcher {
 	if j == nil {
 		return func(ResourceRecord, map[string]string) (Match, error) { return Match{}, nil }
 	}
 	var used atomic.Int64
+	var reported atomic.Bool
 	return func(rec ResourceRecord, params map[string]string) (Match, error) {
 		if max > 0 && used.Load() >= int64(max) {
+			if onExhausted != nil && reported.CompareAndSwap(false, true) {
+				onExhausted()
+			}
 			return Match{}, nil // 判断次数用尽：按不匹配处理，不阻塞其余订阅
 		}
 		ok, err := j(context.Background(), rec, params)

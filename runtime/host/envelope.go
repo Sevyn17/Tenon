@@ -685,8 +685,18 @@ func batchHop(items []store.InboxItem) int {
 	return hop
 }
 
-// batchCaps 一批信封的 caps 交集（信封 caps 已是触发链上的交集；不同发送方再取交集）。
-// nil = 不限（该封没有收紧）；空集 = 一个都不许，参与求交。返回拷贝，避免调用方改到信封数据。
+// batchBudgetRef 一批信封的预算账（08 8.4）：取第一封带 budget_ref 的（一轮只合并同一主体，
+// 主体 = from + budget_ref，故同批的 budget_ref 相同）。都没有返回空。
+func batchBudgetRef(items []store.InboxItem) string {
+	for _, it := range items {
+		if e, ok := parseEnvelope(it); ok && e.BudgetRef != "" {
+			return e.BudgetRef
+		}
+	}
+	return ""
+}
+
+// batchCaps 一批信封的 caps 交集（信封 caps 已是触发链上的交集；不同发送方再取交集）。// nil = 不限（该封没有收紧）；空集 = 一个都不许，参与求交。返回拷贝，避免调用方改到信封数据。
 func batchCaps(items []store.InboxItem) []string {
 	var out []string
 	for _, it := range items {

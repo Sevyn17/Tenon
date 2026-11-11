@@ -51,6 +51,8 @@ type Store struct {
 	// 组件事件日志（04 4.6，T4b）。events 只追加，cursors 是订阅者读位点。
 	compEvents  []store.ComponentEvent
 	compCursors map[string]int64
+	// 预算账本（08 8.4）：budget_ref → 累计用量。
+	budgets map[string]*budgetRow
 
 	cbMu     sync.Mutex
 	onCommit func(bus.Envelope)
@@ -81,6 +83,12 @@ type sess struct {
 	// eventFloor 是按保留期清掉的最大游标，早于它的回放返回 ErrCursorExpired。
 	events     []evRow
 	eventFloor int64
+}
+
+// budgetRow 一个预算账。
+type budgetRow struct {
+	usage     store.BudgetUsage
+	updatedAt int64
 }
 
 // evRow 一条会话事件。entry 带条目正文（条目写入后不变，与 sqlite 按 id 取回等价），rewind 带截断点，其余带原始 data。

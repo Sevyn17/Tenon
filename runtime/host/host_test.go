@@ -22,6 +22,8 @@ type fakeModel struct {
 	calls int
 	block chan struct{}
 	reqs  []session.Request // 回归快照用：记下每次调模型的请求
+	// usage 非零时每次模型回复带上它（预算记账测试用；零值不改变既有行为）。
+	usage session.Usage
 }
 
 func (m *fakeModel) Stream(ctx context.Context, req session.Request, onText func(string)) (session.AssistantItem, session.StopReason, error) {
@@ -41,14 +43,17 @@ func (m *fakeModel) Stream(ctx context.Context, req session.Request, onText func
 	for _, p := range last.Content {
 		txt += p.Text
 	}
+	m.mu.Lock()
+	u := m.usage
+	m.mu.Unlock()
 	if last.Role == "tool" {
-		return session.AssistantItem{Content: text("done")}, session.StopReason{V: "stop"}, nil
+		return session.AssistantItem{Content: text("done"), Usage: u}, session.StopReason{V: "stop"}, nil
 	}
 	if strings.Contains(txt, "tool") {
-		return session.AssistantItem{ToolCalls: []session.ToolCall{{Name: "echo", Args: json.RawMessage(`{"s":"x"}`)}}},
+		return session.AssistantItem{ToolCalls: []session.ToolCall{{Name: "echo", Args: json.RawMessage(`{"s":"x"}`)}}, Usage: u},
 			session.StopReason{V: "tool_calls"}, nil
 	}
-	return session.AssistantItem{Content: text("re:" + txt)}, session.StopReason{V: "stop"}, nil
+	return session.AssistantItem{Content: text("re:" + txt), Usage: u}, session.StopReason{V: "stop"}, nil
 }
 
 type rig struct {

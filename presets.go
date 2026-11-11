@@ -14,6 +14,7 @@ import (
 	_ "github.com/Sevyn17/tenon/modules/context/prompt"
 	_ "github.com/Sevyn17/tenon/modules/context/redact"
 	_ "github.com/Sevyn17/tenon/modules/context/skills"
+	_ "github.com/Sevyn17/tenon/modules/extend/budget"
 	_ "github.com/Sevyn17/tenon/modules/extend/events"
 	_ "github.com/Sevyn17/tenon/modules/extend/hooks"
 	_ "github.com/Sevyn17/tenon/modules/extend/modelmatch"
@@ -57,6 +58,7 @@ var defaultComponents = []string{
 	"workgroup",
 	"group",
 	"events",
+	"budget",
 	"modelmatch",
 }
 

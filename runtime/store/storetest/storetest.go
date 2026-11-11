@@ -70,6 +70,7 @@ func Run(t *testing.T, open func(t *testing.T) store.Store) {
 		{"EventLogCursor", testEventLogCursor},
 		{"EventLogTx", testEventLogTx},
 		{"EventLogLimit", testEventLogLimit},
+		{"BudgetLedger", testBudgetLedger},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) { c.f(t, open(t)) })

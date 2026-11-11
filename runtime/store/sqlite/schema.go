@@ -223,4 +223,13 @@ var coreMigrations = []migration{
 			tenant TEXT NOT NULL, name TEXT NOT NULL, seq INTEGER NOT NULL,
 			PRIMARY KEY(tenant, name))`,
 	}},
+	// v15：预算账本（框架设计 08 8.4）。按 budget_ref 累计 token 用量；只加不改表。
+	{version: 15, stmts: []string{
+		`CREATE TABLE budgets(
+			tenant TEXT NOT NULL, ref TEXT NOT NULL,
+			input INTEGER NOT NULL DEFAULT 0, output INTEGER NOT NULL DEFAULT 0,
+			cache_read INTEGER NOT NULL DEFAULT 0, cache_write INTEGER NOT NULL DEFAULT 0,
+			updated_at INTEGER NOT NULL,
+			PRIMARY KEY(tenant, ref))`,
+	}},
 }

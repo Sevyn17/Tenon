@@ -150,6 +150,8 @@ type Host struct {
 	Definitions agentdef.Source
 	// Remote 出站传输（T6a）：投 remote:<host>/agent:<名> 时用它。nil = 不支持远端。
 	Remote RemoteSender
+	// DefaultBudget 宿主级预算上限（token；0 = 不限）。会话没配 [use.budget] 时用它兜底。
+	DefaultBudget uint64
 
 	// Holder 本实例的租约持有者标识（空 = 首次打开时按实例生成）。
 	// 同一存储上两个 Host 打开同一会话会互相抢租约，旧持有者的写入被存储拒绝（02 2.2 fencing）。
@@ -494,6 +496,9 @@ func (h *Host) publish(id, kind string, data any) {
 	}
 }
 
+// Publish 供组件发布一条易失事件（界面订阅用；不落库）。id 可空。
+func (h *Host) Publish(id, kind string, data any) { h.publish(id, kind, data) }
+
 // NewItemID 生成 inbox item id（调用方没有时用）。
 func NewItemID() string { u, _ := uuid.NewV7(); return u.String() }
 
@@ -522,6 +527,9 @@ type actor struct {
 	turnQueued map[string]bool
 	// turnCaps 是本轮的工具授权范围（信封 caps 交集）：turn 开始时设给 agent，结束时清空。
 	turnCaps []string
+	// turnBudgetRef 是本轮的预算账（信封 budget_ref，取本批主触发者）：turn 开始时设，结束时按本回合
+	// 用量记账（08 8.4）。
+	turnBudgetRef string
 	// steered 本回合已受理的插话 client_id（protocol 2 steer 幂等：插话只在回合中有效，同回合重发只确认不重复插入）。只在 actor 协程里读写。
 	steered map[string]bool
 	// turnInputs 即将开始的回合吃进的输入（inbox item id），turn_start 发出后清空。只在 actor 协程里读写。
@@ -1044,8 +1052,9 @@ func (a *actor) drainInbox(ctx context.Context) (stop bool, err error) {
 			}
 			content = nc
 		}
-		a.turnInputs = consume        // 守卫放行后才记：被拒的输入不开回合
-		a.turnCaps = batchCaps(batch) // 信封 caps 交集：本轮只许调这些工具（空=不限）
+		a.turnInputs = consume                  // 守卫放行后才记：被拒的输入不开回合
+		a.turnCaps = batchCaps(batch)           // 信封 caps 交集：本轮只许调这些工具（空=不限）
+		a.turnBudgetRef = batchBudgetRef(batch) // 本轮预算账（08 8.4）
 		end, terr := a.turn(ctx, func(tctx context.Context) (session.EndReason, error) {
 			return a.ag.SendContent(tctx, content, m, consume)
 		})
@@ -1060,6 +1069,7 @@ func (a *actor) drainInbox(ctx context.Context) (stop bool, err error) {
 		a.processing = nil
 		a.turnQueued = nil
 		a.turnCaps = nil
+		a.turnBudgetRef = ""
 	}
 }
 
@@ -1198,6 +1208,9 @@ func (a *actor) turn(ctx context.Context, f func(context.Context) (session.EndRe
 	if err := a.ag.Commit(ctx); err != nil { // span 与 after_turn 的修改落库
 		return end, err
 	}
+	// 预算记账（08 8.4）：本回合用量记到本轮 budget_ref 账上；超限则挂起。提交之后记，读得到本回合条目。
+	a.h.accountBudget(context.Background(), a.id, a.turnBudgetRef, a.ag.Core.TurnNumber(),
+		a.turnUsage(0), a.budgetLimitOf())
 	// 外发与检查点同事务（08 9.6）：提交成功后再派发；派发在后台进行、失败不影响回合结果，
 	// 未标记的外发行会在下次派发时重试。
 	a.h.kickFlush()
