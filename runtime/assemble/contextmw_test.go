@@ -4,6 +4,7 @@ package assemble
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	"github.com/Sevyn17/tenon/runtime/component"
@@ -25,10 +26,26 @@ func (c *ctxTestComponent) Setup(r *component.Registrar) error {
 func (c *ctxTestComponent) Start(*component.Scope) error { return nil }
 
 // ctxTestAssembly 装一个登记了 Context 中间件的 Assembly。
+//
+// component.Register 是全局注册（同进程只能注册一次），所以用 sync.Once 按名字注册，
+// setup 存到注册表里、每次装配时取——这样 -count=N 重跑不会「重复注册」panic。
+var (
+	ctxTestSetups  sync.Map // name -> func(*component.Registrar) error
+	ctxTestRegOnce sync.Map // name -> *sync.Once
+)
+
 func ctxTestAssembly(t *testing.T, setup func(*component.Registrar) error) *component.Assembly {
 	t.Helper()
 	name := t.Name() + "/ctxmw"
-	component.Register(name, func() component.Component { return &ctxTestComponent{setup: setup} })
+	ctxTestSetups.Store(name, setup)
+	onceAny, _ := ctxTestRegOnce.LoadOrStore(name, &sync.Once{})
+	onceAny.(*sync.Once).Do(func() {
+		component.Register(name, func() component.Component {
+			fn, _ := ctxTestSetups.Load(name)
+			s, _ := fn.(func(*component.Registrar) error)
+			return &ctxTestComponent{setup: s}
+		})
+	})
 	asm, err := component.Assemble(component.Spec{Plugins: []component.Entry{{Name: name}}})
 	if err != nil {
 		t.Fatal(err)

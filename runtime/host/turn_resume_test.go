@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/Sevyn17/tenon/runtime/component"
 )
@@ -58,12 +59,23 @@ func TestTurnMWRerunOnResume(t *testing.T) {
 	if id2 := waitConfirm(t, r2.db, "s1"); id2 != callID {
 		t.Fatalf("恢复后应仍在等同一调用：%s vs %s", id2, callID)
 	}
-	// 恢复时 Turn 链应重跑一次，且 Resumed=true（4.3 硬约束）。
+	// 恢复是异步的（actor 在后台跑）：等链被重跑，不要立刻读。
+	// 4.3 硬约束：恢复时 Turn 链重跑一次，且 Resumed=true。
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		mu.Lock()
+		after := len(reqs)
+		mu.Unlock()
+		if after > before {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("恢复时链应重跑：before=%d after=%d", before, after)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 	mu.Lock()
 	defer mu.Unlock()
-	if len(reqs) <= before {
-		t.Fatalf("恢复时链应重跑：before=%d after=%d", before, len(reqs))
-	}
 	found := false
 	for _, req := range reqs[before:] {
 		if req.Resumed {
