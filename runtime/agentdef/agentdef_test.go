@@ -121,10 +121,14 @@ func TestParseRejects(t *testing.T) {
 	}
 }
 
-func TestResidentUnsupported(t *testing.T) {
-	_, err := Parse("", Files{ManifestName: []byte("id = \"a\"\nresident = true\n")})
-	if !errors.Is(err, ErrUnsupported) || !strings.Contains(err.Error(), "未支持") {
-		t.Fatalf("err = %v", err)
+func TestResidentParses(t *testing.T) {
+	// T5a：resident = true 不再报未支持，解析出 Resident=true。
+	a, err := Parse("", Files{ManifestName: []byte("id = \"a\"\nresident = true\n")})
+	if err != nil {
+		t.Fatalf("resident = true 应可解析：%v", err)
+	}
+	if !a.Resident {
+		t.Fatal("Resident 应为 true")
 	}
 }
 
@@ -266,8 +270,9 @@ func TestMemPutValidates(t *testing.T) {
 	if err := m.Put(Ref{Namespace: Platform, Tenant: "t", Name: "a"}, pkg("a", "")); err == nil {
 		t.Fatal("平台层带租户应报错")
 	}
-	if err := m.Put(Ref{Namespace: Platform, Name: "a"}, Files{ManifestName: []byte("id = \"a\"\nresident = true\n")}); !errors.Is(err, ErrUnsupported) {
-		t.Fatalf("resident 应报未支持：%v", err)
+	// T5a：resident = true 现在可存（不再报未支持）。
+	if err := m.Put(Ref{Namespace: Platform, Name: "a"}, Files{ManifestName: []byte("id = \"a\"\nresident = true\n")}); err != nil {
+		t.Fatalf("resident = true 应可存：%v", err)
 	}
 	// Put 后改调用方的切片不影响已存内容。
 	f := pkg("a", "原")

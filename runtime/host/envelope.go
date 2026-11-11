@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/Sevyn17/tenon/runtime/agent"
+	"github.com/Sevyn17/tenon/runtime/agentdef"
 	"github.com/Sevyn17/tenon/runtime/component"
 	"github.com/Sevyn17/tenon/runtime/mail"
 	"github.com/Sevyn17/tenon/runtime/session"
@@ -129,6 +130,11 @@ func (h *Host) deliverAgentID(ctx context.Context, env mail.Envelope, bizMeta js
 	if env.From.Kind == mail.AddrHuman {
 		creator = env.From.ID
 	}
+	// 常驻定义（T5a）：固定会话 id resident:<租户>/<名字>，唯一性靠 id，不用会话键。
+	// 查到就投、查不到就建；不回收；创建者记 system:<租户>。
+	if h.isResident(env.To.ID) {
+		return h.deliverResident(ctx, env, bizMeta)
+	}
 	if env.Key != "" {
 		id, err := h.DB.FindSessionByKey(ctx, env.To.ID, creator, env.Key)
 		if err == nil {
@@ -200,7 +206,83 @@ func (h *Host) deliverAgentID(ctx context.Context, env mail.Envelope, bizMeta js
 	return id, h.deliverSession(ctx, env)
 }
 
-// DeliverText 是投递一条用户文本的便捷入口（等价于 from=human 的 wake 请求）。
+// isResident 某个定义名是否是常驻定义（T5a）。没配定义来源时返回 false。
+func (h *Host) isResident(name string) bool {
+	if h.Definitions == nil {
+		return false
+	}
+	refs, err := h.Definitions.List(context.Background(), agentdef.Scope{Tenant: store.Tenant})
+	if err != nil {
+		return false
+	}
+	for _, r := range refs {
+		if r.Name != name {
+			continue
+		}
+		def, err := h.Definitions.Load(context.Background(), r)
+		if err != nil {
+			return false
+		}
+		return def.Resident
+	}
+	return false
+}
+
+// residentSessionID 常驻定义的固定会话 id：resident:<租户>/<名字>。唯一性靠这个 id，不走会话键。
+func residentSessionID(name string) string { return "resident:" + store.Tenant + "/" + name }
+
+// deliverResident 投给常驻定义（T5a / D6）：固定 id 查到就投、查不到就建。创建者记 system:<租户>；
+// 不回收（不参与休眠回收）；进程重启后由 Open 兜底扫描按待处理信封决定是否唤醒。
+func (h *Host) deliverResident(ctx context.Context, env mail.Envelope, bizMeta json.RawMessage) (string, error) {
+	id := residentSessionID(env.To.ID)
+	noEntries := math.MaxInt
+	if l, err := h.DB.Load(ctx, id, &noEntries); err == nil {
+		if l.Meta.AgentID != env.To.ID {
+			return "", fmt.Errorf("host: 常驻会话 %s 已存在且不是 %s 的会话", id, env.To.ID)
+		}
+		env.To = mail.Address{Kind: mail.AddrSession, ID: id}
+		return id, h.deliverSession(ctx, env)
+	} else if !errors.Is(err, store.ErrNotFound) {
+		return "", err
+	}
+	// 建会话前守卫（与 deliverAgentID 同）。
+	if v, why := h.evalGuard(component.GuardRequest{Point: component.GuardSessionOpen, Envelope: &env, Agent: env.To.ID}); v == component.Deny {
+		h.guardDenied(env, "", why, "agent", env.To.ID)
+		return "", fmt.Errorf("%w: %s", ErrNotAllowed, why)
+	}
+	meta := store.SessionMeta{ID: id, AgentID: env.To.ID, Creator: "system:" + store.Tenant,
+		SessionKey: "", Origin: "agent", Meta: bizMeta, Workspace: h.Workspace}
+	probe := env
+	probe.To = mail.Address{Kind: mail.AddrSession, ID: id}
+	verdict, reason := h.evalGuard(component.GuardRequest{Point: component.GuardDeliver, Envelope: &probe})
+	if verdict == component.Deny {
+		h.guardDenied(env, "", reason)
+		return "", fmt.Errorf("%w: %s", ErrNotAllowed, reason)
+	}
+	// 常驻会话谁能联系只看 agent: 的定义守卫（上面 GuardSessionOpen / 这里 GuardDeliver），
+	// 创建者是 system:<租户>，不能拿「是不是创建者」拦人（T5a / 08 8.3）。
+	if err := guardContact(probe, meta, true); err != nil {
+		h.guardDenied(env, "", err.Error())
+		return "", err
+	}
+	pre := func(ag *agent.Agent, cfg *session.Config) error {
+		if ag.Def != nil {
+			meta.AgentID, meta.AgentHash = ag.Def.ID, ag.Def.Version
+		}
+		_, err := ag.OpenAs(ctx, cfg, meta)
+		return err
+	}
+	if _, err := h.open(ctx, id, env.To.ID, h.New, pre); err != nil {
+		// 并发建同一常驻会话：另一路已建好，转投过去（inbox 按信封 id 幂等）。
+		if errors.Is(err, store.ErrConflict) {
+			env.To = mail.Address{Kind: mail.AddrSession, ID: id}
+			return id, h.deliverSession(ctx, env)
+		}
+		return "", err
+	}
+	env.To = mail.Address{Kind: mail.AddrSession, ID: id}
+	return id, h.deliverSession(ctx, env)
+}
 func (h *Host) DeliverText(ctx context.Context, sessionID, from, text string) error {
 	return h.Deliver(ctx, mail.Envelope{
 		From:   mail.Address{Kind: mail.AddrHuman, ID: from},
@@ -229,7 +311,9 @@ func (h *Host) deliverSession(ctx context.Context, env mail.Envelope) error {
 		h.guardDenied(env, id, reason)
 		return fmt.Errorf("%w: %s", ErrNotAllowed, reason)
 	}
-	if err := guardContact(env, l.Meta, verdict == component.Allow); err != nil {
+	// 常驻会话（T5a）：谁能联系只看 agent: 定义守卫，创建者是 system:<租户>，不按「是否创建者」拦。
+	allowContact := verdict == component.Allow || strings.HasPrefix(id, "resident:")
+	if err := guardContact(env, l.Meta, allowContact); err != nil {
 		h.guardDenied(env, id, err.Error())
 		return err
 	}

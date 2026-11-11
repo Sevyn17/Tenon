@@ -189,9 +189,6 @@ func Parse(where string, files Files) (Agent, error) {
 			return Agent{}, fail("x.%s：命名空间不合法", k)
 		}
 	}
-	if m.Resident {
-		return Agent{}, fmt.Errorf("定义 %s：resident = true %w（常驻定义在 T5 支持）", file, ErrUnsupported)
-	}
 
 	others := make(Files, len(files)-1)
 	for n, b := range files {

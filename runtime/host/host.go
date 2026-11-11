@@ -21,6 +21,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/Sevyn17/tenon/runtime/agent"
+	"github.com/Sevyn17/tenon/runtime/agentdef"
 	"github.com/Sevyn17/tenon/runtime/bus"
 	"github.com/Sevyn17/tenon/runtime/component"
 	"github.com/Sevyn17/tenon/runtime/session"
@@ -144,6 +145,9 @@ type Host struct {
 	// 非空时拒绝打开属于别的工作区的会话——会话的工具在本宿主的工作目录里执行，开错了就是在别的项目里读写。
 	// 空 = 不区分工作区。
 	Workspace string
+	// Definitions 智能体定义来源（T5a）：投递 agent:<名> 时查该定义是否常驻。
+	// nil = 不查（按非常驻处理）。
+	Definitions agentdef.Source
 
 	// Holder 本实例的租约持有者标识（空 = 首次打开时按实例生成）。
 	// 同一存储上两个 Host 打开同一会话会互相抢租约，旧持有者的写入被存储拒绝（02 2.2 fencing）。

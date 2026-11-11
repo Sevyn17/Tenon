@@ -62,6 +62,7 @@ func Wire(o WireOptions) (*Wired, error) {
 	}
 	// 组件登记的守卫规则（04 4.2、08 D4）：投递 / 建会话等内核点位在 Host 里执行。
 	h.Guards = o.Asm.GuardRules()
+	h.Definitions = o.Definitions
 	h.Hooks.AfterTurn = func(id string, end session.EndReason) {
 		for _, f := range col.AfterTurn {
 			f(id, end)
