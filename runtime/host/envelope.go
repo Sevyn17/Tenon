@@ -758,13 +758,27 @@ func batchHop(items []store.InboxItem) int {
 
 // batchBudgetRef 一批信封的预算账（08 8.4）：取第一封带 budget_ref 的（一轮只合并同一主体，
 // 主体 = from + budget_ref，故同批的 budget_ref 相同）。都没有返回空。
+// batchBudgetRef 本批信封的预算账。**跨机器触发的回合不在这里记账**（08 8.4「记账按触发」：
+// 远端信封引起的工作记在发送方账上，接收方若也记就是重复计费）。所以只取本机来源的信封：
+// from 是 human（本地用户）或 component（本地组件）。远端信封经 DeliverRemote 投递时 from 被归一成
+// component:remote，据此识别。
 func batchBudgetRef(items []store.InboxItem) string {
 	for _, it := range items {
-		if e, ok := parseEnvelope(it); ok && e.BudgetRef != "" {
-			return e.BudgetRef
+		e, ok := parseEnvelope(it)
+		if !ok || e.BudgetRef == "" {
+			continue
 		}
+		if isRemoteOrigin(e) {
+			continue // 远端触发：记账归发送方
+		}
+		return e.BudgetRef
 	}
 	return ""
+}
+
+// isRemoteOrigin 这封信封是否来自远端（跨机器）。DeliverRemote 把远端 from 归一成 component:remote。
+func isRemoteOrigin(e mail.Envelope) bool {
+	return e.From.Kind == mail.AddrComponent && e.From.ID == "remote"
 }
 
 // batchCaps 一批信封的 caps 交集（信封 caps 已是触发链上的交集；不同发送方再取交集）。// nil = 不限（该封没有收紧）；空集 = 一个都不许，参与求交。返回拷贝，避免调用方改到信封数据。
