@@ -28,12 +28,37 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Go 工具链：自建 runner 从 github.com 下 go-*.tar.gz 常超时（ETIMEDOUT 20.205.243.166，
+      # 上一次成功也花了 9.5 分钟）。所以先用 runner 上已装的 Go；没有才回退到 setup-go 下载。
+      - name: 检查 runner 上已有的 Go
+        id: localgo
+        run: |
+          if command -v go >/dev/null 2>&1; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+            go version
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            echo "runner 上没有 go，将回退到 setup-go 下载"
+          fi
+
       - uses: actions/setup-go@v5
+        if: steps.localgo.outputs.found != 'true'
         with:
           go-version-file: go.mod
           cache: true
-          # setup-go 的 cache 需要能访问模块代理；自建 runner 上失败不该阻断整个 job。
           cache-dependency-path: go.sum
+
+      - name: 校验 Go 版本
+        run: |
+          want=$(sed -n 's/^go \([0-9.]*\).*/\1/p' go.mod)
+          have=$(go env GOVERSION | sed 's/^go//')
+          echo "go.mod 需要 >= $want，实际 $have"
+          # 只比较主次版本（如 1.26 vs 1.26.10）。
+          lowest=$(printf '%s\n%s\n' "$want" "$have" | sort -V | head -1)
+          if [ "$lowest" != "$want" ]; then
+            echo "::error::Go 版本过低：需要 >= $want，实际 $have"
+            exit 1
+          fi
 
       - name: gofmt
         run: |
