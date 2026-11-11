@@ -46,18 +46,20 @@ type SessionCx struct {
 	Values map[string]any
 }
 
-// ToolSet 装配期登记好的一组工具；LayerFunc 每会话工具层（nil 层跳过）；BlockFunc 每会话系统块（nil 跳过）。
+// ToolSet 装配期登记好的一组工具；BlockFunc 每会话系统块（nil 跳过）；HooksFunc 每会话钩子。
+//
+// 04 4.3.1：原 LayerFunc（每会话取一组 toolhub.Layer）已删——层被 ToolCall 中间件与判定区取代，
+// 「每会话一次」的需求由 InitFunc（SessionInit 点位）承担。
 type (
 	ToolSet struct {
 		Tools   func() []*toolhub.Tool
 		Visible func(*SessionCx) bool // 可空 = 所有会话都要
 	}
-	LayerFunc func(*SessionCx) ([]toolhub.Layer, error)
 	BlockFunc func(*SessionCx) (*session.SystemBlock, error)
 	HooksFunc func(*SessionCx) agent.Hooks
 )
 
-// Builder 会话构造器。Tools / Layers / Blocks 按登记顺序生效：工具顺序即暴露顺序，层由外到内。
+// Builder 会话构造器。Tools / Inits / Blocks 按登记顺序生效：工具顺序即暴露顺序。
 type Builder struct {
 	DB        store.Store
 	Artifacts toolhub.Artifacts

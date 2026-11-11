@@ -2,11 +2,10 @@ package toolhub
 
 // 授权判定（04 4.3.1）：工具管理器不自己做授权，但需要一个「谁来授权」的落点。
 //
-// 原来靠「恰好一层 Authorizes=true 的 Layer」表达（items.go 的 Hub.Validate 强制唯一）。
-// 04 4.3.1 把决策从「拦截链」里拆出来：授权是**一个决策者**（可挂起问人、有状态），
-// 不是链上的一层。所以改成 Hub.Authorizer 字段。
+// 04 4.3.1：决策从「拦截链」里拆出来——授权是**一个决策者**（可挂起问人、有状态），
+// 不是链上的一层。所以用 Hub.Authorizer 字段，不再有 Authorizes 层（字段已删）。
 //
-// 兼容：Authorizes 层仍然工作（迁移期间两者都在）；装配层在迁移完成后只设 Authorizer。
+// 多个策略（permission 的档位、sandbox 的沙箱申请）各自 AddAuthorizer，内核组合取严。
 
 import (
 	"context"

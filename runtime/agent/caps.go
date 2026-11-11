@@ -4,7 +4,7 @@ package agent
 // 会话可能由别的会话或组件触发，触发链上每一跳的 caps 取交集；nil 表示不限，空集表示一个都不许
 // （与 host.intersectCaps 一致）。
 // 这里用一层 Guard 在工具执行前再拦一次：模型请求了不在范围里的工具时返回错误结果，
-// 不交给执行器（权限判定仍由权限插件的 Authorizes 层负责，见 toolhub.Validate）。
+// 不交给执行器（权限判定由权限组件的 Authorizer 负责，见 toolhub.Hub.Validate）。
 
 import (
 	"context"

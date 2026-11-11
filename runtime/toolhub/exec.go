@@ -265,7 +265,7 @@ func denied(decision string) Output {
 func (h *Hub) chain(i int, call session.ToolCall) Next {
 	if i >= len(h.layers) {
 		// 链的最内层（04 4.3.1）：授权判定者在这里。它在所有改写层之后（拿最终参数），
-		// 紧贴执行器（不能绕过）。没设 Authorizer 时退回 executor（迁移期由 Authorizes 层判）。
+		// 紧贴执行器（不能绕过）。没设 Authorizer 时退回 executor（Hub.Validate 已保证不会走到）。
 		if h.authorizer == nil {
 			return h.executor
 		}

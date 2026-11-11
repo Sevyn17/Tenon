@@ -193,7 +193,7 @@ type Hub struct {
 	await       Await
 	timeout     time.Duration // 工具未声明 Timeout 时的缺省（[kernel] tool_timeout）
 	deadline    time.Duration // 确认截止（[kernel] confirm_deadline）
-	// authorizer 授权判定者（04 4.3.1）：nil = 用 Authorizes 层（迁移期兼容）。
+	// authorizer 授权判定者（04 4.3.1）：nil = 没人判定，Hub.Validate 拒绝装配。
 	authorizer Authorizer
 }
 
