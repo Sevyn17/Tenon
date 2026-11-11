@@ -148,6 +148,8 @@ type Host struct {
 	// Definitions 智能体定义来源（T5a）：投递 agent:<名> 时查该定义是否常驻。
 	// nil = 不查（按非常驻处理）。
 	Definitions agentdef.Source
+	// Remote 出站传输（T6a）：投 remote:<host>/agent:<名> 时用它。nil = 不支持远端。
+	Remote RemoteSender
 
 	// Holder 本实例的租约持有者标识（空 = 首次打开时按实例生成）。
 	// 同一存储上两个 Host 打开同一会话会互相抢租约，旧持有者的写入被存储拒绝（02 2.2 fencing）。

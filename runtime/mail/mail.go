@@ -22,15 +22,19 @@ const (
 	AddrAgent     = "agent"
 	AddrHuman     = "human"
 	AddrComponent = "component"
+	// AddrRemote 远端地址：remote:<host>/agent:<名字>（T6a）。Host 记对端，ID 是远端 agent 名。
+	AddrRemote = "remote"
 )
 
-// Address 是一个已解析的地址：Kind + ID。
+// Address 是一个已解析的地址：Kind + ID。远端地址另带 Host（对端基址或对端名）。
 type Address struct {
 	Kind string `json:"kind"`
 	ID   string `json:"id"`
+	Host string `json:"host,omitempty"` // 仅 AddrRemote：remote:<host>/agent:<ID>
 }
 
-// ParseAddress 解析 "session:<id>" / "agent:<名字>" / "human:<用户>" / "component:<组件>"。
+// ParseAddress 解析 "session:<id>" / "agent:<名字>" / "human:<用户>" / "component:<组件>" /
+// "remote:<host>/agent:<名字>"。
 func ParseAddress(raw string) (Address, error) {
 	kind, id, ok := strings.Cut(raw, ":")
 	if !ok || kind == "" || id == "" {
@@ -39,15 +43,29 @@ func ParseAddress(raw string) (Address, error) {
 	switch kind {
 	case AddrSession, AddrAgent, AddrHuman, AddrComponent:
 		return Address{Kind: kind, ID: id}, nil
+	case AddrRemote:
+		// remote:<host>/agent:<名字>
+		host, rest, ok := strings.Cut(id, "/")
+		if !ok || host == "" {
+			return Address{}, fmt.Errorf("mail: 远端地址 %q 不合法（应为 remote:<host>/agent:<名字>）", raw)
+		}
+		sub, subID, ok := strings.Cut(rest, ":")
+		if !ok || sub != AddrAgent || subID == "" {
+			return Address{}, fmt.Errorf("mail: 远端地址 %q 不合法（只支持 remote:<host>/agent:<名字>）", raw)
+		}
+		return Address{Kind: AddrRemote, Host: host, ID: subID}, nil
 	default:
 		return Address{}, fmt.Errorf("mail: 未知地址类型 %q", kind)
 	}
 }
 
-// String 还原成 "kind:id"。
+// String 还原成 "kind:id"（远端还原成 "remote:<host>/agent:<ID>"）。
 func (a Address) String() string {
 	if a.Kind == "" {
 		return a.ID
+	}
+	if a.Kind == AddrRemote {
+		return AddrRemote + ":" + a.Host + "/" + AddrAgent + ":" + a.ID
 	}
 	return a.Kind + ":" + a.ID
 }

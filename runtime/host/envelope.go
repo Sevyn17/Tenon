@@ -94,9 +94,42 @@ func (h *Host) deliver(ctx context.Context, env mail.Envelope) error {
 		return h.deliverAgent(ctx, env)
 	case mail.AddrHuman:
 		return h.deliverHuman(ctx, env)
+	case mail.AddrRemote:
+		return h.deliverRemote(ctx, env)
 	default:
 		return fmt.Errorf("%w：%s", ErrUnsupportedAddr, env.To.String())
 	}
+}
+
+// RemoteSender 出站传输（T6a）：把信封发到对端 host。由应用/transport 实现并注入 Host.Remote。
+type RemoteSender interface {
+	Send(ctx context.Context, host string, env mail.Envelope) error
+}
+
+// AgentCard 取某定义的公开名片（T6a）。只导公开字段，不导提示词、[use.*]、caps。
+func (h *Host) AgentCard(name string) (agentdef.Card, error) {
+	if h.Definitions == nil {
+		return agentdef.Card{}, fmt.Errorf("host: 没有定义来源")
+	}
+	def, err := h.Definitions.Load(context.Background(), agentdef.Ref{Namespace: agentdef.Platform, Name: name})
+	if err != nil {
+		// 平台层没有，按裸名在租户→平台解析一次
+		a, _, rerr := agentdef.Resolve(context.Background(), h.Definitions, agentdef.Scope{Tenant: store.Tenant}, name)
+		if rerr != nil {
+			return agentdef.Card{}, fmt.Errorf("host: 取定义 %s：%w", name, rerr)
+		}
+		def = a
+	}
+	return agentdef.CardOf(def), nil
+}
+
+// deliverRemote 投给远端（T6a）：交给宿主注明的出站传输（Host.Remote）。没配返回不支持。
+// caps 已由发送会话写入，接收方再与自身权限求交；联系名单/权限在接收方照常生效。
+func (h *Host) deliverRemote(ctx context.Context, env mail.Envelope) error {
+	if h.Remote == nil {
+		return fmt.Errorf("%w：%s（未配置出站传输）", ErrUnsupportedAddr, env.To.String())
+	}
+	return h.Remote.Send(ctx, env.To.Host, env)
 }
 
 // DeliverAgent 入口投递给 agent:<定义名>，返回信封落进的会话 id；bizMeta 非空时写进新建会话的业务 meta。
