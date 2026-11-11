@@ -68,7 +68,12 @@ jobs:
             url="$base/go${full}.linux-${arch}.tar.gz"
             echo "尝试 $url"
             if curl -fsSL --retry 2 --connect-timeout 20 "$url" -o /tmp/go.tgz; then
-              sudo tar -C /usr/local -xzf /tmp/go.tgz
+              # 容器里常以 root 跑且没有 sudo，先试 sudo、没有再直接解压。
+              if command -v sudo >/dev/null 2>&1; then
+                sudo tar -C /usr/local -xzf /tmp/go.tgz
+              else
+                tar -C /usr/local -xzf /tmp/go.tgz
+              fi
               echo "/usr/local/go/bin" >> "$GITHUB_PATH"
               export PATH="/usr/local/go/bin:$PATH"
               go version
