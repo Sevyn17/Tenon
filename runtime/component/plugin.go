@@ -312,6 +312,8 @@ type Assembly struct {
 	templates []agentdef.Template
 	// guards 组件登记的守卫规则（04 4.2、08 D4）；装配结束后只读。
 	guards []GuardRule
+	// middleware 洋葱式中间件（04 4.3）：点位名 → 按登记顺序的中间件。
+	middleware map[string][]mwReg
 	// collections 组件登记的集合（05 5.6，T4a）；OpenCollections 之前句柄不可用。
 	collections []collectionReg
 	// collMigrations 集合迁移登记，按 After 拓扑排序后跑。
@@ -342,7 +344,8 @@ func Assemble(spec Spec) (*Assembly, error) {
 	a := &Assembly{metas: map[string]Meta{}, configs: map[string]any{}, sources: map[string]map[string]string{},
 		values: map[string]any{}, fromDef: map[string]bool{}, injected: map[string]bool{}, items: map[string][]Item{},
 		mandatory: map[string]bool{}, plugins: map[string]Component{}, scopes: map[string]*Scope{},
-		agentSchemas: map[string]useconf.Schema{}, resources: map[string]ResourceType{}, matchers: map[string]matcherReg{}}
+		agentSchemas: map[string]useconf.Schema{}, resources: map[string]ResourceType{}, matchers: map[string]matcherReg{},
+		middleware: map[string][]mwReg{}}
 	a.installBuiltinMatchers()
 	enabled := map[string]Entry{}
 	for _, e := range spec.Plugins {

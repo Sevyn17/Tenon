@@ -106,10 +106,44 @@ func (h *Host) deliver(ctx context.Context, env mail.Envelope) error {
 	if err := env.Normalize(); err != nil {
 		return err
 	}
-	if env.Trace == "" { // 一次任务共享 trace id（08 8.7）：入口处由内核分配。
+	// 投递中间件链（04 4.3 Deliver 点位）：中间件在最外层，可改写信封或短路。
+	// 守卫仍在最内层（deliverSession 里），中间件改写后的信封照样过守卫（08）。
+	if h.DeliverChain != nil {
+		req := component.DeliverReq{Envelope: &env, SessionID: env.To.ID, FromRemote: isRemoteOrigin(env)}
+		resp, err := h.DeliverChain(ctx, req)
+		if err != nil {
+			return err
+		}
+		if !resp.Delivered {
+			return nil // 被中间件拦下：不算错误
+		}
+		return nil // 内核投递已由链的最内层（deliverCore）完成
+	}
+	// 没有中间件：直接走内核投递（跳数、地址分派、守卫都在 deliverCore 里）。
+	return h.deliverCore(ctx, env)
+}
+
+// DeliverKernel 投递链的最内层（04 4.3）：真正的内核投递——跳数、地址分派、守卫都在这里。
+// 装配层用它组链：chain := asm.DeliverChain(h.DeliverKernel())。
+func (h *Host) DeliverKernel() func(context.Context, component.DeliverReq) (component.DeliverResp, error) {
+	return func(ctx context.Context, req component.DeliverReq) (component.DeliverResp, error) {
+		if err := h.deliverCore(ctx, *req.Envelope); err != nil {
+			return component.DeliverResp{}, err
+		}
+		return component.DeliverResp{Delivered: true}, nil
+	}
+}
+
+// SetDeliverChain 装投递中间件链（04 4.3）。chain 由装配层用 asm.DeliverChain(h.DeliverKernel()) 组。
+func (h *Host) SetDeliverChain(chain func(context.Context, component.DeliverReq) (component.DeliverResp, error)) {
+	h.DeliverChain = chain
+}
+
+// deliverCore 内核投递：跳数、地址分派、守卫。中间件链的最内层调它。
+func (h *Host) deliverCore(ctx context.Context, env mail.Envelope) error {
+	if env.Trace == "" {
 		env.Trace = mail.NewID()
 	}
-	// 跳数（08 D4）：每投递一次加一，超过上限截断并记 guard.denied。
 	env.Hop++
 	if limit := h.maxHop(); env.Hop > limit {
 		h.guardDenied(env, env.To.ID, "hop")

@@ -185,6 +185,9 @@ type Host struct {
 	MaxHop int
 	// Guards 组件登记的守卫规则（04 4.2、08 D4），装配期从 Assembly 取来。
 	Guards []component.GuardRule
+	// DeliverChain 投递中间件链（04 4.3 Deliver 点位），由装配层用 SetDeliverMiddleware 装。
+	// nil = 没有中间件（直接走内核投递）。中间件在最外层，改写后的信封仍要过守卫。
+	DeliverChain func(ctx context.Context, req component.DeliverReq) (component.DeliverResp, error)
 
 	mu     sync.Mutex
 	actors map[string]*actor

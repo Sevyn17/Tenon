@@ -37,7 +37,7 @@ func TestHelperPluginProcess(t *testing.T) {
 					extproc.CapMatcher, extproc.CapResource},
 				Tools:         []string{"echo_tool"},
 				ToolSpecs:     []extproc.ToolSpec{{Name: "echo_tool", Description: "回显"}},
-				Middleware:    []string{"tool_call"},
+				Middleware:    []string{"tool_call", "deliver"},
 				Events:        []string{"plugin.*"},
 				Matchers:      []string{"kw"},
 				MatcherSpecs:  []extproc.MatcherSpec{{Name: "kw", Description: "按 body 是否含关键字判断"}},
@@ -59,6 +59,20 @@ func TestHelperPluginProcess(t *testing.T) {
 			res := extproc.MiddlewareResult{}
 			if strings.Contains(mc.Tool, "bad") {
 				res.Verdict, res.Reason = "deny", "工具名含 bad"
+			}
+			b, _ := json.Marshal(res)
+			_ = enc.Encode(extproc.Response{JSONRPC: "2.0", ID: req.ID, Result: b})
+		case "deliver":
+			var p struct {
+				SessionID  string          `json:"session_id"`
+				Envelope   json.RawMessage `json:"envelope"`
+				FromRemote bool            `json:"from_remote"`
+			}
+			_ = json.Unmarshal(req.Params, &p)
+			// 约定：信封 body 含 "block" 就拦截。
+			res := map[string]string{}
+			if strings.Contains(string(p.Envelope), "block") {
+				res["verdict"], res["reason"] = "deny", "body 含 block"
 			}
 			b, _ := json.Marshal(res)
 			_ = enc.Encode(extproc.Response{JSONRPC: "2.0", ID: req.ID, Result: b})
@@ -344,5 +358,45 @@ func TestHandshakeSpecCapMismatch(t *testing.T) {
 		MatcherSpecs: []extproc.MatcherSpec{{}}}
 	if err := h3.Validate(); err == nil {
 		t.Fatal("匹配器声明缺名字应被拒")
+	}
+}
+
+// Deliver 中间件经回桥转发：插件 deny 则拦截，放行则继续。
+func TestDeliverMiddlewareBridge(t *testing.T) {
+	conn, cleanup := startHelper(t)
+	defer cleanup()
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	if _, err := conn.Call(ctx, "handshake", map[string]any{"version": extproc.Version}); err != nil {
+		t.Fatal(err)
+	}
+	// body 含 block → deny。
+	raw, err := conn.Call(ctx, "deliver", map[string]any{
+		"session_id": "s1", "envelope": map[string]string{"body": "please block me"}, "from_remote": false})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var res struct {
+		Verdict string `json:"verdict"`
+	}
+	if err := json.Unmarshal(raw, &res); err != nil {
+		t.Fatal(err)
+	}
+	if res.Verdict != "deny" {
+		t.Fatalf("含 block 应被 deny：%+v", res)
+	}
+	// 不含 block → 放行（verdict 空）。
+	raw2, err := conn.Call(ctx, "deliver", map[string]any{
+		"session_id": "s1", "envelope": map[string]string{"body": "normal"}, "from_remote": false})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var res2 struct {
+		Verdict string `json:"verdict"`
+	}
+	_ = json.Unmarshal(raw2, &res2)
+	if res2.Verdict != "" {
+		t.Fatalf("普通信封应放行：%+v", res2)
 	}
 }

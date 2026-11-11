@@ -65,6 +65,10 @@ func Wire(o WireOptions) (*Wired, error) {
 	}
 	// 组件登记的守卫规则（04 4.2、08 D4）：投递 / 建会话等内核点位在 Host 里执行。
 	h.Guards = o.Asm.GuardRules()
+	// 投递中间件链（04 4.3 Deliver 点位）：只有登记过中间件才装，没登记时 Host 直接走内核投递。
+	if o.Asm.HasMiddleware(component.PointDeliverMw) {
+		h.SetDeliverChain(o.Asm.DeliverChain(h.DeliverKernel()))
+	}
 	h.Definitions = o.Definitions
 	h.Hooks.AfterTurn = func(id string, end session.EndReason) {
 		for _, f := range col.AfterTurn {

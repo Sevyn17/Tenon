@@ -101,6 +101,32 @@ func (p *plug) Setup(cx *component.Registrar) error {
 			return err
 		}
 	}
+	// Deliver 中间件（04 4.3 Deliver 点位）：经回桥把「一封信封要投进会话」交给插件决定放行/拦截/改写。
+	if p.hasMiddleware("deliver") {
+		component.Wrap(cx, component.Deliver, func(ctx context.Context, req component.DeliverReq,
+			next func(context.Context, component.DeliverReq) (component.DeliverResp, error)) (component.DeliverResp, error) {
+			if p.conn == nil {
+				return next(ctx, req) // 不可用：放行给内核（fail_open 由调用方决定，这里不阻断投递）
+			}
+			cctx, cancel := context.WithTimeout(ctx, CallTimeout)
+			defer cancel()
+			// 把信封的要点交给插件；插件返回 deny 则拦截。
+			envJSON, _ := json.Marshal(req.Envelope)
+			raw, err := p.conn.Call(cctx, "deliver", map[string]any{
+				"session_id": req.SessionID, "envelope": json.RawMessage(envJSON), "from_remote": req.FromRemote})
+			if err != nil {
+				return component.DeliverResp{}, err // fail_closed：投递失败
+			}
+			var res struct {
+				Verdict string `json:"verdict,omitempty"`
+				Reason  string `json:"reason,omitempty"`
+			}
+			if json.Unmarshal(raw, &res) == nil && res.Verdict == "deny" {
+				return component.DeliverResp{Delivered: false}, nil // 拦截：不报错
+			}
+			return next(ctx, req)
+		})
+	}
 	// 事件订阅：按握手报告的事件名逐个登记（04 4.8 只开事件订阅这一能力）。
 	for _, name := range p.events {
 		if err := cx.On(name, func(ctx context.Context, e store.ComponentEvent) error {
