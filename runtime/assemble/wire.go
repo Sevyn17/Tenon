@@ -69,6 +69,12 @@ func Wire(o WireOptions) (*Wired, error) {
 	if o.Asm.HasMiddleware(component.PointDeliverMw) {
 		h.SetDeliverChain(o.Asm.DeliverChain(h.DeliverKernel()))
 	}
+	// 新建会话中间件链（04 4.3 SessionOpen 点位）：最内层是空实现（真正的建会话由 Host 自己做）。
+	if o.Asm.HasMiddleware(component.PointSessionOpenMw) {
+		h.SessionOpenChain = o.Asm.SessionOpenChain(func(ctx context.Context, req component.SessionOpenReq) (component.SessionOpenResp, error) {
+			return component.SessionOpenResp{}, nil
+		})
+	}
 	h.Definitions = o.Definitions
 	h.Hooks.AfterTurn = func(id string, end session.EndReason) {
 		for _, f := range col.AfterTurn {

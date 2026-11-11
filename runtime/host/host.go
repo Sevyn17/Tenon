@@ -188,6 +188,9 @@ type Host struct {
 	// DeliverChain 投递中间件链（04 4.3 Deliver 点位），由装配层用 SetDeliverMiddleware 装。
 	// nil = 没有中间件（直接走内核投递）。中间件在最外层，改写后的信封仍要过守卫。
 	DeliverChain func(ctx context.Context, req component.DeliverReq) (component.DeliverResp, error)
+	// SessionOpenChain 新建会话中间件链（04 4.3 SessionOpen 点位），装配期装。
+	// nil = 没有中间件。只在新建时跑，打开已有会话不跑。
+	SessionOpenChain func(ctx context.Context, req component.SessionOpenReq) (component.SessionOpenResp, error)
 
 	mu     sync.Mutex
 	actors map[string]*actor
@@ -394,6 +397,22 @@ func (h *Host) open(ctx context.Context, id, def string, f Factory, pre func(*ag
 		return Handle{}, err
 	}
 	if !existed && pre == nil {
+		// SessionOpen 中间件（04 4.3）：只在新建时跑，可写缺省 meta 或拒绝创建。
+		if h.SessionOpenChain != nil {
+			req := component.SessionOpenReq{SessionID: id, Agent: def, Origin: "new"}
+			resp, err := h.SessionOpenChain(ctx, req)
+			if err != nil {
+				return Handle{}, err
+			}
+			if resp.Denied {
+				_ = h.DB.DeleteSession(ctx, id, nil) // 回滚：不留下半建的会话
+				reason := resp.Reason
+				if reason == "" {
+					reason = "被中间件拒绝"
+				}
+				return Handle{}, fmt.Errorf("%w: %s", ErrNotAllowed, reason)
+			}
+		}
 		if err := h.created(ctx, id, Origin{Kind: "new"}); err != nil {
 			return Handle{}, err
 		}
