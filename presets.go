@@ -6,6 +6,7 @@ package tenon
 // 存储（store-sqlite）不在预设里：存储由 WithStore 提供。
 
 import (
+	_ "github.com/Sevyn17/tenon/modules/collab/group"
 	_ "github.com/Sevyn17/tenon/modules/collab/subagent"
 	_ "github.com/Sevyn17/tenon/modules/collab/workgroup"
 	_ "github.com/Sevyn17/tenon/modules/context/compact-basic"
@@ -52,6 +53,7 @@ var defaultComponents = []string{
 	"web",
 	"subagent",
 	"workgroup",
+	"group",
 }
 
 // minimalComponents 最小预设：内核 + 上下文（压缩要用模型组件）。
