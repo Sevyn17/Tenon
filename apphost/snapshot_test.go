@@ -274,6 +274,23 @@ func compare(t *testing.T, path string, got []byte) {
 	}
 	if string(want) != string(got) {
 		_ = os.WriteFile(path+".got", got, 0o644)
-		t.Fatalf("模型请求与快照不同（有意变化用 -update 重录；本次结果写在 %s.got）", path)
+		// 打印首个差异位置与上下文，跨平台排查时能直接看到差在哪（CI 日志里可读）。
+		wl, gl := strings.Split(string(want), "\n"), strings.Split(string(got), "\n")
+		for i := 0; i < len(wl) && i < len(gl); i++ {
+			if wl[i] != gl[i] {
+				lo := i - 3
+				if lo < 0 {
+					lo = 0
+				}
+				hi := i + 4
+				if hi > len(gl) {
+					hi = len(gl)
+				}
+				t.Fatalf("模型请求与快照不同（有意变化用 -update 重录；本次结果写在 %s.got）\n"+
+					"首处差异在第 %d 行：\n  want: %q\n  got:  %q\n上下文(got)：\n%s",
+					path, i+1, wl[i], gl[i], strings.Join(gl[lo:hi], "\n"))
+			}
+		}
+		t.Fatalf("模型请求与快照不同（行数 %d vs %d；本次结果写在 %s.got）", len(wl), len(gl), path)
 	}
 }
