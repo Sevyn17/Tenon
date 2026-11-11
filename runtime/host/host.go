@@ -167,6 +167,8 @@ type Host struct {
 	TreePolicy string
 	// TreeRestarts restart 策略下的最大重跑次数（<=0 按 1）。
 	TreeRestarts int
+	// MaxHop 单封信封允许的最大跳数（08 8.4）；<=0 用内核缺省 MaxHop（8）。租户可调小（T4f）。
+	MaxHop int
 	// Guards 组件登记的守卫规则（04 4.2、08 D4），装配期从 Assembly 取来。
 	Guards []component.GuardRule
 
@@ -997,7 +999,7 @@ func (a *actor) drainInbox(ctx context.Context) (stop bool, err error) {
 		// 每回合都按本批信封重设 trace：非信封输入（Send/Note）置空，免得沿用上一回合的 trace。
 		a.ag.SetTrace(env.Trace)
 		// 触发链信息：本回合发出的信封沿用本批里最大的跳数、来源可信度只降不升（08 8.7）。
-		a.ag.SetTurnOrigin(agent.TurnOrigin{Hop: batchHop(batch), Untrusted: untrusted})
+		a.ag.SetTurnOrigin(agent.TurnOrigin{Hop: batchHop(batch), Untrusted: untrusted, From: env.From.String()})
 		a.ag.Ctx.SetUntrusted(untrusted) // 权限组件据此把 allow 降为询问
 		if env.Trace != "" {
 			a.h.recordTrace(env.Trace, a.id, "session", "")

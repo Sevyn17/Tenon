@@ -37,8 +37,16 @@ var ErrTooManyHops = errors.New("host: 信封跳数超过上限")
 // ErrNotAllowed 发送方不在目标会话的联系名单里（08 D4）。
 var ErrNotAllowed = errors.New("host: 发送方不在联系名单里")
 
-// MaxHop 单封信封允许的最大跳数。
+// MaxHop 单封信封允许的最大跳数（08 8.4 缺省；租户可调小，见 Host.MaxHop）。
 const MaxHop = 8
+
+// maxHop 本宿主生效的跳数上限：Host.MaxHop > 0 时用它，否则用内核缺省。
+func (h *Host) maxHop() int {
+	if h.MaxHop > 0 {
+		return h.MaxHop
+	}
+	return MaxHop
+}
 
 // Deliver 投递一封来自入口（人 / 应用 / 组件）的信封（13 13.3）：session: 只查不建；
 // agent: 带 key 时查或建（B19）；human: 发布给界面。
@@ -74,9 +82,9 @@ func (h *Host) deliver(ctx context.Context, env mail.Envelope) error {
 	}
 	// 跳数（08 D4）：每投递一次加一，超过上限截断并记 guard.denied。
 	env.Hop++
-	if env.Hop > MaxHop {
+	if limit := h.maxHop(); env.Hop > limit {
 		h.guardDenied(env, env.To.ID, "hop")
-		return fmt.Errorf("%w: %d > %d", ErrTooManyHops, env.Hop, MaxHop)
+		return fmt.Errorf("%w: %d > %d", ErrTooManyHops, env.Hop, limit)
 	}
 	switch env.To.Kind {
 	case mail.AddrSession:
@@ -298,7 +306,7 @@ func (h *Host) control(ctx context.Context, id string, env mail.Envelope) error 
 		h.guardDenied(env, id, "control_external")
 		return fmt.Errorf("host: 外部来源 %s 不能发送 control 信封", env.From)
 	}
-	if !controlAllowed(env.From, l.Meta) {
+	if !controlAllowed(env.From, l.Meta) && !h.controlByTurnTrigger(id, env.From) {
 		h.guardDenied(env, id, "control")
 		return fmt.Errorf("host: %s 无权发送 control 信封", env.From)
 	}
@@ -341,6 +349,24 @@ func controlAllowed(from mail.Address, meta store.SessionMeta) bool {
 	default:
 		return false
 	}
+}
+
+// controlByTurnTrigger 本轮触发者可以中断本轮（02 2.4，T4f）：多人会话里，非创建者的触发用户
+// 也能中断自己发起的那一轮。只在「本会话正有一轮在跑」时成立，且触发者是 human 或 session。
+func (h *Host) controlByTurnTrigger(id string, from mail.Address) bool {
+	a, ok := h.getActor(id)
+	if !ok || a.ag == nil {
+		return false
+	}
+	trig := a.ag.CurrentTurnOrigin().From
+	if trig == "" {
+		return false
+	}
+	switch from.Kind {
+	case mail.AddrHuman, mail.AddrSession:
+		return from.String() == trig
+	}
+	return false
 }
 
 // getActor 取已注册的 actor（不加锁语义：调用方只做幂等投递）。

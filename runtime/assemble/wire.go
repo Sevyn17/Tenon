@@ -74,6 +74,7 @@ func Wire(o WireOptions) (*Wired, error) {
 	}
 	h.Limit = k.Concurrency
 	h.TreePolicy, h.TreeRestarts = k.TreePolicy, k.TreeRestarts
+	h.MaxHop = k.MaxHop
 	// 工件文件回收（审查 P1-41）：没有引用、超过宽限期未触碰的文件删掉；由 Background 里的存储清理循环调用。
 	var blobGC func(context.Context) (int, error)
 	if gc, ok := o.Blobs.(store.BlobGC); ok {

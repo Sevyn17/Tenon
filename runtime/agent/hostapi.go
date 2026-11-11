@@ -159,6 +159,9 @@ func (a *Agent) EnqueueOutbox(id string, envelope []byte) {
 type TurnOrigin struct {
 	Hop       int
 	Untrusted bool
+	// From 触发本回合的输入来源地址（信封 from 字符串，如 "human:u1"）；空 = 非信封输入。
+	// 多人会话里 control 放行到本轮触发者（02 2.4，T4f）。
+	From string
 }
 
 // SetTurnOrigin 设置本回合的触发链信息。

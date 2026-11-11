@@ -26,6 +26,7 @@ type Kernel struct {
 	TreePolicy   string        // 子会话一轮失败时：give_up（缺省）/ restart / escalate
 	TreeRestarts int           // restart 策略下的最多重跑次数（0 = 1）
 	Retain       time.Duration // 观测与记账行的保留期（0 = 7 天）
+	MaxHop       int           // 单封信封最大跳数（0 = 内核缺省 8；租户可调小，08 8.4 / T4f）
 }
 
 // DefaultKernel 内核缺省值。
@@ -82,6 +83,8 @@ func ParseKernel(m map[string]any) (Kernel, error) {
 			err = setUint(v, func(n uint64) { k.TreeRestarts = int(n) }, 100)
 		case "retain":
 			err = setDur(v, &k.Retain)
+		case "max_hop":
+			err = setUint(v, func(n uint64) { k.MaxHop = int(n) }, 1<<16)
 		default:
 			return k, fmt.Errorf("[kernel] 未知配置项 %q", key)
 		}
