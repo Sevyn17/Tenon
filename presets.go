@@ -16,6 +16,7 @@ import (
 	_ "github.com/Sevyn17/tenon/modules/context/skills"
 	_ "github.com/Sevyn17/tenon/modules/extend/budget"
 	_ "github.com/Sevyn17/tenon/modules/extend/events"
+	_ "github.com/Sevyn17/tenon/modules/extend/extproc"
 	_ "github.com/Sevyn17/tenon/modules/extend/hooks"
 	_ "github.com/Sevyn17/tenon/modules/extend/modelmatch"
 	_ "github.com/Sevyn17/tenon/modules/model/adapter-anthropic"
@@ -59,6 +60,7 @@ var defaultComponents = []string{
 	"group",
 	"events",
 	"budget",
+	"extproc",
 	"modelmatch",
 }
 

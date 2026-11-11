@@ -69,10 +69,19 @@ type Handshake struct {
 	Middleware []string `json:"middleware,omitempty"`
 	// Tools 工具名清单。
 	Tools []string `json:"tools,omitempty"`
+	// ToolSpecs 工具的完整声明（名字、描述、JSON Schema）；有它就按它登记工具。
+	ToolSpecs []ToolSpec `json:"tool_specs,omitempty"`
 	// Matchers 匹配器名清单。
 	Matchers []string `json:"matchers,omitempty"`
 	// Resources 资源类型名清单。
 	Resources []string `json:"resources,omitempty"`
+}
+
+// ToolSpec 一个外部工具的声明（模型面）。
+type ToolSpec struct {
+	Name        string          `json:"name"`
+	Description string          `json:"description,omitempty"`
+	Schema      json.RawMessage `json:"schema,omitempty"`
 }
 
 // Validate 校验握手：版本一致、能力在允许集合内、中间件点位合法。
@@ -94,7 +103,26 @@ func (h Handshake) Validate() error {
 			return fmt.Errorf("extproc: 中间件点位 %q 不在允许范围（只开 tool_call / deliver）", m)
 		}
 	}
+	// 报告了工具就必须声明 tools 能力，避免绕过能力声明登记点位。
+	if len(h.ToolSpecs) > 0 && !hasCap(h.Capabilities, CapTools) {
+		return fmt.Errorf("extproc: 报告了工具但没声明 %q 能力", CapTools)
+	}
+	for _, t := range h.ToolSpecs {
+		if t.Name == "" {
+			return fmt.Errorf("extproc: 工具缺名字")
+		}
+	}
 	return nil
+}
+
+// hasCap 能力集合里是否有 c。
+func hasCap(caps []string, c string) bool {
+	for _, x := range caps {
+		if x == c {
+			return true
+		}
+	}
+	return false
 }
 
 // Encode 编码一个请求。
