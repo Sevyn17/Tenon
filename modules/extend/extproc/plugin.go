@@ -77,15 +77,11 @@ func (p *plug) Setup(cx *component.Registrar) error {
 		}
 	}
 	// 起进程 + 握手在 Start 里做（要等进程起来）；工具点位在这里登记一个懒加载条目。
-	// 中间件：ToolCall 与 Deliver 两个点位（04 4.8 只开这两个）。层在调用时检查 p.conn。
-	component.RegisterAt(cx, assemble.SessionLayer, ServiceName, assemble.LayerEntry{Guard: false, Order: 90,
-		Func: func(sc *assemble.SessionCx) ([]toolhub.Layer, error) {
-			if p.conn == nil || !p.hasMiddleware("tool_call") {
-				return nil, nil
-			}
-			return []toolhub.Layer{{Name: ServiceName, FailOpen: false,
-				Call: p.middlewareCall("tool_call")}}, nil
-		}})
+	// 中间件：ToolCall 与 Deliver 两个点位（04 4.8 只开这两个）。中间件内部检查 p.conn。
+	// 04 4.3.1：不再登记「会话层」，直接登记到 ToolCall 点位。
+	if p.hasMiddleware("tool_call") {
+		component.Wrap(cx, component.ToolCall, p.toolCallMw())
+	}
 	// 匹配器：经回桥把判断转发给进程（04 4.8 允许匹配器，模型判断类匹配器也走这条路）。
 	for _, spec := range p.matcherSpecs {
 		name := spec.Name
@@ -256,28 +252,34 @@ func (p *plug) hasMiddleware(point string) bool {
 }
 
 // middlewareCall 造一个把调用转发给插件的层：插件返回 deny 则拒绝，否则放行（可改写参数）。
-func (p *plug) middlewareCall(point string) func(ctx context.Context, cx *toolhub.Cx, args json.RawMessage, next toolhub.Next) (toolhub.Output, error) {
-	return func(ctx context.Context, cx *toolhub.Cx, args json.RawMessage, next toolhub.Next) (toolhub.Output, error) {
+// toolCallMw 扩展进程的 tool_call 中间件（04 4.3.1 ToolCall 点位）：
+// 经回桥把一次工具调用交给进程决定放行/拒绝/改写参数。
+//
+// 语义：进程 deny → 拒绝（fail_closed）；进程改 args → 用改写的；回桥失败 → 拒绝（fail_closed）；
+// 进程不可用（conn 为 nil）→ 放行给下一环（组件本身没起来，不该阻断所有工具调用）。
+func (p *plug) toolCallMw() component.ToolCallMw {
+	return func(ctx context.Context, req component.ToolCallReq,
+		next func(context.Context, component.ToolCallReq) (component.ToolCallResp, error)) (component.ToolCallResp, error) {
 		if p.conn == nil {
-			return next(ctx, cx, args) // 不可用：fail_closed 由调用方按不可用处理，这里放行给下一环
+			return next(ctx, req)
 		}
 		cctx, cancel := context.WithTimeout(ctx, CallTimeout)
 		defer cancel()
 		raw, err := p.conn.Call(cctx, "middleware", extproc.MiddlewareCall{
-			Point: point, Tool: cx.Tool.Spec.Name, Args: args, SessionID: cx.SessionID})
+			Point: "tool_call", Tool: req.Tool, Args: req.Args, SessionID: req.SessionID})
 		if err != nil {
-			return toolhub.Failf("扩展进程中间件失败：%v", err), nil // fail_closed
+			return component.ToolCallResp{Denied: true}, nil // fail_closed
 		}
 		var res extproc.MiddlewareResult
 		if json.Unmarshal(raw, &res) == nil {
 			if res.Verdict == "deny" {
-				return toolhub.Failf("扩展进程中间件拒绝：%s", res.Reason), nil
+				return component.ToolCallResp{Denied: true}, nil
 			}
 			if len(res.Args) > 0 {
-				args = res.Args
+				req.Args = res.Args
 			}
 		}
-		return next(ctx, cx, args)
+		return next(ctx, req)
 	}
 }
 
