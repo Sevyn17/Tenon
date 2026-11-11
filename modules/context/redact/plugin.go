@@ -5,7 +5,6 @@ package redact
 import (
 	"github.com/Sevyn17/tenon/runtime/assemble"
 	"github.com/Sevyn17/tenon/runtime/component"
-	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 type plug struct{}
@@ -25,10 +24,9 @@ func (*plug) Setup(cx *component.Registrar) error {
 	if ok && c != nil {
 		c.SetRedact(func(s string) string { t, _ := red.String(s); return t })
 	}
-	component.RegisterAt(cx, assemble.SessionLayer, "redact", assemble.LayerEntry{Order: 0,
-		Func: func(*assemble.SessionCx) ([]toolhub.Layer, error) { return []toolhub.Layer{Layer(red)}, nil }})
-	component.RegisterAt(cx, assemble.SessionLayer, "redact-guard", assemble.LayerEntry{Guard: true, Order: 1,
-		Func: func(*assemble.SessionCx) ([]toolhub.Layer, error) { return []toolhub.Layer{WriteGuard()}, nil }})
+	// 04 4.3.1：不再登记「会话层」，拆成 ToolCall 改写区（脱敏输出）与判定区（拒写占位符）。
+	component.Wrap(cx, component.ToolCall, Middleware(red))
+	component.WrapGuard(cx, component.ToolCall, "redact-guard", WriteGuardFn)
 	return nil
 }
 

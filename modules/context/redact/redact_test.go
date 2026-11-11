@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/Sevyn17/tenon/runtime/callctx"
+	"github.com/Sevyn17/tenon/runtime/component"
 	"github.com/Sevyn17/tenon/runtime/session"
 	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
@@ -83,7 +84,8 @@ func TestLayerPersistsRedacted(t *testing.T) {
 			return toolhub.Text("env: TENON_API_KEY=sk-abcdefghijklmnopqrstuvwx"), nil
 		},
 	})
-	h.AddLayer(Layer(New()))
+	// 04 4.3.1：脱敏从「会话层」迁到 ToolCall 中间件；测试里把它包成一层挂上去。
+	h.AddLayer(toolhub.Layer{Name: "redact", Call: mwAsLayer(Middleware(New()))})
 	res := h.Execute(context.Background(), kctx("s"), []session.ToolCall{{ID: "c1", Name: "leak", Args: json.RawMessage(`{}`)}}, nil)
 	r0, ok := res.Next()
 	if !ok || r0.Err != nil {
@@ -97,3 +99,27 @@ func TestLayerPersistsRedacted(t *testing.T) {
 
 // kctx 测试用调用上下文（框架设计 04 §4.4）。
 func kctx(id string) *callctx.Ctx { return callctx.New(callctx.Options{SessionID: id}) }
+
+// mwAsLayer 把 ToolCall 中间件包成 toolhub.Layer（测试用；生产路径由 assemble 装配）。
+func mwAsLayer(mw component.ToolCallMw) func(ctx context.Context, cx *toolhub.Cx, args json.RawMessage, next toolhub.Next) (toolhub.Output, error) {
+	return func(ctx context.Context, cx *toolhub.Cx, args json.RawMessage, next toolhub.Next) (toolhub.Output, error) {
+		req := component.ToolCallReq{Args: args}
+		if cx != nil && cx.Tool != nil {
+			req.Tool = cx.Tool.Spec.Name
+		}
+		if cx != nil {
+			req.SessionID = cx.SessionID
+		}
+		resp, err := mw(ctx, req, func(ctx context.Context, r component.ToolCallReq) (component.ToolCallResp, error) {
+			out, err := next(ctx, cx, r.Args)
+			return component.ToolCallResp{Output: out}, err
+		})
+		if err != nil {
+			return toolhub.Output{}, err
+		}
+		if resp.Denied {
+			return toolhub.Failf("%s", resp.Reason), nil
+		}
+		return resp.Output, nil
+	}
+}

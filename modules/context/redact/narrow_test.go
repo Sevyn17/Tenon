@@ -6,8 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Sevyn17/tenon/runtime/session"
-	"github.com/Sevyn17/tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/runtime/component"
 )
 
 func TestAssignSkipsCode(t *testing.T) {
@@ -36,24 +35,24 @@ func TestAssignSkipsCode(t *testing.T) {
 }
 
 func TestWriteGuard(t *testing.T) {
-	g := WriteGuard()
-	ran := false
-	next := func(context.Context, *toolhub.Cx, json.RawMessage) (toolhub.Output, error) {
-		ran = true
-		return toolhub.Text("ok"), nil
+	// 04 4.3.1：判定区是纯谓词（不再包 next）。
+	deny := func(tool, args string) (component.Verdict, string) {
+		return WriteGuardFn(context.Background(), component.ToolCallReq{
+			Tool: tool, Args: json.RawMessage(args)})
 	}
-	w := &toolhub.Tool{Attrs: map[string]any{toolhub.AttrWorkspace: true}}
-	out, _ := g.Call(context.Background(), &toolhub.Cx{Tool: w}, json.RawMessage(`{"content":"x=`+Placeholder+`"}`), next)
-	if ran || out.Status != session.ToolError {
-		t.Fatalf("应拒绝写回占位符：ran=%v out=%+v", ran, out)
+	// 写文件类工具 + 含占位符 → 拒绝。
+	if v, why := deny("write_file", `{"content":"x=`+Placeholder+`"}`); v != component.Deny || why == "" {
+		t.Fatalf("应拒绝写回占位符：%v %q", v, why)
 	}
-	if _, _ = g.Call(context.Background(), &toolhub.Cx{Tool: w}, json.RawMessage(`{"content":"x=1"}`), next); !ran {
-		t.Fatal("无占位符应放行")
+	if v, _ := deny("edit", `{"new_string":"x=`+Placeholder+`"}`); v != component.Deny {
+		t.Fatalf("edit 也应拒绝")
 	}
-	ran = false
-	r := &toolhub.Tool{}
-	g.Call(context.Background(), &toolhub.Cx{Tool: r}, json.RawMessage(`{"q":"`+Placeholder+`"}`), next)
-	if !ran {
-		t.Fatal("非写文件工具应放行")
+	// 写文件类工具 + 无占位符 → 不表态（放行给其他判定与内核）。
+	if v, _ := deny("write_file", `{"content":"x=1"}`); v != component.Abstain {
+		t.Fatalf("无占位符应 Abstain")
+	}
+	// 非写文件工具 → 不表态。
+	if v, _ := deny("read_file", `{"q":"`+Placeholder+`"}`); v != component.Abstain {
+		t.Fatalf("非写文件工具应 Abstain")
 	}
 }

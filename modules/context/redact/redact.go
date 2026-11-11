@@ -14,8 +14,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
-	"time"
 
+	"github.com/Sevyn17/tenon/runtime/component"
 	"github.com/Sevyn17/tenon/runtime/session"
 	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
@@ -170,21 +170,20 @@ const AttrRedacted = "redacted"
 // 作为最外层 Transform（thin-kernel 决定 2）：内层 Guard 返回的 Confirm 原样透传；确认后重跑也会再经过它。
 // 结果在 chain 返回后才写幂等记录、溢出产物与日志，所以落库的都是脱敏后的文本。脱敏失败（超时 / panic）按 FailOpen=false 处理：
 // 宁可拒绝这次结果，也不把未脱敏的文本写进日志。
-func Layer(r *Redactor) toolhub.Layer {
-	return toolhub.Layer{
-		Name:     "redact",
-		Timeout:  2 * time.Second,
-		FailOpen: false,
-		Call: func(ctx context.Context, cx *toolhub.Cx, args json.RawMessage, next toolhub.Next) (toolhub.Output, error) {
-			out, err := next(ctx, cx, args)
-			if err != nil || out.Kind != toolhub.Done {
-				return out, err
-			}
-			if c, n := r.Content(out.Content); n > 0 {
-				out.Content = c
-			}
-			return out, nil
-		},
+// Middleware 工具结果脱敏中间件（04 4.3.1 ToolCall 改写区）：工具跑完后把输出里的密钥替换成占位符。
+//
+// 原来是 toolhub.Layer（会话层），04 4.3.1 拆会话层后改成 ToolCall 点位的中间件。
+func Middleware(r *Redactor) component.ToolCallMw {
+	return func(ctx context.Context, req component.ToolCallReq,
+		next func(context.Context, component.ToolCallReq) (component.ToolCallResp, error)) (component.ToolCallResp, error) {
+		resp, err := next(ctx, req)
+		if err != nil || resp.Output.Kind != toolhub.Done {
+			return resp, err
+		}
+		if c, n := r.Content(resp.Output.Content); n > 0 {
+			resp.Output.Content = c
+		}
+		return resp, nil
 	}
 }
 
@@ -204,16 +203,25 @@ func HasPlaceholder(args json.RawMessage) bool {
 
 // WriteGuard 工具 Guard：写文件类工具（带 toolhub.AttrWorkspace 的 edit / write_file）的参数里带占位符时拒绝。
 // 模型读到的是脱敏后的文本，原样写回会把占位符写进文件、edit 的 old_string 也对不上磁盘内容。
-func WriteGuard() toolhub.Layer {
-	return toolhub.Layer{
-		Name:    "redact-guard",
-		Guard:   true,
-		Timeout: 2 * time.Second,
-		Call: func(ctx context.Context, cx *toolhub.Cx, args json.RawMessage, next toolhub.Next) (toolhub.Output, error) {
-			if t := cx.Tool; t != nil && t.Attrs[toolhub.AttrWorkspace] == true && HasPlaceholder(args) {
-				return toolhub.Failf("参数里含脱敏占位符 %s：它不是文件的真实内容，不能写回。请改写不含密钥的部分，或让用户手动处理含密钥的行", Placeholder), nil
-			}
-			return next(ctx, cx, args)
-		},
+// WriteGuardFn 写文件类工具（带 toolhub.AttrWorkspace 的 edit / write_file）的参数里带占位符时拒绝。
+//
+// 模型读到的是脱敏后的文本，原样写回会把占位符写进文件、edit 的 old_string 也对不上磁盘内容。
+// 原来是 toolhub.Layer（会话层，Guard:true），04 4.3.1 拆会话层后改成 ToolCall 判定区的纯谓词。
+//
+// 注意：判定区拿不到 toolhub.Tool 的 Attrs（只给 ToolCallReq），所以这里改判工具名——
+// 判定「是不是写文件工具」由 redact 自己维护名单，与 toolhub.AttrWorkspace 的登记保持同步。
+func WriteGuardFn(ctx context.Context, req component.ToolCallReq) (component.Verdict, string) {
+	if !isWorkspaceWriteTool(req.Tool) {
+		return component.Abstain, ""
 	}
+	if !HasPlaceholder(req.Args) {
+		return component.Abstain, ""
+	}
+	return component.Deny, "参数里含脱敏占位符 " + Placeholder +
+		"：它不是文件的真实内容，不能写回。请改写不含密钥的部分，或让用户手动处理含密钥的行"
 }
+
+// workspaceWriteTools 会写工作区文件的工具（与 toolhub.AttrWorkspace 的登记一致）。
+var workspaceWriteTools = map[string]bool{"edit": true, "write_file": true, "apply_patch": true}
+
+func isWorkspaceWriteTool(name string) bool { return workspaceWriteTools[name] }

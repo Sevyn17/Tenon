@@ -39,6 +39,8 @@ type ToolCallResp struct {
 	Output toolhub.Output
 	// Denied 是否被中间件拒绝（拒绝时不执行工具）。
 	Denied bool
+	// Reason 拒绝原因（Denied 为真时用；空则用「被中间件拒绝」）。进工具结果与 guard.denied。
+	Reason string
 }
 
 // ToolCall 中间件点位。
@@ -71,7 +73,11 @@ func (a *Assembly) ToolCallLayers() []toolhub.Layer {
 				}
 				resp, _ := out.(ToolCallResp)
 				if resp.Denied {
-					return toolhub.Failf("被中间件拒绝"), nil
+					why := resp.Reason
+					if why == "" {
+						why = "被中间件拒绝"
+					}
+					return toolhub.Failf("%s", why), nil
 				}
 				return resp.Output, nil
 			}})
