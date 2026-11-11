@@ -57,8 +57,13 @@ jobs:
 
           # 下载官方 tarball：国内镜像优先，失败回退 go.dev。
           arch=$(uname -m); case "$arch" in x86_64) arch=amd64;; aarch64|arm64) arch=arm64;; esac
-          full="$want.0"
-          [ -n "${GOTOOLCHAIN_VERSION:-}" ] && full="$GOTOOLCHAIN_VERSION"
+          # go.mod 里的 go 版本可能已带补丁号（1.26.0）也可能不带（1.26）；官方文件名要求完整三段。
+          case "$want" in
+            *.*.*) full="$want" ;;
+            *.*)   full="$want.0" ;;
+            *)     full="$want.0.0" ;;
+          esac
+          echo "下载 Go $full"
           for base in https://golang.google.cn/dl https://go.dev/dl https://mirrors.aliyun.com/golang; do
             url="$base/go${full}.linux-${arch}.tar.gz"
             echo "尝试 $url"
