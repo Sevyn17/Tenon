@@ -31,6 +31,9 @@ type ToolCallReq struct {
 	Risk toolhub.Risk
 	// CallID 本次调用的 id。
 	CallID string
+	// Scope 本会话的作用域（04 4.3.1）：中间件要「每会话一份」的状态或历史回读时用它。
+	// nil = 没有作用域（如测试直接构造）；中间件须容忍 nil。
+	Scope SessionScope
 }
 
 // ToolCallResp 工具调用结果。
@@ -61,7 +64,8 @@ func (a *Assembly) ToolCallLayers() []toolhub.Layer {
 		reg := r
 		out = append(out, toolhub.Layer{Name: "mw:" + reg.plugin, Guard: false,
 			Call: func(ctx context.Context, cx *toolhub.Cx, args json.RawMessage, next toolhub.Next) (toolhub.Output, error) {
-				req := ToolCallReq{Tool: toolName(cx), Args: args, SessionID: cx.SessionID, Risk: riskOf(cx), CallID: cx.CallID}
+				req := ToolCallReq{Tool: toolName(cx), Args: args, SessionID: cx.SessionID, Risk: riskOf(cx),
+					CallID: cx.CallID, Scope: scopeOf(cx)}
 				// 走通用的洋葱链：把 next 包成「调下一层」。
 				out, err := reg.run(ctx, req, func(c context.Context, r any) (any, error) {
 					rr, _ := r.(ToolCallReq)
@@ -99,4 +103,15 @@ func riskOf(cx *toolhub.Cx) toolhub.Risk {
 		return toolhub.Read
 	}
 	return cx.Tool.Risk
+}
+
+// scopeOf 取会话作用域（由 assemble 在构造 Hub 时通过 toolhub.Cx 关联；没有则 nil）。
+func scopeOf(cx *toolhub.Cx) SessionScope {
+	if cx == nil || cx.Ctx == nil {
+		return nil
+	}
+	if s, ok := cx.Ctx.Scope().(SessionScope); ok {
+		return s
+	}
+	return nil
 }

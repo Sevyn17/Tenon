@@ -12,6 +12,7 @@ import (
 
 	"github.com/Sevyn17/tenon/modules/internal/workspace"
 	"github.com/Sevyn17/tenon/runtime/appid"
+	"github.com/Sevyn17/tenon/runtime/component"
 	"github.com/Sevyn17/tenon/runtime/session"
 	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
@@ -35,6 +36,11 @@ type Instructions struct {
 	// History 可空：会话已提交历史（压缩点 + 可见窗口里的条目）。嵌套指令追加在工具结果里，
 	// "已装载"按它推导：会话恢复后不重复追加，压缩掉的指令下次进入该目录时重新追加（审查 P1-26）。
 	History func() (compactionBase int, window []*session.Entry)
+
+	// discoverHook 测试注入：非 nil 时 Discover 直接用它（验证超时放行语义）。
+	discoverHook func(path string) string
+	// discoverTimeout 发现指令的超时（0 = 缺省 2s，原 Layer 的 Timeout）。
+	discoverTimeout time.Duration
 
 	mu     sync.Mutex
 	loaded map[string]bool // 已装载文件（绝对路径）
@@ -275,7 +281,58 @@ func (in *Instructions) Discover(target string) string {
 // agentsTools 触发嵌套发现的工具（按参数 path）。
 var agentsTools = map[string]bool{"read_file": true, "edit": true, "write_file": true, "grep": true, "glob": true, "list_dir": true}
 
-// Layer 工具 Transform：成功调用到达更深目录时，把新适用的指令追加到结果末尾（仅追加，前缀缓存不变）。
+// Middleware 工具结果追加项目指令（04 4.3.1 ToolCall 改写区）：成功调用到达更深目录时，
+// 把新适用的指令追加到结果末尾（仅追加，前缀缓存不变）。
+//
+// 原 toolhub.Layer 的 Timeout: 2s + FailOpen: true（超时放行）在 4.3.1 里不由框架开关表达，
+// 由本中间件自己实现：发现过程带 2s 超时，超时或出错就原样放行（不阻断工具调用）。
+func (in *Instructions) Middleware() component.ToolCallMw {
+	return func(ctx context.Context, req component.ToolCallReq,
+		next func(context.Context, component.ToolCallReq) (component.ToolCallResp, error)) (component.ToolCallResp, error) {
+		resp, err := next(ctx, req)
+		if err != nil || resp.Output.Kind != toolhub.Done || resp.Output.Status != session.ToolOK ||
+			!agentsTools[req.Tool] {
+			return resp, err
+		}
+		var a struct{ Path string }
+		_ = json.Unmarshal(req.Args, &a)
+		// FailOpen：发现指令带 2s 超时，超时/出错就放行（t == "" 分支）。
+		t := in.discoverWithTimeout(ctx, a.Path)
+		if t == "" {
+			return resp, nil
+		}
+		resp.Output.Content = append(append(session.Content{}, resp.Output.Content...),
+			session.NewTextPart("\n\n<project-instructions>\n该目录有新的项目指令，后续在此目录工作时遵守：\n\n"+t+"\n</project-instructions>"))
+		return resp, nil
+	}
+}
+
+// discoverWithTimeout 带 2s 超时的指令发现（原 Layer 的 Timeout + FailOpen 语义）。
+// 超时或出错返回空串 = 放行。
+func (in *Instructions) discoverWithTimeout(ctx context.Context, path string) string {
+	d := in.discoverTimeout
+	if d <= 0 {
+		d = 2 * time.Second
+	}
+	dctx, cancel := context.WithTimeout(ctx, d)
+	defer cancel()
+	type res struct{ text string }
+	ch := make(chan res, 1)
+	go func() {
+		if in.discoverHook != nil {
+			ch <- res{text: in.discoverHook(path)}
+			return
+		}
+		ch <- res{text: in.Discover(path)}
+	}()
+	select {
+	case r := <-ch:
+		return r.text
+	case <-dctx.Done():
+		return "" // 超时：放行（FailOpen）
+	}
+}
+
 func (in *Instructions) Layer() toolhub.Layer {
 	return toolhub.Layer{Name: "agents_md", Timeout: 2 * time.Second, FailOpen: true,
 		Call: func(ctx context.Context, cx *toolhub.Cx, args json.RawMessage, next toolhub.Next) (toolhub.Output, error) {

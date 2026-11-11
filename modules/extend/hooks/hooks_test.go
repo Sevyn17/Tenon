@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Sevyn17/tenon/runtime/component"
 	"github.com/Sevyn17/tenon/runtime/session"
 	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
@@ -86,24 +87,33 @@ func tool(name string) *toolhub.Tool {
 }
 
 // call 用层链跑一次工具，inner 是真正的工具。
-func call(t *testing.T, ls []toolhub.Layer, name string, inner toolhub.Next) (toolhub.Output, bool) {
+// call 把中间件链跑一遍（04 4.3.1：钩子从 toolhub.Layer 改成 component.ToolCallMw）。
+func call(t *testing.T, ms []component.ToolCallMw, name string, inner toolhub.Next) (toolhub.Output, bool) {
 	t.Helper()
 	ran := false
-	next := func(ctx context.Context, cx *toolhub.Cx, a json.RawMessage) (toolhub.Output, error) {
+	// 内核：真正执行工具。
+	kernel := func(ctx context.Context, req component.ToolCallReq) (component.ToolCallResp, error) {
 		ran = true
-		return inner(ctx, cx, a)
+		out, err := inner(ctx, &toolhub.Cx{SessionID: req.SessionID, CallID: req.CallID, Tool: tool(name)}, req.Args)
+		return component.ToolCallResp{Output: out}, err
 	}
-	for i := len(ls) - 1; i >= 0; i-- {
-		l, n := ls[i], next
-		next = func(ctx context.Context, cx *toolhub.Cx, a json.RawMessage) (toolhub.Output, error) {
-			return l.Call(ctx, cx, a, n)
+	// 洋葱：从最后一层往外套。
+	next := kernel
+	for i := len(ms) - 1; i >= 0; i-- {
+		mw, inner := ms[i], next
+		next = func(ctx context.Context, req component.ToolCallReq) (component.ToolCallResp, error) {
+			return mw(ctx, req, inner)
 		}
 	}
-	out, err := next(context.Background(), &toolhub.Cx{SessionID: "s1", CallID: "c1", Tool: tool(name)}, json.RawMessage(`{"command":"rm -rf x"}`))
+	resp, err := next(context.Background(), component.ToolCallReq{SessionID: "s1", CallID: "c1",
+		Tool: name, Args: json.RawMessage(`{"command":"rm -rf x"}`)})
 	if err != nil {
 		t.Fatal(err)
 	}
-	return out, ran
+	if resp.Denied {
+		return toolhub.Failf("%s", resp.Reason), false
+	}
+	return resp.Output, ran
 }
 
 func ok(context.Context, *toolhub.Cx, json.RawMessage) (toolhub.Output, error) {
@@ -139,7 +149,7 @@ func TestLoadConfig(t *testing.T) {
 func TestPreBlocks(t *testing.T) {
 	for mode, want := range map[string]string{"exit2": "禁止删除", "json-block": "先跑测试", "json-deny": "不许"} {
 		r, _ := runner(t, Hook{Event: PreToolUse, Matcher: "shell", Command: mode})
-		out, ran := call(t, r.Layers(), "shell", ok)
+		out, ran := call(t, r.Middlewares(), "shell", ok)
 		if ran || out.Status != session.ToolError || !strings.Contains(text(out), want) {
 			t.Fatalf("%s: 应阻止 ran=%v out=%q", mode, ran, text(out))
 		}
@@ -150,7 +160,7 @@ func TestPreAllowAndMatcher(t *testing.T) {
 	r, warns := runner(t,
 		Hook{Event: PreToolUse, Matcher: "edit", Command: "exit2"},
 		Hook{Event: PreToolUse, Command: "allow"})
-	out, ran := call(t, r.Layers(), "shell", ok)
+	out, ran := call(t, r.Middlewares(), "shell", ok)
 	if !ran || text(out) != "done" || len(*warns) != 0 {
 		t.Fatalf("不匹配的钩子不应生效: ran=%v %q %v", ran, text(out), *warns)
 	}
@@ -159,7 +169,7 @@ func TestPreAllowAndMatcher(t *testing.T) {
 func TestFailuresDoNotBlock(t *testing.T) {
 	for _, mode := range []string{"fail", "block-noreason"} {
 		r, warns := runner(t, Hook{Event: PreToolUse, Command: mode})
-		out, ran := call(t, r.Layers(), "shell", ok)
+		out, ran := call(t, r.Middlewares(), "shell", ok)
 		if !ran || text(out) != "done" || len(*warns) != 1 {
 			t.Fatalf("%s: 钩子失败只告警: ran=%v %q %v", mode, ran, text(out), *warns)
 		}
@@ -170,7 +180,7 @@ func TestPostAppendsContext(t *testing.T) {
 	log := filepath.Join(t.TempDir(), "log.jsonl")
 	t.Setenv("HOOK_LOG", log)
 	r, _ := runner(t, Hook{Event: PostToolUse, Command: "context"})
-	out, ran := call(t, r.Layers(), "edit", ok)
+	out, ran := call(t, r.Middlewares(), "edit", ok)
 	if !ran || !strings.Contains(text(out), "done") || !strings.Contains(text(out), "[用户钩子] lint 通过") {
 		t.Fatalf("工具后钩子应追加说明: %q", text(out))
 	}
@@ -188,7 +198,7 @@ func TestStopFires(t *testing.T) {
 	log := filepath.Join(t.TempDir(), "log.jsonl")
 	t.Setenv("HOOK_LOG", log)
 	r, _ := runner(t, Hook{Event: Stop, Matcher: "ignored", Command: "allow"})
-	if len(r.Layers()) != 0 {
+	if len(r.Middlewares()) != 0 {
 		t.Fatal("只有 stop 钩子时不应加工具层")
 	}
 	r.AfterTurn("s9", session.DoneReason())
@@ -201,7 +211,7 @@ func TestStopFires(t *testing.T) {
 
 func TestEmpty(t *testing.T) {
 	var r *Runner
-	if !r.Empty() || len(New(Config{}, ".", nil).Layers()) != 0 {
+	if !r.Empty() || len(New(Config{}, ".", nil).Middlewares()) != 0 {
 		t.Fatal("空配置不应产生层")
 	}
 }
@@ -219,7 +229,7 @@ func TestPreBlocksNativeExit2ThroughShell(t *testing.T) {
 	}
 	r := New(Config{Hook: []Hook{{Event: PreToolUse, Matcher: "shell", Command: cmd, re: regexp.MustCompile("^(?:shell)$")}}},
 		t.TempDir(), func(string) {})
-	out, ran := call(t, r.Layers(), "shell", ok)
+	out, ran := call(t, r.Middlewares(), "shell", ok)
 	if ran || out.Status != session.ToolError || !strings.Contains(text(out), "禁止删除") {
 		t.Fatalf("原生程序退出码 2 应阻止: ran=%v out=%q", ran, text(out))
 	}
@@ -229,11 +239,11 @@ func TestPreBlocksNativeExit2ThroughShell(t *testing.T) {
 func TestThirdPartyHookEnvScrubbed(t *testing.T) {
 	t.Setenv("HOOKTEST_API_KEY", "sk-host")
 	r, _ := runner(t, Hook{Event: PreToolUse, Command: "envkey", scrub: true})
-	if _, ran := call(t, r.Layers(), "shell", ok); !ran {
+	if _, ran := call(t, r.Middlewares(), "shell", ok); !ran {
 		t.Fatal("第三方钩子不应看到宿主密钥")
 	}
 	r, _ = runner(t, Hook{Event: PreToolUse, Command: "envkey"})
-	if _, ran := call(t, r.Layers(), "shell", ok); ran {
+	if _, ran := call(t, r.Middlewares(), "shell", ok); ran {
 		t.Fatal("用户级钩子应看到完整环境（测试自检）")
 	}
 }

@@ -83,19 +83,10 @@ func (p *plug) Setup(cx *component.Registrar) error {
 	} else if ok {
 		r.Confine = sb.Apply
 	}
-	split := func(guard bool) []toolhub.Layer {
-		var ls []toolhub.Layer
-		for _, l := range r.Layers() {
-			if l.Guard == guard {
-				ls = append(ls, l)
-			}
-		}
-		return ls
+	// 04 4.3.1：不再登记「会话层」，改成 ToolCall 改写区的中间件（pre 阻止 / post 追加反馈）。
+	for _, mw := range r.Middlewares() {
+		component.Wrap(cx, component.ToolCall, mw)
 	}
-	component.RegisterAt(cx, assemble.SessionLayer, "hooks-post", assemble.LayerEntry{Order: 10,
-		Func: func(*assemble.SessionCx) ([]toolhub.Layer, error) { return split(false), nil }})
-	component.RegisterAt(cx, assemble.SessionLayer, "hooks-pre", assemble.LayerEntry{Guard: true, Order: 20,
-		Func: func(*assemble.SessionCx) ([]toolhub.Layer, error) { return split(true), nil }})
 	component.RegisterAt(cx, assemble.AfterTurn, "hooks", assemble.AfterTurnFunc(r.AfterTurn))
 	return nil
 }

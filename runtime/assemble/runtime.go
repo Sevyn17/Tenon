@@ -145,6 +145,8 @@ func (b *Builder) Build(id, defName string, child bool) (*agent.Agent, *session.
 		ms.Media = hub.ReadArtifact // 工具结果里的图片按工件引用取回，发给支持图片的模型
 	}
 	cx := &SessionCx{ID: id, Workdir: b.Workdir, Hub: hub, Agent: a, Child: child, Values: map[string]any{}, Ctx: kctx, Def: def}
+	// 04 4.3.1：把会话作用域挂到 kctx，中间件经 ToolCallReq.Scope 拿到「每会话一份」的状态。
+	kctx.SetScope(&sessionScope{cx: cx})
 	if child {
 		if cx.Parent, err = b.parentLimits(id); err != nil {
 			return nil, nil, err
@@ -413,4 +415,30 @@ func toolGuard(rules []component.GuardRule) (toolhub.Layer, bool) {
 			}
 			return next(ctx, cx, args)
 		}}, true
+}
+
+// sessionScope 把 SessionCx 适配成 component.SessionScope（04 4.3.1）。
+//
+// 中间件是全局单例，不能存会话状态；需要「每会话一份」时经 ToolCallReq.Scope 拿它。
+type sessionScope struct{ cx *SessionCx }
+
+func (s *sessionScope) ID() string { return s.cx.ID }
+
+func (s *sessionScope) Value(key string) (any, bool) {
+	v, ok := s.cx.Values[key]
+	return v, ok
+}
+
+func (s *sessionScope) SetValue(key string, v any) { s.cx.Values[key] = v }
+
+func (s *sessionScope) History() (int, []*session.Entry) {
+	if s.cx.Agent == nil {
+		return 0, nil
+	}
+	snap := s.cx.Agent.Committed()
+	off := snap.Header.CompactionBase - snap.Base
+	if off < 0 || off > len(snap.Entries) {
+		off = 0
+	}
+	return snap.Header.CompactionBase, snap.Entries[off:]
 }

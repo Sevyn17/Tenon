@@ -3,10 +3,10 @@ package instructions
 // 插件登记（thin-kernel-plan §2.2）：AGENTS.md 系统块 + 嵌套指令 Transform 层（每会话一份，已装载集合属于本会话）。
 
 import (
+	"context"
 	"github.com/Sevyn17/tenon/runtime/assemble"
 	"github.com/Sevyn17/tenon/runtime/component"
 	"github.com/Sevyn17/tenon/runtime/session"
-	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 const valueKey = "instructions"
@@ -45,13 +45,37 @@ func (*plug) Setup(cx *component.Registrar) error {
 		return err
 	}
 	trusted := assemble.ProjectTrusted(cx) // 不受信项目：只读用户全局 AGENTS.md（审查 P1-4）
-	component.RegisterAt(cx, assemble.SessionLayer, "instructions", assemble.LayerEntry{Order: 20,
-		Func: func(sc *assemble.SessionCx) ([]toolhub.Layer, error) {
-			return []toolhub.Layer{get(sc, root, trusted).Layer()}, nil
-		}})
+	// 04 4.3.1：不再登记「会话层」，改成 ToolCall 改写区（追加项目指令，超时由中间件自己实现）。
+	// 每会话一份 Instructions 存在会话作用域上（req.Scope），与原来 LayerEntry.Func 每会话构造等价。
+	component.Wrap(cx, component.ToolCall, func(ctx context.Context, req component.ToolCallReq,
+		next func(context.Context, component.ToolCallReq) (component.ToolCallResp, error)) (component.ToolCallResp, error) {
+		in := instructionsFor(req.Scope, root, trusted)
+		return in.Middleware()(ctx, req, next)
+	})
 	component.RegisterAt(cx, assemble.SystemBlock, "instructions", assemble.BlockEntry{Order: 10,
 		Func: func(sc *assemble.SessionCx) (*session.SystemBlock, error) { return get(sc, root, trusted).Block() }})
 	return nil
 }
 
 func (*plug) Start(*component.Scope) error { return nil }
+
+// instructionsFor 按会话作用域取本会话的 Instructions（没有就建一份存进去）。
+// 等价于原来 LayerEntry.Func 里 get(sc, ...) 的「每会话一份」语义。
+func instructionsFor(scope component.SessionScope, root string, trusted bool) *Instructions {
+	if scope == nil {
+		// 没有作用域（测试/装配期）：退化成一次性实例，不跨调用保留状态。
+		in := NewInstructions(root)
+		in.Untrusted = !trusted
+		return in
+	}
+	if v, ok := scope.Value(valueKey); ok {
+		if in, ok := v.(*Instructions); ok {
+			return in
+		}
+	}
+	in := NewInstructions(root)
+	in.Untrusted = !trusted
+	in.History = func() (int, []*session.Entry) { return scope.History() }
+	scope.SetValue(valueKey, in)
+	return in
+}

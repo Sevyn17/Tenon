@@ -39,6 +39,29 @@ type Ctx struct {
 	// reResolve 按某个用户重解使用配置（内核按会话创建者算一份；这里按本轮触发者再算，T4f）。
 	// nil = 不支持按触发者重解（退回会话算好的那份）。
 	reResolve func(user, component string) (map[string]any, bool)
+	// scope 会话作用域（04 4.3.1）：中间件拿「每会话一份」状态与历史回读用。
+	// 由 assemble 在构造会话时设进来；类型是 any，避免 callctx 依赖 component。
+	scope any
+}
+
+// Scope 会话作用域（04 4.3.1）。nil = 没有（装配期或测试）。
+func (c *Ctx) Scope() any {
+	if c == nil {
+		return nil
+	}
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.scope
+}
+
+// SetScope 设会话作用域（assemble 在构造会话时调）。
+func (c *Ctx) SetScope(s any) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.scope = s
 }
 
 // Options 内核构造 Ctx 用。

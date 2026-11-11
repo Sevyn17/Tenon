@@ -20,6 +20,7 @@ import (
 
 	"github.com/Sevyn17/tenon/modules/internal/proc"
 	"github.com/Sevyn17/tenon/runtime/appid"
+	"github.com/Sevyn17/tenon/runtime/component"
 	"github.com/Sevyn17/tenon/runtime/session"
 	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
@@ -317,55 +318,58 @@ func (r *Runner) run(ctx context.Context, h *Hook, in Input) Result {
 }
 
 // Layers 返回工具前（Guard）与工具后（Transform）两层；没有对应钩子的不返回。
-func (r *Runner) Layers() []toolhub.Layer {
-	var ls []toolhub.Layer
+// Middlewares 工具调用中间件（04 4.3.1 ToolCall 改写区）。
+//
+// 两个钩子都放改写区而不是判定区：
+//   - pre 会执行用户脚本（外部副作用），不满足判定区「纯谓词、无副作用、可并行」；
+//     它「阻止」的语义由中间件内部实现（返回 Denied），对调用方等价。
+//   - post 本来就是改写（往结果里追加反馈）。
+//
+// 超时：原 toolhub.Layer 的 Timeout 由 r.Fire 内部按钩子配置执行，这里不再包一层；
+// post 的 FailOpen 语义由 r.Fire 自己保证（钩子失败不阻断工具调用）。
+func (r *Runner) Middlewares() []component.ToolCallMw {
+	var ms []component.ToolCallMw
 	if r.has(PreToolUse) {
-		ls = append(ls, toolhub.Layer{
-			Name:    "hooks-pre",
-			Guard:   true,
-			Timeout: r.total(PreToolUse),
-			Call: func(ctx context.Context, cx *toolhub.Cx, args json.RawMessage, next toolhub.Next) (toolhub.Output, error) {
-				for _, res := range r.Fire(ctx, Input{SessionID: cx.SessionID, Event: PreToolUse, ToolName: cx.Tool.Spec.Name, CallID: cx.CallID, ToolInput: args}) {
-					if res.Block {
-						return toolhub.Failf("被用户钩子阻止：%s", res.Reason), nil
-					}
+		ms = append(ms, func(ctx context.Context, req component.ToolCallReq,
+			next func(context.Context, component.ToolCallReq) (component.ToolCallResp, error)) (component.ToolCallResp, error) {
+			for _, res := range r.Fire(ctx, Input{SessionID: req.SessionID, Event: PreToolUse,
+				ToolName: req.Tool, CallID: req.CallID, ToolInput: req.Args}) {
+				if res.Block {
+					return component.ToolCallResp{Denied: true, Reason: "被用户钩子阻止：" + res.Reason}, nil
 				}
-				return next(ctx, cx, args)
-			},
+			}
+			return next(ctx, req)
 		})
 	}
 	if r.has(PostToolUse) {
-		ls = append(ls, toolhub.Layer{
-			Name:     "hooks-post",
-			Timeout:  r.total(PostToolUse),
-			FailOpen: true,
-			Call: func(ctx context.Context, cx *toolhub.Cx, args json.RawMessage, next toolhub.Next) (toolhub.Output, error) {
-				out, err := next(ctx, cx, args)
-				// 只对真正执行成功的结果触发：本层在所有 Guard 之外，被拒绝 / 出错的结果不送钩子（与 Claude Code PostToolUse 一致）
-				if err != nil || out.Kind != toolhub.Done || out.Status != session.ToolOK {
-					return out, err
+		ms = append(ms, func(ctx context.Context, req component.ToolCallReq,
+			next func(context.Context, component.ToolCallReq) (component.ToolCallResp, error)) (component.ToolCallResp, error) {
+			resp, err := next(ctx, req)
+			// 只对真正执行成功的结果触发：被拒绝 / 出错的结果不送钩子（与 Claude Code PostToolUse 一致）
+			if err != nil || resp.Output.Kind != toolhub.Done || resp.Output.Status != session.ToolOK {
+				return resp, err
+			}
+			in := Input{SessionID: req.SessionID, Event: PostToolUse, ToolName: req.Tool, CallID: req.CallID,
+				ToolInput: req.Args, ToolResponse: clip(textOf(resp.Output.Content), MaxOutput),
+				ToolStatus: resp.Output.Status.State}
+			var notes []string
+			for _, res := range r.Fire(ctx, in) {
+				if res.Block {
+					notes = append(notes, "[用户钩子反馈] "+res.Reason)
+				} else if res.Context != "" {
+					notes = append(notes, "[用户钩子] "+res.Context)
 				}
-				in := Input{SessionID: cx.SessionID, Event: PostToolUse, ToolName: cx.Tool.Spec.Name, CallID: cx.CallID, ToolInput: args,
-					ToolResponse: clip(textOf(out.Content), MaxOutput), ToolStatus: out.Status.State}
-				var notes []string
-				for _, res := range r.Fire(ctx, in) {
-					if res.Block {
-						notes = append(notes, "[用户钩子反馈] "+res.Reason)
-					} else if res.Context != "" {
-						notes = append(notes, "[用户钩子] "+res.Context)
-					}
-				}
-				if len(notes) > 0 {
-					out.Content = append(append(session.Content{}, out.Content...), session.NewTextPart("\n"+strings.Join(notes, "\n")))
-				}
-				return out, nil
-			},
+			}
+			if len(notes) > 0 {
+				resp.Output.Content = append(append(session.Content{}, resp.Output.Content...),
+					session.NewTextPart("\n"+strings.Join(notes, "\n")))
+			}
+			return resp, nil
 		})
 	}
-	return ls
+	return ms
 }
 
-// AfterTurn 回合结束钩子（只通知；P0 不支持 Codex 的 stop 续跑）。
 func (r *Runner) AfterTurn(id string, end session.EndReason) {
 	if !r.has(Stop) {
 		return
