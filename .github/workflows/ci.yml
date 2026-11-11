@@ -18,6 +18,13 @@ jobs:
   go:
     name: Go（gofmt / 文件名 / 文档链接 / vet / test / race）
     runs-on: ubuntu-latest
+    env:
+      # 模块代理：GitHub 托管 runner 直连 proxy.golang.org 即可；自建 runner（如 NAS 上的
+      # Gitea act_runner，容器里访问不了 Google）需要国内镜像。这里列多个，Go 按顺序回退。
+      # GOFLAGS 关掉 toolchain 自动下载：go.mod 的 go 版本由 setup-go 装好，避免容器里再拉。
+      GOPROXY: https://goproxy.cn,https://goproxy.io,https://proxy.golang.org,direct
+      GOSUMDB: sum.golang.google.cn
+      GOTOOLCHAIN: local
     steps:
       - uses: actions/checkout@v4
 
@@ -25,6 +32,8 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+          # setup-go 的 cache 需要能访问模块代理；自建 runner 上失败不该阻断整个 job。
+          cache-dependency-path: go.sum
 
       - name: gofmt
         run: |
