@@ -15,6 +15,7 @@ import (
 	"github.com/Sevyn17/tenon/runtime/bus"
 	"github.com/Sevyn17/tenon/runtime/component"
 	"github.com/Sevyn17/tenon/runtime/host"
+	"github.com/Sevyn17/tenon/runtime/pkgs"
 	"github.com/Sevyn17/tenon/runtime/store"
 	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
@@ -56,6 +57,20 @@ func WithService(key string, v any) Option {
 			c.services = map[string]any{}
 		}
 		c.services[key] = v
+		return nil
+	}
+}
+
+// WithPackages 装上已加载的插件包（apphost.LoadAll 的结果）。一次设齐三件事：
+//   - 以 pkgs.Service 预置给插件（mcp / hooks / skills / prompt），等同 WithService(pkgs.Service, ps)；
+//   - 包带的定义经 agentdef.Dir 变成定义来源，单独存放、不算应用定义（不参与缺省智能体与单定义解析，
+//     T4d 审查 H2）；优先级：应用显式来源 > 内联 WithAgent > 用户级包 > 项目级包 > 内置缺省；
+//   - 包的摘要填进装配结果，explain 输出"插件包"一段。
+//
+// 包定义与组件模板同名时由 Assembly.Definitions 报启动错误（现有 WithTemplates 规则）。
+func WithPackages(ps []*pkgs.Package) Option {
+	return func(c *config) error {
+		c.packages = append(c.packages, ps...)
 		return nil
 	}
 }

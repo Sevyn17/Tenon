@@ -151,6 +151,7 @@ github.com/Sevyn17/tenon: func WithModelCatalog(path string) Option
 github.com/Sevyn17/tenon: func WithModels(hub *ModelHub, model string) Option
 github.com/Sevyn17/tenon: func WithOpenAI(baseURL string, model string, key KeyRef) Option
 github.com/Sevyn17/tenon: func WithOpenAIResponses(baseURL string, model string, key KeyRef) Option
+github.com/Sevyn17/tenon: func WithPackages(ps []*github.com/Sevyn17/tenon/runtime/pkgs.Package) Option
 github.com/Sevyn17/tenon: func WithProfile(p *github.com/Sevyn17/tenon/runtime/component.Profile) Option
 github.com/Sevyn17/tenon: func WithProjectTrust(trusted bool) Option
 github.com/Sevyn17/tenon: func WithProtocolOptions(f func(*github.com/Sevyn17/tenon/appapi.Options)) Option

@@ -22,7 +22,9 @@ func AgentSources(ps []*Package) []agentdef.Source {
 	return out
 }
 
-// Infos 包的摘要（explain 用）。scope 决定列哪些层的定义；列不出（目录读失败）时定义一栏记成说明。
+// Infos 包的摘要（explain 用）。scope 决定列哪些层的定义（装配期用租户范围，不含用户层，
+// 所以包里 user/<租户>/<用户>/<名> 的定义不会列进 explain——它们是按用户可见的，explain 只列平台 / 租户层）；
+// 列不出（目录读失败）时定义一栏记成说明。
 func Infos(ctx context.Context, ps []*Package, scope agentdef.Scope) []component.PackageInfo {
 	out := make([]component.PackageInfo, 0, len(ps))
 	for _, p := range ps {
@@ -34,6 +36,8 @@ func Infos(ctx context.Context, ps []*Package, scope agentdef.Scope) []component
 			refs, err := agentdef.Dir(p.AgentsDir).List(ctx, scope)
 			if err != nil {
 				info.Agents = []string{"（读定义目录失败：" + err.Error() + "）"}
+				out = append(out, info)
+				continue
 			}
 			for _, r := range refs {
 				info.Agents = append(info.Agents, r.String())

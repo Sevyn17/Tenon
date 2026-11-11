@@ -18,6 +18,7 @@ import (
 	"github.com/Sevyn17/tenon/runtime/bus"
 	"github.com/Sevyn17/tenon/runtime/component"
 	"github.com/Sevyn17/tenon/runtime/host"
+	"github.com/Sevyn17/tenon/runtime/pkgs"
 	"github.com/Sevyn17/tenon/runtime/store"
 	"github.com/Sevyn17/tenon/runtime/toolhub"
 	"github.com/Sevyn17/tenon/runtime/useconf"
@@ -59,8 +60,10 @@ type config struct {
 	store      store.Store       // WithStore
 	models     *assemble.Models  // WithModels
 	agents     []agentdef.Source // WithAgents
-	workdir    string
-	ui         assemble.UI
+	// packages 插件包（WithPackages）：包带的定义单独存放，不算应用定义（T4d 审查 H2）。
+	packages []*pkgs.Package
+	workdir  string
+	ui       assemble.UI
 	// protocolUI 界面经应用协议（WithProtocolUI）。
 	protocolUI bool
 	// configs 组件配置（WithConfig），按组件名合并。
@@ -416,6 +419,12 @@ func build(c *config) (*App, error) {
 	for k, v := range c.services {
 		inject[k] = v
 	}
+	// WithPackages 也把包预置给插件（等同 WithService(pkgs.Service, ps)）；显式 WithService 给过就不覆盖。
+	if len(c.packages) > 0 {
+		if _, ok := inject[pkgs.Service]; !ok {
+			inject[pkgs.Service] = c.packages
+		}
+	}
 	if st != nil {
 		inject[assemble.ServiceDB] = st
 	}
@@ -433,7 +442,10 @@ func build(c *config) (*App, error) {
 		}
 	}
 	builtin := agentdef.Mem() // 内置缺省智能体（Start 里按需登记）
+	// 应用显式定义：WithAgents 来源在前、内联 WithAgent 在后（同名以先给的为准，WithAgents 优先）。
 	appDefs := agentdef.Multi(append(append([]agentdef.Source(nil), c.agents...), inline)...)
+	// 插件包带的定义单独一路（T4d 审查 H2）：不算应用定义，不参与缺省智能体与单定义解析。
+	pkgDefs := agentdef.Multi(pkgs.AgentSources(c.packages)...)
 	// 应用工具（WithTools）：一个内部组件登记到 session_tools。
 	var toolNames []string
 	if len(c.tools) > 0 {
@@ -506,9 +518,14 @@ func build(c *config) (*App, error) {
 	if err != nil {
 		return nil, fmt.Errorf("tenon: 装配: %w", err)
 	}
-	defs, err := asm.Definitions(agentdef.Multi(appDefs, builtin))
+	// 定义来源合成顺序既是可见性也是同名优先级：应用显式 > 包定义 > 内置缺省。
+	defs, err := asm.Definitions(agentdef.Multi(appDefs, pkgDefs, builtin))
 	if err != nil {
 		return nil, fmt.Errorf("tenon: 定义: %w", err)
+	}
+	// 包摘要填进装配结果，explain 用（T4d）。目录后来被删也不影响启动，Infos 会记说明。
+	if len(c.packages) > 0 {
+		asm.SetPackages(pkgs.Infos(context.Background(), c.packages, agentdef.Scope{Tenant: store.Tenant}))
 	}
 	if st == nil {
 		if v, ok := asm.Value(assemble.ServiceDB); ok {
