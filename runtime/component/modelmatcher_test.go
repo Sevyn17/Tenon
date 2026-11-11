@@ -58,3 +58,18 @@ func TestModelMatcherExhaustedCallbackOnce(t *testing.T) {
 		t.Fatalf("用尽回调应只触发一次，实际 %d", n)
 	}
 }
+
+// 判断失败也计数（回归：原先只在命中时计数，模型持续失败时永远触发不到上限）。
+func TestModelMatcherCountsFailures(t *testing.T) {
+	calls := 0
+	m := ModelMatcher(func(context.Context, ResourceRecord, map[string]string) (bool, error) {
+		calls++
+		return false, errors.New("模型失败")
+	}, 2, nil)
+	for i := 0; i < 5; i++ {
+		_, _ = m(ResourceRecord{Body: "x"}, nil)
+	}
+	if calls != 2 {
+		t.Fatalf("失败也应计数、到上限后不再调模型，实际调用 %d 次", calls)
+	}
+}

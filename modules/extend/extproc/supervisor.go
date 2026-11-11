@@ -47,7 +47,11 @@ type Supervisor struct {
 func (s *Supervisor) Start(ctx context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.startLocked(ctx)
+	if err := s.startLocked(ctx); err != nil {
+		s.failLocked()
+		return err
+	}
+	return nil
 }
 
 func (s *Supervisor) startLocked(ctx context.Context) error {
@@ -74,6 +78,14 @@ func (s *Supervisor) startLocked(ctx context.Context) error {
 	s.cmd, s.stdin, s.stdout = cmd, in, out
 	go s.watch(cmd)
 	return nil
+}
+
+// failLocked 启动失败：标记不可用并回调（调用方不能拿着 nil conn 继续用）。调用方持锁。
+func (s *Supervisor) failLocked() {
+	s.dead = true
+	if s.OnUnavailable != nil {
+		go s.OnUnavailable() // 回调里可能再取锁，放 goroutine 里避免死锁
+	}
 }
 
 // watch 等进程退出；非主动停止时按退避重启，超限标记不可用。
@@ -107,11 +119,8 @@ func (s *Supervisor) watch(cmd *exec.Cmd) {
 	}
 	if n >= limit {
 		s.mu.Lock()
-		s.dead = true
+		s.failLocked()
 		s.mu.Unlock()
-		if s.OnUnavailable != nil {
-			s.OnUnavailable()
-		}
 		return
 	}
 	time.Sleep(backoff)
@@ -121,10 +130,8 @@ func (s *Supervisor) watch(cmd *exec.Cmd) {
 		return
 	}
 	if e := s.startLocked(context.Background()); e != nil {
+		s.failLocked()
 		s.mu.Unlock()
-		if s.OnUnavailable != nil {
-			s.OnUnavailable()
-		}
 		return
 	}
 	s.mu.Unlock()

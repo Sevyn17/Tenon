@@ -531,6 +531,8 @@ type actor struct {
 	// turnBudgetRef 是本轮的预算账（信封 budget_ref，取本批主触发者）：turn 开始时设，结束时按本回合
 	// 用量记账（08 8.4）。
 	turnBudgetRef string
+	// budgetedTurn 已记账的回合号：同一回合重跑（TreePolicy=restart）不重复记账（进程内去重）。
+	budgetedTurn uint32
 	// steered 本回合已受理的插话 client_id（protocol 2 steer 幂等：插话只在回合中有效，同回合重发只确认不重复插入）。只在 actor 协程里读写。
 	steered map[string]bool
 	// turnInputs 即将开始的回合吃进的输入（inbox item id），turn_start 发出后清空。只在 actor 协程里读写。
@@ -1216,8 +1218,13 @@ func (a *actor) turn(ctx context.Context, f func(context.Context) (session.EndRe
 		return end, err
 	}
 	// 预算记账（08 8.4）：本回合用量记到本轮 budget_ref 账上；超限则挂起。提交之后记，读得到本回合条目。
-	a.h.accountBudget(context.Background(), a.id, a.turnBudgetRef, a.ag.Core.TurnNumber(),
-		a.turnUsage(0), a.budgetLimitOf())
+	// 同一回合重跑（TreePolicy=restart）不重复记账。
+	turn := a.ag.Core.TurnNumber()
+	if turn != a.budgetedTurn {
+		a.budgetedTurn = turn
+		a.h.accountBudget(context.Background(), a.id, a.turnBudgetRef, turn,
+			a.turnUsage(0), a.budgetLimitOf())
+	}
 	// 外发与检查点同事务（08 9.6）：提交成功后再派发；派发在后台进行、失败不影响回合结果，
 	// 未标记的外发行会在下次派发时重试。
 	a.h.kickFlush()
@@ -1513,6 +1520,10 @@ func (a *actor) insertFrom(ctx context.Context, items []store.InboxItem) error {
 		o := a.ag.CurrentTurnOrigin()
 		o.Untrusted = true
 		a.ag.SetTurnOrigin(o)
+	}
+	// 插入的信封来自人时，触发者也跟着更新（08 8.3：一轮只合并同一主体，这里是防御性对齐）。
+	if env.From.Kind == mail.AddrHuman && env.From.ID != "" {
+		a.ag.Ctx.SetTrigger(env.From.ID)
 	}
 	if err := a.ag.Core.MidInput(content, m); err != nil {
 		if errors.Is(err, session.ErrNotWaiting) {

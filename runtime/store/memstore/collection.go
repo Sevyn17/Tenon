@@ -19,9 +19,9 @@ type collDoc struct {
 }
 
 type collection struct {
-	s    *Store
-	spec store.CollectionSpec
-	id   string // tenant\x00owner\x00name
+	s           *Store
+	spec        store.CollectionSpec
+	id          string // tenant\x00owner\x00name
 	owner, name string
 }
 

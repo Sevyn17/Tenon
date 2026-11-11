@@ -105,7 +105,7 @@ func (g *Group) importTasks(ctx context.Context) error {
 // oldTask 旧表 p_workgroup_tasks 的一行。
 type oldTask struct {
 	team, subject, desc, owner, status, result string
-	id, rev                                     int
+	id, rev                                    int
 }
 
 // readOldTasks 读出旧任务板的全部行。表不存在返回 nil。

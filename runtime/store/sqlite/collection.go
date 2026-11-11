@@ -17,8 +17,8 @@ import (
 
 // collection 一个已打开的集合。db 是打开它的句柄：事务视图里打开的，写入落在该事务上。
 type collection struct {
-	db   *DB
-	spec store.CollectionSpec
+	db                  *DB
+	spec                store.CollectionSpec
 	tenant, owner, name string
 }
 

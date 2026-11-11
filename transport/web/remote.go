@@ -86,11 +86,17 @@ func RemoteHandler(deliver func(ctx context.Context, env mail.Envelope) error) h
 			http.Error(w, "bad envelope", http.StatusBadRequest)
 			return
 		}
-		// 入站信封的 from 不能是 human（远端不能冒充本地已鉴权用户，08 8.5）。
+		// 入站信封的安全约束（08 8.3 / 8.5）：
+		//  1. from 不能是 human——远端不能冒充本地已鉴权用户；
+		//  2. origin 强制 external——跨机器来的内容一律不可信，不能被对端声明成可信；
+		//  3. hop 清零——跳数由本端重新起算，避免对端伪造 hop 绕过上限；
+		//  4. caps 保留（发送方内核写入的授权范围），由本端在投递时与接收方有效权限求交。
 		if env.From.Kind == mail.AddrHuman {
 			http.Error(w, "remote cannot send as human", http.StatusForbidden)
 			return
 		}
+		env.Origin = mail.OriginExternal
+		env.Hop = 0
 		if err := deliver(r.Context(), env); err != nil {
 			http.Error(w, err.Error(), http.StatusBadGateway)
 			return

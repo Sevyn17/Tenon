@@ -6,18 +6,18 @@ package memstore
 import "github.com/Sevyn17/tenon/runtime/store"
 
 type snapshot struct {
-	clock    int64
-	sessions map[string]*sess
-	shells   map[string][]byte
-	defs     map[string][]def
-	inbox    map[string][]inboxRow
-	tools    map[string]map[string]*toolRow
-	pending  map[string]store.Pending
-	outbox    []outboxRow
-	traces    []store.TraceEvent
-	collSpecs map[string]store.CollectionSpec
-	collDocs  map[string]map[string]*collDoc
-	collVers  map[string]int
+	clock       int64
+	sessions    map[string]*sess
+	shells      map[string][]byte
+	defs        map[string][]def
+	inbox       map[string][]inboxRow
+	tools       map[string]map[string]*toolRow
+	pending     map[string]store.Pending
+	outbox      []outboxRow
+	traces      []store.TraceEvent
+	collSpecs   map[string]store.CollectionSpec
+	collDocs    map[string]map[string]*collDoc
+	collVers    map[string]int
 	compEvents  []store.ComponentEvent
 	compCursors map[string]int64
 }
@@ -25,17 +25,17 @@ type snapshot struct {
 // snap 复制当前状态；调用方持 s.mu。
 func (s *Store) snap() snapshot {
 	sn := snapshot{clock: s.clock,
-		sessions: make(map[string]*sess, len(s.sessions)),
-		shells:   make(map[string][]byte, len(s.shells)),
-		defs:     make(map[string][]def, len(s.defs)),
-		inbox:    make(map[string][]inboxRow, len(s.inbox)),
-		tools:    make(map[string]map[string]*toolRow, len(s.tools)),
-		pending:  make(map[string]store.Pending, len(s.pending)),
-		outbox:    append([]outboxRow(nil), s.outbox...),
-		traces:    append([]store.TraceEvent(nil), s.traces...),
-		collSpecs: make(map[string]store.CollectionSpec, len(s.collSpecs)),
-		collDocs:  make(map[string]map[string]*collDoc, len(s.collDocs)),
-		collVers:  make(map[string]int, len(s.collVers)),
+		sessions:    make(map[string]*sess, len(s.sessions)),
+		shells:      make(map[string][]byte, len(s.shells)),
+		defs:        make(map[string][]def, len(s.defs)),
+		inbox:       make(map[string][]inboxRow, len(s.inbox)),
+		tools:       make(map[string]map[string]*toolRow, len(s.tools)),
+		pending:     make(map[string]store.Pending, len(s.pending)),
+		outbox:      append([]outboxRow(nil), s.outbox...),
+		traces:      append([]store.TraceEvent(nil), s.traces...),
+		collSpecs:   make(map[string]store.CollectionSpec, len(s.collSpecs)),
+		collDocs:    make(map[string]map[string]*collDoc, len(s.collDocs)),
+		collVers:    make(map[string]int, len(s.collVers)),
 		compEvents:  append([]store.ComponentEvent(nil), s.compEvents...),
 		compCursors: make(map[string]int64, len(s.compCursors)),
 	}

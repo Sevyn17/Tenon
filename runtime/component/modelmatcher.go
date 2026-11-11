@@ -29,6 +29,9 @@ func ModelMatcher(j Judge, max int, onExhausted func()) Matcher {
 			}
 			return Match{}, nil // 判断次数用尽：按不匹配处理，不阻塞其余订阅
 		}
+		// 每次实际发起判断都计数（命中、未命中、失败都算）：上限按"判断次数"算，
+		// 否则模型持续失败时永远触发不到上限。
+		used.Add(1)
 		ok, err := j(context.Background(), rec, params)
 		if err != nil {
 			return Match{}, nil // 判断失败按不匹配，不阻塞扇出
@@ -36,7 +39,6 @@ func ModelMatcher(j Judge, max int, onExhausted func()) Matcher {
 		if !ok {
 			return Match{}, nil
 		}
-		used.Add(1)
 		return Match{Matched: true}, nil
 	}
 }

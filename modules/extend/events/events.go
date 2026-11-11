@@ -13,6 +13,7 @@ package events
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -44,8 +45,14 @@ type Hub struct {
 }
 
 // Post 投一条外部事件给 target（agent:<名> / resident:<名> / session:<id>）。
+// resident:<名> 归一成 agent:<名>：常驻由 Host 按定义查（T5a），不用会话键。
 func (h *Hub) Post(ctx context.Context, target, body string) error {
-	addr, err := mail.ParseAddress(strings.TrimSpace(target))
+	raw := strings.TrimSpace(target)
+	// resident:<名> 不是 mail 的地址类型（常驻靠 agent: 查定义实现），这里归一。
+	if name, ok := strings.CutPrefix(raw, "resident:"); ok && name != "" {
+		raw = "agent:" + name
+	}
+	addr, err := mail.ParseAddress(raw)
 	if err != nil {
 		return err
 	}
@@ -92,14 +99,34 @@ func (p *plug) Setup(cx *component.Registrar) error {
 }
 
 func (p *plug) Start(sc *component.Scope) error {
-	for _, task := range p.cfg.Schedule {
+	// 先整体校验再起定时器：写错的配置直接拒绝启动（与"坏清单/坏配置启动失败"的既有策略一致），
+	// 不静默跳过——否则用户以为定时任务在跑。
+	type job struct {
+		every time.Duration
+		task  Task
+	}
+	jobs := make([]job, 0, len(p.cfg.Schedule))
+	for i, task := range p.cfg.Schedule {
 		d, err := time.ParseDuration(task.Every)
 		if err != nil || d <= 0 {
-			continue // 配置错误：跳过该任务
+			return fmt.Errorf("events: schedule[%d] 的 every %q 不合法", i, task.Every)
 		}
-		task := task
-		sc.Go("events:"+task.Target, func(ctx context.Context) error {
-			return runTask(ctx, d, p.hub, task)
+		if strings.TrimSpace(task.Target) == "" {
+			return fmt.Errorf("events: schedule[%d] 缺 target", i)
+		}
+		tgt := strings.TrimSpace(task.Target)
+		if name, ok := strings.CutPrefix(tgt, "resident:"); ok && name != "" {
+			tgt = "agent:" + name // 常驻归一，与 Post 一致
+		}
+		if _, err := mail.ParseAddress(tgt); err != nil {
+			return fmt.Errorf("events: schedule[%d] 的 target %q 不合法：%w", i, task.Target, err)
+		}
+		jobs = append(jobs, job{every: d, task: task})
+	}
+	for _, j := range jobs {
+		j := j
+		sc.Go("events:"+j.task.Target, func(ctx context.Context) error {
+			return runTask(ctx, j.every, p.hub, j.task)
 		})
 	}
 	return nil

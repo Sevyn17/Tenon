@@ -19,6 +19,7 @@ type Conn struct {
 	r *bufio.Scanner
 
 	mu      sync.Mutex
+	wmu     sync.Mutex // 串行化写入：并发 Call 时两个 JSON 行不能交错
 	pending map[string]chan Response
 	nextID  atomic.Int64
 	closed  bool
@@ -63,9 +64,12 @@ func (c *Conn) Call(ctx context.Context, method string, params any) (json.RawMes
 	c.pending[key] = ch
 	c.mu.Unlock()
 
-	if _, err := c.w.Write(append(b, '\n')); err != nil {
+	c.wmu.Lock()
+	_, werr := c.w.Write(append(b, '\n'))
+	c.wmu.Unlock()
+	if werr != nil {
 		c.removePending(key)
-		return nil, fmt.Errorf("extproc: 写请求：%w", err)
+		return nil, fmt.Errorf("extproc: 写请求：%w", werr)
 	}
 	select {
 	case <-ctx.Done():
@@ -96,7 +100,9 @@ func (c *Conn) Notify(method string, params any) error {
 	if err != nil {
 		return err
 	}
+	c.wmu.Lock()
 	_, err = c.w.Write(append(b, '\n'))
+	c.wmu.Unlock()
 	return err
 }
 

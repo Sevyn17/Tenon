@@ -121,21 +121,30 @@ func (g *Group) nextSeq(ctx context.Context, groupID string) (int64, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	metaKey := "__meta__:" + groupID
-	var cur int64
-	var ver int64
-	if d, err := g.Reads.Get(ctx, store.Tenant, metaKey); err == nil {
-		cur = toInt64(d.Body["next_seq"])
-		ver = d.Version
-	} else if !errors.Is(err, store.ErrNotFound) {
-		return 0, err
+	// 跨进程并发时 CAS 会失败（别的进程刚写过），重试几次取新版本；进程内由 g.mu 串行，不会撞。
+	var lastErr error
+	for attempt := 0; attempt < 5; attempt++ {
+		var cur int64
+		var ver int64
+		if d, err := g.Reads.Get(ctx, store.Tenant, metaKey); err == nil {
+			cur = toInt64(d.Body["next_seq"])
+			ver = d.Version
+		} else if !errors.Is(err, store.ErrNotFound) {
+			return 0, err
+		}
+		next := cur + 1
+		err := g.Reads.Put(ctx, store.Tenant, store.Doc{
+			Key: metaKey, Body: map[string]any{"group": groupID, "next_seq": next, "tenant": store.Tenant},
+		}, ver)
+		if err == nil {
+			return next, nil
+		}
+		if !errors.Is(err, store.ErrConflict) {
+			return 0, err
+		}
+		lastErr = err
 	}
-	next := cur + 1
-	if err := g.Reads.Put(ctx, store.Tenant, store.Doc{
-		Key: metaKey, Body: map[string]any{"group": groupID, "next_seq": next, "tenant": store.Tenant},
-	}, ver); err != nil {
-		return 0, err
-	}
-	return next, nil
+	return 0, fmt.Errorf("group: 取序号连续冲突：%w", lastErr)
 }
 
 // Append 往群里写一条记录并返回序号。
@@ -212,13 +221,20 @@ func (g *Group) readPos(ctx context.Context, groupID, bot string) int64 {
 
 // setReadPos 推进已读序号（只增，条件写）。
 func (g *Group) setReadPos(ctx context.Context, groupID, bot string, pos int64) error {
-	if pos <= g.readPos(ctx, groupID, bot) {
-		return nil
+	key := bot + "@" + groupID
+	var ver int64
+	if d, err := g.Reads.Get(ctx, store.Tenant, key); err == nil {
+		if toInt64(d.Body["pos"]) >= pos {
+			return nil // 已读到更后面：不回退
+		}
+		ver = d.Version
+	} else if !errors.Is(err, store.ErrNotFound) {
+		return err
 	}
 	return g.Reads.Put(ctx, store.Tenant, store.Doc{
-		Key:  bot + "@" + groupID,
+		Key:  key,
 		Body: map[string]any{"group": groupID, "bot": bot, "pos": pos, "tenant": store.Tenant},
-	}, 0)
+	}, ver)
 }
 
 // ---------- @ 解析 ----------

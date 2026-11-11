@@ -171,3 +171,44 @@ func TestBackgroundIncludesPriorReply(t *testing.T) {
 	}
 	_ = m
 }
+
+// 已读位置能连续推进：第二次 Background 不重复注入已读过的记录（回归：setReadPos 曾用 ifVersion=0，
+// 第二次必失败，导致背景每轮重复注入）。
+func TestBackgroundAdvancesReadPos(t *testing.T) {
+	g, _, _, _ := rig(t)
+	ctx := context.Background()
+	cfgG := cfg()
+	// 两条人的发言（不 @ 任何机器人，避免建会话）。
+	if _, err := g.Post(ctx, cfgG, "g1", mail.Address{Kind: mail.AddrHuman, ID: "张三"}, "第一条"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := g.Post(ctx, cfgG, "g1", mail.Address{Kind: mail.AddrHuman, ID: "张三"}, "第二条"); err != nil {
+		t.Fatal(err)
+	}
+	cx := callctx.New(callctx.Options{SessionID: "bot-sess"})
+	cx.Bind(callctx.Session{ID: "bot-sess"}, metaRaw("g1", "alice-bot", []string{"alice-bot"}), nil)
+
+	first := g.Background(cx)
+	if len(first) == 0 {
+		t.Fatal("第一次应注入背景")
+	}
+	// 已读位置应推进到末条；第二次没有新记录 → 不再注入。
+	second := g.Background(cx)
+	if len(second) != 0 {
+		t.Fatalf("已读位置没推进，背景重复注入：%v", second)
+	}
+	// 再来一条新记录 → 只注入新的那条。
+	if _, err := g.Post(ctx, cfgG, "g1", mail.Address{Kind: mail.AddrHuman, ID: "李四"}, "第三条"); err != nil {
+		t.Fatal(err)
+	}
+	third := g.Background(cx)
+	if len(third) == 0 {
+		t.Fatal("有新记录应注入")
+	}
+	if strings.Contains(third[0].Body, "第一条") || strings.Contains(third[0].Body, "第二条") {
+		t.Fatalf("只该注入新的那条：%s", third[0].Body)
+	}
+	if !strings.Contains(third[0].Body, "第三条") {
+		t.Fatalf("应注入第三条：%s", third[0].Body)
+	}
+}
