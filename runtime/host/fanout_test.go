@@ -117,10 +117,21 @@ func TestFanoutAcceptance(t *testing.T) {
 	if got := inboxOf(t, r.db, "s1"); len(got) != 0 {
 		t.Fatalf("被拒的不应入信箱：%+v", got)
 	}
-	events, err := r.db.Read(ctx, 0, 0)
-	if err != nil || len(events) != 1 || events[0].Name != "guard.denied" {
-		t.Fatalf("应记一条 guard.denied：%v %+v", err, events)
+	// 只数 guard.denied（其它组件事件与本次断言无关，避免被无关事件干扰）。
+	var deniedEvents []store.ComponentEvent
+	if all, err := r.db.Read(ctx, 0, 0); err != nil {
+		t.Fatalf("读组件事件：%v", err)
+	} else {
+		for _, e := range all {
+			if e.Name == "guard.denied" {
+				deniedEvents = append(deniedEvents, e)
+			}
+		}
 	}
+	if len(deniedEvents) != 1 {
+		t.Fatalf("应记一条 guard.denied，实际 %d 条（全部事件 %+v）", len(deniedEvents), deniedEvents)
+	}
+	events := deniedEvents
 	var data map[string]string
 	if err := json.Unmarshal(events[0].Data, &data); err != nil {
 		t.Fatal(err)
