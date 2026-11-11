@@ -75,6 +75,10 @@ func Wire(o WireOptions) (*Wired, error) {
 			return component.SessionOpenResp{}, nil
 		})
 	}
+	// 回合中间件链（04 4.3 Turn 点位）：存构造器，调用时由 Host 注入本轮 kernel。
+	if o.Asm.HasMiddleware(component.PointTurnMw) {
+		h.TurnChain = o.Asm.TurnChain
+	}
 	h.Definitions = o.Definitions
 	h.Hooks.AfterTurn = func(id string, end session.EndReason) {
 		for _, f := range col.AfterTurn {

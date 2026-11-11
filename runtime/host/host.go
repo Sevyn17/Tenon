@@ -191,6 +191,9 @@ type Host struct {
 	// SessionOpenChain 新建会话中间件链（04 4.3 SessionOpen 点位），装配期装。
 	// nil = 没有中间件。只在新建时跑，打开已有会话不跑。
 	SessionOpenChain func(ctx context.Context, req component.SessionOpenReq) (component.SessionOpenResp, error)
+	// TurnChain 回合中间件链的**构造器**（04 4.3 Turn 点位）：调用时注入本轮内核 kernel，
+	// 返回包好中间件的链。nil = 没有中间件。**不跨挂起**：恢复时链重新构造并跑一次，Resumed=true。
+	TurnChain func(kernel func(context.Context, component.TurnReq) (component.TurnResp, error)) func(context.Context, component.TurnReq) (component.TurnResp, error)
 
 	mu     sync.Mutex
 	actors map[string]*actor
@@ -1225,7 +1228,7 @@ func (a *actor) turn(ctx context.Context, f func(context.Context) (session.EndRe
 	a.turnInputs = nil
 	a.ag.SetCaps(a.turnCaps) // 本轮授权范围（信封 caps 交集，T3）
 	defer a.ag.SetCaps(nil)
-	end, err := f(tctx)
+	end, err := a.turnWithMiddleware(tctx, f)
 	if err != nil {
 		sp.Set("error", err.Error()).End("error")
 		return end, err
@@ -1272,6 +1275,42 @@ func turnErr(end session.EndReason) error {
 
 // turnFailed 处理一轮运行的失败（02 2.2 的所属树策略）。返回 true 表示 actor 应退出，
 // 会话句柄的 Wait 会得到这个错误；false 表示已按策略重跑/降级，actor 继续服务。
+// turnWithMiddleware 跑一轮的中间件链（04 4.3 Turn 点位）：f 是链的最内层 kernel。
+//
+// **不跨挂起**：一轮等工具、等人、预算挂起或进程重启后，恢复时这条链会重新构造并跑一次，
+// 那时 Resumed=true（a.ag.Pending() 表示打开时还有未完成回合）。
+// 中间件不能把状态放在闭包或调用栈里等它「回来」，跨段状态要写进会话或组件集合。
+func (a *actor) turnWithMiddleware(ctx context.Context, f func(context.Context) (session.EndReason, error)) (session.EndReason, error) {
+	if a.h.TurnChain == nil {
+		return f(ctx)
+	}
+	// kernel：真正跑这一轮。结果填进 Resp.End 交给中间件（可改写）。
+	kernel := func(ctx context.Context, req component.TurnReq) (component.TurnResp, error) {
+		end, err := f(ctx)
+		if err != nil {
+			return component.TurnResp{}, err
+		}
+		raw, merr := json.Marshal(end)
+		if merr != nil {
+			return component.TurnResp{}, merr
+		}
+		return component.TurnResp{End: raw}, nil
+	}
+	req := component.TurnReq{SessionID: a.id, Turn: a.ag.Core.TurnNumber(),
+		Resumed: a.ag.Pending(), Inputs: a.turnInputs}
+	resp, err := a.h.TurnChain(kernel)(ctx, req)
+	if err != nil {
+		return session.EndReason{}, err
+	}
+	var end session.EndReason
+	if len(resp.End) > 0 {
+		if uerr := json.Unmarshal(resp.End, &end); uerr != nil {
+			return end, fmt.Errorf("host: Turn 中间件返回的 End 不合法：%w", uerr)
+		}
+	}
+	return end, nil
+}
+
 func (a *actor) turnFailed(ctx context.Context, err error) bool {
 	a.h.publish(a.id, "turn.failed", map[string]any{"error": err.Error()})
 	// 失败的一轮不留在等待态：先收尾成 Idle（未完成的工具按 Abort 语义处理）。
