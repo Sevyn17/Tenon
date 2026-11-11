@@ -75,29 +75,3 @@ func TestRemoteMissingHost(t *testing.T) {
 		t.Fatal("缺 host 应报错")
 	}
 }
-
-// 入站强制 origin=external、hop=0（远端不能声明可信、不能伪造跳数）。
-func TestRemoteForcesExternalAndHop(t *testing.T) {
-	var got mail.Envelope
-	srv := httptest.NewServer(RemoteHandler(func(ctx context.Context, env mail.Envelope) error {
-		got = env
-		return nil
-	}))
-	defer srv.Close()
-	c := &RemoteClient{}
-	// 对端伪造 origin=human、hop=1。
-	err := c.Send(context.Background(), srv.URL, mail.Envelope{
-		From: mail.Address{Kind: mail.AddrComponent, ID: "peer"},
-		To:   mail.Address{Kind: mail.AddrRemote, Host: srv.URL, ID: "worker"},
-		Kind: mail.KindRequest, Origin: mail.OriginHuman, Hop: 1, Body: "x",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got.Origin != mail.OriginExternal {
-		t.Fatalf("入站 origin 应强制 external，实际 %q", got.Origin)
-	}
-	if got.Hop != 0 {
-		t.Fatalf("入站 hop 应清零，实际 %d", got.Hop)
-	}
-}

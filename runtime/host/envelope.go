@@ -65,6 +65,34 @@ func (h *Host) Deliver(ctx context.Context, env mail.Envelope) error {
 	return h.deliver(ctx, env)
 }
 
+// DeliverRemote 入站远端信封的投递入口（T6a，08 8.3 / 8.5）。
+//
+// 与 Deliver（本机入口）的区别：跨机器来的信封是触发链上的一环，caps 与 hop 必须**沿链保留**
+// （Deliver 会把它们清成入口语义：caps=nil、hop=0，那等于远端提权）。这里只做安全归一：
+//   - from 不能是 human（远端不能冒充本地已鉴权用户）；
+//   - origin 强制 external（跨机器内容一律不可信，不能被对端声明成可信）；
+//   - from=component 降级：远端不能声称自己是本地组件（否则 guardContact 对 component 无条件放行），
+//     把对端声称的身份记进 Via，From 归一成 component:remote；
+//   - caps 保留（发送方内核写入的授权范围），由本端在会话打开时与接收方有效权限求交；
+//   - hop 保留并加一（由 deliver 统一加）。
+func (h *Host) DeliverRemote(ctx context.Context, env mail.Envelope) error {
+	if env.From.Kind == mail.AddrHuman {
+		return fmt.Errorf("%w: 远端不能用 human 身份投递", ErrNotAllowed)
+	}
+	env.Origin = mail.OriginExternal
+	if env.From.Kind == mail.AddrComponent {
+		// 对端声称的组件身份只作转发方记录，不当作本机组件（联系名单不认）。
+		if env.Via == "" {
+			env.Via = env.From.ID
+		}
+		env.From = mail.Address{Kind: mail.AddrComponent, ID: "remote"}
+	}
+	if env.Trace == "" {
+		env.Trace = mail.NewID()
+	}
+	return h.deliver(ctx, env)
+}
+
 // deliverQueued 派发会话发件箱里的信封：内核字段是发送会话的回合在提交时写好的
 // （见 StampOutbound），沿链保留，只在这里继续加跳数。
 func (h *Host) deliverQueued(ctx context.Context, env mail.Envelope) error {

@@ -67,8 +67,12 @@ func (c *RemoteClient) Send(ctx context.Context, host string, env mail.Envelope)
 	return nil
 }
 
-// RemoteHandler 入站 handler：收远端信封，交给 deliver（通常是 host.Deliver）。
-// 返回 http.Handler；鉴权由外层（现有 web.Server 的令牌检查）负责。
+// RemoteHandler 入站 handler：收远端信封，交给 deliver。
+//
+// deliver 必须是**远端入口**（`host.DeliverRemote`），不是 `host.Deliver`——后者是"本机入口"语义，
+// 会把 caps 清成 nil（= 不限）并重置 hop，远端就能借此提权。安全归一（拒绝 human、强制
+// origin=external、component 身份降级、caps/hop 沿链保留）在 `Host.DeliverRemote` 里做。
+// 鉴权由外层（现有 web.Server 的令牌检查）负责。
 func RemoteHandler(deliver func(ctx context.Context, env mail.Envelope) error) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -86,17 +90,11 @@ func RemoteHandler(deliver func(ctx context.Context, env mail.Envelope) error) h
 			http.Error(w, "bad envelope", http.StatusBadRequest)
 			return
 		}
-		// 入站信封的安全约束（08 8.3 / 8.5）：
-		//  1. from 不能是 human——远端不能冒充本地已鉴权用户；
-		//  2. origin 强制 external——跨机器来的内容一律不可信，不能被对端声明成可信；
-		//  3. hop 清零——跳数由本端重新起算，避免对端伪造 hop 绕过上限；
-		//  4. caps 保留（发送方内核写入的授权范围），由本端在投递时与接收方有效权限求交。
+		// 明显的非法来源在这里先拒（省一次投递）；其余安全归一见 Host.DeliverRemote。
 		if env.From.Kind == mail.AddrHuman {
 			http.Error(w, "remote cannot send as human", http.StatusForbidden)
 			return
 		}
-		env.Origin = mail.OriginExternal
-		env.Hop = 0
 		if err := deliver(r.Context(), env); err != nil {
 			http.Error(w, err.Error(), http.StatusBadGateway)
 			return
