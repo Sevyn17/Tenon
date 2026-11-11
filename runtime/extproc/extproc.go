@@ -73,6 +73,8 @@ type Handshake struct {
 	ToolSpecs []ToolSpec `json:"tool_specs,omitempty"`
 	// Matchers 匹配器名清单。
 	Matchers []string `json:"matchers,omitempty"`
+	// Events 订阅的事件名清单（名字可 * 结尾表示前缀）。
+	Events []string `json:"events,omitempty"`
 	// Resources 资源类型名清单。
 	Resources []string `json:"resources,omitempty"`
 }
@@ -102,6 +104,21 @@ func (h Handshake) Validate() error {
 		if !MiddlewarePoints[m] {
 			return fmt.Errorf("extproc: 中间件点位 %q 不在允许范围（只开 tool_call / deliver）", m)
 		}
+	}
+	// 报告了事件订阅就必须声明 events 能力。
+	if len(h.Events) > 0 && !hasCap(h.Capabilities, CapEvents) {
+		return fmt.Errorf("extproc: 报告了事件订阅但没声明 %q 能力", CapEvents)
+	}
+	// 报告了中间件就必须声明 middleware 能力。
+	if len(h.Middleware) > 0 && !hasCap(h.Capabilities, CapMiddleware) {
+		return fmt.Errorf("extproc: 报告了中间件但没声明 %q 能力", CapMiddleware)
+	}
+	// 报告了匹配器 / 资源类型就必须声明对应能力。
+	if len(h.Matchers) > 0 && !hasCap(h.Capabilities, CapMatcher) {
+		return fmt.Errorf("extproc: 报告了匹配器但没声明 %q 能力", CapMatcher)
+	}
+	if len(h.Resources) > 0 && !hasCap(h.Capabilities, CapResource) {
+		return fmt.Errorf("extproc: 报告了资源类型但没声明 %q 能力", CapResource)
 	}
 	// 报告了工具就必须声明 tools 能力，避免绕过能力声明登记点位。
 	if len(h.ToolSpecs) > 0 && !hasCap(h.Capabilities, CapTools) {
@@ -154,4 +171,33 @@ func EncodeResponse(r Response) ([]byte, error) {
 		r.JSONRPC = "2.0"
 	}
 	return json.Marshal(r)
+}
+
+// MiddlewareCall 中间件转发参数（框架 → 插件）。
+type MiddlewareCall struct {
+	// Point 中间件点位：tool_call / deliver。
+	Point string `json:"point"`
+	// Tool 工具名（point=tool_call 时）。
+	Tool string `json:"tool,omitempty"`
+	// Args 工具参数（point=tool_call 时，JSON 原文）。
+	Args json.RawMessage `json:"args,omitempty"`
+	// SessionID 会话 id。
+	SessionID string `json:"session_id,omitempty"`
+	// Envelope 信封（point=deliver 时）。
+	Envelope json.RawMessage `json:"envelope,omitempty"`
+}
+
+// MiddlewareResult 中间件结果（插件 → 框架）：Verdict 空 = 放行；deny = 拒绝（Reason 给原因）。
+type MiddlewareResult struct {
+	Verdict string `json:"verdict,omitempty"`
+	Reason  string `json:"reason,omitempty"`
+	// Args 改写后的参数（可空；transform 类中间件用）。
+	Args json.RawMessage `json:"args,omitempty"`
+}
+
+// EventNotice 事件通知参数（框架 → 插件，无 id 的通知）。
+type EventNotice struct {
+	Name string          `json:"name"`
+	At   int64           `json:"at,omitempty"`
+	Data json.RawMessage `json:"data,omitempty"`
 }

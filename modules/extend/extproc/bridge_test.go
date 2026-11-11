@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 	"testing"
 	"time"
 
@@ -32,9 +33,11 @@ func TestHelperPluginProcess(t *testing.T) {
 		switch req.Method {
 		case "handshake":
 			hs := extproc.Handshake{Version: extproc.Version,
-				Capabilities: []string{extproc.CapTools},
+				Capabilities: []string{extproc.CapTools, extproc.CapMiddleware, extproc.CapEvents},
 				Tools:        []string{"echo_tool"},
-				ToolSpecs:    []extproc.ToolSpec{{Name: "echo_tool", Description: "回显"}}}
+				ToolSpecs:    []extproc.ToolSpec{{Name: "echo_tool", Description: "回显"}},
+				Middleware:   []string{"tool_call"},
+				Events:       []string{"plugin.*"}}
 			b, _ := json.Marshal(hs)
 			_ = enc.Encode(extproc.Response{JSONRPC: "2.0", ID: req.ID, Result: b})
 		case "tools/call":
@@ -45,6 +48,15 @@ func TestHelperPluginProcess(t *testing.T) {
 			_ = json.Unmarshal(req.Params, &p)
 			out, _ := json.Marshal(map[string]string{"text": "echo:" + string(p.Args)})
 			_ = enc.Encode(extproc.Response{JSONRPC: "2.0", ID: req.ID, Result: out})
+		case "middleware":
+			var mc extproc.MiddlewareCall
+			_ = json.Unmarshal(req.Params, &mc)
+			res := extproc.MiddlewareResult{}
+			if strings.Contains(mc.Tool, "bad") {
+				res.Verdict, res.Reason = "deny", "工具名含 bad"
+			}
+			b, _ := json.Marshal(res)
+			_ = enc.Encode(extproc.Response{JSONRPC: "2.0", ID: req.ID, Result: b})
 		default:
 			_ = enc.Encode(extproc.Response{JSONRPC: "2.0", ID: req.ID,
 				Error: &extproc.RPCError{Code: -32601, Message: "no such method"}})
@@ -125,4 +137,78 @@ func TestHandshakeGuardRejectedE2E(t *testing.T) {
 		t.Fatal("guard 能力应被拒")
 	}
 	_ = fmt.Sprint
+}
+
+// 中间件：插件 deny 的工具调用被拦（fail_closed 语义），放行的照常执行。
+func TestMiddlewareDeny(t *testing.T) {
+	conn, cleanup := startHelper(t)
+	defer cleanup()
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	// 先握手，让插件声明 middleware。
+	if _, err := conn.Call(ctx, "handshake", map[string]any{"version": extproc.Version}); err != nil {
+		t.Fatal(err)
+	}
+	// 直接走 middleware 方法：deny 带 bad 的。
+	raw, err := conn.Call(ctx, "middleware", extproc.MiddlewareCall{Point: "tool_call", Tool: "bad_tool"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var res extproc.MiddlewareResult
+	if err := json.Unmarshal(raw, &res); err != nil {
+		t.Fatal(err)
+	}
+	if res.Verdict != "deny" {
+		t.Fatalf("bad_tool 应被 deny：%+v", res)
+	}
+	// 放行的工具返回空 verdict。
+	raw2, err := conn.Call(ctx, "middleware", extproc.MiddlewareCall{Point: "tool_call", Tool: "ok_tool"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var res2 extproc.MiddlewareResult
+	_ = json.Unmarshal(raw2, &res2)
+	if res2.Verdict != "" {
+		t.Fatalf("ok_tool 应放行：%+v", res2)
+	}
+}
+
+// 握手报告的中间件与事件经 Validate 通过（能力已声明）。
+func TestHandshakeMiddlewareAndEvents(t *testing.T) {
+	h := extproc.Handshake{Version: extproc.Version,
+		Capabilities: []string{extproc.CapMiddleware, extproc.CapEvents},
+		Middleware:   []string{"tool_call", "deliver"}, Events: []string{"plugin.*"}}
+	if err := h.Validate(); err != nil {
+		t.Fatalf("合法握手应通过：%v", err)
+	}
+	// 报告中间件但没声明 middleware 能力 → 拒。
+	bad := extproc.Handshake{Version: extproc.Version, Capabilities: []string{extproc.CapEvents}, Middleware: []string{"tool_call"}}
+	if err := bad.Validate(); err == nil {
+		t.Fatal("缺 middleware 能力应被拒")
+	}
+}
+
+// startHelper 起 helper 子进程并返回已连好的 Conn。
+func startHelper(t *testing.T) (*extproc.Conn, func()) {
+	t.Helper()
+	cmd := helperCmd(t)
+	in, err := cmd.StdinPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := cmd.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	conn := extproc.NewConn(in, out)
+	cleanup := func() {
+		conn.Close()
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+	}
+	return conn, cleanup
 }
