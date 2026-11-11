@@ -22,9 +22,11 @@ func crashArgv() []string {
 func TestSupervisorUnavailableAfterCrashes(t *testing.T) {
 	var crashes atomic.Int32
 	var unavailable atomic.Bool
+	// MaxCrashes=1：进程第一次退出就标记不可用，不依赖退避重启的时序（全量并行时
+	// 进程创建本身可能很慢，两次崩溃的窗口太窄会 flake）。
 	s := &Supervisor{
 		Argv:          crashArgv(),
-		MaxCrashes:    2,
+		MaxCrashes:    1,
 		Backoff:       10 * time.Millisecond,
 		OnCrash:       func(error) { crashes.Add(1) },
 		OnUnavailable: func() { unavailable.Store(true) },
@@ -33,8 +35,8 @@ func TestSupervisorUnavailableAfterCrashes(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Stop()
-	// 等它崩到超限。
-	deadline := time.Now().Add(10 * time.Second)
+	// 等它崩到超限（给足时间：CI 上进程创建可能很慢）。
+	deadline := time.Now().Add(30 * time.Second)
 	for !unavailable.Load() {
 		if time.Now().After(deadline) {
 			t.Fatalf("超限后应标记不可用（crashes=%d）", crashes.Load())

@@ -72,8 +72,10 @@ type Builder struct {
 
 	Tools  []ToolSet
 	Layers []LayerFunc
-	Blocks []BlockFunc
-	Hooks  HooksFunc // 可空
+	// ToolCallMW ToolCall 中间件层（04 4.3），装配期由 Assembly 转成 toolhub.Layer，装在最外层。
+	ToolCallMW []toolhub.Layer
+	Blocks     []BlockFunc
+	Hooks      HooksFunc // 可空
 	// Items 权限项声明（装配级，见 PointPermItems）：每个会话的 hub 先登记注册表，再登记工具。
 	Items []toolhub.Item
 	// Definitions 智能体定义来源（03 3.5）；nil = 会话不带定义（也没有可加载的定义名）。
@@ -164,6 +166,11 @@ func (b *Builder) Build(id, defName string, child bool) (*agent.Agent, *session.
 		for _, l := range ls {
 			hub.AddLayer(l)
 		}
+	}
+	// ToolCall 中间件（04 4.3）：装在最外层——先于守卫跑，但它改写后的 args 仍会交给内层守卫重判
+	// （「不能绕过守卫」）。中间件可短路（Denied → 不执行工具）。
+	for _, l := range b.ToolCallMW {
+		hub.PrependLayer(l)
 	}
 	if l, ok := toolGuard(b.Guards); ok { // 组件守卫先于授权层判定：被拒的调用不再要人确认
 		hub.PrependLayer(l)
