@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  go:
+    name: Go（gofmt / 文件名 / 文档链接 / vet / test / race）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: gofmt
+        run: |
+          bad=$(gofmt -l .)
+          if [ -n "$bad" ]; then echo "未 gofmt："; echo "$bad"; exit 1; fi
+
+      - name: 文件名（Go 模块 zip 只收字母、数字与 ASCII 标点）
+        run: |
+          badpaths=$(git ls-files -z | perl -CS -0ne 'chomp; for $c (split //) { if (ord($c) < 128) { next if $c =~ m{[A-Za-z0-9!#$%&()+,\-.=@\[\]^_{}~ /]} } else { next if $c =~ /\p{L}/ } print "  $_\n"; last }')
+          if [ -n "$badpaths" ]; then echo "文件名含 go 模块不接受的字符："; echo "$badpaths"; exit 1; fi
+
+      - name: 文档链接
+        run: python3 scripts/doclinks.py
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go test
+        run: go test -count=1 ./...
+
+      - name: go test -race
+        run: |
+          go test -race -count=1 \
+            ./runtime/host/ ./runtime/store/... ./runtime/session/ ./runtime/toolhub/ \
+            ./runtime/agent/ ./runtime/bus/ ./runtime/inject/ \
+            ./modules/security/... ./modules/collab/... ./modules/extend/... \
+            ./runtime/extproc/ ./runtime/component/ ./runtime/callctx/ \
+            ./tenontest/ ./apphost/ ./transport/...
+
+  web:
+    name: 前端（typecheck / test）
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: typecheck
+        run: pnpm run typecheck
+
+      - name: test
+        run: pnpm test
