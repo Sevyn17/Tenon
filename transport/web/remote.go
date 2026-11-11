@@ -12,9 +12,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
+	hostpkg "github.com/Sevyn17/tenon/runtime/host"
 	"github.com/Sevyn17/tenon/runtime/mail"
 )
 
@@ -100,5 +102,66 @@ func RemoteHandler(deliver func(ctx context.Context, env mail.Envelope) error) h
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
+	})
+}
+
+// RemoteEventsPath 跨机器事件续读的 HTTP 路径（对端 handler 挂在它上面）。
+const RemoteEventsPath = "/remote/events"
+
+// FetchEvents 实现 hostpkg.RemoteEventFetcher：按序号从对端拉事件（T6a 补 T4b 留的口）。
+// 请求带 after 与 limit，对端从自己的组件事件日志里读 seq > after 的事件返回。
+func (c *RemoteClient) FetchEvents(ctx context.Context, host string, after int64, limit int) ([]hostpkg.RemoteEvent, error) {
+	if host == "" {
+		return nil, fmt.Errorf("web: 远端地址缺 host")
+	}
+	base := host
+	if !strings.Contains(base, "://") {
+		base = "http://" + base
+	}
+	u := fmt.Sprintf("%s%s?after=%d&limit=%d", strings.TrimSuffix(base, "/"), RemoteEventsPath, after, limit)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return nil, err
+	}
+	if c.Token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.Token)
+	}
+	cli := c.HTTP
+	if cli == nil {
+		cli = &http.Client{Timeout: 30 * time.Second}
+	}
+	resp, err := cli.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("web: 拉取 %s 的事件：%w", host, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode/100 != 2 {
+		b, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return nil, fmt.Errorf("web: 对端 %s 返回 %d：%s", host, resp.StatusCode, strings.TrimSpace(string(b)))
+	}
+	var out []hostpkg.RemoteEvent
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 8<<20)).Decode(&out); err != nil {
+		return nil, fmt.Errorf("web: 对端事件格式不合法：%w", err)
+	}
+	return out, nil
+}
+
+// RemoteEventsHandler 入站 handler：按 after/limit 从本地组件事件日志读事件返回。
+// read 由调用方给（通常是 store.EventLog.Read 的包装）；鉴权由外层 web.Server 令牌负责。
+func RemoteEventsHandler(read func(ctx context.Context, after int64, limit int) ([]hostpkg.RemoteEvent, error)) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		after, _ := strconv.ParseInt(r.URL.Query().Get("after"), 10, 64)
+		limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+		evs, err := read(r.Context(), after, limit)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(evs)
 	})
 }

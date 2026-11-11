@@ -199,7 +199,10 @@ github.com/Sevyn17/tenon/transport/web: const MaxInflight untyped int
 github.com/Sevyn17/tenon/transport/web: func New(c Config) *Server
 github.com/Sevyn17/tenon/transport/web: func NewToken() (string, error)
 github.com/Sevyn17/tenon/transport/web: type RemoteClient struct{Token string; HTTP *net/http.Client}
+github.com/Sevyn17/tenon/transport/web: method (RemoteClient) FetchEvents(ctx context.Context, host string, after int64, limit int) ([]github.com/Sevyn17/tenon/runtime/host.RemoteEvent, error)
 github.com/Sevyn17/tenon/transport/web: method (RemoteClient) Send(ctx context.Context, host string, env github.com/Sevyn17/tenon/runtime/mail.Envelope) error
+github.com/Sevyn17/tenon/transport/web: func RemoteEventsHandler(read func(ctx context.Context, after int64, limit int) ([]github.com/Sevyn17/tenon/runtime/host.RemoteEvent, error)) net/http.Handler
+github.com/Sevyn17/tenon/transport/web: const RemoteEventsPath untyped string
 github.com/Sevyn17/tenon/transport/web: func RemoteHandler(deliver func(ctx context.Context, env github.com/Sevyn17/tenon/runtime/mail.Envelope) error) net/http.Handler
 github.com/Sevyn17/tenon/transport/web: const RemotePath untyped string
 github.com/Sevyn17/tenon/transport/web: type Server struct{}

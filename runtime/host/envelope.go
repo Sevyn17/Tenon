@@ -134,6 +134,30 @@ type RemoteSender interface {
 	Send(ctx context.Context, host string, env mail.Envelope) error
 }
 
+// RemoteEvent 一条跨机器读到的事件（T6a 事件续读）。形状与 store.ComponentEvent 对应。
+type RemoteEvent struct {
+	Seq    int64           `json:"seq"`
+	At     int64           `json:"at,omitempty"`
+	Source string          `json:"source"`
+	Name   string          `json:"name"`
+	Data   json.RawMessage `json:"data,omitempty"`
+}
+
+// RemoteEventFetcher 跨机器事件续读（T6a，补 T4b 留的口）：按序号从对端拉事件。
+// 由应用/transport 实现并注入 Host.RemoteEvents；nil = 不支持跨机器续读。
+type RemoteEventFetcher interface {
+	// FetchEvents 取 <host> 上 seq > after 的事件（升序），至多 limit 条。
+	FetchEvents(ctx context.Context, host string, after int64, limit int) ([]RemoteEvent, error)
+}
+
+// FetchRemoteEvents 从对端拉 seq > after 的事件（T6a）。没配 fetcher 返回 ErrUnsupportedAddr。
+func (h *Host) FetchRemoteEvents(ctx context.Context, host string, after int64, limit int) ([]RemoteEvent, error) {
+	if h.RemoteEvents == nil {
+		return nil, fmt.Errorf("%w：%s（未配置跨机器事件续读）", ErrUnsupportedAddr, host)
+	}
+	return h.RemoteEvents.FetchEvents(ctx, host, after, limit)
+}
+
 // AgentCard 取某定义的公开名片（T6a）。只导公开字段，不导提示词、[use.*]、caps。
 func (h *Host) AgentCard(name string) (agentdef.Card, error) {
 	if h.Definitions == nil {

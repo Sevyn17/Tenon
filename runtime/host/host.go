@@ -154,6 +154,8 @@ type Host struct {
 	resident   map[string]bool
 	// Remote 出站传输（T6a）：投 remote:<host>/agent:<名> 时用它。nil = 不支持远端。
 	Remote RemoteSender
+	// RemoteEvents 跨机器事件续读（T6a）：按序号从对端拉事件。nil = 不支持。
+	RemoteEvents RemoteEventFetcher
 	// DefaultBudget 宿主级预算上限（token；0 = 不限）。会话没配 [use.budget] 时用它兜底。
 	DefaultBudget uint64
 
