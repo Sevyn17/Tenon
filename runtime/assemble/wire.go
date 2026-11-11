@@ -115,6 +115,7 @@ func Wire(o WireOptions) (*Wired, error) {
 		Kernel:      &k,
 		Compactor:   col.Compactor, // 自动压缩与超限后的强制压缩（审查 P0-1）
 		ContextMW:   ctxMiddleware(o.Asm),
+		ModelMW:     modelMiddleware(o.Asm),
 		Definitions: o.Definitions,
 		Statuses:    col.Statuses,
 		Schemas:     o.Asm.AgentSchemas(),
@@ -192,4 +193,31 @@ func (m ctxMW) Build(ctx context.Context, req *session.Request, kernel func(cont
 		req.Messages = resp.Messages
 	}
 	return req, nil
+}
+
+// modelMiddleware 把 04 4.3 的 ModelCall 点位中间件适配成 agent.ModelCallMiddleware。
+// 没有登记中间件时返回 nil（agent 直接发请求，零开销）。
+func modelMiddleware(asm *component.Assembly) agent.ModelCallMiddleware {
+	if !asm.HasMiddleware(component.PointModelCallMw) {
+		return nil
+	}
+	return modelMW{asm: asm}
+}
+
+type modelMW struct{ asm *component.Assembly }
+
+func (m modelMW) Call(ctx context.Context, req *session.Request,
+	kernel func(context.Context, *session.Request) (session.AssistantItem, session.StopReason, error)) (session.AssistantItem, session.StopReason, error) {
+	chain := m.asm.ModelCallChain(func(ctx context.Context, r component.ModelCallReq) (component.ModelCallResp, error) {
+		reply, stop, err := kernel(ctx, r.Request)
+		if err != nil {
+			return component.ModelCallResp{}, err
+		}
+		return component.ModelCallResp{Reply: reply, Stop: stop}, nil
+	})
+	resp, err := chain(ctx, component.ModelCallReq{Request: req})
+	if err != nil {
+		return session.AssistantItem{}, session.StopReason{}, err
+	}
+	return resp.Reply, resp.Stop, nil
 }

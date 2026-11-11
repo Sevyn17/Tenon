@@ -66,7 +66,9 @@ type Builder struct {
 	Compactor agent.Compactor // 可空
 	// ContextMW 上下文组装中间件（04 4.3 Context 点位），可空。
 	ContextMW agent.ContextMiddleware
-	Workdir   string
+	// ModelMW 模型请求中间件（04 4.3 ModelCall 点位），可空。
+	ModelMW agent.ModelCallMiddleware
+	Workdir string
 	// Policy 新会话策略（每次调用取一份）。
 	Policy func() session.Policy
 	// Kernel [kernel] 节（工具缺省超时 / 确认截止 / 工件阈值）；nil = 内核缺省。
@@ -126,6 +128,9 @@ func (b *Builder) Build(id, defName string, child bool) (*agent.Agent, *session.
 	a.UseSource = b.UseSource
 	if b.ContextMW != nil {
 		a.ContextMW = b.ContextMW
+	}
+	if b.ModelMW != nil {
+		a.ModelMW = b.ModelMW
 	}
 	if b.Compactor != nil {
 		a.Compactor = b.Compactor

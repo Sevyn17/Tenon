@@ -77,6 +77,9 @@ type Agent struct {
 	// 由装配层把 component 的链适配成这个接口注入；agent 包不 import component。
 	ContextMW ContextMiddleware
 
+	// ModelMW 可空：模型请求中间件（04 4.3 ModelCall 点位）。同上由装配层适配注入。
+	ModelMW ModelCallMiddleware
+
 	// Now 时钟（测试注入）；nil = time.Now。
 	Now func() time.Time
 
@@ -329,19 +332,28 @@ func (a *Agent) sendModel(ctx context.Context, need *session.Need, req session.R
 		reply session.AssistantItem
 		stop  session.StopReason
 	)
-	if sm, ok := a.Model.(SinkModel); ok { // modelhub：推理增量与工具调用片段也送出
-		reply, stop, err = sm.StreamSink(ctx, need.Model.RequestID, req, modelhub.Sink{Text: onText,
-			Reasoning: func(d string) {
-				if first.IsZero() {
-					first = a.clock()
-				}
-				ss.reasoning(d)
-			},
-			Tool: ss.tool, Reset: onReset})
-	} else if rm, ok := a.Model.(RequestModel); ok { // 带 need id（R3）与 Reset
-		reply, stop, err = rm.StreamRequest(ctx, need.Model.RequestID, req, onText, onReset)
+	// 内核的模型调用（三种 Model 实现的分支）。ModelCall 中间件链的最内层。
+	kernel := func(ctx context.Context, r *session.Request) (session.AssistantItem, session.StopReason, error) {
+		if sm, ok := a.Model.(SinkModel); ok { // modelhub：推理增量与工具调用片段也送出
+			return sm.StreamSink(ctx, need.Model.RequestID, *r, modelhub.Sink{Text: onText,
+				Reasoning: func(d string) {
+					if first.IsZero() {
+						first = a.clock()
+					}
+					ss.reasoning(d)
+				},
+				Tool: ss.tool, Reset: onReset})
+		}
+		if rm, ok := a.Model.(RequestModel); ok { // 带 need id（R3）与 Reset
+			return rm.StreamRequest(ctx, need.Model.RequestID, *r, onText, onReset)
+		}
+		return a.Model.Stream(ctx, *r, onText)
+	}
+	// ModelCall 中间件（04 4.3）：包住一次模型请求，可脱敏 / 换模型 / 记账 / 重试。
+	if a.ModelMW != nil {
+		reply, stop, err = a.ModelMW.Call(ctx, &req, kernel)
 	} else {
-		reply, stop, err = a.Model.Stream(ctx, req, onText)
+		reply, stop, err = kernel(ctx, &req)
 	}
 	ss.assign(&reply) // 预分配的调用 id 写回回复：tool 事件的 call_id 与条目、工具结果一致
 	if !first.IsZero() {
@@ -407,4 +419,12 @@ func (a *Agent) CommittedHistory() []session.Message {
 type ContextMiddleware interface {
 	// Build 让链处理一次上下文组装。kernel 是最内层：真正组装请求。
 	Build(ctx context.Context, req *session.Request, kernel func(context.Context, *session.Request) (*session.Request, error)) (*session.Request, error)
+}
+
+// ModelCallMiddleware 模型请求中间件（框架设计 04 4.3 ModelCall 点位）。
+//
+// 装配层把 component.ModelCall 点位的链适配成它注入 Agent.ModelMW。
+// kernel 是最内层：真正发请求给模型。
+type ModelCallMiddleware interface {
+	Call(ctx context.Context, req *session.Request, kernel func(context.Context, *session.Request) (session.AssistantItem, session.StopReason, error)) (session.AssistantItem, session.StopReason, error)
 }
