@@ -16,6 +16,7 @@ import (
 	_ "github.com/Sevyn17/tenon/modules/context/skills"
 	_ "github.com/Sevyn17/tenon/modules/extend/events"
 	_ "github.com/Sevyn17/tenon/modules/extend/hooks"
+	_ "github.com/Sevyn17/tenon/modules/extend/modelmatch"
 	_ "github.com/Sevyn17/tenon/modules/model/adapter-anthropic"
 	_ "github.com/Sevyn17/tenon/modules/model/adapter-openai-chat"
 	_ "github.com/Sevyn17/tenon/modules/model/adapter-openai-responses"
@@ -56,6 +57,7 @@ var defaultComponents = []string{
 	"workgroup",
 	"group",
 	"events",
+	"modelmatch",
 }
 
 // minimalComponents 最小预设：内核 + 上下文（压缩要用模型组件）。
