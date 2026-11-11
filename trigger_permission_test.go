@@ -74,6 +74,29 @@ func (l limitedSource) User(ctx context.Context, tenant, user, component string)
 	return nil, nil
 }
 
+// waitToolResults 等会话历史里出现至少 n 条工具结果（比等 assistant 更稳：工具执行完才算）。
+func waitToolResults(t *testing.T, app *tenontest.App, n int) {
+	t.Helper()
+	db := app.Internals().DB
+	for i := 0; i < 600; i++ {
+		infos, _ := db.ListSessions(context.Background(), 0, 50, true)
+		for _, si := range infos {
+			h, _ := app.History(context.Background(), si.ID)
+			c := 0
+			for _, e := range h {
+				if e.Item.ToolResult != nil {
+					c++
+				}
+			}
+			if c >= n {
+				return
+			}
+		}
+		sleepMs(5)
+	}
+	t.Fatal("等待工具结果超时")
+}
+
 // waitTurns 等会话历史里出现至少 n 条 assistant 条目。
 func waitTurns(t *testing.T, app *tenontest.App, n int) {
 	t.Helper()
@@ -142,7 +165,7 @@ func TestTriggerUserLimitAllowsForHighUser(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	waitTurns(t, app, 1)
+	waitToolResults(t, app, 1)
 	if !anyToolOK(t, app, "write_file") {
 		t.Fatal("不受限用户触发时 write_file 应能成功（对照）")
 	}
