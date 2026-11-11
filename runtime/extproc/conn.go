@@ -23,7 +23,6 @@ type Conn struct {
 	pending map[string]chan Response
 	nextID  atomic.Int64
 	closed  bool
-	err     error
 
 	// OnNotify 收到无 id 的通知（服务端主动推）时回调；可为空。
 	OnNotify func(method string, params json.RawMessage)
@@ -122,13 +121,6 @@ func (c *Conn) Close() error {
 	return nil
 }
 
-// Err 读循环遇到的错误（关闭后为 nil 或 io.EOF）。
-func (c *Conn) Err() error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.err
-}
-
 func (c *Conn) removePending(key string) {
 	c.mu.Lock()
 	delete(c.pending, key)
@@ -179,7 +171,6 @@ func (c *Conn) readLoop() {
 		err = io.EOF
 	}
 	c.mu.Lock()
-	c.err = err
 	if !c.closed {
 		c.closed = true
 		for k, ch := range c.pending {

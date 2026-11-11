@@ -144,13 +144,6 @@ func (s *Supervisor) Available() bool {
 	return !s.dead && !s.stopped
 }
 
-// Crashes 当前连续崩溃次数。
-func (s *Supervisor) Crashes() int {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.crashes
-}
-
 // Stdin 给回桥用。
 func (s *Supervisor) Stdin() io.WriteCloser {
 	s.mu.Lock()

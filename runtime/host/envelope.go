@@ -244,6 +244,25 @@ func (h *Host) isResident(name string) bool {
 	if h.Definitions == nil {
 		return false
 	}
+	// 缓存：定义来源在装配期确定、运行期不变，按名缓存避免每次投递都全量 List + Load（热路径）。
+	h.residentMu.Lock()
+	if v, ok := h.resident[name]; ok {
+		h.residentMu.Unlock()
+		return v
+	}
+	h.residentMu.Unlock()
+	res := h.lookupResident(name)
+	h.residentMu.Lock()
+	if h.resident == nil {
+		h.resident = map[string]bool{}
+	}
+	h.resident[name] = res
+	h.residentMu.Unlock()
+	return res
+}
+
+// lookupResident 真正查一次定义来源：该名字的定义是否 resident。
+func (h *Host) lookupResident(name string) bool {
 	refs, err := h.Definitions.List(context.Background(), agentdef.Scope{Tenant: store.Tenant})
 	if err != nil {
 		return false

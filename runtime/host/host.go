@@ -149,6 +149,9 @@ type Host struct {
 	// Definitions 智能体定义来源（T5a）：投递 agent:<名> 时查该定义是否常驻。
 	// nil = 不查（按非常驻处理）。
 	Definitions agentdef.Source
+	// resident / residentMu 常驻判定缓存（定义来源运行期不变，避免每次投递全量 List）。
+	residentMu sync.Mutex
+	resident   map[string]bool
 	// Remote 出站传输（T6a）：投 remote:<host>/agent:<名> 时用它。nil = 不支持远端。
 	Remote RemoteSender
 	// DefaultBudget 宿主级预算上限（token；0 = 不限）。会话没配 [use.budget] 时用它兜底。
