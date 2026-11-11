@@ -33,11 +33,16 @@ func TestHelperPluginProcess(t *testing.T) {
 		switch req.Method {
 		case "handshake":
 			hs := extproc.Handshake{Version: extproc.Version,
-				Capabilities: []string{extproc.CapTools, extproc.CapMiddleware, extproc.CapEvents},
-				Tools:        []string{"echo_tool"},
-				ToolSpecs:    []extproc.ToolSpec{{Name: "echo_tool", Description: "回显"}},
-				Middleware:   []string{"tool_call"},
-				Events:       []string{"plugin.*"}}
+				Capabilities: []string{extproc.CapTools, extproc.CapMiddleware, extproc.CapEvents,
+					extproc.CapMatcher, extproc.CapResource},
+				Tools:         []string{"echo_tool"},
+				ToolSpecs:     []extproc.ToolSpec{{Name: "echo_tool", Description: "回显"}},
+				Middleware:    []string{"tool_call"},
+				Events:        []string{"plugin.*"},
+				Matchers:      []string{"kw"},
+				MatcherSpecs:  []extproc.MatcherSpec{{Name: "kw", Description: "按 body 是否含关键字判断"}},
+				Resources:     []string{"ticket"},
+				ResourceSpecs: []extproc.ResourceSpec{{Name: "ticket", Description: "工单"}}}
 			b, _ := json.Marshal(hs)
 			_ = enc.Encode(extproc.Response{JSONRPC: "2.0", ID: req.ID, Result: b})
 		case "tools/call":
@@ -56,6 +61,21 @@ func TestHelperPluginProcess(t *testing.T) {
 				res.Verdict, res.Reason = "deny", "工具名含 bad"
 			}
 			b, _ := json.Marshal(res)
+			_ = enc.Encode(extproc.Response{JSONRPC: "2.0", ID: req.ID, Result: b})
+		case "matcher":
+			var mc extproc.MatchCall
+			_ = json.Unmarshal(req.Params, &mc)
+			// 约定：body 含 params["keyword"] 即命中，命中时 mode=wake。
+			res := extproc.MatchResult{}
+			if kw := mc.Params["keyword"]; kw != "" && strings.Contains(mc.Record.Body, kw) {
+				res.Matched, res.Mode = true, "wake"
+			}
+			b, _ := json.Marshal(res)
+			_ = enc.Encode(extproc.Response{JSONRPC: "2.0", ID: req.ID, Result: b})
+		case "render":
+			var rc extproc.RenderCall
+			_ = json.Unmarshal(req.Params, &rc)
+			b, _ := json.Marshal(extproc.RenderResult{Text: "[" + rc.Resource + "#" + itoa(rc.Record.Seq) + "] " + rc.Record.Body})
 			_ = enc.Encode(extproc.Response{JSONRPC: "2.0", ID: req.ID, Result: b})
 		default:
 			_ = enc.Encode(extproc.Response{JSONRPC: "2.0", ID: req.ID,
@@ -211,4 +231,118 @@ func startHelper(t *testing.T) (*extproc.Conn, func()) {
 		_ = cmd.Wait()
 	}
 	return conn, cleanup
+}
+
+// itoa 小整数转字符串（避免为测试再引 strconv 之外的东西）。
+func itoa(n int64) string {
+	if n == 0 {
+		return "0"
+	}
+	var b [20]byte
+	i := len(b)
+	neg := n < 0
+	if neg {
+		n = -n
+	}
+	for n > 0 {
+		i--
+		b[i] = byte('0' + n%10)
+		n /= 10
+	}
+	if neg {
+		i--
+		b[i] = '-'
+	}
+	return string(b[i:])
+}
+
+// 匹配器与资源渲染经回桥转发给插件（T6b 剩余能力）。
+func TestMatcherAndRenderBridge(t *testing.T) {
+	conn, cleanup := startHelper(t)
+	defer cleanup()
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	// 握手拿到 matcher / resource 声明。
+	raw, err := conn.Call(ctx, "handshake", map[string]any{"version": extproc.Version})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var hs extproc.Handshake
+	if err := json.Unmarshal(raw, &hs); err != nil {
+		t.Fatal(err)
+	}
+	if err := hs.Validate(); err != nil {
+		t.Fatalf("握手校验：%v", err)
+	}
+	if len(hs.MatcherSpecs) != 1 || hs.MatcherSpecs[0].Name != "kw" {
+		t.Fatalf("匹配器声明 = %+v", hs.MatcherSpecs)
+	}
+	if len(hs.ResourceSpecs) != 1 || hs.ResourceSpecs[0].Name != "ticket" {
+		t.Fatalf("资源类型声明 = %+v", hs.ResourceSpecs)
+	}
+
+	// matcher：body 含关键字 → 命中且 mode=wake。
+	mraw, err := conn.Call(ctx, "matcher", extproc.MatchCall{
+		Matcher: "kw",
+		Record:  extproc.MatchRecord{Resource: "ticket", Seq: 7, Body: "紧急：服务器宕机"},
+		Params:  map[string]string{"keyword": "紧急"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var mr extproc.MatchResult
+	if err := json.Unmarshal(mraw, &mr); err != nil {
+		t.Fatal(err)
+	}
+	if !mr.Matched || mr.Mode != "wake" {
+		t.Fatalf("含关键字应命中且 mode=wake：%+v", mr)
+	}
+	// 不含关键字 → 不命中。
+	mraw2, _ := conn.Call(ctx, "matcher", extproc.MatchCall{
+		Matcher: "kw", Record: extproc.MatchRecord{Body: "普通工单"},
+		Params: map[string]string{"keyword": "紧急"},
+	})
+	var mr2 extproc.MatchResult
+	_ = json.Unmarshal(mraw2, &mr2)
+	if mr2.Matched {
+		t.Fatalf("不含关键字不该命中：%+v", mr2)
+	}
+
+	// render：按资源名与序号渲染。
+	rraw, err := conn.Call(ctx, "render", extproc.RenderCall{
+		Resource: "ticket", Record: extproc.MatchRecord{Seq: 7, Body: "工单内容"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rr extproc.RenderResult
+	if err := json.Unmarshal(rraw, &rr); err != nil {
+		t.Fatal(err)
+	}
+	if rr.Text != "[ticket#7] 工单内容" {
+		t.Fatalf("渲染 = %q", rr.Text)
+	}
+}
+
+// 握手报告的 MatcherSpecs / ResourceSpecs 与能力声明不一致时拒绝。
+func TestHandshakeSpecCapMismatch(t *testing.T) {
+	// 有 MatcherSpecs 但没声明 matcher 能力。
+	h := extproc.Handshake{Version: extproc.Version, Capabilities: []string{extproc.CapTools},
+		MatcherSpecs: []extproc.MatcherSpec{{Name: "m"}}}
+	if err := h.Validate(); err == nil {
+		t.Fatal("有匹配器声明但没声明能力应被拒")
+	}
+	// 有 ResourceSpecs 但没声明 resource 能力。
+	h2 := extproc.Handshake{Version: extproc.Version, Capabilities: []string{extproc.CapTools},
+		ResourceSpecs: []extproc.ResourceSpec{{Name: "r"}}}
+	if err := h2.Validate(); err == nil {
+		t.Fatal("有资源类型声明但没声明能力应被拒")
+	}
+	// 声明里缺名字。
+	h3 := extproc.Handshake{Version: extproc.Version, Capabilities: []string{extproc.CapMatcher},
+		MatcherSpecs: []extproc.MatcherSpec{{}}}
+	if err := h3.Validate(); err == nil {
+		t.Fatal("匹配器声明缺名字应被拒")
+	}
 }

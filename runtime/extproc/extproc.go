@@ -77,6 +77,24 @@ type Handshake struct {
 	Events []string `json:"events,omitempty"`
 	// Resources 资源类型名清单。
 	Resources []string `json:"resources,omitempty"`
+	// MatcherSpecs 匹配器的完整声明；有它就按它登记匹配器（经回桥把判断转发给进程）。
+	MatcherSpecs []MatcherSpec `json:"matcher_specs,omitempty"`
+	// ResourceSpecs 资源类型的完整声明；有它就按它登记资源类型（含 Render）。
+	ResourceSpecs []ResourceSpec `json:"resource_specs,omitempty"`
+}
+
+// MatcherSpec 一个外部匹配器的声明。
+type MatcherSpec struct {
+	Name string `json:"name"`
+	// Description 说明（只作 explain 展示）。
+	Description string `json:"description,omitempty"`
+}
+
+// ResourceSpec 一个外部资源类型的声明。
+type ResourceSpec struct {
+	Name string `json:"name"`
+	// Description 说明（只作 explain 展示）。
+	Description string `json:"description,omitempty"`
 }
 
 // ToolSpec 一个外部工具的声明（模型面）。
@@ -112,6 +130,27 @@ func (h Handshake) Validate() error {
 	// 报告了中间件就必须声明 middleware 能力。
 	if len(h.Middleware) > 0 && !hasCap(h.Capabilities, CapMiddleware) {
 		return fmt.Errorf("extproc: 报告了中间件但没声明 %q 能力", CapMiddleware)
+	}
+	// 报告了 MatcherSpecs / ResourceSpecs 时，名字清单与能力声明要对得上。
+	if len(h.MatcherSpecs) > 0 {
+		if !hasCap(h.Capabilities, CapMatcher) {
+			return fmt.Errorf("extproc: 报告了匹配器声明但没声明 %q 能力", CapMatcher)
+		}
+		for _, m := range h.MatcherSpecs {
+			if m.Name == "" {
+				return fmt.Errorf("extproc: 匹配器声明缺名字")
+			}
+		}
+	}
+	if len(h.ResourceSpecs) > 0 {
+		if !hasCap(h.Capabilities, CapResource) {
+			return fmt.Errorf("extproc: 报告了资源类型声明但没声明 %q 能力", CapResource)
+		}
+		for _, r := range h.ResourceSpecs {
+			if r.Name == "" {
+				return fmt.Errorf("extproc: 资源类型声明缺名字")
+			}
+		}
 	}
 	// 报告了匹配器 / 资源类型就必须声明对应能力。
 	if len(h.Matchers) > 0 && !hasCap(h.Capabilities, CapMatcher) {
@@ -200,4 +239,40 @@ type EventNotice struct {
 	Name string          `json:"name"`
 	At   int64           `json:"at,omitempty"`
 	Data json.RawMessage `json:"data,omitempty"`
+}
+
+// MatchCall 匹配器判断的转发参数（框架 → 插件）：把一条资源记录和订阅参数交给进程判断。
+type MatchCall struct {
+	// Matcher 匹配器名（握手时登记的名字）。
+	Matcher string `json:"matcher"`
+	// Record 资源记录（字段同 component.ResourceRecord 的线上形状）。
+	Record MatchRecord `json:"record"`
+	// Params 本订阅的匹配器参数。
+	Params map[string]string `json:"params,omitempty"`
+}
+
+// MatchRecord 一条资源记录的线上形状（只带匹配器需要看的字段）。
+type MatchRecord struct {
+	Resource string            `json:"resource"`
+	Seq      int64             `json:"seq"`
+	From     string            `json:"from"`
+	Body     string            `json:"body"`
+	Fields   map[string]string `json:"fields,omitempty"`
+}
+
+// MatchResult 匹配器结果（插件 → 框架）：Matched 为 false 不投；Mode 空 = notice。
+type MatchResult struct {
+	Matched bool   `json:"matched"`
+	Mode    string `json:"mode,omitempty"`
+}
+
+// RenderCall 资源渲染的转发参数（框架 → 插件）。
+type RenderCall struct {
+	Resource string      `json:"resource"`
+	Record   MatchRecord `json:"record"`
+}
+
+// RenderResult 渲染结果（插件 → 框架）。
+type RenderResult struct {
+	Text string `json:"text"`
 }

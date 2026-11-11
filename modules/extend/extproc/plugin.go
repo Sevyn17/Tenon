@@ -15,6 +15,7 @@ import (
 	"github.com/Sevyn17/tenon/runtime/assemble"
 	"github.com/Sevyn17/tenon/runtime/component"
 	"github.com/Sevyn17/tenon/runtime/extproc"
+	"github.com/Sevyn17/tenon/runtime/mail"
 	"github.com/Sevyn17/tenon/runtime/session"
 	"github.com/Sevyn17/tenon/runtime/store"
 	"github.com/Sevyn17/tenon/runtime/toolhub"
@@ -49,6 +50,9 @@ type plug struct {
 	middleware []string
 	// events 握手报告的事件订阅名。
 	events []string
+	// matcherSpecs / resourceSpecs 握手报告的匹配器与资源类型声明。
+	matcherSpecs  []extproc.MatcherSpec
+	resourceSpecs []extproc.ResourceSpec
 }
 
 func init() { component.Register(ServiceName, func() component.Component { return &plug{} }) }
@@ -82,6 +86,21 @@ func (p *plug) Setup(cx *component.Registrar) error {
 			return []toolhub.Layer{{Name: ServiceName, FailOpen: false,
 				Call: p.middlewareCall("tool_call")}}, nil
 		}})
+	// 匹配器：经回桥把判断转发给进程（04 4.8 允许匹配器，模型判断类匹配器也走这条路）。
+	for _, spec := range p.matcherSpecs {
+		name := spec.Name
+		if err := cx.Matcher(name, p.remoteMatcher(name)); err != nil {
+			return err
+		}
+	}
+	// 资源类型：登记类型并把 Render 转发给进程（渲染器是 ResourceType.Render，不是独立点位）。
+	for _, spec := range p.resourceSpecs {
+		name := spec.Name
+		if err := cx.ResourceType(component.ResourceType{Name: name,
+			Render: func(rec component.ResourceRecord) string { return p.remoteRender(name, rec) }}); err != nil {
+			return err
+		}
+	}
 	// 事件订阅：按握手报告的事件名逐个登记（04 4.8 只开事件订阅这一能力）。
 	for _, name := range p.events {
 		if err := cx.On(name, func(ctx context.Context, e store.ComponentEvent) error {
@@ -147,7 +166,57 @@ func (p *plug) startAndHandshake() error {
 	p.tools = hs.ToolSpecs
 	p.middleware = hs.Middleware
 	p.events = hs.Events
+	p.matcherSpecs = hs.MatcherSpecs
+	p.resourceSpecs = hs.ResourceSpecs
 	return nil
+}
+
+// remoteMatcher 造一个把判断转发给进程的匹配器。失败按不匹配处理（不阻塞扇出）。
+func (p *plug) remoteMatcher(name string) component.Matcher {
+	return func(rec component.ResourceRecord, params map[string]string) (component.Match, error) {
+		if p.conn == nil {
+			return component.Match{}, nil // 不可用：按不匹配
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), CallTimeout)
+		defer cancel()
+		raw, err := p.conn.Call(ctx, "matcher", extproc.MatchCall{
+			Matcher: name, Record: toMatchRecord(rec), Params: params})
+		if err != nil {
+			return component.Match{}, nil // 回桥失败按不匹配
+		}
+		var res extproc.MatchResult
+		if json.Unmarshal(raw, &res) != nil {
+			return component.Match{}, nil
+		}
+		if !res.Matched {
+			return component.Match{}, nil
+		}
+		return component.Match{Matched: true, Mode: mail.Mode(res.Mode)}, nil
+	}
+}
+
+// remoteRender 把资源渲染转发给进程；回桥失败退回记录正文（不丢内容）。
+func (p *plug) remoteRender(name string, rec component.ResourceRecord) string {
+	if p.conn == nil {
+		return rec.Body
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), CallTimeout)
+	defer cancel()
+	raw, err := p.conn.Call(ctx, "render", extproc.RenderCall{Resource: name, Record: toMatchRecord(rec)})
+	if err != nil {
+		return rec.Body
+	}
+	var res extproc.RenderResult
+	if json.Unmarshal(raw, &res) != nil || res.Text == "" {
+		return rec.Body
+	}
+	return res.Text
+}
+
+// toMatchRecord 把内部资源记录转成线上形状。
+func toMatchRecord(rec component.ResourceRecord) extproc.MatchRecord {
+	return extproc.MatchRecord{Resource: rec.Resource, Seq: rec.Seq,
+		From: rec.From.String(), Body: rec.Body, Fields: rec.Fields}
 }
 
 // hasMiddleware 握手是否报告了某中间件点位。
