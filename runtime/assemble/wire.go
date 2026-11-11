@@ -114,6 +114,7 @@ func Wire(o WireOptions) (*Wired, error) {
 		Items:       col.Items,
 		Kernel:      &k,
 		Compactor:   col.Compactor, // 自动压缩与超限后的强制压缩（审查 P0-1）
+		ContextMW:   ctxMiddleware(o.Asm),
 		Definitions: o.Definitions,
 		Statuses:    col.Statuses,
 		Schemas:     o.Asm.AgentSchemas(),
@@ -155,4 +156,40 @@ func (w *Wired) Ready(ctx context.Context) []error {
 		}
 	}
 	return errs
+}
+
+// ctxMiddleware 把 04 4.3 的 Context 点位中间件适配成 agent.ContextMiddleware。
+// agent 包不 import component（底层包不依赖装配层），所以在这里做适配。
+// 没有登记中间件时返回 nil（agent 直接走内核组装，零开销）。
+func ctxMiddleware(asm *component.Assembly) agent.ContextMiddleware {
+	if !asm.HasMiddleware(component.PointContextMw) {
+		return nil
+	}
+	return ctxMW{asm: asm}
+}
+
+type ctxMW struct{ asm *component.Assembly }
+
+func (m ctxMW) Build(ctx context.Context, req *session.Request, kernel func(context.Context, *session.Request) (*session.Request, error)) (*session.Request, error) {
+	// 4.3 限制 1：系统提示词只来自定义和框架，中间件改 System 无效。
+	// 这里保存内核版 System，链跑完后还原。
+	sys := req.System
+	creq := component.ContextReq{Request: req, System: sys}
+	chain := m.asm.ContextChain(func(ctx context.Context, r component.ContextReq) (component.ContextResp, error) {
+		out, err := kernel(ctx, r.Request)
+		if err != nil {
+			return component.ContextResp{}, err
+		}
+		return component.ContextResp{Messages: out.Messages}, nil
+	})
+	resp, err := chain(ctx, creq)
+	if err != nil {
+		return nil, err
+	}
+	// 还原系统提示词（限制 1），只接受 Messages 的改动（限制 3）。
+	req.System = sys
+	if resp.Messages != nil {
+		req.Messages = resp.Messages
+	}
+	return req, nil
 }

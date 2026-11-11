@@ -64,6 +64,8 @@ type Builder struct {
 	Models    *modelhub.Hub
 	Model     string
 	Compactor agent.Compactor // 可空
+	// ContextMW 上下文组装中间件（04 4.3 Context 点位），可空。
+	ContextMW agent.ContextMiddleware
 	Workdir   string
 	// Policy 新会话策略（每次调用取一份）。
 	Policy func() session.Policy
@@ -122,6 +124,9 @@ func (b *Builder) Build(id, defName string, child bool) (*agent.Agent, *session.
 	a.Statuses = b.Statuses
 	a.Schemas = b.Schemas
 	a.UseSource = b.UseSource
+	if b.ContextMW != nil {
+		a.ContextMW = b.ContextMW
+	}
 	if b.Compactor != nil {
 		a.Compactor = b.Compactor
 	}

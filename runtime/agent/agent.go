@@ -73,6 +73,10 @@ type Agent struct {
 	// Compactor 可空：每次模型调用前决定是否压缩（compact-basic 插件，最外层）。
 	Compactor Compactor
 
+	// ContextMW 可空：上下文组装中间件（04 4.3 Context 点位）。
+	// 由装配层把 component 的链适配成这个接口注入；agent 包不 import component。
+	ContextMW ContextMiddleware
+
 	// Now 时钟（测试注入）；nil = time.Now。
 	Now func() time.Time
 
@@ -239,6 +243,30 @@ func (a *Agent) callModel(ctx context.Context, need *session.Need) (*session.Nee
 // buildRequest 构造本步基础请求；配置了压缩器时先问它要不要压缩（最外层，先于 modelhub 全部层）。
 // 压缩失败不挡模型调用（失败开放），只记 span；force 用于上下文超限后的强制压缩。
 func (a *Agent) buildRequest(ctx context.Context, force bool) (session.Request, *reqlog.CompactionView, error) {
+	// Context 中间件（04 4.3）：包住整次上下文组装，可重排 / 改写历史条目的渲染格式。
+	if a.ContextMW != nil {
+		var view *reqlog.CompactionView
+		kernel := func(ctx context.Context, req *session.Request) (*session.Request, error) {
+			r, v, err := a.buildRequestKernel(ctx, force)
+			view = v
+			if err != nil {
+				return nil, err
+			}
+			*req = r
+			return req, nil
+		}
+		req := &session.Request{}
+		out, err := a.ContextMW.Build(ctx, req, kernel)
+		if err != nil {
+			return session.Request{}, nil, err
+		}
+		return *out, view, nil
+	}
+	return a.buildRequestKernel(ctx, force)
+}
+
+// buildRequestKernel 内核的上下文组装（不含中间件）。
+func (a *Agent) buildRequestKernel(ctx context.Context, force bool) (session.Request, *reqlog.CompactionView, error) {
 	cx := a.Core.Context()
 	if a.Compactor != nil {
 		sp := a.startSpan("compact", "", a.curStep()).Set("force", force)
@@ -368,4 +396,15 @@ func (a *Agent) CommittedHistory() []session.Message {
 		return nil
 	}
 	return req.Messages
+}
+
+// ContextMiddleware 上下文组装中间件（框架设计 04 4.3 Context 点位）。
+//
+// 装配层把 component.Context 点位的中间件链适配成它注入 Agent.ContextMW；
+// agent 包不 import component（底层包不依赖装配层）。
+//
+// 限制由 component 侧保证（System 只读、链后还原），这里只负责「把请求交给链」。
+type ContextMiddleware interface {
+	// Build 让链处理一次上下文组装。kernel 是最内层：真正组装请求。
+	Build(ctx context.Context, req *session.Request, kernel func(context.Context, *session.Request) (*session.Request, error)) (*session.Request, error)
 }
