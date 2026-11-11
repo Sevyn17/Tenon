@@ -28,37 +28,50 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Go 工具链：自建 runner 从 github.com 下 go-*.tar.gz 常超时（ETIMEDOUT 20.205.243.166，
-      # 上一次成功也花了 9.5 分钟）。所以先用 runner 上已装的 Go；没有才回退到 setup-go 下载。
-      - name: 检查 runner 上已有的 Go
-        id: localgo
+      # Go 工具链：自建 runner（act_runner）从 github.com 下 go-*.tar.gz 常超时
+      # （ETIMEDOUT / TLS EOF），而且 act_runner 对 steps.<id>.outputs 的 if 条件支持不稳，
+      # 所以不用 action 的条件跳过，改成一个 shell 步骤自己判断：
+      #   有本地 Go 且版本够 → 直接用；否则才下载官方 tarball（走国内镜像优先）。
+      - name: 准备 Go 工具链
         run: |
-          if command -v go >/dev/null 2>&1; then
-            echo "found=true" >> "$GITHUB_OUTPUT"
-            go version
-          else
-            echo "found=false" >> "$GITHUB_OUTPUT"
-            echo "runner 上没有 go，将回退到 setup-go 下载"
-          fi
-
-      - uses: actions/setup-go@v5
-        if: steps.localgo.outputs.found != 'true'
-        with:
-          go-version-file: go.mod
-          cache: true
-          cache-dependency-path: go.sum
-
-      - name: 校验 Go 版本
-        run: |
+          set -euo pipefail
           want=$(sed -n 's/^go \([0-9.]*\).*/\1/p' go.mod)
-          have=$(go env GOVERSION | sed 's/^go//')
-          echo "go.mod 需要 >= $want，实际 $have"
-          # 只比较主次版本（如 1.26 vs 1.26.10）。
-          lowest=$(printf '%s\n%s\n' "$want" "$have" | sort -V | head -1)
-          if [ "$lowest" != "$want" ]; then
-            echo "::error::Go 版本过低：需要 >= $want，实际 $have"
-            exit 1
+          echo "go.mod 要求 >= $want"
+
+          ver_ok() { # $1 = 版本号（如 1.26.10），与 $want 比主次版本
+            local have=$1
+            [ "$(printf '%s\n%s\n' "$want" "$have" | sort -V | head -1)" = "$want" ]
+          }
+
+          if command -v go >/dev/null 2>&1; then
+            have=$(go env GOVERSION | sed 's/^go//')
+            if ver_ok "$have"; then
+              echo "用 runner 上已有的 Go $have"
+              go version
+              exit 0
+            fi
+            echo "runner 上的 Go $have 低于 $want，需要下载"
+          else
+            echo "runner 上没有 go，需要下载"
           fi
+
+          # 下载官方 tarball：国内镜像优先，失败回退 go.dev。
+          arch=$(uname -m); case "$arch" in x86_64) arch=amd64;; aarch64|arm64) arch=arm64;; esac
+          full="$want.0"
+          [ -n "${GOTOOLCHAIN_VERSION:-}" ] && full="$GOTOOLCHAIN_VERSION"
+          for base in https://golang.google.cn/dl https://go.dev/dl https://mirrors.aliyun.com/golang; do
+            url="$base/go${full}.linux-${arch}.tar.gz"
+            echo "尝试 $url"
+            if curl -fsSL --retry 2 --connect-timeout 20 "$url" -o /tmp/go.tgz; then
+              sudo tar -C /usr/local -xzf /tmp/go.tgz
+              echo "/usr/local/go/bin" >> "$GITHUB_PATH"
+              export PATH="/usr/local/go/bin:$PATH"
+              go version
+              exit 0
+            fi
+          done
+          echo "::error::无法获取 Go $want（本地版本不够，镜像与官方都失败）"
+          exit 1
 
       - name: gofmt
         run: |
