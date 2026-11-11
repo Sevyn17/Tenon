@@ -226,14 +226,21 @@ func (h *Hub) Validate() error {
 			return fmt.Errorf("toolhub: 工具 %s 既声明无需授权又引用了权限项", n)
 		}
 	}
+	// 授权落点（04 4.3.1）：要么设了 Authorizer（决策服务），要么恰好一个 Authorizes 层
+	// （迁移期兼容）。两者都没有 = 没人判定，失败即收紧——直接拒绝装配。
 	n := 0
 	for _, l := range h.layers {
 		if l.Authorizes {
 			n++
 		}
 	}
-	if n != 1 {
-		return fmt.Errorf("toolhub: 装配必须恰好有一个权限策略层，现在有 %d 个", n)
+	switch {
+	case h.authorizer != nil && n > 0:
+		return fmt.Errorf("toolhub: 装配同时设了 Authorizer 与 %d 个权限策略层，只能二选一", n)
+	case h.authorizer != nil:
+		return nil
+	case n != 1:
+		return fmt.Errorf("toolhub: 装配必须恰好有一个权限策略层或一个 Authorizer，现在层 %d 个", n)
 	}
 	return nil
 }

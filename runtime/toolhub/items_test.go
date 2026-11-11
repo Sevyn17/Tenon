@@ -109,7 +109,7 @@ func TestHubValidate(t *testing.T) {
 		t.Fatalf("一个授权层应通过：%v", err)
 	}
 	h.AddLayer(authLayer())
-	if err := h.Validate(); err == nil || !strings.Contains(err.Error(), "现在有 2 个") {
+	if err := h.Validate(); err == nil || !strings.Contains(err.Error(), "现在层 2 个") {
 		t.Fatalf("两个授权层应拒绝启动：%v", err)
 	}
 

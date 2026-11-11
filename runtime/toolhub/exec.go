@@ -264,7 +264,28 @@ func denied(decision string) Output {
 // chain 构造第 i 层起的调用链；最内层是执行器。
 func (h *Hub) chain(i int, call session.ToolCall) Next {
 	if i >= len(h.layers) {
-		return h.executor
+		// 链的最内层（04 4.3.1）：授权判定者在这里。它在所有改写层之后（拿最终参数），
+		// 紧贴执行器（不能绕过）。没设 Authorizer 时退回 executor（迁移期由 Authorizes 层判）。
+		if h.authorizer == nil {
+			return h.executor
+		}
+		return func(ctx context.Context, cx *Cx, args json.RawMessage) (Output, error) {
+			d, err := h.authorizer.Authorize(ctx, cx, args)
+			if err != nil {
+				return Failf("授权判定失败：%v", err), nil // 失败即收紧
+			}
+			switch d.Action {
+			case DecisionAllow:
+				return h.executor(ctx, cx, args)
+			case DecisionDeny:
+				return Failf("权限拒绝：%s", d.Reason), nil
+			default: // DecisionConfirm：挂起等确认（与 Guard 层返回 Confirm 同一路径）
+				if cx.Approved {
+					return h.executor(ctx, cx, args) // 已批准且参数一致
+				}
+				return Output{Kind: Confirm, Reason: d.Reason}, nil
+			}
+		}
 	}
 	l := h.layers[i]
 	inner := h.chain(i+1, call)

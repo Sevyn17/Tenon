@@ -425,3 +425,23 @@ func Layer(policy func(sessionID string) Policy) toolhub.Layer {
 		},
 	}
 }
+
+// Authorizer 权限判定者（04 4.3.1）：替代原来的 Authorizes 层，挂在 toolhub.Hub 的最内层。
+//
+// 与 Layer 的区别：判定从「拦截链上的一层」变成「一个决策者」。DecisionConfirm（AskUser）
+// 仍走工具管理器原有的确认流程（挂起 → 等人 → 按同参数重放），语义不变。
+//
+// policy 按会话 id 取（与原来 Layer(policy) 一致）。
+func Authorizer(policy func(sessionID string) Policy) toolhub.Authorizer {
+	return toolhub.AuthorizerFunc(func(ctx context.Context, cx *toolhub.Cx, args json.RawMessage) (toolhub.Decision, error) {
+		d := policy(cx.SessionID).Decide(cx, args)
+		switch d.Action {
+		case Allow:
+			return toolhub.Decision{Action: toolhub.DecisionAllow}, nil
+		case Deny:
+			return toolhub.Decision{Action: toolhub.DecisionDeny, Reason: d.Reason}, nil
+		default: // AskUser
+			return toolhub.Decision{Action: toolhub.DecisionConfirm, Reason: d.Reason}, nil
+		}
+	})
+}

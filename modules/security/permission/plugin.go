@@ -153,7 +153,9 @@ func (*plug) Setup(cx *component.Registrar) error {
 				}
 				return p
 			}
-			return []toolhub.Layer{Layer(policy)}, nil
+			// 04 4.3.1：判定从「Authorizes 层」改成 Hub 的 Authorizer（决策服务）。
+			hub.AddAuthorizer(Authorizer(policy))
+			return nil, nil
 		}})
 	return cx.Provide("permission", s)
 }

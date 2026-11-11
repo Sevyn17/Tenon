@@ -106,6 +106,33 @@ func Effective(session Mode, args json.RawMessage, approved bool) (Mode, error) 
 
 // Layer 沙箱 Guard：受沙箱工具申请更宽模式时要求人工确认（权限模式 full 也不例外）。
 // approve 可空：会话规则已批准同类申请时免确认。
+// Authorizer 沙箱判定者（04 4.3.1）：替代原来的 Guard 层。
+//
+// 判定逻辑与 Layer 一致：工具不需要沙箱 → 放行；申请更宽的沙箱且未批准 → 需确认
+// （可由 SandboxApprover 免确认）；否则放行。
+func Authorizer(mode func(sessionID string) Mode, approve ...toolhub.SandboxApprover) toolhub.Authorizer {
+	return toolhub.AuthorizerFunc(func(ctx context.Context, cx *toolhub.Cx, args json.RawMessage) (toolhub.Decision, error) {
+		if on, _ := cx.Tool.Attrs[AttrSandboxed].(bool); !on {
+			return toolhub.Decision{Action: toolhub.DecisionAllow}, nil
+		}
+		req, err := Requested(args)
+		if err != nil {
+			return toolhub.Decision{Action: toolhub.DecisionDeny, Reason: fmt.Sprintf("参数不合法：%v", err)}, nil
+		}
+		cur := mode(cx.SessionID)
+		if req != "" && Wider(req, cur) && !cx.Approved {
+			for _, a := range approve {
+				if a != nil && a.AllowsSandbox(cx.SessionID, cx.Tool.Spec.Name, args, req) {
+					return toolhub.Decision{Action: toolhub.DecisionAllow}, nil
+				}
+			}
+			return toolhub.Decision{Action: toolhub.DecisionConfirm,
+				Reason: fmt.Sprintf("%s 申请沙箱 %s（当前 %s），仅本次有效", cx.Tool.Spec.Name, req, cur)}, nil
+		}
+		return toolhub.Decision{Action: toolhub.DecisionAllow}, nil
+	})
+}
+
 func Layer(mode func(sessionID string) Mode, approve ...toolhub.SandboxApprover) toolhub.Layer {
 	return toolhub.Layer{
 		Name:    "sandbox",

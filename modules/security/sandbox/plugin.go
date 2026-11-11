@@ -53,9 +53,11 @@ func (p *plug) Setup(cx *component.Registrar) error {
 	if c == nil {
 		c = &Config{}
 	}
+	// 04 4.3.1：不再登记「会话层」，改成 Hub 的 Authorizer（决策服务，与 permission 组合取严）。
 	component.RegisterAt(cx, assemble.SessionLayer, "sandbox", assemble.LayerEntry{Guard: true, Order: 5,
-		Func: func(*assemble.SessionCx) ([]toolhub.Layer, error) {
-			return []toolhub.Layer{Layer(pol.SandboxMode, ap)}, nil
+		Func: func(sc *assemble.SessionCx) ([]toolhub.Layer, error) {
+			sc.Hub.AddAuthorizer(Authorizer(pol.SandboxMode, ap))
+			return nil, nil
 		}})
 	if !platformSupported {
 		if ui, ok, _ := component.UseOptional[assemble.UI](cx, assemble.ServiceUI); ok && ui != nil {
