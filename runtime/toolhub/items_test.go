@@ -15,11 +15,11 @@ func itemTool(name string, ids ...string) *Tool {
 	return t.WithItems(ids...)
 }
 
-func authLayer() Layer {
-	return Layer{Name: "perm", Guard: true, Authorizes: true,
-		Call: func(ctx context.Context, cx *Cx, args json.RawMessage, next Next) (Output, error) {
-			return next(ctx, cx, args)
-		}}
+// authAuthorizer 一个全放行的授权判定者（04 4.3.1：替代原来的 Authorizes 层）。
+func authAuthorizer() Authorizer {
+	return AuthorizerFunc(func(ctx context.Context, cx *Cx, args json.RawMessage) (Decision, error) {
+		return Decision{Action: DecisionAllow}, nil
+	})
 }
 
 // 权限项结构校验：类别必须在九类别内，三种类型各自的必填项。
@@ -99,29 +99,26 @@ func TestHubValidate(t *testing.T) {
 		return h
 	}
 
+	// 04 4.3.1：授权落点从「Authorizes 层」改成 Authorizer（决策服务）。
 	h := newHub()
 	_ = h.Register(itemTool("write_file", "fs.write"))
-	if err := h.Validate(); err == nil || !strings.Contains(err.Error(), "恰好有一个权限策略层") {
-		t.Fatalf("没有授权层应拒绝启动：%v", err)
+	if err := h.Validate(); err == nil || !strings.Contains(err.Error(), "没有授权判定者") {
+		t.Fatalf("没有 Authorizer 应拒绝启动：%v", err)
 	}
-	h.AddLayer(authLayer())
+	h.AddAuthorizer(authAuthorizer())
 	if err := h.Validate(); err != nil {
-		t.Fatalf("一个授权层应通过：%v", err)
-	}
-	h.AddLayer(authLayer())
-	if err := h.Validate(); err == nil || !strings.Contains(err.Error(), "现在层 2 个") {
-		t.Fatalf("两个授权层应拒绝启动：%v", err)
+		t.Fatalf("有 Authorizer 应通过：%v", err)
 	}
 
 	h = newHub()
-	h.AddLayer(authLayer())
+	h.AddAuthorizer(authAuthorizer())
 	_ = h.Register(itemTool("write_file", "fs.nonesuch"))
 	if err := h.Validate(); err == nil || !strings.Contains(err.Error(), "未注册的权限项 fs.nonesuch") {
 		t.Fatalf("引用未注册项应报错：%v", err)
 	}
 
 	h = newHub()
-	h.AddLayer(authLayer())
+	h.AddAuthorizer(authAuthorizer())
 	bad := itemTool("todo", "fs.write")
 	bad.NoAuth = true
 	_ = h.Register(bad)
@@ -131,7 +128,7 @@ func TestHubValidate(t *testing.T) {
 
 	// 未声明权限项也不报错：按“一律询问”处理。
 	h = newHub()
-	h.AddLayer(authLayer())
+	h.AddAuthorizer(authAuthorizer())
 	_ = h.Register(itemTool("mystery"))
 	if err := h.Validate(); err != nil {
 		t.Fatalf("未声明权限项的工具不应阻止启动：%v", err)
@@ -178,7 +175,7 @@ func TestDefaultAuthorizer(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	h.AddLayer(DefaultAuthorizer())
+	h.AddAuthorizer(DefaultAuthorizer())
 	if err := h.Validate(); err != nil {
 		t.Fatal(err)
 	}

@@ -15,11 +15,11 @@ import (
 )
 
 // authLayer 测试用的授权层（toolhub 要求恰好一个）。
-func authLayer(*assemble.SessionCx) ([]toolhub.Layer, error) {
-	return []toolhub.Layer{{Name: "perm", Guard: true, Authorizes: true,
-		Call: func(ctx context.Context, cx *toolhub.Cx, a json.RawMessage, n toolhub.Next) (toolhub.Output, error) {
-			return n(ctx, cx, a)
-		}}}, nil
+func authInit(sc *assemble.SessionCx) error {
+	sc.Hub.AddAuthorizer(toolhub.AuthorizerFunc(func(ctx context.Context, cx *toolhub.Cx, a json.RawMessage) (toolhub.Decision, error) {
+		return toolhub.Decision{Action: toolhub.DecisionAllow}, nil
+	}))
+	return nil
 }
 
 // 定义里的 prompt 进系统段，排在基础提示词之后；无定义的会话不多块
@@ -41,7 +41,7 @@ func TestDefinitionPromptJoinsSystem(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	b := &assemble.Builder{DB: memstore.New(), Blocks: col.Blocks, Layers: []assemble.LayerFunc{authLayer}, Definitions: defs}
+	b := &assemble.Builder{DB: memstore.New(), Blocks: col.Blocks, Inits: []assemble.InitFunc{authInit}, Definitions: defs}
 	_, cfg, err := b.Build("s1", "support", false)
 	if err != nil {
 		t.Fatal(err)

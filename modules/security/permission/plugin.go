@@ -68,8 +68,8 @@ func (*plug) Setup(cx *component.Registrar) error {
 		return err
 	}
 	component.RegisterAt(cx, assemble.PermItems, ItemSandbox, SandboxItem())
-	component.RegisterAt(cx, assemble.SessionLayer, "permission", assemble.LayerEntry{Guard: true, Order: 10,
-		Func: func(sc *assemble.SessionCx) ([]toolhub.Layer, error) {
+	component.RegisterAt(cx, assemble.SessionInit, "permission", assemble.InitEntry{Order: 10,
+		Func: func(sc *assemble.SessionCx) error {
 			// §9.5：与参数无关地必然 deny 的工具不进模型工具列表（每次构造工具列表时按当前档位求值）。
 			hub, id := sc.Hub, sc.ID
 			s.SetItems(hub.Items())
@@ -82,7 +82,7 @@ func (*plug) Setup(cx *component.Registrar) error {
 			})
 			// §9.2：插件建议值越过封顶表 → 拒绝启动。
 			if err := CheckItems(hub.Items()); err != nil {
-				return nil, err
+				return err
 			}
 			// [use.permission]（08 8.3）：定义给的权限上限档位，会话打开后由框架算好放进 Ctx。
 			// 没写时不加限制；写了但档位不存在时按 read-only 处理（不因笔误放开）。
@@ -139,7 +139,7 @@ func (*plug) Setup(cx *component.Registrar) error {
 				}
 				return Visible(s.Def(id), t, items)
 			}); err != nil {
-				return nil, err
+				return err
 			}
 			policy := func(sid string) Policy {
 				p := s.Policy(sid)
@@ -155,7 +155,7 @@ func (*plug) Setup(cx *component.Registrar) error {
 			}
 			// 04 4.3.1：判定从「Authorizes 层」改成 Hub 的 Authorizer（决策服务）。
 			hub.AddAuthorizer(Authorizer(policy))
-			return nil, nil
+			return nil
 		}})
 	return cx.Provide("permission", s)
 }

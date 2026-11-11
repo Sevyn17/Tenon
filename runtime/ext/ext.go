@@ -65,7 +65,7 @@ const (
 // 会话级点位（assemble.Collect 读取）。
 const (
 	PointSessionTools    = "session_tools"     // assemble.ToolsEntry
-	PointSessionLayer    = "session_layer"     // assemble.LayerEntry
+	PointSessionInit     = "session_init"      // assemble.InitEntry：会话构造时初始化（04 4.3.1 拆会话层后剩下的正当用途）
 	PointSystemBlock     = "system_block"      // assemble.BlockEntry
 	PointAfterTurn       = "after_turn"        // assemble.AfterTurnFunc
 	PointReady           = "ready"             // assemble.ReadyFunc

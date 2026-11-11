@@ -58,13 +58,13 @@ github.com/Sevyn17/tenon: type GuardRequest = github.com/Sevyn17/tenon/runtime/c
 github.com/Sevyn17/tenon: type GuardRule = github.com/Sevyn17/tenon/runtime/component.GuardRule struct{Name string; On github.com/Sevyn17/tenon/runtime/component.GuardPoint; Check func(req github.com/Sevyn17/tenon/runtime/component.GuardRequest) (github.com/Sevyn17/tenon/runtime/component.Verdict, string)}
 github.com/Sevyn17/tenon: const GuardSessionOpen github.com/Sevyn17/tenon/runtime/component.GuardPoint
 github.com/Sevyn17/tenon: const GuardToolCall github.com/Sevyn17/tenon/runtime/component.GuardPoint
+github.com/Sevyn17/tenon: type InitEntry = github.com/Sevyn17/tenon/runtime/assemble.InitEntry struct{Order int; Func github.com/Sevyn17/tenon/runtime/assemble.InitFunc}
 github.com/Sevyn17/tenon: type Internals struct{Host *github.com/Sevyn17/tenon/runtime/host.Host; Bus *github.com/Sevyn17/tenon/runtime/bus.Bus; Assembly *github.com/Sevyn17/tenon/runtime/component.Assembly; Models *github.com/Sevyn17/tenon/runtime/assemble.Models; Definitions github.com/Sevyn17/tenon/runtime/agentdef.Source; DB github.com/Sevyn17/tenon/runtime/store.Store; Blobs github.com/Sevyn17/tenon/runtime/toolhub.Artifacts; Builder *github.com/Sevyn17/tenon/runtime/assemble.Builder}
 github.com/Sevyn17/tenon: type Key[T any] = github.com/Sevyn17/tenon/runtime/ext.Key[T] struct{}
 github.com/Sevyn17/tenon: method (Key) Maybe() string
 github.com/Sevyn17/tenon: method (Key) Name() string
 github.com/Sevyn17/tenon: method (Key) Need() string
 github.com/Sevyn17/tenon: type KeyRef string
-github.com/Sevyn17/tenon: type LayerEntry = github.com/Sevyn17/tenon/runtime/assemble.LayerEntry struct{Guard bool; Order int; Func github.com/Sevyn17/tenon/runtime/assemble.LayerFunc}
 github.com/Sevyn17/tenon: const LocalTenant untyped string
 github.com/Sevyn17/tenon: const LocalUser untyped string
 github.com/Sevyn17/tenon: func MemoryStore() Store
@@ -82,7 +82,7 @@ github.com/Sevyn17/tenon: type Option func(*config) error
 github.com/Sevyn17/tenon: type Point[T any] = github.com/Sevyn17/tenon/runtime/ext.Point[T] struct{}
 github.com/Sevyn17/tenon: method (Point) Name() string
 github.com/Sevyn17/tenon: var PointAfterTurn github.com/Sevyn17/tenon/runtime/ext.Point[github.com/Sevyn17/tenon/runtime/assemble.AfterTurnFunc]
-github.com/Sevyn17/tenon: var PointLayer github.com/Sevyn17/tenon/runtime/ext.Point[github.com/Sevyn17/tenon/runtime/assemble.LayerEntry]
+github.com/Sevyn17/tenon: var PointSessionInit github.com/Sevyn17/tenon/runtime/ext.Point[github.com/Sevyn17/tenon/runtime/assemble.InitEntry]
 github.com/Sevyn17/tenon: var PointSystemBlock github.com/Sevyn17/tenon/runtime/ext.Point[github.com/Sevyn17/tenon/runtime/assemble.BlockEntry]
 github.com/Sevyn17/tenon: var PointTools github.com/Sevyn17/tenon/runtime/ext.Point[github.com/Sevyn17/tenon/runtime/assemble.ToolsEntry]
 github.com/Sevyn17/tenon: func Provide[T any](cx *Registrar, k Key[T], v T) error

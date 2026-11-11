@@ -77,8 +77,8 @@ type (
 	ToolsEntry = assemble.ToolsEntry
 	// BlockEntry 一个系统提示块（PointSystemBlock）。
 	BlockEntry = assemble.BlockEntry
-	// LayerEntry 一个会话层（PointLayer）：Guard 为 true 是守卫（拦截调用），否则是变换。
-	LayerEntry = assemble.LayerEntry
+	// InitEntry 一条会话初始化（PointSessionInit）：会话构造完成后调一次。
+	InitEntry = assemble.InitEntry
 	// AfterTurnFunc 回合结束通知（PointAfterTurn）。
 	AfterTurnFunc = assemble.AfterTurnFunc
 	// SessionCx 构造会话时登记项拿到的上下文（会话 id、定义、工作目录……）。
@@ -94,8 +94,8 @@ var (
 	PointTools = assemble.SessionTools
 	// PointSystemBlock 系统提示块：登记 BlockEntry。
 	PointSystemBlock = assemble.SystemBlock
-	// PointLayer 会话层（守卫与变换）：登记 LayerEntry。
-	PointLayer = assemble.SessionLayer
+	// PointSessionInit 会话初始化（04 4.3.1）：登记 InitEntry，会话构造完成后调一次。
+	PointSessionInit = assemble.SessionInit
 	// PointAfterTurn 回合结束通知：登记 AfterTurnFunc。
 	PointAfterTurn = assemble.AfterTurn
 )

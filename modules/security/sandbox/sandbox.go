@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"os/exec"
 	"path/filepath"
-	"time"
 
 	"github.com/Sevyn17/tenon/runtime/appid"
 	"github.com/Sevyn17/tenon/runtime/toolhub"
@@ -131,32 +130,4 @@ func Authorizer(mode func(sessionID string) Mode, approve ...toolhub.SandboxAppr
 		}
 		return toolhub.Decision{Action: toolhub.DecisionAllow}, nil
 	})
-}
-
-func Layer(mode func(sessionID string) Mode, approve ...toolhub.SandboxApprover) toolhub.Layer {
-	return toolhub.Layer{
-		Name:    "sandbox",
-		Guard:   true,
-		Timeout: 5 * time.Second,
-		Call: func(ctx context.Context, cx *toolhub.Cx, args json.RawMessage, next toolhub.Next) (toolhub.Output, error) {
-			if on, _ := cx.Tool.Attrs[AttrSandboxed].(bool); !on {
-				return next(ctx, cx, args)
-			}
-			req, err := Requested(args)
-			if err != nil {
-				return toolhub.Failf("参数不合法：%v", err), nil
-			}
-			cur := mode(cx.SessionID)
-			if req != "" && Wider(req, cur) && !cx.Approved {
-				for _, a := range approve {
-					if a != nil && a.AllowsSandbox(cx.SessionID, cx.Tool.Spec.Name, args, req) {
-						return next(ctx, cx, args)
-					}
-				}
-				return toolhub.Output{Kind: toolhub.Confirm,
-					Reason: fmt.Sprintf("%s 申请沙箱 %s（当前 %s），仅本次有效", cx.Tool.Spec.Name, req, cur)}, nil
-			}
-			return next(ctx, cx, args)
-		},
-	}
 }

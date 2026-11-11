@@ -30,34 +30,31 @@ func TestEffective(t *testing.T) {
 	}
 }
 
-func TestLayerAsksForWider(t *testing.T) {
-	l := Layer(func(string) Mode { return WorkspaceWrite })
+func TestAuthorizerAsksForWider(t *testing.T) {
+	// 04 4.3.1：判定从 toolhub.Layer 改成 Authorizer（决策服务）。
+	a := Authorizer(func(string) Mode { return WorkspaceWrite })
 	tool := &toolhub.Tool{Spec: session.ToolSpec{Name: "shell"}, Attrs: map[string]any{AttrSandboxed: true}}
-	ran := false
-	next := func(context.Context, *toolhub.Cx, json.RawMessage) (toolhub.Output, error) {
-		ran = true
-		return toolhub.Text("ok"), nil
-	}
-	call := func(args string, approved bool) toolhub.Output {
-		ran = false
-		out, err := l.Call(context.Background(), &toolhub.Cx{Tool: tool, Approved: approved}, json.RawMessage(args), next)
+	call := func(args string, approved bool) toolhub.Decision {
+		d, err := a.Authorize(context.Background(), &toolhub.Cx{Tool: tool, Approved: approved},
+			json.RawMessage(args))
 		if err != nil {
 			t.Fatal(err)
 		}
-		return out
+		return d
 	}
-	if out := call(`{"sandbox_permissions":"danger-full-access"}`, false); out.Kind != toolhub.Confirm || ran {
-		t.Fatal("更宽的申请应要求确认")
+	if d := call(`{"sandbox_permissions":"danger-full-access"}`, false); d.Action != toolhub.DecisionConfirm {
+		t.Fatalf("更宽的申请应要求确认：%+v", d)
 	}
-	if call(`{"sandbox_permissions":"danger-full-access"}`, true); !ran {
-		t.Fatal("已批准应放行")
+	if d := call(`{"sandbox_permissions":"danger-full-access"}`, true); d.Action != toolhub.DecisionAllow {
+		t.Fatalf("已批准应放行：%+v", d)
 	}
-	if call(`{"sandbox_permissions":"read-only"}`, false); !ran {
-		t.Fatal("更窄的申请应直接放行")
+	if d := call(`{"sandbox_permissions":"read-only"}`, false); d.Action != toolhub.DecisionAllow {
+		t.Fatalf("更窄的申请应直接放行：%+v", d)
 	}
 	plain := &toolhub.Tool{Spec: session.ToolSpec{Name: "read_file"}}
-	ran = false
-	if _, _ = l.Call(context.Background(), &toolhub.Cx{Tool: plain}, json.RawMessage(`{"sandbox_permissions":"danger-full-access"}`), next); !ran {
-		t.Fatal("非沙箱工具不受影响")
+	d, _ := a.Authorize(context.Background(), &toolhub.Cx{Tool: plain},
+		json.RawMessage(`{"sandbox_permissions":"danger-full-access"}`))
+	if d.Action != toolhub.DecisionAllow {
+		t.Fatalf("不需要沙箱的工具应放行：%+v", d)
 	}
 }

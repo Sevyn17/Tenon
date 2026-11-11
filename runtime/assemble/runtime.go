@@ -74,8 +74,8 @@ type Builder struct {
 	// Kernel [kernel] 节（工具缺省超时 / 确认截止 / 工件阈值）；nil = 内核缺省。
 	Kernel *Kernel
 
-	Tools  []ToolSet
-	Layers []LayerFunc
+	Tools []ToolSet
+	Inits []InitFunc
 	// ToolCallMW ToolCall 中间件层（04 4.3），装配期由 Assembly 转成 toolhub.Layer，装在最外层。
 	ToolCallMW []toolhub.Layer
 	Blocks     []BlockFunc
@@ -170,13 +170,11 @@ func (b *Builder) Build(id, defName string, child bool) (*agent.Agent, *session.
 			}
 		}
 	}
-	for _, f := range b.Layers {
-		ls, err := f(cx)
-		if err != nil {
+	// 会话初始化（04 4.3.1）：原来「每会话取一组层」的入口，现在只做初始化
+	// （如 permission/sandbox 给本会话的 Hub 设 Authorizer）。层已由 ToolCall 中间件取代。
+	for _, f := range b.Inits {
+		if err := f(cx); err != nil {
 			return nil, nil, err
-		}
-		for _, l := range ls {
-			hub.AddLayer(l)
 		}
 	}
 	// ToolCall 中间件（04 4.3）：装在最外层——先于守卫跑，但它改写后的 args 仍会交给内层守卫重判
@@ -187,8 +185,8 @@ func (b *Builder) Build(id, defName string, child bool) (*agent.Agent, *session.
 	if l, ok := toolGuard(b.Guards); ok { // 组件守卫先于授权层判定：被拒的调用不再要人确认
 		hub.PrependLayer(l)
 	}
-	if !hub.Authorized() { // 没装权限组件：用内核缺省授权层（有副作用的工具一律询问，P0-7）
-		hub.AddLayer(toolhub.DefaultAuthorizer())
+	if !hub.Authorized() { // 没装权限组件：用内核缺省授权判定者（有副作用的工具一律询问，P0-7）
+		hub.AddAuthorizer(toolhub.DefaultAuthorizer())
 	}
 	if err := hub.Validate(); err != nil {
 		return nil, nil, err

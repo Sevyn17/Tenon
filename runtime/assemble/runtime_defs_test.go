@@ -29,7 +29,7 @@ func defsSource(t *testing.T, names ...string) agentdef.Source {
 func TestBuildWithDefinition(t *testing.T) {
 	b := &Builder{
 		DB:          memstore.New(),
-		Layers:      []LayerFunc{permLayer()},
+		Inits:       []InitFunc{permInit()},
 		Definitions: defsSource(t, "subagent"),
 	}
 	a, _, err := b.Build("s1", "subagent", true)
@@ -58,7 +58,7 @@ func TestBuildWithDefinition(t *testing.T) {
 	}
 
 	// 没有定义来源时，指定了定义名 → 报错；不指定 → 正常。
-	bare := &Builder{DB: memstore.New(), Layers: []LayerFunc{permLayer()}}
+	bare := &Builder{DB: memstore.New(), Inits: []InitFunc{permInit()}}
 	if _, _, err := bare.Build("s4", "subagent", true); err == nil {
 		t.Fatal("没有定义来源时应报错")
 	}
@@ -78,7 +78,7 @@ func TestBuildRestoresDefinitionFromSession(t *testing.T) {
 	}
 	b := &Builder{
 		DB:          db,
-		Layers:      []LayerFunc{permLayer()},
+		Inits:       []InitFunc{permInit()},
 		Definitions: defsSource(t, "subagent"),
 	}
 	a, _, err := b.Build("r1", "", true)
@@ -117,7 +117,7 @@ func TestDefinitionModelUsed(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	b := &Builder{DB: memstore.New(), Layers: []LayerFunc{permLayer()}, Definitions: m, Models: hub, Model: "main-1"}
+	b := &Builder{DB: memstore.New(), Inits: []InitFunc{permInit()}, Definitions: m, Models: hub, Model: "main-1"}
 	for def, want := range map[string]string{"quick": "fast-1", "plain": "main-1", "": "main-1"} {
 		_, cfg, err := b.Build("s-"+def, def, false)
 		if err != nil {

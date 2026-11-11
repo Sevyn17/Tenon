@@ -84,20 +84,6 @@ func TestAuthorizerConfirmApproved(t *testing.T) {
 	}
 }
 
-// 同时设 Authorizer 与 Authorizes 层 → 装配拒绝。
-func TestAuthorizerAndAuthorizesLayerConflict(t *testing.T) {
-	h, _ := authHub(t, AuthorizerFunc(func(context.Context, *Cx, json.RawMessage) (Decision, error) {
-		return Decision{Action: DecisionAllow}, nil
-	}))
-	h.AddLayer(Layer{Name: "perm", Guard: true, Authorizes: true,
-		Call: func(ctx context.Context, cx *Cx, args json.RawMessage, next Next) (Output, error) {
-			return next(ctx, cx, args)
-		}})
-	if err := h.Validate(); err == nil {
-		t.Fatal("同时设 Authorizer 与 Authorizes 层应拒绝装配")
-	}
-}
-
 // 两者都没有 → 装配拒绝（失败即收紧）。
 func TestNoAuthorizerNoLayerRejected(t *testing.T) {
 	h := New(Options{})

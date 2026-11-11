@@ -108,7 +108,7 @@ func Wire(o WireOptions) (*Wired, error) {
 			return pol
 		},
 		Tools:       col.Tools,
-		Layers:      col.Layers,
+		Inits:       col.Inits,
 		ToolCallMW:  o.Asm.ToolCallLayers(),
 		Blocks:      col.Blocks, // 系统提示词由 prompt 组件提供
 		Items:       col.Items,

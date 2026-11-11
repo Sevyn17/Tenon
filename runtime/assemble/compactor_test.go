@@ -45,7 +45,7 @@ func TestCollectCarriesCompactorToSessions(t *testing.T) {
 	if col.Compactor == nil {
 		t.Fatal("Collect 应取出 service:compactor")
 	}
-	b := &Builder{DB: memstore.New(), Layers: []LayerFunc{permLayer()}, Compactor: col.Compactor}
+	b := &Builder{DB: memstore.New(), Inits: []InitFunc{permInit()}, Compactor: col.Compactor}
 	a, _, err := b.Build("s1", "", false)
 	if err != nil {
 		t.Fatal(err)

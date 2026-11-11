@@ -16,7 +16,7 @@ func TestBuilderCarriesStatuses(t *testing.T) {
 	}}
 	b := &Builder{
 		DB:       memstore.New(),
-		Layers:   []LayerFunc{permLayer()},
+		Inits:    []InitFunc{permInit()},
 		Statuses: regs,
 	}
 	a, _, err := b.Build("s1", "", false)

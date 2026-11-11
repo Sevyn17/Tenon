@@ -143,10 +143,7 @@ type Layer struct {
 	Guard    bool // false = Transform
 	Timeout  time.Duration
 	FailOpen bool // 只对 Transform 有效
-	// Authorizes 本层负责授权判定（权限插件的 Guard）。装配必须恰好有一层这样的层，
-	// 否则 Hub.Validate 拒绝启动（见 items.go）——工具管理器自己不做判定。
-	Authorizes bool
-	Call       func(ctx context.Context, cx *Cx, args json.RawMessage, next Next) (Output, error)
+	Call     func(ctx context.Context, cx *Cx, args json.RawMessage, next Next) (Output, error)
 }
 
 // Record 幂等 / 挂起记录的视图。
@@ -286,29 +283,21 @@ func (h *Hub) PrependLayer(l Layer) { h.layers = append([]Layer{l}, h.layers...)
 // DefaultAuthorizer 没有装权限组件时的缺省授权层：只读与声明无需授权的工具放行，其余一律询问
 // （与"未声明权限项的工具按一律询问"同一口径，失败即收紧）。权限组件提供自己的授权层时不用它。
 // 原先没有授权层时会话构造直接报错，Minimal 预设起不了任何会话（2026-11-04 审查 P0-7）。
-func DefaultAuthorizer() Layer {
-	return Layer{Name: "default-authorizer", Guard: true, Authorizes: true,
-		Call: func(ctx context.Context, cx *Cx, args json.RawMessage, next Next) (Output, error) {
-			if cx.Approved || cx.Tool == nil || cx.Tool.Risk == Read || cx.Tool.NoAuth {
-				return next(ctx, cx, args)
-			}
-			return Output{Kind: Confirm, Reason: cx.Tool.Spec.Name + " 有副作用，需要确认（未装权限组件）"}, nil
-		}}
+// DefaultAuthorizer 没有装权限组件时的缺省授权判定者（04 4.3.1）：
+// 只读与声明无需授权的工具放行，其余一律询问（与「未声明权限项的工具按一律询问」同一口径，
+// 失败即收紧）。
+func DefaultAuthorizer() Authorizer {
+	return AuthorizerFunc(func(ctx context.Context, cx *Cx, args json.RawMessage) (Decision, error) {
+		if cx.Approved || cx.Tool == nil || cx.Tool.Risk == Read || cx.Tool.NoAuth {
+			return Decision{Action: DecisionAllow}, nil
+		}
+		return Decision{Action: DecisionConfirm,
+			Reason: cx.Tool.Spec.Name + " 有副作用，需要确认（未装权限组件）"}, nil
+	})
 }
 
 // Authorized 层链里是否有负责授权判定的层。
-func (h *Hub) Authorized() bool {
-	// 04 4.3.1：授权落点有两种——Authorizer（决策服务）或 Authorizes 层（迁移期兼容）。
-	if h.authorizer != nil {
-		return true
-	}
-	for _, l := range h.layers {
-		if l.Authorizes {
-			return true
-		}
-	}
-	return false
-}
+func (h *Hub) Authorized() bool { return h.authorizer != nil }
 
 // Names 已登记工具名（登记顺序，含内核自带的机制工具）。
 func (h *Hub) Names() []string { return append([]string(nil), h.order...) }

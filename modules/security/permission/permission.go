@@ -13,7 +13,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"time"
 
 	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
@@ -402,36 +401,7 @@ func Glob(pat, s string) bool {
 
 // Layer 构造 toolhub Guard 层。policy 按会话取（档位可切换）。已批准的调用（cx.Approved，toolhub 按挂起记录
 // 核对过参数哈希）免确认。
-func Layer(policy func(sessionID string) Policy) toolhub.Layer {
-	return toolhub.Layer{
-		Name:       "permission",
-		Guard:      true,
-		Authorizes: true,
-		Timeout:    5 * time.Second,
-		Call: func(ctx context.Context, cx *toolhub.Cx, args json.RawMessage, next toolhub.Next) (toolhub.Output, error) {
-			d := policy(cx.SessionID).Decide(cx, args)
-			switch d.Action {
-			case Allow:
-				return next(ctx, cx, args)
-			case Deny:
-				return toolhub.Failf("权限拒绝：%s", d.Reason), nil
-			default:
-				// 拒绝类在上面已判；这里只有确认类，批准记录可免确认（参数必须一致）。
-				if cx.Approved {
-					return next(ctx, cx, args)
-				}
-				return toolhub.Output{Kind: toolhub.Confirm, Reason: d.Reason}, nil
-			}
-		},
-	}
-}
 
-// Authorizer 权限判定者（04 4.3.1）：替代原来的 Authorizes 层，挂在 toolhub.Hub 的最内层。
-//
-// 与 Layer 的区别：判定从「拦截链上的一层」变成「一个决策者」。DecisionConfirm（AskUser）
-// 仍走工具管理器原有的确认流程（挂起 → 等人 → 按同参数重放），语义不变。
-//
-// policy 按会话 id 取（与原来 Layer(policy) 一致）。
 func Authorizer(policy func(sessionID string) Policy) toolhub.Authorizer {
 	return toolhub.AuthorizerFunc(func(ctx context.Context, cx *toolhub.Cx, args json.RawMessage) (toolhub.Decision, error) {
 		d := policy(cx.SessionID).Decide(cx, args)
@@ -441,6 +411,11 @@ func Authorizer(policy func(sessionID string) Policy) toolhub.Authorizer {
 		case Deny:
 			return toolhub.Decision{Action: toolhub.DecisionDeny, Reason: d.Reason}, nil
 		default: // AskUser
+			// 已批准（工具管理器按挂起记录核对参数哈希后置 cx.Approved）：确认类直接放行。
+			// 原来这一判断在 Layer.Call 的 default 分支里，迁到 Authorizer 后要在这里补上。
+			if cx.Approved {
+				return toolhub.Decision{Action: toolhub.DecisionAllow}, nil
+			}
 			return toolhub.Decision{Action: toolhub.DecisionConfirm, Reason: d.Reason}, nil
 		}
 	})

@@ -23,7 +23,7 @@ import (
 // 点位名与实现类型。
 const (
 	PointSessionTools = ext.PointSessionTools // ToolsEntry
-	PointSessionLayer = ext.PointSessionLayer // LayerEntry
+	PointSessionInit  = ext.PointSessionInit  // InitEntry
 	PointSystemBlock  = ext.PointSystemBlock  // BlockEntry
 	PointAfterTurn    = ext.PointAfterTurn    // AfterTurnFunc
 	PointReady        = ext.PointReady        // ReadyFunc：会话构造器就绪后调用一次（如补投上次未送达的结果）
@@ -35,7 +35,7 @@ const (
 // 类型化点位（计划/08 3.5）：组件用 component.RegisterAt(cx, assemble.SessionTools, 名字, ToolsEntry{…}) 登记。
 var (
 	SessionTools    = ext.NewPoint[ToolsEntry](PointSessionTools)
-	SessionLayer    = ext.NewPoint[LayerEntry](PointSessionLayer)
+	SessionInit     = ext.NewPoint[InitEntry](PointSessionInit)
 	SystemBlock     = ext.NewPoint[BlockEntry](PointSystemBlock)
 	AfterTurn       = ext.NewPoint[AfterTurnFunc](PointAfterTurn)
 	Ready           = ext.NewPoint[ReadyFunc](PointReady)
@@ -75,12 +75,18 @@ type ToolsEntry struct {
 	Visible func(*SessionCx) bool
 }
 
-// LayerEntry 一条会话层登记。排序：Transform（Guard=false）在外、Guard 在内；同位置按 Order、再按插件名。
-type LayerEntry struct {
-	Guard bool
+// InitEntry 一条会话初始化登记（04 4.3.1）。
+//
+// 拆会话层后，原来「每会话构造时取一组 toolhub.Layer」的需求只剩一件事：
+// **会话构造完成后给我一次机会做初始化**（如 permission/sandbox 给本会话的 Hub 设 Authorizer）。
+// 它不再产出层——层已被 ToolCall 中间件与判定区取代。
+type InitEntry struct {
 	Order int
-	Func  LayerFunc
+	Func  InitFunc
 }
+
+// InitFunc 会话初始化：会话构造完成后调一次（sc.Hub / sc.Ctx 已就绪）。
+type InitFunc func(*SessionCx) error
 
 // BlockEntry 一条系统块登记，按 Order、再按插件名排列（应用自己的块在最前）。
 type BlockEntry struct {
@@ -163,7 +169,7 @@ func PrintIn(ui UI, sessionID, text string) {
 // Collected 装配结果里的会话贡献。
 type Collected struct {
 	Tools     []ToolSet
-	Layers    []LayerFunc
+	Inits     []InitFunc
 	Blocks    []BlockFunc
 	AfterTurn []AfterTurnFunc
 	Ready     []ReadyFunc
@@ -199,30 +205,27 @@ func Collect(asm *component.Assembly) (*Collected, error) {
 	for _, t := range tl {
 		c.Tools = append(c.Tools, ToolSet{Tools: t.e.Tools, Visible: t.e.Visible})
 	}
-	type layer struct {
-		e      LayerEntry
+	type initEntry struct {
+		e      InitEntry
 		plugin string
 	}
-	var ls []layer
-	for _, it := range asm.Items(PointSessionLayer) {
-		e, ok := it.Impl.(LayerEntry)
+	var inits []initEntry
+	for _, it := range asm.Items(PointSessionInit) {
+		e, ok := it.Impl.(InitEntry)
 		if !ok {
-			return nil, fmt.Errorf("runtime: 插件 %s 的 %s 类型不符（%T）", it.Plugin, PointSessionLayer, it.Impl)
+			return nil, fmt.Errorf("runtime: 插件 %s 的 %s 类型不符（%T）", it.Plugin, PointSessionInit, it.Impl)
 		}
-		ls = append(ls, layer{e, it.Plugin})
+		inits = append(inits, initEntry{e, it.Plugin})
 	}
-	sort.SliceStable(ls, func(i, j int) bool {
-		x, y := ls[i], ls[j]
-		if x.e.Guard != y.e.Guard {
-			return !x.e.Guard
-		}
+	sort.SliceStable(inits, func(i, j int) bool {
+		x, y := inits[i], inits[j]
 		if x.e.Order != y.e.Order {
 			return x.e.Order < y.e.Order
 		}
 		return x.plugin < y.plugin
 	})
-	for _, l := range ls {
-		c.Layers = append(c.Layers, l.e.Func)
+	for _, in := range inits {
+		c.Inits = append(c.Inits, in.e.Func)
 	}
 	type block struct {
 		e      BlockEntry

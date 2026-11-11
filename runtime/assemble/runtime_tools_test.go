@@ -11,14 +11,12 @@ import (
 )
 
 // 装配必须恰好有一个授权层（见 toolhub.Validate），测试里放一个直通的。
-func permLayer() LayerFunc {
-	return func(*SessionCx) ([]toolhub.Layer, error) {
-		return []toolhub.Layer{{
-			Name: "perm", Guard: true, Authorizes: true,
-			Call: func(ctx context.Context, cx *toolhub.Cx, args json.RawMessage, next toolhub.Next) (toolhub.Output, error) {
-				return next(ctx, cx, args)
-			},
-		}}, nil
+func permInit() InitFunc {
+	return func(sc *SessionCx) error {
+		sc.Hub.AddAuthorizer(toolhub.AuthorizerFunc(func(ctx context.Context, cx *toolhub.Cx, args json.RawMessage) (toolhub.Decision, error) {
+			return toolhub.Decision{Action: toolhub.DecisionAllow}, nil
+		}))
+		return nil
 	}
 }
 
@@ -43,8 +41,8 @@ func TestToolsSharedAcrossSessions(t *testing.T) {
 	}
 	echo, delegate := mk("echo"), mk("delegate")
 	b := &Builder{
-		DB:     memstore.New(),
-		Layers: []LayerFunc{permLayer()},
+		DB:    memstore.New(),
+		Inits: []InitFunc{permInit()},
 		Tools: []ToolSet{
 			{Tools: echo},
 			{Tools: delegate, Visible: func(sc *SessionCx) bool { return !sc.Child }},
@@ -90,7 +88,7 @@ func TestToolsSharedAcrossSessions(t *testing.T) {
 
 // 一批工具取不到（如 MCP 还没起来）时按空处理，不让装配失败。
 func TestToolSetNilTools(t *testing.T) {
-	b := &Builder{DB: memstore.New(), Layers: []LayerFunc{permLayer()}, Tools: []ToolSet{
+	b := &Builder{DB: memstore.New(), Inits: []InitFunc{permInit()}, Tools: []ToolSet{
 		{Tools: func() []*toolhub.Tool { return nil }},
 		{Tools: nil},
 	}}

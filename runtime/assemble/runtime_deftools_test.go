@@ -37,7 +37,7 @@ func toolsBuilder(t *testing.T, defs agentdef.Source, ran *int) *Builder {
 			}}
 	}
 	set := []*toolhub.Tool{mk("read_file"), mk("grep"), mk("shell")}
-	return &Builder{DB: memstore.New(), Layers: []LayerFunc{permLayer()}, Definitions: defs,
+	return &Builder{DB: memstore.New(), Inits: []InitFunc{permInit()}, Definitions: defs,
 		Tools: []ToolSet{{Tools: func() []*toolhub.Tool { return set }}}}
 }
 

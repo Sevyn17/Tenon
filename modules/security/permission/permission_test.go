@@ -273,28 +273,30 @@ func TestSessionRule(t *testing.T) {
 }
 
 // 已批准（cx.Approved：toolhub 按挂起记录核对参数哈希后置位）的确认类调用直接执行；拒绝类不受批准影响。
-func TestLayerConfirmAndApproved(t *testing.T) {
-	ran := 0
-	next := func(context.Context, *toolhub.Cx, json.RawMessage) (toolhub.Output, error) {
-		ran++
-		return toolhub.Text("ok"), nil
-	}
-	l := Layer(func(string) Policy { return Policy{Mode: Ask} })
+//
+// 04 4.3.1：判定从 toolhub.Layer 改成 Authorizer（决策服务），这里直接测判定结论。
+func TestAuthorizerConfirmAndApproved(t *testing.T) {
+	a := Authorizer(func(string) Policy { return Policy{Mode: Ask} })
 	c := eff("write_file", toolhub.Write, toolhub.EffectWrite)
 
-	out, _ := l.Call(context.Background(), c, json.RawMessage(`{"path":"b.txt"}`), next)
-	if out.Kind != toolhub.Confirm || ran != 0 {
-		t.Fatalf("未批准应返回 Confirm 且不执行: %+v ran=%d", out, ran)
+	d, err := a.Authorize(context.Background(), c, json.RawMessage(`{"path":"b.txt"}`))
+	if err != nil {
+		t.Fatal(err)
 	}
+	if d.Action != toolhub.DecisionConfirm {
+		t.Fatalf("未批准应返回 Confirm: %+v", d)
+	}
+	// 已批准：工具管理器会传 Approved=true（见 exec.go），判定应放行。
 	c.Approved = true
-	out, _ = l.Call(context.Background(), c, json.RawMessage(`{"path":"a.txt"}`), next)
-	if out.Kind != toolhub.Done || ran != 1 {
-		t.Fatalf("已批准应执行: %+v ran=%d", out, ran)
+	d, _ = a.Authorize(context.Background(), c, json.RawMessage(`{"path":"a.txt"}`))
+	if d.Action != toolhub.DecisionAllow {
+		t.Fatalf("已批准应放行: %+v", d)
 	}
-	l2 := Layer(func(string) Policy { return Policy{Mode: ReadOnly} })
-	out, _ = l2.Call(context.Background(), c, json.RawMessage(`{"path":"a.txt"}`), next)
-	if out.Status != session.ToolError || ran != 1 {
-		t.Fatalf("拒绝类不受批准影响: %+v", out)
+	// 拒绝类不受批准影响。
+	a2 := Authorizer(func(string) Policy { return Policy{Mode: ReadOnly} })
+	d, _ = a2.Authorize(context.Background(), c, json.RawMessage(`{"path":"a.txt"}`))
+	if d.Action != toolhub.DecisionDeny {
+		t.Fatalf("拒绝类不受批准影响: %+v", d)
 	}
 }
 
