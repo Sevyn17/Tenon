@@ -87,6 +87,8 @@ type config struct {
 	inline       []Agent
 	defaultAgent string
 	secrets      func(string) (string, error) // WithSecrets
+	// useSource 租户/用户层使用配置来源（WithConfigSource，06 6.3）。
+	useSource useconf.Source
 }
 
 // Default 标准组件预设（10 10.2）：内核、上下文、模型、工具、权限、沙箱、协作。
@@ -255,6 +257,16 @@ func WithKernel(kv map[string]any) Option {
 		for k, v := range kv {
 			c.kernel[k] = v
 		}
+		return nil
+	}
+}
+
+// WithConfigSource 提供租户层与用户层的使用配置来源（06 6.3）：组件按 [use.<组件>] 的
+// tenant 标签只允许覆盖这些字段；limit:"min"/"intersect" 各层取严。nil = 没有租户/用户层。
+// 会话打开时按创建者算一次；守卫每轮再按本轮触发者的上限取一次（08 8.3，依赖本来源）。
+func WithConfigSource(src useconf.Source) Option {
+	return func(c *config) error {
+		c.useSource = src
 		return nil
 	}
 }
@@ -537,7 +549,8 @@ func build(c *config) (*App, error) {
 	}
 	app := &App{asm: asm, defs: defs, host: h, bus: b, handle: st, own: c.store, workdir: workdir, ui: ui, pui: pui,
 		trusted: c.projectTrust, kern: kern, hooks: c.hooks, approvals: c.approvals, protocol: c.protocol, readyErrs: c.readyErrs,
-		appDefs: appDefs, builtinDefs: builtin, appToolNames: toolNames, defaultAgent: c.defaultAgent, protocolUIOn: c.protocolUI || c.ui != nil}
+		appDefs: appDefs, builtinDefs: builtin, appToolNames: toolNames, defaultAgent: c.defaultAgent,
+		protocolUIOn: c.protocolUI || c.ui != nil, useSource: c.useSource}
 	if v, ok := asm.Value(assemble.ServiceModelhub); ok {
 		app.models, _ = v.(*assemble.Models)
 	}
@@ -589,6 +602,7 @@ type App struct {
 	protocol  []func(*appapi.Options)
 	readyErrs func([]error)
 	// 外观用的（agents.go、session.go）。
+	useSource    useconf.Source
 	appDefs      agentdef.Source
 	builtinDefs  *agentdef.MemSource
 	appToolNames []string

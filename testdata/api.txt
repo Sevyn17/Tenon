@@ -143,6 +143,7 @@ github.com/Sevyn17/tenon: func WithAgent(as ...Agent) Option
 github.com/Sevyn17/tenon: func WithAgents(srcs ...AgentSource) Option
 github.com/Sevyn17/tenon: func WithAnthropic(model string, key KeyRef) Option
 github.com/Sevyn17/tenon: func WithConfig(component string, kv map[string]any) Option
+github.com/Sevyn17/tenon: func WithConfigSource(src github.com/Sevyn17/tenon/runtime/useconf.Source) Option
 github.com/Sevyn17/tenon: func WithDefaultAgent(name string) Option
 github.com/Sevyn17/tenon: func WithKernel(kv map[string]any) Option
 github.com/Sevyn17/tenon: func WithModeApprovals(a github.com/Sevyn17/tenon/adapters.ModeApprovals) Option

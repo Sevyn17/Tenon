@@ -83,7 +83,8 @@ func (a *App) Start(ctx context.Context) (err error) {
 	}
 	db := a.handle.DB()
 	w, err := assemble.Wire(assemble.WireOptions{Asm: a.asm, Host: a.host, DB: db, Blobs: a.handle.Blobs(),
-		Models: a.models, Workdir: a.workdir, Kernel: a.kern, Definitions: a.defs, MaxSteps: -1, Hooks: a.hooks})
+		Models: a.models, Workdir: a.workdir, Kernel: a.kern, Definitions: a.defs, MaxSteps: -1, Hooks: a.hooks,
+		UseSource: a.useSource})
 	if err != nil {
 		return fmt.Errorf("tenon: 接线: %w", err)
 	}

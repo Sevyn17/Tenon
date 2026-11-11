@@ -17,7 +17,7 @@ const ServiceName = "budget"
 //	tokens_per_day = 200000
 type UseConfig struct {
 	// TokensPerDay 每日 token 上限（08 8.4）。limit:"min"：定义 / 租户 / 用户各层取最小。
-	TokensPerDay int64 `toml:"tokens_per_day" limit:"min" description:"每日 token 上限；各层取最小"`
+	TokensPerDay int64 `toml:"tokens_per_day" tenant:"true" limit:"min" description:"每日 token 上限；租户/用户可覆盖，各层取最小"`
 }
 
 type plug struct{}

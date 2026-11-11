@@ -16,6 +16,7 @@ import (
 	"github.com/Sevyn17/tenon/runtime/session"
 	"github.com/Sevyn17/tenon/runtime/store"
 	"github.com/Sevyn17/tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/runtime/useconf"
 )
 
 // BlobGrace 工件回收的宽限期：没有引用的文件超过这么久未被触碰才删（约束清单「存储」）。
@@ -37,6 +38,8 @@ type WireOptions struct {
 	SleepAfter time.Duration
 	// Hooks 应用自己的会话钩子（可空）。
 	Hooks HooksFunc
+	// UseSource 租户层与用户层的使用配置来源（06 6.3）；nil = 没有租户/用户层。
+	UseSource useconf.Source
 }
 
 // Wired Wire 的结果。
@@ -99,6 +102,7 @@ func Wire(o WireOptions) (*Wired, error) {
 		Definitions: o.Definitions,
 		Statuses:    col.Statuses,
 		Schemas:     o.Asm.AgentSchemas(),
+		UseSource:   o.UseSource,
 		Hooks:       o.Hooks,
 		Guards:      h.Guards,
 	}

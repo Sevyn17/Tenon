@@ -83,6 +83,8 @@ type Builder struct {
 	// Schemas 装配期各组件登记的使用配置原型（06 6.2，Assembly.AgentSchemas）：新会话按定义的
 	// [use.*] 算 use_config 用；nil = 定义里写了 [use.*] 的会话创建失败（没有组件认这份配置）。
 	Schemas []useconf.Schema
+	// UseSource 租户层与用户层的使用配置来源（06 6.3）；nil = 没有租户/用户层。
+	UseSource useconf.Source
 	// Guards 组件登记的守卫规则；GuardToolCall 上的规则装成每个会话工具栈里的一层守卫（toolGuard）。
 	Guards []component.GuardRule
 }
@@ -117,6 +119,7 @@ func (b *Builder) Build(id, defName string, child bool) (*agent.Agent, *session.
 	a.Def = def
 	a.Statuses = b.Statuses
 	a.Schemas = b.Schemas
+	a.UseSource = b.UseSource
 	if b.Compactor != nil {
 		a.Compactor = b.Compactor
 	}

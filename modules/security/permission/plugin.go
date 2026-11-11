@@ -25,7 +25,7 @@ const Service = ext.ServicePermission
 //	[use.permission]
 //	mode = "read-only"
 type UseConfig struct {
-	Mode string `toml:"mode" description:"本智能体的权限上限档位（read-only / ask / workspace / full 或自定义档位名）；与会话档位取更严"`
+	Mode string `toml:"mode" tenant:"true" description:"本智能体的权限上限档位（read-only / ask / workspace / full 或自定义档位名）；租户/用户可覆盖，与会话档位取更严"`
 }
 
 // PluginConfig permission 插件配置（命令行 -mode / -yes / -sandbox 经插件配置覆盖传入）。
