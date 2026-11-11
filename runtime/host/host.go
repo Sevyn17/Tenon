@@ -24,6 +24,7 @@ import (
 	"github.com/Sevyn17/tenon/runtime/agentdef"
 	"github.com/Sevyn17/tenon/runtime/bus"
 	"github.com/Sevyn17/tenon/runtime/component"
+	"github.com/Sevyn17/tenon/runtime/mail"
 	"github.com/Sevyn17/tenon/runtime/session"
 	"github.com/Sevyn17/tenon/runtime/store"
 	"github.com/Sevyn17/tenon/runtime/toolhub"
@@ -1015,6 +1016,12 @@ func (a *actor) drainInbox(ctx context.Context) (stop bool, err error) {
 		// 触发链信息：本回合发出的信封沿用本批里最大的跳数、来源可信度只降不升（08 8.7）。
 		a.ag.SetTurnOrigin(agent.TurnOrigin{Hop: batchHop(batch), Untrusted: untrusted, From: env.From.String()})
 		a.ag.Ctx.SetUntrusted(untrusted) // 权限组件据此把 allow 降为询问
+		// 本轮触发者（T4f，08 8.3）：守卫按它的用户层上限重解权限。非人触发（组件/智能体）置空。
+		if env.From.Kind == mail.AddrHuman {
+			a.ag.Ctx.SetTrigger(env.From.ID)
+		} else {
+			a.ag.Ctx.SetTrigger("")
+		}
 		if env.Trace != "" {
 			a.h.recordTrace(env.Trace, a.id, "session", "")
 		}

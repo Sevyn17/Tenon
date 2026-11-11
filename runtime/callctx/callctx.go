@@ -34,6 +34,11 @@ type Ctx struct {
 	use     map[string]any // 使用配置 [use.*] 解析结果：组件名 → 该组件的配置
 	// untrusted 本回合输入是否含不可信来源（内核每回合设置，见 SetUntrusted）。
 	untrusted bool
+	// trigger 本轮触发者（human 用户 id；空 = 非人触发）。守卫按它重解用户层上限（08 8.3，T4f）。
+	trigger string
+	// reResolve 按某个用户重解使用配置（内核按会话创建者算一份；这里按本轮触发者再算，T4f）。
+	// nil = 不支持按触发者重解（退回会话算好的那份）。
+	reResolve func(user, component string) (map[string]any, bool)
 }
 
 // Options 内核构造 Ctx 用。
@@ -142,6 +147,53 @@ func (c *Ctx) Bind(s Session, meta, use json.RawMessage) {
 	c.session = s
 	c.meta = decodeObject(meta)
 	c.use = decodeObject(use)
+}
+
+// SetTrigger 设置本轮触发者（human 用户 id；空 = 非人触发）。守卫按它重解用户层上限（T4f）。
+func (c *Ctx) SetTrigger(user string) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	c.trigger = user
+	c.mu.Unlock()
+}
+
+// Trigger 本轮触发者（空 = 非人触发）。
+func (c *Ctx) Trigger() string {
+	if c == nil {
+		return ""
+	}
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.trigger
+}
+
+// SetReResolver 内核注入「按用户重解使用配置」的能力（T4f）：f 返回该用户层算好的某组件配置。
+func (c *Ctx) SetReResolver(f func(user, component string) (map[string]any, bool)) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	c.reResolve = f
+	c.mu.Unlock()
+}
+
+// UseForTrigger 按本轮触发者取某组件的使用配置（T4f，08 8.3）：有触发者且内核支持重解时用重解值，
+// 否则退回会话算好的那份（Use）。第二返回值 false = 该组件没配置。
+func (c *Ctx) UseForTrigger(component string) (any, bool) {
+	if c == nil {
+		return nil, false
+	}
+	c.mu.RLock()
+	trig, f := c.trigger, c.reResolve
+	c.mu.RUnlock()
+	if trig != "" && f != nil {
+		if v, ok := f(trig, component); ok {
+			return v, true
+		}
+	}
+	return c.Use(component)
 }
 
 // SetUntrusted 内核在每回合开始（以及回合中插入新输入）时设置：本回合的输入里有没有不可信来源

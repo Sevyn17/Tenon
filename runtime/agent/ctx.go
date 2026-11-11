@@ -3,8 +3,11 @@ package agent
 // 调用上下文（框架设计 04 §4.4）：会话构造时建 Ctx，Open 时用会话行填全。
 
 import (
+	"context"
+
 	"github.com/Sevyn17/tenon/runtime/callctx"
 	"github.com/Sevyn17/tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/useconf"
 )
 
 // toolCtx 本次工具调用与层用的上下文；没配时按会话 id 兜底（测试与嵌入方）。
@@ -29,4 +32,17 @@ func (a *Agent) bindCtx(m store.SessionMeta) {
 		Parent:     m.ParentID,
 		Key:        m.SessionKey,
 	}, m.Meta, m.UseConfig)
+	// 按本轮触发者重解使用配置的能力（T4f，08 8.3）：守卫每轮按触发者的用户层上限取一次。
+	// 只有配了租户/用户来源、且有定义时才装；否则 UseForTrigger 退回会话算好的那份。
+	if a.UseSource != nil && a.Def != nil && len(a.Schemas) > 0 {
+		schemas, defUse := a.Schemas, a.Def.Use
+		a.Ctx.SetReResolver(func(user, component string) (map[string]any, bool) {
+			vals, err := useconf.ResolveAll(context.Background(), schemas, defUse, a.UseSource, store.Tenant, user)
+			if err != nil {
+				return nil, false
+			}
+			v, ok := vals[component]
+			return v, ok
+		})
+	}
 }

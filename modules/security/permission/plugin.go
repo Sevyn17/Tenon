@@ -103,7 +103,13 @@ func (*plug) Setup(cx *component.Registrar) error {
 			capDefs := func() []*ModeDef {
 				var u UseConfig
 				if sc.Ctx != nil {
-					_ = sc.Ctx.Config("permission", &u)
+					// 按本轮触发者的用户层上限重解（T4f，08 8.3）：多人会话里低权限成员的消息
+					// 触发不了高权限工具。没触发者时退回会话算好的那份。
+					if v, ok := sc.Ctx.UseForTrigger("permission"); ok {
+						applyUse(&u, v)
+					} else {
+						_ = sc.Ctx.Config("permission", &u)
+					}
 				}
 				if u.Mode == "" && sc.Def != nil {
 					u.Mode, _ = sc.Def.Use["permission"]["mode"].(string)
@@ -153,6 +159,22 @@ func (*plug) Setup(cx *component.Registrar) error {
 }
 
 func (*plug) Start(*component.Scope) error { return nil }
+
+// applyUse 把使用配置（map 或已解码结构体）套到 u 上。
+func applyUse(u *UseConfig, v any) {
+	switch x := v.(type) {
+	case UseConfig:
+		*u = x
+	case *UseConfig:
+		if x != nil {
+			*u = *x
+		}
+	case map[string]any:
+		if m, ok := x["mode"].(string); ok {
+			u.Mode = m
+		}
+	}
+}
 
 // userHome 用户全局目录：应用的用户级目录（appid.Home）；取不到返回空。
 func userHome() string { return appid.Home() }
