@@ -14,6 +14,7 @@ import (
 	_ "github.com/Sevyn17/tenon/modules/context/prompt"
 	_ "github.com/Sevyn17/tenon/modules/context/redact"
 	_ "github.com/Sevyn17/tenon/modules/context/skills"
+	_ "github.com/Sevyn17/tenon/modules/extend/events"
 	_ "github.com/Sevyn17/tenon/modules/extend/hooks"
 	_ "github.com/Sevyn17/tenon/modules/model/adapter-anthropic"
 	_ "github.com/Sevyn17/tenon/modules/model/adapter-openai-chat"
@@ -54,6 +55,7 @@ var defaultComponents = []string{
 	"subagent",
 	"workgroup",
 	"group",
+	"events",
 }
 
 // minimalComponents 最小预设：内核 + 上下文（压缩要用模型组件）。
