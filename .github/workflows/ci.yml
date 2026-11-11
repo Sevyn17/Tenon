@@ -22,9 +22,15 @@ jobs:
       # 模块代理：GitHub 托管 runner 直连 proxy.golang.org 即可；自建 runner（如 NAS 上的
       # Gitea act_runner，容器里访问不了 Google）需要国内镜像。这里列多个，Go 按顺序回退。
       # GOFLAGS 关掉 toolchain 自动下载：go.mod 的 go 版本由 setup-go 装好，避免容器里再拉。
+      #
+      # 自建 runner 的容器每次是新的，模块缓存默认不保留 → 每次都要全量下载，镜像一抖就
+      # 整 job 失败（goproxy.cn 的 unexpected EOF / PROTOCOL_ERROR）。所以：
+      #   · GOMODCACHE 指到 $HOME 下的固定路径（act_runner 保留宿主 $HOME，跨 job 复用）
+      #   · 下载失败重试 3 次（网络抖动通常一次重试就过）
       GOPROXY: https://goproxy.cn,https://goproxy.io,https://proxy.golang.org,direct
       GOSUMDB: sum.golang.google.cn
       GOTOOLCHAIN: local
+      GOFLAGS: -mod=mod
     steps:
       - uses: actions/checkout@v4
 
@@ -95,6 +101,21 @@ jobs:
 
       - name: 文档链接
         run: python3 scripts/doclinks.py
+
+      # 先单独下载依赖并重试：镜像抖动时（unexpected EOF / PROTOCOL_ERROR）重试一次通常就过，
+      # 不重试的话整个 job 会因为拉依赖失败而红，掩盖真正的代码问题。
+      - name: 下载依赖（带重试）
+        run: |
+          for i in 1 2 3; do
+            if go mod download all; then
+              echo "依赖下载完成"
+              exit 0
+            fi
+            echo "第 $i 次下载失败，等 10s 重试"
+            sleep 10
+          done
+          echo "::error::依赖下载三次都失败（镜像网络问题，非代码问题）"
+          exit 1
 
       - name: go vet
         run: go vet ./...
