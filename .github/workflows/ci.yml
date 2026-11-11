@@ -42,8 +42,20 @@ jobs:
       - name: go vet
         run: go vet ./...
 
+      # 失败时把失败包逐个 -v 重跑，日志里能直接看到是哪个用例、什么原因。
       - name: go test
-        run: go test -count=1 ./...
+        run: |
+          set -o pipefail
+          if go test -count=1 ./... 2>&1 | tee /tmp/test.log; then
+            exit 0
+          fi
+          echo "::group::失败包逐个重跑"
+          grep -oP '^FAIL\s+\K\S+' /tmp/test.log | sort -u | while read -r pkg; do
+            echo "===== $pkg"
+            go test -count=1 -v "$pkg" 2>&1 | grep -E '^(=== RUN|--- FAIL|FAIL|panic)|\.go:[0-9]+:' | tail -60
+          done
+          echo "::endgroup::"
+          exit 1
 
       - name: go test -race
         run: |
