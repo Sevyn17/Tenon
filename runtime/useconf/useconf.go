@@ -36,8 +36,6 @@ type Field struct {
 	Default  any
 	Required bool
 	Tenant   bool   // 允许租户/用户层覆盖
-	Secret   bool   // 值不进日志、不进 explain
-	Hot      bool   // 改了可以热生效（T3 用）
 	Limit    string // "" / "min" / "intersect"
 	Enum     []string
 	index    int // 结构体字段序号
@@ -80,8 +78,6 @@ func SchemaOf(component string, proto any) (Schema, error) {
 			Type:     sf.Type,
 			Required: tagBool(sf, "required"),
 			Tenant:   tagBool(sf, "tenant"),
-			Secret:   tagBool(sf, "secret"),
-			Hot:      tagBool(sf, "hot"),
 			Limit:    sf.Tag.Get("limit"),
 			index:    i,
 		}

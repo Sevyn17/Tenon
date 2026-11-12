@@ -380,7 +380,8 @@ type ToolRecord struct {
 	SessionID string
 	CallID    string
 	Status    string
-	Kind      string // pending 的种类：result / question / confirm
+	Kind      string // 挂起种类。当前只有 "confirm"（人工确认）；"result" / "question" 未使用
+	// （2026-11-12 M7：原注释承诺三种但生产只写 confirm）
 	ArgsHash  string // 批准时锁定的参数哈希
 	Decision  string
 	Delivered string // 挂起结果已送达、未交内核

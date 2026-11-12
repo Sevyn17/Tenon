@@ -42,7 +42,6 @@ const (
 // Attrs 约定键。
 const (
 	AttrPreview = "preview" // head / tail / head_tail（D7）
-	AttrPresent = "present" // 前端呈现提示：diff / test / plan …（frontend D4 预留）
 )
 
 // Tool 一个工具。Call 必填；Cancel 可空（级联取消时调用）。

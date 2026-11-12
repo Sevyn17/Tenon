@@ -98,7 +98,13 @@ type ModeDef struct {
 	Title       string // 显示名
 	Description string
 	Source      string // builtin / 文件路径
-	Builtin     bool
+	// Builtin 是否内置档位。与 Source == "builtin" 同义，但两者用途不同：
+	// Source 用于 Refresh 时的来源比对（需要原始字符串），Builtin 是对外协议字段
+	// （appapi.ModeInfo.Builtin → 前端 UI 标「内置」）。赋值点只有 load 一处。
+	//
+	// 2026-11-12（M6）：核查后不改——不是「同一事实两处存储」的隐患，而是
+	// 「内部来源字符串」与「对外布尔」两个用途。删 Builtin 会让前端协议丢字段。
+	Builtin bool
 	// Project 来自受信项目的 .tenon/modes（放宽时首次选用须用户确认，§9.6）。
 	Project bool
 	// Items 按权限项取值（§9.4）：键是项 id。取不到的项由判定方回落到建议值。

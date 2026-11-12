@@ -120,8 +120,12 @@ type Adapter interface {
 
 // Capabilities 能力（D7：未声明继承协议默认；智能体定义与回合设置只能收窄）。
 type Capabilities struct {
-	Reasoning     *bool `toml:"reasoning"`
-	Images        *bool `toml:"images"`
+	Reasoning *bool `toml:"reasoning"`
+	Images    *bool `toml:"images"`
+	// ParallelTools 模型是否支持并行工具调用（三态：nil = 未知/按适配器缺省）。
+	// 2026-11-12（L6）：当前零读取方——三个适配器都不看它。但它是**配置项**
+	// （toml `parallel_tools`，用户可在 profile 里写），删了破坏配置兼容；
+	// 保留待接入（并行工具调用需要内核先支持多工具并发执行）。
 	ParallelTools *bool `toml:"parallel_tools"`
 }
 
