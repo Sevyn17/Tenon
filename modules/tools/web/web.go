@@ -1,3 +1,4 @@
+// Package web 提供联网工具：网页抓取与搜索，把 HTML 转成模型可读的文本。
 package web
 
 import (

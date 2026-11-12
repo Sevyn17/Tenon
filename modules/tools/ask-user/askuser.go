@@ -1,3 +1,5 @@
+// Package askuser 提供 ask_user 工具：让模型向人提问并等回答。
+// 没有可应答者时工具报错，模型据此换做法。
 package askuser
 
 import (

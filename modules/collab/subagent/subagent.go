@@ -1,3 +1,5 @@
+// Package subagent 提供委派工具：把一段任务派给子智能体（独立子会话），
+// 等它完成后把结果交回父会话。
 package subagent
 
 import (

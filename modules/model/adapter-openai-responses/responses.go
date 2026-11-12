@@ -1,3 +1,5 @@
+// Package responses 是 OpenAI Responses 协议的适配器（/responses SSE），
+// 支持 reasoning 与更细的流式事件。
 package responses
 
 // 协议适配器 openai-responses（M6.7）：OpenAI /responses SSE。

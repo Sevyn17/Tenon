@@ -1,3 +1,5 @@
+// Package apphost 是框架的进程宿主：加载 profile 与插件包、解析项目信任、
+// 装配 Runtime 并起 web / CLI 服务。产品（CLI、桌面端）经它启动，不直接碰内核。
 package apphost
 
 // 项目信任（plugin-switch-plan §3.3，参照 Codex projects.trust_level）。

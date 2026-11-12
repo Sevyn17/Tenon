@@ -1247,7 +1247,7 @@ func (a *actor) turn(ctx context.Context, resumed bool, f func(context.Context) 
 	if a.h.Hooks.AfterTurn != nil {
 		a.h.Hooks.AfterTurn(a.id, end)
 	}
-	// turn / end_kind / code / message 供 protocol 2 的结构化 turn.ended（G7）；reason 是 protocol 1 的拼好的字符串。
+	// turn / end_kind / code / message 供 protocol 2 的结构化 turn.ended（G7）。
 	a.h.publish(a.id, "turn_end", map[string]any{"reason": end.String(), "turn": a.lastTurn(),
 		"end_kind": int(end.Kind), "code": end.Code, "message": end.Message})
 	if err := a.ag.Commit(ctx); err != nil { // span 与 after_turn 的修改落库

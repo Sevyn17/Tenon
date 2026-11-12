@@ -1,3 +1,4 @@
+// Package todo 提供待办工具：模型维护一份计划项列表，供人查看进度。
 package todo
 
 import (

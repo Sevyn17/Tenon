@@ -1,3 +1,5 @@
+// Package instructions 读取项目里的 AGENTS.md 并注入系统提示词，
+// 让模型遵守项目约定（04 4.3.1 改写区 + 判定区）。
 package instructions
 
 import (

@@ -1,3 +1,5 @@
+// Package budget 登记 [use.budget] 的使用配置 schema，并按本轮触发者
+// 解析预算层级（框架设计 08 8.4、06 6.3）。
 package budget
 
 // 预算使用配置（框架设计 08 8.4、06 6.3，T4f/T5c 基础设施）：登记 [use.budget] 的 schema，

@@ -190,7 +190,7 @@ func (h *Host) Respond(ctx context.Context, id string, r store.Resolution, ans A
 	return got, true, nil
 }
 
-// Ask 在已打开的会话上向人提问（question 交互）并等回答。opened 非空时在登记后、等待前调用（protocol 1 的 ask 事件用）。
+// Ask 在已打开的会话上向人提问（question 交互）并等回答。opened 非空时在登记后、等待前调用。
 // ctx 结束返回 ctx.Err()，会话退出返回 ErrClosed，交互随之 voided。
 func (h *Host) Ask(ctx context.Context, sessionID, question string, options []string, opened func(interactionID string)) (string, error) {
 	body := map[string]any{"text": question}

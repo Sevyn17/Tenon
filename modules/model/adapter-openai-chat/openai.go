@@ -1,3 +1,5 @@
+// Package openaichat 是 OpenAI 兼容 Chat Completions 协议的适配器
+// （/chat/completions SSE），覆盖绝大多数兼容实现。
 package openaichat
 
 // 协议适配器 openai-chat（model-hub D2，review-1 G5）：OpenAI 兼容 /chat/completions SSE。

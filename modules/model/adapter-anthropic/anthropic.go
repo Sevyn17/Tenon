@@ -1,3 +1,5 @@
+// Package anthropic 是 Anthropic Messages 协议的模型适配器（/v1/messages SSE）。
+// 把内核的 session.Request 编成协议请求，把流式事件解回 modelhub.Event。
 package anthropic
 
 // anthropic-messages 协议适配器（model-hub D2）：/v1/messages SSE。

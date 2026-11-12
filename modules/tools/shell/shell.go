@@ -1,3 +1,5 @@
+// Package shell 提供 shell / job_output / job_kill 三个工具：
+// 执行命令、读后台任务输出、终止后台任务。
 package shell
 
 // 5.3：shell / job_output / job_kill（docs/90 - 归档/20 - 插件/10 - 命令执行.md）。

@@ -1,3 +1,5 @@
+// Package prompt 提供基础系统提示词：内核不写死任何提示词，
+// 全部由本组件按配置（text / file / workdir）给出。
 package prompt
 
 // 插件登记（plugin-switch-plan §2.1）：基础系统提示词。内核不写死任何提示词，

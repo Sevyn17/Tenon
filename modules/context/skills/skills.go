@@ -1,3 +1,4 @@
+// Package skills 发现并注入技能（可复用的操作说明），按需加载进系统提示词。
 package skills
 
 import (
