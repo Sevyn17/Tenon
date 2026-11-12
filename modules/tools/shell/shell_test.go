@@ -106,29 +106,64 @@ func TestShellTimeoutKillsTree(t *testing.T) {
 	}
 }
 
+// 后台 job：启动 → 等待输出 → 增量读 → kill。
+//
+// 2026-11-12：修了两个「负载高时才会暴露」的脆弱点（本地全量测试曾偶发失败一次，
+// 12.79s 后报 step2 断言不符；此后单跑/包内/race/重负载 30+ 次均未复现）：
+//
+//  1. 原先硬编码 "job-1" / "job-2" 假定 job 编号从 1 开始且严格递增。
+//     但 job id 来自 Shell.seq，是**同一 Shell 实例**内的全局计数——
+//     将来若有别的用例共用/污染实例，或实现改成复用编号，断言就会错。
+//     改成从启动输出里解析实际 id。
+//
+//  2. 原先 sleepCmd(1) 只有 1 秒，wait=true timeout=20。负载高时 PowerShell 启动
+//     本身就要几百毫秒，1 秒的 sleep 可能来不及让 echo end 落进缓冲就被 Wait 关闭，
+//     于是「已结束」出现了但输出不全。改成 sleep 2 秒（给启动留余量），
+//     并把等待上限从 20 秒降到 10 秒（失败时更快暴露，不是靠等满）。
 func TestShellBackgroundJob(t *testing.T) {
 	s := NewShell(t.TempDir())
 	defer s.Close()
-	cmd := "echo start; " + sleepCmd(1) + "; echo end"
+	// 从启动输出解析 job id，不假定它是 job-1。
+	jobID := func(out string) string {
+		t.Helper()
+		i := strings.Index(out, "job-")
+		if i < 0 {
+			t.Fatalf("应返回 job id: %q", out)
+		}
+		rest := out[i+len("job-"):]
+		n := 0
+		for n < len(rest) && rest[n] >= '0' && rest[n] <= '9' {
+			n++
+		}
+		if n == 0 {
+			t.Fatalf("job id 缺编号: %q", out)
+		}
+		return "job-" + rest[:n]
+	}
+
+	cmd := "echo start; " + sleepCmd(2) + "; echo end"
 	out, _ := callT(t, s, "shell", `{"command":`+q(cmd)+`,"background":true}`)
-	if !strings.Contains(out, "job-1") {
-		t.Fatalf("应返回 job id: %q", out)
-	}
-	out, _ = callT(t, s, "job_output", `{"id":"job-1","wait":true,"timeout":20}`)
+	id1 := jobID(out)
+	out, _ = callT(t, s, "job_output", `{"id":"`+id1+`","wait":true,"timeout":10}`)
 	if !strings.Contains(out, "start") || !strings.Contains(out, "end") || !strings.Contains(out, "已结束，退出码 0") {
-		t.Fatalf("等待结束后应有全部输出: %q", out)
+		t.Fatalf("等待结束后应有全部输出（id=%s）: %q", id1, out)
 	}
-	out, _ = callT(t, s, "job_output", `{"id":"job-1"}`)
+	out, _ = callT(t, s, "job_output", `{"id":"`+id1+`"}`)
 	if strings.Contains(out, "start") {
 		t.Fatalf("再次读取不应重复旧输出: %q", out)
 	}
+
 	// 长任务被 kill。
-	callT(t, s, "shell", `{"command":`+q(sleepCmd(60))+`,"background":true}`)
-	out, isErr := callT(t, s, "job_kill", `{"id":"job-2"}`)
-	if isErr || !strings.Contains(out, "已终止") {
-		t.Fatalf("kill 失败: %q", out)
+	out, _ = callT(t, s, "shell", `{"command":`+q(sleepCmd(60))+`,"background":true}`)
+	id2 := jobID(out)
+	if id2 == id1 {
+		t.Fatalf("两个 job 的 id 应不同: %s / %s", id1, id2)
 	}
-	if _, isErr := callT(t, s, "job_output", `{"id":"job-9"}`); !isErr {
+	out, isErr := callT(t, s, "job_kill", `{"id":"`+id2+`"}`)
+	if isErr || !strings.Contains(out, "已终止") {
+		t.Fatalf("kill 失败（id=%s）: %q", id2, out)
+	}
+	if _, isErr := callT(t, s, "job_output", `{"id":"job-9999"}`); !isErr {
 		t.Fatal("不存在的 job 应报错")
 	}
 }
