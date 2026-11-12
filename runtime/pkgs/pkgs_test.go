@@ -22,7 +22,10 @@ func (nopPlugin) Setup(cx *component.Registrar) error { return nil }
 func (nopPlugin) Start(sc *component.Scope) error     { return nil }
 
 func init() {
-	component.Register("pkgs-test-target", func() component.Component { return nopPlugin{} })
+	// 幂等：component.Register 是全局注册，-count=N 重跑会撞「重复注册」panic（D1）。
+	if _, ok := component.MetaOf("pkgs-test-target"); !ok {
+		component.Register("pkgs-test-target", func() component.Component { return nopPlugin{} })
+	}
 	// 测试用清单段：真实的段（mcp 的 [[server]]、hooks 的 [[hook]]）由各组件登记，本包不认识它们（审查 P1-56）。
 	RegisterSection(Section{Key: "widget", Owner: "pkgs-test-target", Label: "部件",
 		Decode: func(_ string, md toml.MetaData, prim toml.Primitive) (any, error) {

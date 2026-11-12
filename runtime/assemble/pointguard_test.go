@@ -9,11 +9,21 @@ package assemble
 import (
 	"context"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/Sevyn17/tenon/runtime/component"
 	"github.com/Sevyn17/tenon/runtime/store/memstore"
 )
+
+// pgRegisterOnce 幂等注册（照 contextmw_test.go 的既有模式）：
+// component.Register 是全局注册，-count=N 重跑同一测试会撞「重复注册」panic（D1）。
+var pgRegOnce sync.Map // name -> *sync.Once
+
+func pgRegisterOnce(name string, f component.Factory) {
+	onceAny, _ := pgRegOnce.LoadOrStore(name, &sync.Once{})
+	onceAny.(*sync.Once).Do(func() { component.Register(name, f) })
+}
 
 // wrapGuardComp 一个登记了 ToolCall 判定的组件。
 type wrapGuardComp struct{}
@@ -34,7 +44,7 @@ func (*wrapGuardComp) Start(*component.Scope) error { return nil }
 // pointGuards 适配器在登记了判定时返回非 nil，且结论正确。
 func TestPointGuardsAdapter(t *testing.T) {
 	name := t.Name() + "/wg"
-	component.Register(name, func() component.Component { return &wrapGuardComp{} })
+	pgRegisterOnce(name, func() component.Component { return &wrapGuardComp{} })
 	asm, err := component.Assemble(component.Spec{Plugins: []component.Entry{{Name: name}}})
 	if err != nil {
 		t.Fatal(err)
@@ -68,7 +78,7 @@ func TestPointGuardsNilWhenEmpty(t *testing.T) {
 // Builder.PointGuards 装进 Hub 后，Gate 真的能拦（端到端走 Build）。
 func TestPointGuardsReachHub(t *testing.T) {
 	name := t.Name() + "/wg2"
-	component.Register(name, func() component.Component { return &wrapGuardComp{} })
+	pgRegisterOnce(name, func() component.Component { return &wrapGuardComp{} })
 	asm, err := component.Assemble(component.Spec{Plugins: []component.Entry{{Name: name}}})
 	if err != nil {
 		t.Fatal(err)

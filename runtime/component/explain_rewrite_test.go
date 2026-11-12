@@ -24,7 +24,7 @@ func (c rewriteComp) Start(*Scope) error     { return nil }
 // 声明改写效果的组件在 explain 输出里带 ⚠ 标签。
 func TestExplainMarksRewrite(t *testing.T) {
 	name := t.Name() + "/rw"
-	Register(name, func() Component { return rewriteComp{name: name} })
+	registerOnce(name, func() Component { return rewriteComp{name: name} })
 	asm, err := Assemble(Spec{Plugins: []Entry{{Name: name}}})
 	if err != nil {
 		t.Fatal(err)
@@ -43,7 +43,7 @@ func TestExplainMarksRewrite(t *testing.T) {
 // 只声明 system_prompt 的也算改写（它改的是模型看到的提示词）。
 func TestExplainMarksSystemPrompt(t *testing.T) {
 	name := t.Name() + "/sp"
-	Register(name, func() Component {
+	registerOnce(name, func() Component {
 		return sysPromptComp{name: name}
 	})
 	asm, err := Assemble(Spec{Plugins: []Entry{{Name: name}}})
@@ -69,7 +69,7 @@ func (c sysPromptComp) Start(*Scope) error     { return nil }
 // 不声明改写效果的组件不带标签（不打扰）。
 func TestExplainNoMarkForPlainComponent(t *testing.T) {
 	name := t.Name() + "/plain"
-	Register(name, func() Component { return plainComp{name: name} })
+	registerOnce(name, func() Component { return plainComp{name: name} })
 	asm, err := Assemble(Spec{Plugins: []Entry{{Name: name}}})
 	if err != nil {
 		t.Fatal(err)

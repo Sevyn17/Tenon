@@ -100,7 +100,7 @@ func TestCheckConfigNormalizesInts(t *testing.T) {
 		N int     `cfg:"n"`
 		F float64 `cfg:"f"`
 	}
-	Register(name, func() Component { return metaOnly{Meta{Name: name, Config: &cfg{}}} })
+	registerOnce(name, func() Component { return metaOnly{Meta{Name: name, Config: &cfg{}}} })
 	got, err := CheckConfig(name, map[string]any{"n": float64(3), "f": float64(2)})
 	if err != nil || got["n"] != int64(3) || got["f"] != float64(2) {
 		t.Fatalf("%#v %v", got, err)

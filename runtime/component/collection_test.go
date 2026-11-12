@@ -22,7 +22,7 @@ func collPlugin(t *testing.T, f *fake) string {
 	t.Helper()
 	name := fmt.Sprintf("c%d", collSeq.Add(1))
 	f.meta.Name = name
-	Register(name, func() Component { return f })
+	registerOnce(name, func() Component { return f })
 	return name
 }
 

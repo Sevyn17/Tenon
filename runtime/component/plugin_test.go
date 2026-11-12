@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -30,12 +31,47 @@ func (f *fake) Start(sc *Scope) error {
 	return nil
 }
 
-// reg 用唯一前缀注册，避免测试间同名冲突。
+// registerOnce 幂等注册：同名已注册时跳过。
+//
+// `go test -count=2` 会重跑同一测试函数，t.Name() 不变 → 原先直接 Register 会撞
+// 「重名 panic」。Register 的 panic 是有意的安全检查（init 里重名属编程错误），
+// 所以这里在测试侧做幂等，而不是放宽 Register。
+func registerOnce(name string, f Factory) {
+	regMu.Lock()
+	_, dup := registry[name]
+	regMu.Unlock()
+	if !dup {
+		Register(name, f)
+	}
+}
+
+// 测试注册表：名字 → 当次要用的 fake 实例。
+//
+// 为什么不把 *fake 直接塞进 Register 的闭包：`go test -count=2` 会重跑同一测试函数，
+// 但 t.Name() 不变，所以注册名相同——而每次重跑产生的 *fake 是新对象（闭包捕获的
+// 局部变量如 order 也是新的）。若工厂闭包固定返回第一遍的 *fake，第二遍的断言就会
+// 看到第一遍的残留状态（D1 暴露的第二个问题：middleware_test 等一批用例失败）。
+//
+// 所以：工厂闭包只查表，每次 Setup 时用「当前」的 fake。
+var (
+	testFakes   sync.Map // full name -> *fake
+	testRegOnce sync.Map // full name -> *sync.Once
+)
+
+// reg 用唯一前缀注册，避免测试间同名冲突；-count=N 重跑安全。
 func reg(t *testing.T, name string, f *fake) string {
 	t.Helper()
 	full := t.Name() + "/" + name
 	f.meta.Name = full
-	Register(full, func() Component { return f })
+	testFakes.Store(full, f) // 每次重跑都更新成当次实例
+	onceAny, _ := testRegOnce.LoadOrStore(full, &sync.Once{})
+	onceAny.(*sync.Once).Do(func() {
+		Register(full, func() Component {
+			v, _ := testFakes.Load(full)
+			ff, _ := v.(*fake)
+			return ff
+		})
+	})
 	return full
 }
 
