@@ -18,11 +18,11 @@ import (
 	"testing"
 
 	"github.com/Sevyn17/tenon"
+	"github.com/Sevyn17/tenon/modules/storage/sqlite"
 	"github.com/Sevyn17/tenon/runtime/modelhub"
 	"github.com/Sevyn17/tenon/runtime/session"
 	"github.com/Sevyn17/tenon/runtime/store"
 	"github.com/Sevyn17/tenon/runtime/store/memstore"
-	"github.com/Sevyn17/tenon/runtime/store/sqlite"
 )
 
 const (

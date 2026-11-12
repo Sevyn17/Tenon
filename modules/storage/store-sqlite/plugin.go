@@ -13,11 +13,11 @@ import (
 	"path/filepath"
 	"sync"
 
+	"github.com/Sevyn17/tenon/modules/storage/sqlite"
 	"github.com/Sevyn17/tenon/runtime/appid"
 	"github.com/Sevyn17/tenon/runtime/assemble"
 	"github.com/Sevyn17/tenon/runtime/component"
 	"github.com/Sevyn17/tenon/runtime/store"
-	"github.com/Sevyn17/tenon/runtime/store/sqlite"
 	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 

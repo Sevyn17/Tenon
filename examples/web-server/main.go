@@ -21,7 +21,7 @@ import (
 	"path/filepath"
 
 	"github.com/Sevyn17/tenon"
-	"github.com/Sevyn17/tenon/runtime/store/sqlite"
+	"github.com/Sevyn17/tenon/modules/storage/sqlite"
 	web "github.com/Sevyn17/tenon/transport/web"
 	webui "github.com/Sevyn17/tenon/web"
 )

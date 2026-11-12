@@ -10,11 +10,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Sevyn17/tenon/modules/storage/sqlite"
 	"github.com/Sevyn17/tenon/runtime/agent"
 	"github.com/Sevyn17/tenon/runtime/host"
 	"github.com/Sevyn17/tenon/runtime/session"
 	"github.com/Sevyn17/tenon/runtime/store"
-	"github.com/Sevyn17/tenon/runtime/store/sqlite"
 	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 

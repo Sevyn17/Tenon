@@ -1,6 +1,6 @@
 // Package memstore：内存版 store.Store（T1a，测试与 tenontest 用）。
 //
-// 语义以 runtime/store/sqlite 为准，共用 runtime/store/storetest 一致性测试：
+// 语义以 modules/storage/sqlite 为准，共用 runtime/store/storetest 一致性测试：
 // 头部条件写、截断入归档、会话级单调 sync_seq、inbox 消费标记、会话键唯一、
 // 工具记录状态机、定义版本 + 哈希、提交后通知。
 // 条目、头部、外壳一律按 JSON 存取（与 sqlite 一样不与调用方共享指针）。

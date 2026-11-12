@@ -32,26 +32,9 @@ var kernelIOAllow = map[string][]string{
 	"component/profile_edit.go": {"os"},
 	"pkgs/pkgs.go":              {"os"},
 	"pkgs/ui.go":                {"os"},
-	// 第 3 步随存储实现一起搬到 adapters/storage
-	"store/sql.go":                  {"database/sql"}, // 可选能力接口签名用到 *sql.DB，随第 3 步评估
-	"store/sqlite/blobs.go":         {"os"},
-	"store/sqlite/budget.go":        {"database/sql"},
-	"store/sqlite/collection.go":    {"database/sql"},
-	"store/sqlite/db.go":            {"os", "database/sql", "modernc.org/sqlite"},
-	"store/sqlite/definitions.go":   {"database/sql"},
-	"store/sqlite/delete.go":        {"database/sql"},
-	"store/sqlite/eventlog.go":      {"database/sql"},
-	"store/sqlite/export.go":        {"database/sql"},
-	"store/sqlite/import.go":        {"os", "database/sql"},
-	"store/sqlite/interaction.go":   {"database/sql"},
-	"store/sqlite/lease.go":         {"database/sql"},
-	"store/sqlite/pending.go":       {"database/sql"},
-	"store/sqlite/replay.go":        {"database/sql"},
-	"store/sqlite/session_store.go": {"database/sql", "modernc.org/sqlite"},
-	"store/sqlite/sleep.go":         {"database/sql"},
-	"store/sqlite/stats.go":         {"database/sql"},
-	"store/sqlite/tool_results.go":  {"database/sql"},
-	"store/sqlite/trace.go":         {"database/sql"},
+	// 第 3 步评估后保留：store.SQL 的方法签名用到 *sql.DB，是类型引用不是读写。
+	// 去掉它要另造一套不带 *sql.DB 的迁移接口，而现在只有 SQLite 一个实现，没有第二个方言来证明新接口。
+	"store/sql.go": {"database/sql"},
 	// 第 5 步移出内核
 	"modelhub/helpers.go": {"net/http"},
 	"modelhub/sse.go":     {"net/http"},
