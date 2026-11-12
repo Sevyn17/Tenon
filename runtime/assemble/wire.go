@@ -122,6 +122,7 @@ func Wire(o WireOptions) (*Wired, error) {
 		UseSource:   o.UseSource,
 		Hooks:       o.Hooks,
 		Guards:      h.Guards,
+		PointGuards: pointGuards(o.Asm),
 	}
 	// 顶层会话带委派 / 领导工具；子会话与工作组成员按 child 构造（深度 1）。
 	h.New = func(id, def string) (*agent.Agent, *session.Config, error) { return rb.Build(id, def, false) }
@@ -220,4 +221,18 @@ func (m modelMW) Call(ctx context.Context, req *session.Request,
 		return session.AssistantItem{}, session.StopReason{}, err
 	}
 	return resp.Reply, resp.Stop, nil
+}
+
+// pointGuards 把 04 4.3.2 的判定区（component.WrapGuard 登记）适配成 Build 用的判定函数。
+// 没有登记任何判定时返回 nil（不装 Gate，零开销）。
+//
+// 这是 H1 修复：原来 WrapGuard 只写进 Assembly.guardsByPoint，没有任何生产代码调 EvalPoint，
+// 于是 redact 的「拒写脱敏占位符」这条防护在真实会话里永不触发。
+func pointGuards(asm *component.Assembly) func(ctx context.Context, req component.ToolCallReq) (component.Verdict, string) {
+	if !asm.HasGuards(component.PointToolCallMw) {
+		return nil
+	}
+	return func(ctx context.Context, req component.ToolCallReq) (component.Verdict, string) {
+		return component.EvalPoint(asm, component.PointToolCallMw, ctx, req)
+	}
 }

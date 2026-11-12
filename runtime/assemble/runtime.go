@@ -95,6 +95,9 @@ type Builder struct {
 	UseSource useconf.Source
 	// Guards 组件登记的守卫规则；GuardToolCall 上的规则装成每个会话工具栈里的一层守卫（toolGuard）。
 	Guards []component.GuardRule
+	// PointGuards 判定区（component.WrapGuard 登记的规则）：点位名 → 该点位的判定链。
+	// 04 4.3.2：与 Guards 并存——Guards 是内核守卫（GuardRule），PointGuards 是组件扩展点。
+	PointGuards func(ctx context.Context, req component.ToolCallReq) (component.Verdict, string)
 }
 
 // modelFor 会话用的模型：定义写了 model 就用它（经目录解析校验，写错即报错），否则用全局缺省。
@@ -184,8 +187,32 @@ func (b *Builder) Build(id, defName string, child bool) (*agent.Agent, *session.
 	for _, t := range b.ToolCallMW {
 		hub.PrependTransform(t)
 	}
-	if g, ok := toolGuard(b.Guards); ok { // 组件守卫是纯判定，与 caps 等一起并行跑
+	if g, ok := toolGuard(b.Guards); ok { // 内核守卫规则（GuardRule）是纯判定，与 caps 等一起并行跑
 		hub.AddGate(g)
+	}
+	// 判定区（04 4.3.2，component.WrapGuard 登记）：组件在 ToolCall 点位上登记的准入判定。
+	// 必须接线，否则 WrapGuard 登记了却永不执行（安全防护静默失效）。
+	if b.PointGuards != nil {
+		hub.AddGate(toolhub.Gate{Name: "component-guardpoint",
+			Check: func(ctx context.Context, cx *toolhub.Cx, args json.RawMessage) (toolhub.Verdict, string) {
+				req := component.ToolCallReq{Tool: toolNameOf(cx), Args: args}
+				if cx != nil {
+					req.SessionID = cx.SessionID
+					req.CallID = cx.CallID
+					if cx.Tool != nil {
+						req.Risk = cx.Tool.Risk
+					}
+				}
+				v, why := b.PointGuards(ctx, req)
+				switch v {
+				case component.Deny:
+					return toolhub.VerdictDeny, why
+				case component.Allow:
+					return toolhub.VerdictAllow, ""
+				default:
+					return toolhub.VerdictAbstain, ""
+				}
+			}})
 	}
 	if !hub.Authorized() { // 没装权限组件：用内核缺省授权判定者（有副作用的工具一律询问，P0-7）
 		hub.AddAuthorizer(toolhub.DefaultAuthorizer())
@@ -448,4 +475,12 @@ func (s *sessionScope) History() (int, []*session.Entry) {
 		off = 0
 	}
 	return snap.Header.CompactionBase, snap.Entries[off:]
+}
+
+// toolNameOf 取本次调用的工具名（cx.Tool 可能为空）。
+func toolNameOf(cx *toolhub.Cx) string {
+	if cx == nil || cx.Tool == nil {
+		return ""
+	}
+	return cx.Tool.Spec.Name
 }
