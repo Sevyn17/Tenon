@@ -1,6 +1,9 @@
 package permission
 
-// 插件登记（thin-kernel-plan §2.2）：配置文件（用户级 + 项目级）→ 插件配置覆盖（命令行）→ 会话 Ext 持久状态。
+// 插件登记（thin-kernel-plan §2.2）：部署期配置层（用户级 + 项目级）→ 插件配置覆盖（命令行）→ 会话 Ext 持久状态。
+// permissions.toml 不自己读文件，从 component.KeyLayers 按层取（18 方案第四节）。
+// 没注入配置来源（嵌入场景的缺省）就没有外部规则。自定义档位目录（modes/）是一整个目录，
+// 不是一份配置文件，仍由 ModeDirs 读，随第 4 步一起移出。
 // 提供 service:permission（*Sessions，同时满足 toolhub.SandboxPolicy），登记 Guard 层。
 
 import (
@@ -40,7 +43,7 @@ func init() { component.Register("permission", func() component.Component { retu
 
 func (*plug) Meta() component.Meta {
 	return component.Meta{Name: "permission", Version: "0.1.0", Default: true, Config: &PluginConfig{},
-		Requires: []string{assemble.ServiceDB, assemble.ServiceWorkdir, "?" + assemble.ServiceTrust}, Provides: []string{Service}}
+		Requires: []string{assemble.ServiceDB, assemble.ServiceWorkdir, "?" + assemble.ServiceTrust, component.KeyLayers.Maybe()}, Provides: []string{Service}}
 }
 
 func (*plug) Setup(cx *component.Registrar) error {
@@ -56,11 +59,15 @@ func (*plug) Setup(cx *component.Registrar) error {
 	if err != nil {
 		return err
 	}
+	cfgs, err := configsFromLayers(cx)
+	if err != nil {
+		return err
+	}
 	proj := root
 	if !assemble.ProjectTrusted(cx) {
-		proj = "" // 不受信项目：不读 <dir>/.tenon/permissions.toml
+		proj = "" // 不受信项目：不读项目自定义档位目录
 	}
-	s, err := Open(root, proj, cfg.ForceMode, cfg.Sandbox, store.DB)
+	s, err := open(root, proj, cfgs, cfg.ForceMode, cfg.Sandbox, store.DB)
 	if err != nil {
 		return err
 	}
@@ -162,6 +169,46 @@ func (*plug) Setup(cx *component.Registrar) error {
 
 func (*plug) Start(*component.Scope) error { return nil }
 
+// configsFromLayers 从部署期配置来源取各层的 permissions。
+// 没注入来源返回空：嵌入场景缺省不读 ~/.tenon/permissions.toml（18 方案第七节）。
+// 项目层不受信就不用——项目规则只能加严，但档位名会成为新会话缺省，不该悄悄生效。
+func configsFromLayers(cx *component.Registrar) ([]Config, error) {
+	src, ok, err := component.GetOptional(cx, component.KeyLayers)
+	if err != nil || !ok {
+		return nil, err
+	}
+	layers, err := src.Layers(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	var cs []Config
+	for _, l := range layers {
+		if l.Origin == component.OriginProject && !l.Trusted {
+			continue
+		}
+		var c Config
+		if err := component.DecodeValue(l.File("permissions"), &c); err != nil {
+			return nil, fmt.Errorf("permission: %s: %w", layerWhere(l), err)
+		}
+		if err := checkConfig(c, layerWhere(l)); err != nil {
+			return nil, err
+		}
+		cs = append(cs, c)
+	}
+	return cs, nil
+}
+
+// layerWhere 报错时指给用户看的位置；来源没给就用层名。
+func layerWhere(l component.ConfigLayer) string {
+	if l.Where != "" {
+		return l.Where
+	}
+	if l.Name != "" {
+		return l.Name
+	}
+	return l.Origin
+}
+
 // applyUse 把使用配置（map 或已解码结构体）套到 u 上。
 func applyUse(u *UseConfig, v any) {
 	switch x := v.(type) {
@@ -193,26 +240,11 @@ func ModeDirs(project string) []string {
 	return dirs
 }
 
-// Open 合并用户级与项目级 permissions.toml，读档位注册表，套用强制档位 / 固定沙箱，
+// open 用已合并的配置建会话状态：读档位注册表，套用强制档位 / 固定沙箱，
 // 会话首次用到时经 db 读取其 Ext 里的档位与会话规则（db 返回 nil 时不读）。
-// project 为空时不读项目级配置与项目档位（项目不受信）。
-func Open(root, project, force, fixedSandbox string, db func() store.Store) (*Sessions, error) {
-	var cfgs []Config
-	if h := userHome(); h != "" {
-		c, err := LoadConfig(filepath.Join(h, "permissions.toml"))
-		if err != nil {
-			return nil, err
-		}
-		cfgs = append(cfgs, c)
-	}
-	if project != "" {
-		p := filepath.Join(appid.Project(project), "permissions.toml")
-		c, err := LoadConfig(p)
-		if err != nil {
-			return nil, err
-		}
-		cfgs = append(cfgs, c)
-	}
+// project 为空时不读项目自定义档位目录（项目不受信）。
+// 配置从哪来由调用方决定：Setup 从配置层取，测试直接读文件。
+func open(root, project string, cfgs []Config, force, fixedSandbox string, db func() store.Store) (*Sessions, error) {
 	cfg := Merge(cfgs...)
 	rules, err := cfg.Parsed()
 	if err != nil {

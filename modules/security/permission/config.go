@@ -42,19 +42,24 @@ func LoadConfig(path string) (Config, error) {
 	if err := toml.Unmarshal(b, &c); err != nil {
 		return c, fmt.Errorf("permission: %s: %w", path, err)
 	}
+	return c, checkConfig(c, path)
+}
+
+// checkConfig 公共规则只能加严（§9.7）：写 allow 报错，档位名与规则字符串必须合法。
+// 文件和配置层共用这一套检查；where 是报错时指给用户看的位置。
+func checkConfig(c Config, where string) error {
 	if c.Mode != "" {
 		if err := checkID(c.Mode); err != nil {
-			return c, fmt.Errorf("permission: %s: %w", path, err)
+			return fmt.Errorf("permission: %s: %w", where, err)
 		}
 	}
-	// §9.7 公共规则只能加严：放宽一律写进有名字的档位。
 	if len(c.Allow) > 0 {
-		return c, fmt.Errorf("permission: %s：公共规则只认 deny / ask，allow 请写进自定义档位的 [items]（%s <基础档位> <新名>）", path, appid.Command("mode copy"))
+		return fmt.Errorf("permission: %s：公共规则只认 deny / ask，allow 请写进自定义档位的 [items]（%s <基础档位> <新名>）", where, appid.Command("mode copy"))
 	}
 	if _, err := c.Parsed(); err != nil {
-		return c, fmt.Errorf("permission: %s: %w", path, err)
+		return fmt.Errorf("permission: %s: %w", where, err)
 	}
-	return c, nil
+	return nil
 }
 
 // Parsed 把 allow/ask/deny 字符串转成规则。

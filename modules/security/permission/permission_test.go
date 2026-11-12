@@ -345,14 +345,18 @@ func TestProjectModesNeedApproval(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(proj, ".tenon", "permissions.toml"), []byte("mode = \"yolo\"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	s, err := Open(proj, proj, "", "", func() store.Store { return nil })
+	c, err := LoadConfig(filepath.Join(proj, ".tenon", "permissions.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := open(proj, proj, []Config{c}, "", "", func() store.Store { return nil })
 	if err != nil {
 		t.Fatal(err)
 	}
 	if m := s.Mode("s1"); m != Default {
 		t.Fatalf("未确认的项目放宽档位不应成为缺省，得 %s", m)
 	}
-	s2, err := Open(proj, proj, "", "", func() store.Store { return nil })
+	s2, err := open(proj, proj, []Config{c}, "", "", func() store.Store { return nil })
 	if err != nil {
 		t.Fatal(err)
 	}
