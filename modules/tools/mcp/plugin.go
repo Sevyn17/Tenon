@@ -1,6 +1,9 @@
 package mcp
 
 // 插件登记（thin-kernel-plan §2.2）：MCP 客户端。进程启动时连接一次，工具列表此后不变（T3）。
+// mcp.toml 不自己拼路径去读，从 component.KeyLayers 按层取（18 方案第四节）。
+// 只有项目层：连哪个服务、什么信任级别跟具体项目绑定，不加用户级（18 方案第七节）。
+// 项目层不受信不用。命令行 -config 给的显式路径仍直接读文件。插件包的 [[server]] 走 pkgs.Service。
 
 import (
 	"context"
@@ -8,7 +11,6 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"github.com/Sevyn17/tenon/runtime/appid"
 	"github.com/Sevyn17/tenon/runtime/assemble"
 	"github.com/Sevyn17/tenon/runtime/component"
 	"github.com/Sevyn17/tenon/runtime/pkgs"
@@ -30,7 +32,7 @@ func init() { component.Register("mcp", func() component.Component { return &plu
 
 func (*plug) Meta() component.Meta {
 	return component.Meta{Name: "mcp", Version: "0.1.0", Effects: []string{component.EffectTools, component.EffectExec, component.EffectNetwork}, Config: &PluginConfig{},
-		Requires: []string{assemble.ServiceWorkdir, assemble.ServiceUI, "?" + assemble.ServiceTrust, toolhub.KeySandbox.Maybe(), toolhub.KeySandboxPolicy.Maybe(), "?" + pkgs.Service}}
+		Requires: []string{assemble.ServiceUI, component.KeyLayers.Maybe(), toolhub.KeySandbox.Maybe(), toolhub.KeySandboxPolicy.Maybe(), "?" + pkgs.Service}}
 }
 
 func (p *plug) Setup(cx *component.Registrar) error {
@@ -38,21 +40,17 @@ func (p *plug) Setup(cx *component.Registrar) error {
 	if pc == nil {
 		pc = &PluginConfig{}
 	}
-	root, err := component.Use[string](cx, assemble.ServiceWorkdir)
-	if err != nil {
-		return err
-	}
+	var err error
 	if p.ui, err = component.Use[assemble.UI](cx, assemble.ServiceUI); err != nil {
 		return err
 	}
-	path := pc.Config
-	if path == "" && assemble.ProjectTrusted(cx) { // 不受信项目：不读 <dir>/.tenon/mcp.toml
-		path = filepath.Join(appid.Project(root), "mcp.toml")
-	}
-	if path != "" {
-		if p.cfg, err = LoadConfig(path); err != nil {
+	if pc.Config != "" {
+		// 显式路径（命令行 -config）：调用方点名要读这个文件，路径按原样用，不看来源。
+		if p.cfg, err = LoadConfig(pc.Config); err != nil {
 			return err
 		}
+	} else if p.cfg, err = configFromLayers(cx); err != nil {
+		return err
 	}
 	if err := p.addPackages(cx); err != nil {
 		return err
@@ -84,6 +82,45 @@ func (p *plug) Start(sc *component.Scope) error {
 	}
 	sc.OnClose(func(context.Context) error { p.src.Close(); return nil })
 	return nil
+}
+
+// configFromLayers 从部署期配置来源取 mcp 配置。
+// 只认项目层：服务的信任级别跟具体项目绑定，做成用户级会悄悄作用于所有项目（18 方案第七节）。
+// 项目层不受信不用。没注入来源返回空配置。
+func configFromLayers(cx *component.Registrar) (Config, error) {
+	src, ok, err := component.GetOptional(cx, component.KeyLayers)
+	if err != nil || !ok {
+		return Config{}, err
+	}
+	layers, err := src.Layers(context.Background())
+	if err != nil {
+		return Config{}, err
+	}
+	var out Config
+	for _, l := range layers {
+		if l.Origin != component.OriginProject || !l.Trusted {
+			continue
+		}
+		var c Config
+		if err := component.DecodeValue(l.File("mcp"), &c); err != nil {
+			return Config{}, fmt.Errorf("mcp: %s: %w", mcpWhere(l), err)
+		}
+		if err := checkServers(c.Server); err != nil {
+			return Config{}, fmt.Errorf("mcp: %s: %w", mcpWhere(l), err)
+		}
+		out.Server = append(out.Server, c.Server...)
+	}
+	return out, nil
+}
+
+func mcpWhere(l component.ConfigLayer) string {
+	if l.Where != "" {
+		return l.Where
+	}
+	if l.Name != "" {
+		return l.Name
+	}
+	return l.Origin
 }
 
 // defaultSandbox 权限插件提供的“缺省档位下某工具的沙箱”（不 import 权限插件）。
