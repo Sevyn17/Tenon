@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -295,7 +296,24 @@ func New(opts ...Option) (*App, error) {
 }
 
 // build 把选项变成装配结果。
+// build 把 config 变成可运行的 App。分四段：校验配置 → 准备装配输入 → 装配 → 收尾校验。
 func build(c *config) (*App, error) {
+	if err := checkConfig(c); err != nil {
+		return nil, err
+	}
+	in, err := prepareAssembly(c)
+	if err != nil {
+		return nil, err
+	}
+	asm, err := component.Assemble(in.spec)
+	if err != nil {
+		return nil, fmt.Errorf("tenon: 装配: %w", err)
+	}
+	return finishApp(c, in, asm)
+}
+
+// checkConfig 第一段：纯校验，不碰任何外部资源。把能提前发现的配置错误一次报全。
+func checkConfig(c *config) error {
 	var errs []error
 	if c.profile != nil {
 		if len(c.components) > 0 || len(c.without) > 0 {
@@ -309,7 +327,118 @@ func build(c *config) (*App, error) {
 			errs = append(errs, fmt.Errorf("%w: 没有组件（先选 Default() 或 Minimal()）", ErrInvalid))
 		}
 	}
-	// 预设组件名 → 去重、应用 Without、WithModels 替换 models 组。
+	if len(errs) > 0 {
+		return errors.Join(errs...)
+	}
+	return nil
+}
+
+// assemblyInput prepareAssembly 的产物：装配需要的全部输入与后面要复用的中间值。
+type assemblyInput struct {
+	workdir   string
+	bus       *bus.Bus
+	host      *host.Host
+	ui        assemble.UI
+	pui       *appapi.UI
+	handle    assemble.DBHandle
+	spec      component.Spec
+	kern      assemble.Kernel
+	appDefs   agentdef.Source
+	builtin   *agentdef.MemSource
+	toolNames []string
+}
+
+// prepareAssembly 第二段：整理组件清单、注入服务、构造 spec 与定义来源。
+func prepareAssembly(c *config) (*assemblyInput, error) {
+	names, errs, err := resolveComponents(c)
+	if err != nil {
+		return nil, err
+	}
+	kv := map[string]any{}
+	if c.profile != nil {
+		for k, v := range c.profile.Kernel {
+			kv[k] = v
+		}
+	}
+	for k, v := range c.kernel {
+		kv[k] = v
+	}
+	kern, err := assemble.ParseKernel(kv)
+	if err != nil {
+		errs = append(errs, fmt.Errorf("%w: WithKernel: %v", ErrInvalid, err))
+	}
+	if c.sleepAfter > 0 {
+		kern.SleepAfter = c.sleepAfter
+	}
+	if len(errs) > 0 {
+		return nil, errors.Join(errs...)
+	}
+	workdir, err := resolveWorkdir(c.workdir)
+	if err != nil {
+		return nil, err
+	}
+	handle, hasSQL, err := resolveStore(c.store)
+	if err != nil {
+		return nil, err
+	}
+	b := bus.New(0)
+	ui, pui, err := resolveUI(c, b)
+	if err != nil {
+		return nil, err
+	}
+	h := &host.Host{Bus: b, Workspace: c.workspace}
+	inject := buildInject(c, h, ui, workdir, handle, hasSQL)
+	appDefs, builtin, toolNames, extra, err := resolveDefinitionsAndTools(c)
+	if err != nil {
+		return nil, err
+	}
+	spec, err := buildSpec(c, names, extra, inject)
+	if err != nil {
+		return nil, err
+	}
+	return &assemblyInput{workdir: workdir, bus: b, host: h, ui: ui, pui: pui, handle: handle,
+		spec: spec, kern: kern, appDefs: appDefs, builtin: builtin, toolNames: toolNames}, nil
+}
+
+// finishApp 第四段：装配完成后取服务、拼 App、校验定义。
+func finishApp(c *config, in *assemblyInput, asm *component.Assembly) (*App, error) {
+	defs, err := asm.Definitions(agentdef.Multi(in.appDefs, agentdef.Multi(pkgs.AgentSources(c.packages)...), in.builtin))
+	if err != nil {
+		return nil, fmt.Errorf("tenon: 定义: %w", err)
+	}
+	if len(c.packages) > 0 {
+		asm.SetPackages(pkgs.Infos(context.Background(), c.packages, agentdef.Scope{Tenant: store.Tenant}))
+	}
+	st := in.handle
+	if st == nil {
+		if v, ok := asm.Value(assemble.ServiceDB); ok {
+			st, _ = v.(assemble.DBHandle)
+		}
+		if st == nil {
+			return nil, fmt.Errorf("%w: 没有存储：WithStore，或在 profile 里开一个提供 %s 的组件（如 store-sqlite）", ErrInvalid, assemble.ServiceDB)
+		}
+	}
+	app := &App{asm: asm, defs: defs, host: in.host, bus: in.bus, handle: st, own: c.store, workdir: in.workdir,
+		ui: in.ui, pui: in.pui, trusted: c.projectTrust, kern: in.kern, hooks: c.hooks, approvals: c.approvals,
+		protocol: c.protocol, readyErrs: c.readyErrs, appDefs: in.appDefs, builtinDefs: in.builtin,
+		appToolNames: in.toolNames, defaultAgent: c.defaultAgent,
+		protocolUIOn: c.protocolUI || c.ui != nil, useSource: c.useSource}
+	if v, ok := asm.Value(assemble.ServiceModelhub); ok {
+		app.models, _ = v.(*assemble.Models)
+	}
+	if app.models == nil {
+		return nil, fmt.Errorf("%w: 没有模型来源（WithModels 或 models 组件）", ErrInvalid)
+	}
+	if err := validateDefinitions(asm, defs); err != nil {
+		return nil, err
+	}
+	return app, nil
+}
+
+// resolveComponents 整理组件清单：去重、应用 Without、WithModels 替换 models 组，
+// 并处理「外部存储没有 SQL 出口时去掉 workgroup」。返回最终清单与已收集的错误。
+func resolveComponents(c *config) ([]string, []error, error) {
+	var errs []error
 	preset := make([]string, 0, len(c.components))
 	seen := map[string]bool{}
 	for _, n := range c.components {
@@ -347,81 +476,64 @@ func build(c *config) (*App, error) {
 		}
 		names = kept
 	}
-	// 应用组件：名字不能与预设重复。
-	extra := map[string]component.Component{}
-	for _, comp := range c.extra {
-		n := comp.Name()
-		if seen[n] && !off[n] {
-			errs = append(errs, fmt.Errorf("%w: 应用组件 %s 与预设组件重名", ErrInvalid, n))
-			continue
-		}
-		if _, dup := extra[n]; dup {
-			errs = append(errs, fmt.Errorf("%w: 应用组件 %s 重复", ErrInvalid, n))
-			continue
-		}
-		extra[n] = componentPlugin{c: comp}
-	}
-	// 外部存储没有 SQL 出口时，要求 SQL 的组件起不来：直接去掉并记录说明（不悄悄报错）。
-	sql, hasSQL := c.store.(store.SQL)
-	if c.profile == nil && !hasSQL {
-		kept := names[:0]
-		for _, n := range names {
-			if n == "workgroup" {
-				continue
+	if c.profile == nil {
+		if _, hasSQL := c.store.(store.SQL); !hasSQL {
+			kept := names[:0]
+			for _, n := range names {
+				if n == "workgroup" {
+					continue
+				}
+				kept = append(kept, n)
 			}
-			kept = append(kept, n)
-		}
-		names = kept
-	}
-	kv := map[string]any{} // 内核参数：profile 的 [kernel] 节在下、WithKernel 在上
-	if c.profile != nil {
-		for k, v := range c.profile.Kernel {
-			kv[k] = v
+			names = kept
 		}
 	}
-	for k, v := range c.kernel {
-		kv[k] = v
-	}
-	kern, err := assemble.ParseKernel(kv)
-	if err != nil {
-		errs = append(errs, fmt.Errorf("%w: WithKernel: %v", ErrInvalid, err))
-	}
-	if c.sleepAfter > 0 {
-		kern.SleepAfter = c.sleepAfter
-	}
-	if len(errs) > 0 {
-		return nil, errors.Join(errs...)
-	}
-	workdir := c.workdir
-	if workdir == "" {
+	return names, errs, nil
+}
+
+// resolveWorkdir 工作目录：配置给了就用，否则取进程当前目录，统一转绝对路径。
+func resolveWorkdir(dir string) (string, error) {
+	if dir == "" {
 		wd, err := os.Getwd()
 		if err != nil {
-			return nil, fmt.Errorf("%w: 取工作目录: %v", ErrInvalid, err)
+			return "", fmt.Errorf("%w: 取工作目录: %v", ErrInvalid, err)
 		}
-		workdir = wd
+		dir = wd
 	}
-	abs, err := filepath.Abs(workdir)
+	abs, err := filepath.Abs(dir)
 	if err != nil {
-		return nil, fmt.Errorf("%w: 工作目录 %s: %v", ErrInvalid, workdir, err)
+		return "", fmt.Errorf("%w: 工作目录 %s: %v", ErrInvalid, dir, err)
 	}
-	workdir = abs
-	var st assemble.DBHandle // 存储：WithStore 给的包一层；否则由组件提供（装配后取 service:db）
-	if c.store != nil {
-		st = &storeHandle{db: c.store, blobs: newMemArtifacts(c.store.Exists)}
+	return abs, nil
+}
+
+// resolveStore 存储句柄：WithStore 给的包一层；否则留 nil（由组件提供，装配后取 service:db）。
+func resolveStore(s store.Store) (assemble.DBHandle, bool, error) {
+	if s == nil {
+		return nil, false, nil
 	}
-	b := bus.New(0)
+	_, hasSQL := s.(store.SQL)
+	return &storeHandle{db: s, blobs: newMemArtifacts(s.Exists)}, hasSQL, nil
+}
+
+// resolveUI 界面出口：WithUI 与 WithProtocolUI 二选一；都没给用 nopUI。
+func resolveUI(c *config, b *bus.Bus) (assemble.UI, *appapi.UI, error) {
 	ui := c.ui
-	var pui *appapi.UI
 	switch {
 	case c.protocolUI && ui != nil:
-		return nil, fmt.Errorf("%w: WithUI 与 WithProtocolUI 只能选一个", ErrInvalid)
+		return nil, nil, fmt.Errorf("%w: WithUI 与 WithProtocolUI 只能选一个", ErrInvalid)
 	case c.protocolUI:
-		pui = appapi.NewUI(b)
-		ui = pui
+		pui := appapi.NewUI(b)
+		return pui, pui, nil
 	case ui == nil:
-		ui = nopUI{}
+		return nopUI{}, nil, nil
 	}
-	h := &host.Host{Bus: b, Workspace: c.workspace}
+	return ui, nil, nil
+}
+
+// buildInject 装配期注入的服务表：内核服务 + 应用给的 + 包/存储/模型。
+func buildInject(c *config, h *host.Host, ui assemble.UI, workdir string,
+	handle assemble.DBHandle, hasSQL bool) map[string]any {
 	inject := map[string]any{
 		assemble.ServiceHost:    h,
 		assemble.ServiceUI:      ui,
@@ -437,48 +549,71 @@ func build(c *config) (*App, error) {
 			inject[pkgs.Service] = c.packages
 		}
 	}
-	if st != nil {
-		inject[assemble.ServiceDB] = st
+	if handle != nil {
+		inject[assemble.ServiceDB] = handle
 	}
 	if hasSQL {
-		inject[component.ServiceSQL] = sql
+		if sql, ok := c.store.(store.SQL); ok {
+			inject[component.ServiceSQL] = sql
+		}
 	}
 	if c.models != nil {
 		inject[assemble.ServiceModelhub] = c.models
 	}
-	// 定义来源：组件模板（装配期登记）+ 应用来源；平台同名冲突在这里报。
-	inline := agentdef.Mem() // WithAgent 的定义
+	return inject
+}
+
+// resolveDefinitionsAndTools 定义来源（应用 / 内置）与应用工具组件。
+// 返回 appDefs、builtin、工具名、应用组件表。
+func resolveDefinitionsAndTools(c *config) (agentdef.Source, *agentdef.MemSource, []string, map[string]component.Component, error) {
+	extra := map[string]component.Component{}
+	seenPreset := map[string]bool{}
+	for _, n := range c.components {
+		seenPreset[n] = true
+	}
+	for _, comp := range c.extra {
+		n := comp.Name()
+		if seenPreset[n] && !slices.Contains(c.without, n) {
+			return nil, nil, nil, nil, fmt.Errorf("%w: 应用组件 %s 与预设组件重名", ErrInvalid, n)
+		}
+		if _, dup := extra[n]; dup {
+			return nil, nil, nil, nil, fmt.Errorf("%w: 应用组件 %s 重复", ErrInvalid, n)
+		}
+		extra[n] = componentPlugin{c: comp}
+	}
+	inline := agentdef.Mem()
 	for _, ag := range c.inline {
 		if err := putAgent(inline, ag); err != nil {
-			return nil, err
+			return nil, nil, nil, nil, err
 		}
 	}
-	builtin := agentdef.Mem() // 内置缺省智能体（Start 里按需登记）
-	// 应用显式定义：WithAgents 来源在前、内联 WithAgent 在后（同名以先给的为准，WithAgents 优先）。
+	builtin := agentdef.Mem()
 	appDefs := agentdef.Multi(append(append([]agentdef.Source(nil), c.agents...), inline)...)
-	// 插件包带的定义单独一路（T4d 审查 H2）：不算应用定义，不参与缺省智能体与单定义解析。
-	pkgDefs := agentdef.Multi(pkgs.AgentSources(c.packages)...)
-	// 应用工具（WithTools）：一个内部组件登记到 session_tools。
 	var toolNames []string
 	if len(c.tools) > 0 {
 		ts := make([]*toolhub.Tool, 0, len(c.tools))
 		seen := map[string]bool{}
 		for _, t := range c.tools {
 			if seen[t.Name()] {
-				return nil, fmt.Errorf("%w: WithTools 里工具 %s 重复", ErrInvalid, t.Name())
+				return nil, nil, nil, nil, fmt.Errorf("%w: WithTools 里工具 %s 重复", ErrInvalid, t.Name())
 			}
 			seen[t.Name()] = true
 			ts = append(ts, t.t)
 			toolNames = append(toolNames, t.Name())
 		}
 		if _, dup := extra[appToolsName]; dup {
-			return nil, fmt.Errorf("%w: 组件名 %s 是 WithTools 用的，换个名字", ErrInvalid, appToolsName)
+			return nil, nil, nil, nil, fmt.Errorf("%w: 组件名 %s 是 WithTools 用的，换个名字", ErrInvalid, appToolsName)
 		}
 		extra[appToolsName] = appTools{tools: ts}
 	}
+	return appDefs, builtin, toolNames, extra, nil
+}
+
+// buildSpec 组件装配输入：profile 模式按 profile 展开，预设模式按清单展开。
+func buildSpec(c *config, names []string, extra map[string]component.Component, inject map[string]any) (component.Spec, error) {
 	var spec component.Spec
 	inSpec := map[string]bool{}
-	if c.profile != nil { // 按 profile：开关、强制项、各组件配置（WithConfig 的键覆盖 profile 的）
+	if c.profile != nil {
 		spec = c.profile.Spec(assemble.SlotDefaults())
 		for i, e := range spec.Plugins {
 			if ov := c.configs[e.Name]; len(ov) > 0 {
@@ -493,7 +628,7 @@ func build(c *config) (*App, error) {
 			}
 			inSpec[e.Name] = true
 		}
-		for _, n := range component.Registered() { // 关着的组件也能带配置：开了才生效
+		for _, n := range component.Registered() {
 			inSpec[n] = true
 		}
 		spec.Inject, spec.Instances = inject, extra
@@ -514,54 +649,19 @@ func build(c *config) (*App, error) {
 	}
 	for n := range c.configs {
 		if !inSpec[n] {
-			return nil, fmt.Errorf("%w: WithConfig 的组件 %s 不在装配里", ErrInvalid, n)
+			return spec, fmt.Errorf("%w: WithConfig 的组件 %s 不在装配里", ErrInvalid, n)
 		}
 	}
-	if c.secrets != nil { // WithSecrets：代替缺省的 env: 解析
+	if c.secrets != nil {
 		if spec.Defaults == nil {
 			spec.Defaults = map[string]any{}
 		}
 		spec.Defaults[assemble.SlotSecrets] = assemble.Secrets(secretsFunc(c.secrets))
 	}
-	for n := range extra { // 应用组件（With、WithTools）：两种装配方式都要显式列进来，WithConfig 也作用于它们
+	for n := range extra {
 		spec.Plugins = append(spec.Plugins, component.Entry{Name: n, Config: c.configs[n]})
 	}
-	asm, err := component.Assemble(spec)
-	if err != nil {
-		return nil, fmt.Errorf("tenon: 装配: %w", err)
-	}
-	// 定义来源合成顺序既是可见性也是同名优先级：应用显式 > 包定义 > 内置缺省。
-	defs, err := asm.Definitions(agentdef.Multi(appDefs, pkgDefs, builtin))
-	if err != nil {
-		return nil, fmt.Errorf("tenon: 定义: %w", err)
-	}
-	// 包摘要填进装配结果，explain 用（T4d）。目录后来被删也不影响启动，Infos 会记说明。
-	if len(c.packages) > 0 {
-		asm.SetPackages(pkgs.Infos(context.Background(), c.packages, agentdef.Scope{Tenant: store.Tenant}))
-	}
-	if st == nil {
-		if v, ok := asm.Value(assemble.ServiceDB); ok {
-			st, _ = v.(assemble.DBHandle)
-		}
-		if st == nil {
-			return nil, fmt.Errorf("%w: 没有存储：WithStore，或在 profile 里开一个提供 %s 的组件（如 store-sqlite）", ErrInvalid, assemble.ServiceDB)
-		}
-	}
-	app := &App{asm: asm, defs: defs, host: h, bus: b, handle: st, own: c.store, workdir: workdir, ui: ui, pui: pui,
-		trusted: c.projectTrust, kern: kern, hooks: c.hooks, approvals: c.approvals, protocol: c.protocol, readyErrs: c.readyErrs,
-		appDefs: appDefs, builtinDefs: builtin, appToolNames: toolNames, defaultAgent: c.defaultAgent,
-		protocolUIOn: c.protocolUI || c.ui != nil, useSource: c.useSource}
-	if v, ok := asm.Value(assemble.ServiceModelhub); ok {
-		app.models, _ = v.(*assemble.Models)
-	}
-	if app.models == nil {
-		return nil, fmt.Errorf("%w: 没有模型来源（WithModels 或 models 组件）", ErrInvalid)
-	}
-	// 定义里的 [use.*] 在 New 期一次校验（09 9.3、03 3.6）：未知组件 / 未知字段都这时报。
-	if err := validateDefinitions(asm, defs); err != nil {
-		return nil, err
-	}
-	return app, nil
+	return spec, nil
 }
 
 // validateDefinitions 逐个可见定义校验 [use.*]（src=nil：只算定义层，租户/用户层在打开会话时叠加）。
