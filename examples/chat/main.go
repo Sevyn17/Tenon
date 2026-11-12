@@ -12,6 +12,7 @@ import (
 	"github.com/Sevyn17/tenon"
 )
 
+// OrderArgs order_query 的参数。
 type OrderArgs struct {
 	ID string `json:"id" desc:"订单号"`
 }

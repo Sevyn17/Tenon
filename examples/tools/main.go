@@ -18,10 +18,12 @@ import (
 	"github.com/Sevyn17/tenon"
 )
 
+// OrderArgs order_query 的参数。
 type OrderArgs struct {
 	ID string `json:"id" desc:"订单号"`
 }
 
+// RefundArgs refund 的参数。
 type RefundArgs struct {
 	ID     string `json:"id" desc:"订单号"`
 	Reason string `json:"reason,omitempty" desc:"退款原因"`

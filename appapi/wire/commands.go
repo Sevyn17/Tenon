@@ -30,16 +30,19 @@ const (
 
 // —— 命令参数与结果（10.4）——
 
+// ProtocolRange 客户端支持的协议版本区间。
 type ProtocolRange struct {
 	Min int `json:"min"`
 	Max int `json:"max"`
 }
 
+// HelloArgs hello：客户端自报名字与协议区间。
 type HelloArgs struct {
 	Client   string        `json:"client"`
 	Protocol ProtocolRange `json:"protocol"`
 }
 
+// HelloResult hello 的结果：协商出的协议版本、服务端身份、能力清单与运行环境。
 type HelloResult struct {
 	Protocol     int       `json:"protocol"`
 	Server       string    `json:"server"`
@@ -51,10 +54,12 @@ type HelloResult struct {
 	MaxOutput    int       `json:"max_output"` // tool_result 线上截断阈值（字节）
 }
 
+// SessionArgs 只带一个会话 id 的命令参数（session.get / stats / delete 等）。
 type SessionArgs struct {
 	Session string `json:"session"`
 }
 
+// ListArgs sessions.list 的分页与过滤条件。
 type ListArgs struct {
 	Cursor int64 `json:"cursor,omitempty"`
 	Limit  int   `json:"limit,omitempty"`
@@ -71,6 +76,7 @@ type FollowupsArgs struct {
 	Turn    uint32 `json:"turn,omitempty"`
 }
 
+// FollowupsResult session.followups 的结果：某回合之后的建议追问。
 type FollowupsResult struct {
 	Turn  uint32   `json:"turn"`
 	Items []string `json:"items"` // 最多 4 条，每条一句话
@@ -93,6 +99,7 @@ type Feedback struct {
 	At    int64  `json:"at"`
 }
 
+// FeedbackListResult feedback.list 的结果。
 type FeedbackListResult struct {
 	Items []Feedback `json:"items"`
 }
@@ -104,23 +111,27 @@ type UpdateArgs struct {
 	Pinned  *bool   `json:"pinned,omitempty"`
 }
 
+// ListResult sessions.list 的结果：一页会话与下一页游标。
 type ListResult struct {
 	Items []SessionInfo `json:"items"`
 	Next  int64         `json:"next"`
 }
 
+// CreateArgs session.create：会话 id、定义名、client_id（同 id 重发返回已建会话）。
 type CreateArgs struct {
 	Session    string `json:"session,omitempty"`
 	Definition string `json:"definition,omitempty"`
 	ClientID   string `json:"client_id,omitempty"`
 }
 
+// SubscribeArgs session.subscribe：订阅某会话的事件（可含子会话）。
 type SubscribeArgs struct {
 	Session  string `json:"session"`
 	After    *int64 `json:"after,omitempty"`
 	Children bool   `json:"children,omitempty"`
 }
 
+// EntriesArgs session.entries：按区间或尾部条数取会话条目。
 type EntriesArgs struct {
 	Session string `json:"session"`
 	From    *int   `json:"from,omitempty"`
@@ -128,6 +139,7 @@ type EntriesArgs struct {
 	Tail    int    `json:"tail,omitempty"`
 }
 
+// EntriesResult session.entries 的结果：条目数组与它们在完整日志里的位置。
 type EntriesResult struct {
 	Entries []Entry `json:"entries"`
 	Base    int     `json:"base"`
@@ -142,33 +154,39 @@ type SendArgs struct {
 	ClientID string `json:"client_id"`
 }
 
+// SendResult session.send 的结果：受理的回合与条目。
 type SendResult struct {
 	ClientID string `json:"client_id"`
 	Queued   bool   `json:"queued"`
 }
 
+// SteerArgs session.steer：回合进行中插话或改向。
 type SteerArgs struct {
 	Session  string `json:"session"`
 	Text     string `json:"text"`
 	ClientID string `json:"client_id"`
 }
 
+// RewindArgs session.rewind：把日志截断到某回合首条用户输入。
 type RewindArgs struct {
 	Session  string `json:"session"`
 	ToTurn   uint32 `json:"to_turn"`
 	IfCursor *int64 `json:"if_cursor,omitempty"`
 }
 
+// RewindResult session.rewind 的结果：截断后的日志长度与游标。
 type RewindResult struct {
 	To int `json:"to"`
 }
 
+// CompactArgs session.compact：手动触发一次上下文压缩。
 type CompactArgs struct {
 	Session  string `json:"session"`
 	Upto     *int   `json:"upto,omitempty"`
 	IfCursor *int64 `json:"if_cursor,omitempty"`
 }
 
+// CompactResult session.compact 的结果：压缩后的日志长度与摘要条目。
 type CompactResult struct {
 	Summary      string `json:"summary"`
 	Upto         int    `json:"upto"`
@@ -176,6 +194,7 @@ type CompactResult struct {
 	TokensAfter  int    `json:"tokens_after,omitempty"`
 }
 
+// ForkArgs session.fork：把当前会话分叉成新的子会话。
 type ForkArgs struct {
 	Session  string `json:"session"`
 	To       string `json:"to,omitempty"`
@@ -185,6 +204,7 @@ type ForkArgs struct {
 	ClientID string `json:"client_id,omitempty"`
 }
 
+// SettingsArgs session.settings：读会话设置。
 type SettingsArgs struct {
 	Session  string  `json:"session"`
 	MaxSteps *uint32 `json:"max_steps,omitempty"`
@@ -216,6 +236,7 @@ type WorkspaceOpenArgs struct {
 	Path string `json:"path"`
 }
 
+// WorkspaceOpenResult workspace.open 的结果：打开后的工作区路径。
 type WorkspaceOpenResult struct {
 	Workspace WorkspaceInfo `json:"workspace"`
 }
@@ -236,11 +257,13 @@ type ModelInfo struct {
 	Reason    string `json:"reason,omitempty"`
 }
 
+// ModelsListResult models.list 的结果：可用模型清单。
 type ModelsListResult struct {
 	Models  []ModelInfo `json:"models"`
 	Default string      `json:"default"` // 新会话的缺省模型
 }
 
+// SettingsResult session.settings 的结果。
 type SettingsResult struct {
 	Settings  Settings `json:"settings"`
 	Committed bool     `json:"committed"`
@@ -254,20 +277,24 @@ type Response struct {
 	Value   json.RawMessage `json:"value,omitempty"`
 }
 
+// RespondArgs interaction.respond：回答一个待应答的交互。
 type RespondArgs struct {
 	Interaction string   `json:"interaction"`
 	Response    Response `json:"response"`
 	ClientID    string   `json:"client_id,omitempty"`
 }
 
+// RespondResult interaction.respond 的结果。
 type RespondResult struct {
 	Outcome string `json:"outcome"`
 }
 
+// InteractionsResult interactions 的结果：待应答的交互清单。
 type InteractionsResult struct {
 	Items []Interaction `json:"items"`
 }
 
+// ModeInfo 一个权限档位的摘要。
 type ModeInfo struct {
 	ID      string   `json:"id"`
 	Label   string   `json:"label"`
@@ -277,26 +304,31 @@ type ModeInfo struct {
 	Widened []string `json:"widened,omitempty"`
 }
 
+// ModeListResult mode.list 的结果：可用档位清单。
 type ModeListResult struct {
 	Modes []ModeInfo `json:"modes"`
 }
 
+// ModeSetArgs mode.set：写一个档位的定义。
 type ModeSetArgs struct {
 	Session string `json:"session"`
 	Mode    string `json:"mode"`
 	Confirm bool   `json:"confirm,omitempty"`
 }
 
+// ModeSetResult mode.set 的结果。
 type ModeSetResult struct {
 	State     Mode `json:"state"`
 	Committed bool `json:"committed"`
 }
 
+// ModeShowArgs mode.show：展示某档位对各权限项的取值。
 type ModeShowArgs struct {
 	Session string `json:"session,omitempty"`
 	Mode    string `json:"mode,omitempty"`
 }
 
+// ModeItem mode.show 里一个权限项在该档位下的取值与来源。
 type ModeItem struct {
 	Item    string `json:"item"`
 	Title   string `json:"title"`
@@ -305,11 +337,13 @@ type ModeItem struct {
 	Bounded bool   `json:"bounded"`
 }
 
+// ModeShowResult mode.show 的结果：按权限项列出的取值与来源。
 type ModeShowResult struct {
 	Mode  string     `json:"mode"`
 	Items []ModeItem `json:"items"`
 }
 
+// ArtifactGetArgs artifact.get：按 id 取一段工件内容。
 type ArtifactGetArgs struct {
 	Session string `json:"session"`
 	Ref     string `json:"ref"`
@@ -317,6 +351,7 @@ type ArtifactGetArgs struct {
 	Length  int    `json:"length,omitempty"`
 }
 
+// ArtifactGetResult artifact.get 的结果：base64 内容与元信息。
 type ArtifactGetResult struct {
 	MIME   string `json:"mime"`
 	Size   int    `json:"size"`
@@ -324,24 +359,29 @@ type ArtifactGetResult struct {
 	Base64 string `json:"base64,omitempty"`
 }
 
+// ArtifactPutArgs artifact.put：写一段工件内容。
 type ArtifactPutArgs struct {
 	Session string `json:"session"`
 	MIME    string `json:"mime"`
 	Base64  string `json:"base64"`
 }
 
+// ArtifactPutResult artifact.put 的结果：工件 id。
 type ArtifactPutResult struct {
 	Ref string `json:"ref"`
 }
 
+// TraceArgs trace.explain：按 trace id 取一条调用链的说明。
 type TraceArgs struct {
 	Trace string `json:"trace"`
 }
 
+// TraceResult trace.explain 的结果。
 type TraceResult struct {
 	Text string `json:"text"`
 }
 
+// Empty 没有结果内容的命令用它占位。
 type Empty struct{}
 
 // FilesArgs workspace.files：query 为空时给最近修改的文件，否则模糊匹配路径。
@@ -350,12 +390,14 @@ type FilesArgs struct {
 	Limit int    `json:"limit,omitempty"`
 }
 
+// FileInfo 工作区里的一个文件或目录。
 type FileInfo struct {
 	Path  string `json:"path"` // 相对工作目录，/ 分隔
 	Size  int64  `json:"size"`
 	MTime int64  `json:"mtime"` // Unix 毫秒
 }
 
+// FilesResult workspace.files 的结果：目录下的一页条目。
 type FilesResult struct {
 	Files     []FileInfo `json:"files"`
 	Truncated bool       `json:"truncated"` // 工作区文件太多，只看了前一部分
@@ -372,6 +414,7 @@ type ConfigField struct {
 	Widget      string `json:"widget,omitempty"`
 }
 
+// PluginInfo 一个已装配组件的状态与配置。
 type PluginInfo struct {
 	Name    string        `json:"name"`
 	On      bool          `json:"on"`
@@ -403,6 +446,7 @@ type ProfileScope struct {
 	Reason   string `json:"reason,omitempty"`
 }
 
+// PluginsListResult plugins.list 的结果。
 type PluginsListResult struct {
 	Plugins []PluginInfo `json:"plugins"`
 	// Scopes 可写的 profile 层（没有时 plugins.set 返回 unsupported）。
@@ -421,6 +465,7 @@ type PluginsSetArgs struct {
 	IfRevision *string        `json:"if_revision,omitempty"`
 }
 
+// PluginsSetResult plugins.set 的结果：写入后的开关状态。
 type PluginsSetResult struct {
 	Revision string `json:"revision"`
 	// Restart 恒为真：插件在进程启动时装配，改动重启后生效。
@@ -428,6 +473,7 @@ type PluginsSetResult struct {
 	Plugin  PluginInfo `json:"plugin"`
 }
 
+// PackageInfo 一个已加载的插件包。
 type PackageInfo struct {
 	Name        string `json:"name"`
 	Version     string `json:"version"`
@@ -457,6 +503,7 @@ type UIData struct {
 	Args map[string]any `json:"args,omitempty"`
 }
 
+// PackagesListResult packages.list 的结果。
 type PackagesListResult struct {
 	Packages []PackageInfo `json:"packages"`
 }

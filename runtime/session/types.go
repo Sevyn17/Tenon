@@ -73,9 +73,16 @@ type EndReason struct {
 	Message string
 }
 
-func DoneReason() EndReason              { return EndReason{Kind: EndDone} }
-func CancelledReason() EndReason         { return EndReason{Kind: EndCancelled} }
-func MaxStepsReason() EndReason          { return EndReason{Kind: EndMaxSteps} }
+// DoneReason 回合正常完成。
+func DoneReason() EndReason { return EndReason{Kind: EndDone} }
+
+// CancelledReason 回合被取消（人中断或应用取消）。
+func CancelledReason() EndReason { return EndReason{Kind: EndCancelled} }
+
+// MaxStepsReason 回合因步数达到上限而结束。
+func MaxStepsReason() EndReason { return EndReason{Kind: EndMaxSteps} }
+
+// FailedReason 回合因错误失败（code 是稳定错误码）。
 func FailedReason(code string) EndReason { return EndReason{Kind: EndFailed, Code: code} }
 
 func (r EndReason) String() string {

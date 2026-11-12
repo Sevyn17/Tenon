@@ -172,6 +172,7 @@ type Choice struct {
 	Max      int  `json:"max,omitempty"`
 }
 
+// ChoiceOption 交互里的一个可选项。
 type ChoiceOption struct {
 	ID          string `json:"id"`
 	Label       string `json:"label"`
