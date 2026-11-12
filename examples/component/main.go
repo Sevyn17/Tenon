@@ -23,6 +23,7 @@ import (
 
 	"github.com/Sevyn17/tenon"
 	"github.com/Sevyn17/tenon/runtime/component"
+	"github.com/Sevyn17/tenon/runtime/store/memstore"
 )
 
 // Catalog 订单目录服务：catalog 组件提供，support 组件使用。
@@ -115,7 +116,7 @@ func main() {
 
 func run(ctx context.Context, w io.Writer, model tenon.Option) error {
 	turns := &atomic.Int32{}
-	app, err := tenon.New(tenon.Default(), tenon.WithStore(tenon.MemoryStore()),
+	app, err := tenon.New(tenon.Default(), tenon.WithStore(memstore.MemoryStore()),
 		tenon.With(catalogComponent{}, supportComponent{turns: turns}),
 		tenon.WithConfig("catalog", map[string]any{
 			"orders":  map[string]any{"A1": "已发货", "A2": "待付款"},

@@ -16,8 +16,6 @@ import (
 	"github.com/Sevyn17/tenon/runtime/assemble"
 	"github.com/Sevyn17/tenon/runtime/ext"
 	"github.com/Sevyn17/tenon/runtime/store"
-	"github.com/Sevyn17/tenon/runtime/store/memstore"
-	"github.com/Sevyn17/tenon/runtime/store/sqlite"
 	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
@@ -158,14 +156,4 @@ func (a *App) putDefaultAgent(ctx context.Context) error {
 		}
 	}
 	return putAgent(a.builtinDefs, def)
-}
-
-// —— 存储 ——
-
-// MemoryStore 内存存储（测试、演示、不需要落盘的嵌入场景）。
-func MemoryStore() Store { return memstore.New() }
-
-// SQLiteStore 打开（没有就新建）一个 SQLite 会话库；应用 Close 时关闭它。
-func SQLiteStore(path string) (Store, error) {
-	return sqlite.Open(context.Background(), path, sqlite.Options{})
 }

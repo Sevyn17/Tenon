@@ -35,7 +35,7 @@
 | 组 | 名字 |
 |---|---|
 | 建应用 | `New`、`App.Start` / `Open` / `Close`、`Default`、`Minimal`、`With`、`Without` |
-| 应用选项 | 存储 `WithStore`、`MemoryStore`、`SQLiteStore`；模型 `WithOpenAI`、`WithOpenAIResponses`、`WithAnthropic`、`WithModel`、`WithModels`、`WithModelCatalog`、`WithSecrets`、`Env`；智能体 `WithAgent`、`WithAgents`、`Dir`、`WithDefaultAgent`；工具 `WithTools`；其余 `WithWorkdir`、`WithUI`、`WithConfig`、`WithProtocolUI`、`WithSleepAfter`、`WithProjectTrust`、`WithKernel` |
+| 应用选项 | 存储 `WithStore`（具体实现按需引入：`runtime/store/memstore` 的 `MemoryStore`、`runtime/store/sqlite` 的 `SQLiteStore`，根包不带存储实现）；模型 `WithOpenAI`、`WithOpenAIResponses`、`WithAnthropic`、`WithModel`、`WithModels`、`WithModelCatalog`、`WithSecrets`、`Env`；智能体 `WithAgent`、`WithAgents`、`Dir`、`WithDefaultAgent`；工具 `WithTools`；其余 `WithWorkdir`、`WithUI`、`WithConfig`、`WithProtocolUI`、`WithSleepAfter`、`WithProjectTrust`、`WithKernel` |
 | 应用宿主选项 | `WithProfile`、`WithService`、`WithWorkspace`、`WithSessionHooks`、`WithModeApprovals`、`WithProtocolOptions`、`WithReadyErrors`；`App.Internals()`（不在承诺里，见上） |
 | 会话 | `App.Ask` / `NewSession` / `Session` / `History`、`Session.Send` / `Stream` / `History` / `Cancel`、`Event` 与 `Event*`、`Reply`、`Meta`、`WithTenant`、`WithUser` |
 | 工具 | `Func`、`Raw`、`SchemaOf`、`Tool` 的修饰方法、`CallInfoFrom` |

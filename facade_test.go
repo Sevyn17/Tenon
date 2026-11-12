@@ -12,6 +12,7 @@ import (
 	"github.com/Sevyn17/tenon"
 	"github.com/Sevyn17/tenon/appapi"
 	"github.com/Sevyn17/tenon/appapi/wire"
+	"github.com/Sevyn17/tenon/runtime/store/memstore"
 	"github.com/Sevyn17/tenon/tenontest"
 )
 
@@ -205,7 +206,7 @@ func TestConfirmWithoutUI(t *testing.T) {
 
 // WithOpenAI：类型化配端点；api_key 只收引用。
 func TestWithOpenAI(t *testing.T) {
-	app, err := tenon.New(tenon.Default(), tenon.WithStore(tenon.MemoryStore()), tenon.WithWorkdir(t.TempDir()),
+	app, err := tenon.New(tenon.Default(), tenon.WithStore(memstore.MemoryStore()), tenon.WithWorkdir(t.TempDir()),
 		tenon.WithOpenAI("https://api.deepseek.com/v1", "deepseek-chat", tenon.Env("DEEPSEEK_API_KEY")))
 	if err != nil {
 		t.Fatal(err)
@@ -220,7 +221,7 @@ func TestWithOpenAI(t *testing.T) {
 	if ms.Default != "cli/deepseek-chat" {
 		t.Fatalf("缺省模型：%q", ms.Default)
 	}
-	if _, err := tenon.New(tenon.Default(), tenon.WithStore(tenon.MemoryStore()),
+	if _, err := tenon.New(tenon.Default(), tenon.WithStore(memstore.MemoryStore()),
 		tenon.WithOpenAI("https://x/v1", "m", tenon.KeyRef("sk-明文"))); err == nil {
 		t.Fatal("明文密钥应被拒绝")
 	}

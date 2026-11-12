@@ -16,6 +16,7 @@ import (
 	"sync"
 
 	"github.com/Sevyn17/tenon"
+	"github.com/Sevyn17/tenon/runtime/store/memstore"
 )
 
 // OrderArgs order_query 的参数。
@@ -70,7 +71,7 @@ func main() {
 // run 两轮：先查订单，再退款（退款要确认，approve 回答）。
 func run(ctx context.Context, w io.Writer, approve func(tool, args string) bool, model tenon.Option) error {
 	s := &shop{refunded: map[string]bool{}}
-	app, err := tenon.New(tenon.Default(), tenon.WithStore(tenon.MemoryStore()), tenon.WithTools(s.tools()...),
+	app, err := tenon.New(tenon.Default(), tenon.WithStore(memstore.MemoryStore()), tenon.WithTools(s.tools()...),
 		tenon.WithAgent(tenon.Agent{Name: "support", Prompt: "你是售后客服。查订单、退款都要用工具。",
 			Tools: []string{"order_query", "order_refund"}}),
 		model)

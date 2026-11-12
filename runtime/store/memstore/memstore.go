@@ -151,6 +151,12 @@ type def struct {
 	at         int64
 }
 
+// MemoryStore 内存存储（测试、演示、不需要落盘的嵌入场景）。
+//
+// 等价于 New；放在实现包里而不是根包，是为了让 import tenon 不必带上任何具体存储实现
+// （docs/02 - 开发管理/18 - 内核与 I/O 分离方案 第六步 1）。
+func MemoryStore() *Store { return New() }
+
 // New 创建空存储。
 func New() *Store {
 	return &Store{sessions: map[string]*sess{}, shells: map[string][]byte{}, defs: map[string][]def{},

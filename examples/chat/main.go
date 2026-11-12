@@ -10,6 +10,7 @@ import (
 	"os"
 
 	"github.com/Sevyn17/tenon"
+	"github.com/Sevyn17/tenon/runtime/store/memstore"
 )
 
 // OrderArgs order_query 的参数。
@@ -21,7 +22,7 @@ func main() {
 	lookup := tenon.Func("order_query", "按订单号查订单状态", func(ctx context.Context, a OrderArgs) (any, error) {
 		return map[string]string{"id": a.ID, "status": "已发货，预计明天送达"}, nil
 	})
-	app, err := tenon.New(tenon.Default(), tenon.WithStore(tenon.MemoryStore()), tenon.WithTools(lookup),
+	app, err := tenon.New(tenon.Default(), tenon.WithStore(memstore.MemoryStore()), tenon.WithTools(lookup),
 		tenon.WithAgent(tenon.Agent{Name: "support", Prompt: "你是售后客服，查订单要用工具。", Tools: []string{"order_query"}}),
 		tenon.WithOpenAI(os.Getenv("TENON_BASE_URL"), os.Getenv("TENON_MODEL"), tenon.Env("TENON_API_KEY")))
 	if err != nil {

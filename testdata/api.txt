@@ -65,7 +65,6 @@ github.com/Sevyn17/tenon: method (Key) Need() string
 github.com/Sevyn17/tenon: type KeyRef string
 github.com/Sevyn17/tenon: const LocalTenant untyped string
 github.com/Sevyn17/tenon: const LocalUser untyped string
-github.com/Sevyn17/tenon: func MemoryStore() Store
 github.com/Sevyn17/tenon: type Meta map[string]any
 github.com/Sevyn17/tenon: func Minimal() Option
 github.com/Sevyn17/tenon: type ModelHub = github.com/Sevyn17/tenon/runtime/modelhub.Hub struct{OnSpan func(github.com/Sevyn17/tenon/runtime/modelhub.AttemptSpan)}
@@ -103,7 +102,6 @@ github.com/Sevyn17/tenon: method (Registrar) SetAuthorizer(a github.com/Sevyn17/
 github.com/Sevyn17/tenon: method (Registrar) Status(key string, fn github.com/Sevyn17/tenon/runtime/inject.Func) error
 github.com/Sevyn17/tenon: method (Registrar) Template(src github.com/Sevyn17/tenon/runtime/agentdef.Source)
 github.com/Sevyn17/tenon: type Reply struct{Text string; SessionID string}
-github.com/Sevyn17/tenon: func SQLiteStore(path string) (Store, error)
 github.com/Sevyn17/tenon: func SchemaOf[T any]() string
 github.com/Sevyn17/tenon: type Scope = github.com/Sevyn17/tenon/runtime/component.Scope struct{}
 github.com/Sevyn17/tenon: method (Scope) Child(name string) *github.com/Sevyn17/tenon/runtime/component.Scope

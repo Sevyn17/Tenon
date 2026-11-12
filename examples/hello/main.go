@@ -13,6 +13,7 @@ import (
 	"os"
 
 	"github.com/Sevyn17/tenon"
+	"github.com/Sevyn17/tenon/runtime/store/memstore"
 )
 
 func main() {
@@ -24,7 +25,7 @@ func main() {
 
 // run 用给定的模型选项问一句，把回答写到 w。
 func run(ctx context.Context, w io.Writer, question string, model tenon.Option) error {
-	app, err := tenon.New(tenon.Default(), tenon.WithStore(tenon.MemoryStore()), model)
+	app, err := tenon.New(tenon.Default(), tenon.WithStore(memstore.MemoryStore()), model)
 	if err != nil {
 		return err
 	}

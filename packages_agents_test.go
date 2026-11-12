@@ -14,6 +14,7 @@ import (
 	"github.com/Sevyn17/tenon/runtime/agentdef"
 	"github.com/Sevyn17/tenon/runtime/pkgs"
 	"github.com/Sevyn17/tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/store/memstore"
 	"github.com/Sevyn17/tenon/tenontest"
 )
 
@@ -128,7 +129,7 @@ func TestPackageAgentBadDefinitionFailsStartup(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
-	_, err = tenon.New(tenon.Default(), tenon.WithStore(tenon.MemoryStore()), tenon.WithWorkdir(t.TempDir()),
+	_, err = tenon.New(tenon.Default(), tenon.WithStore(memstore.MemoryStore()), tenon.WithWorkdir(t.TempDir()),
 		tenon.WithPackages([]*pkgs.Package{p}), tenontest.Model())
 	if err == nil {
 		t.Fatal("坏定义应让 New 失败（与坏清单一致的 fail-fast）")
@@ -156,7 +157,7 @@ func (c tplComponent) Setup(cx *tenon.Registrar) error {
 // 包里的平台定义与组件模板同名 → 装配（New）返回错误（验收第 5 条）。
 func TestPackageAgentTemplateConflict(t *testing.T) {
 	p := mkPkg(t, "clash", "user", "tplonly")
-	_, err := tenon.New(tenon.Default(), tenon.WithStore(tenon.MemoryStore()), tenon.WithWorkdir(t.TempDir()),
+	_, err := tenon.New(tenon.Default(), tenon.WithStore(memstore.MemoryStore()), tenon.WithWorkdir(t.TempDir()),
 		tenon.With(tplComponent{name: "tplc"}), tenon.WithPackages([]*pkgs.Package{p}), tenontest.Model())
 	if err == nil || !strings.Contains(err.Error(), "同名") {
 		t.Fatalf("包定义与组件模板同名应让 New 报错，实际 err=%v", err)

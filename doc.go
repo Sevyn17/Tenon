@@ -7,7 +7,7 @@
 // 一个应用 = 组件预设 + 存储 + 模型 + 智能体定义：
 //
 //	app, err := tenon.New(tenon.Default(),
-//	    tenon.WithStore(tenon.MemoryStore()),
+//	    tenon.WithStore(memstore.MemoryStore()),
 //	    tenon.WithOpenAI(baseURL, model, tenon.Env("TENON_API_KEY")))
 //	if err != nil { ... }
 //	if err := app.Start(ctx); err != nil { ... }
@@ -20,7 +20,8 @@
 //
 // # 应用选项
 //
-//   - 存储：[WithStore]、[MemoryStore]、[SQLiteStore]。
+//   - 存储：[WithStore]。具体实现按需引入：内存用 tenon/runtime/store/memstore 的 MemoryStore，
+//     SQLite 用 tenon/runtime/store/sqlite 的 SQLiteStore——根包不带任何具体存储实现。
 //   - 模型：[WithOpenAI]、[WithOpenAIResponses]、[WithAnthropic]、[WithModel]、[WithModels]、[WithModelCatalog]；
 //     密钥只以引用出现（[Env]），接自己的密钥库用 [WithSecrets]。
 //   - 智能体：[WithAgent]、[WithAgents]、[Dir]、[WithDefaultAgent]。不给名字时的选法见 [App.NewSession]。

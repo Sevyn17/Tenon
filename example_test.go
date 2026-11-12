@@ -9,13 +9,14 @@ import (
 	"log"
 
 	"github.com/Sevyn17/tenon"
+	"github.com/Sevyn17/tenon/runtime/store/memstore"
 	"github.com/Sevyn17/tenon/tenontest"
 )
 
 // 装配、启动、问一句。真实应用把 tenontest.Model 换成 WithOpenAI / WithAnthropic / WithModel。
 func ExampleNew() {
 	ctx := context.Background()
-	app, err := tenon.New(tenon.Default(), tenon.WithStore(tenon.MemoryStore()),
+	app, err := tenon.New(tenon.Default(), tenon.WithStore(memstore.MemoryStore()),
 		tenontest.Model(tenontest.Reply("你好，有什么可以帮你？")))
 	if err != nil {
 		log.Fatal(err)
@@ -43,7 +44,7 @@ func ExampleFunc() {
 	weather := tenon.Func("weather", "查天气", func(_ context.Context, a weatherArgs) (any, error) {
 		return map[string]string{"city": a.City, "sky": "晴"}, nil
 	})
-	app, err := tenon.New(tenon.Default(), tenon.WithStore(tenon.MemoryStore()), tenon.WithTools(weather),
+	app, err := tenon.New(tenon.Default(), tenon.WithStore(memstore.MemoryStore()), tenon.WithTools(weather),
 		tenontest.Model(
 			tenontest.Reply("").CallTool("weather", `{"city":"杭州"}`),
 			tenontest.Reply("杭州今天晴。")))
@@ -72,7 +73,7 @@ func ExampleFunc() {
 // 同一个会话多轮。
 func ExampleSession_Send() {
 	ctx := context.Background()
-	app, err := tenon.New(tenon.Default(), tenon.WithStore(tenon.MemoryStore()),
+	app, err := tenon.New(tenon.Default(), tenon.WithStore(memstore.MemoryStore()),
 		tenontest.Model(tenontest.Reply("记住了：A1。"), tenontest.Reply("你刚才说的是 A1。")))
 	if err != nil {
 		log.Fatal(err)
@@ -118,7 +119,7 @@ func (stamp) Setup(cx *tenon.Registrar) error {
 
 func ExampleComponent() {
 	ctx := context.Background()
-	app, err := tenon.New(tenon.Default(), tenon.WithStore(tenon.MemoryStore()),
+	app, err := tenon.New(tenon.Default(), tenon.WithStore(memstore.MemoryStore()),
 		tenon.With(stamp{}), tenon.WithConfig("stamp", map[string]any{"prefix": "NO."}),
 		tenontest.Model(tenontest.Reply("").CallTool("stamp", `{"id":"7"}`), tenontest.Reply("好了")))
 	if err != nil {
@@ -141,7 +142,7 @@ func ExampleComponent() {
 // 错误用 errors.Is 判断。
 func ExampleApp_Session() {
 	ctx := context.Background()
-	app, err := tenon.New(tenon.Default(), tenon.WithStore(tenon.MemoryStore()), tenontest.Model())
+	app, err := tenon.New(tenon.Default(), tenon.WithStore(memstore.MemoryStore()), tenontest.Model())
 	if err != nil {
 		log.Fatal(err)
 	}

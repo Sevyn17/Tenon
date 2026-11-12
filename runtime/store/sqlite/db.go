@@ -126,6 +126,14 @@ type Options struct {
 	SyncFull bool
 }
 
+// SQLiteStore 打开（没有就新建）一个 SQLite 会话库；应用 Close 时关闭它。
+//
+// 等价于 Open(ctx, path, Options{})；放在实现包里而不是根包，是为了让 import tenon
+// 不必编进 SQLite 驱动（docs/02 - 开发管理/18 - 内核与 I/O 分离方案 第六步 1）。
+func SQLiteStore(ctx context.Context, path string) (*DB, error) {
+	return Open(ctx, path, Options{})
+}
+
 // Open 打开（不存在则创建）并执行迁移。
 func Open(ctx context.Context, path string, opt Options) (*DB, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {

@@ -10,10 +10,13 @@ go get github.com/Sevyn17/tenon
 ```
 
 ```go
-import "github.com/Sevyn17/tenon"
+import (
+    "github.com/Sevyn17/tenon"
+    "github.com/Sevyn17/tenon/runtime/store/memstore"
+)
 
 app, err := tenon.New(tenon.Default(),
-    tenon.WithStore(tenon.MemoryStore()),
+    tenon.WithStore(memstore.MemoryStore()),
     tenon.WithTools(lookup),
     tenon.WithOpenAI(baseURL, model, tenon.Env("TENON_API_KEY")))
 ```

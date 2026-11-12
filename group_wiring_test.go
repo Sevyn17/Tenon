@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/Sevyn17/tenon"
+	"github.com/Sevyn17/tenon/runtime/store/memstore"
 	"github.com/Sevyn17/tenon/tenontest"
 )
 
@@ -47,7 +48,7 @@ func TestGroupModuleWiring(t *testing.T) {
 // WithAgent 里的两个定义可解析、群资源类型登记在装配里（配置没写错时 New 成功）。
 func TestGroupConfigAccepted(t *testing.T) {
 	_, err := tenon.New(
-		tenon.Default(), tenon.WithStore(tenon.MemoryStore()), tenon.WithWorkdir(t.TempDir()),
+		tenon.Default(), tenon.WithStore(memstore.MemoryStore()), tenon.WithWorkdir(t.TempDir()),
 		tenon.WithAgent(tenon.Agent{Name: "alice-bot"}, tenon.Agent{Name: "bob-bot"}),
 		tenon.WithConfig("group", map[string]any{
 			"manual": false,
