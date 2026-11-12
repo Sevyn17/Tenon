@@ -131,7 +131,14 @@ type Cx struct {
 	ChildSessionID string // 委派类工具填写：子会话 id（tool span 记录，预留）
 	finished       bool   // 记录已在确认路径里结清
 	started        bool   // 执行器已写 started（层短路时为 false）
-	// Approved 本调用已获人工批准且参数哈希一致（由 hub 按挂起记录设置；Guard 据此免确认，拒绝类仍重判）。
+	// Approved 本次调用已获人工批准，且参数哈希与挂起记录一致（由 hub 设置）。
+	//
+	// 语义只有一个：**跳过确认，不跳过判定**。读取方只应据此跳过「要不要问人」，
+	// 不应据此跳过 deny 判定（拒绝类仍要重判）。
+	//
+	// 2026-11-12（M5）：原来注释同时承诺「免确认」与「免重判」两种，6 个读取方实际用法不一。
+	// 已把 DefaultAuthorizer 里的 `cx.Approved` 分支删掉（它不该关心批准状态——
+	// 它的职责是「没装权限组件时的缺省判定」，而批准是确认流程的事）。
 	Approved bool
 	// Progress 报告执行中的输出（易失，只给界面看，不进结果）：text 是"最新的一段"而不是增量，
 	// 界面直接替换显示。nil = 没人看，工具不必采样。
@@ -278,7 +285,9 @@ func (h *Hub) Register(t *Tool) error {
 // 失败即收紧）。
 func DefaultAuthorizer() Authorizer {
 	return AuthorizerFunc(func(ctx context.Context, cx *Cx, args json.RawMessage) (Decision, error) {
-		if cx.Approved || cx.Tool == nil || cx.Tool.Risk == Read || cx.Tool.NoAuth {
+		// 不看 cx.Approved：批准是「确认流程」的事，本函数是「没装权限组件时的缺省判定」。
+		// 已批准的调用不会走到这里要确认（exec.go 在 Confirm 分支里先判 cx.Approved）。
+		if cx.Tool == nil || cx.Tool.Risk == Read || cx.Tool.NoAuth {
 			return Decision{Action: DecisionAllow}, nil
 		}
 		return Decision{Action: DecisionConfirm,
