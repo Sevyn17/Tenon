@@ -35,11 +35,24 @@ func (t Tool) clone() Tool {
 // Writes 标成"会改东西"：交给权限组件按档位判定（缺省档位下要确认），不和别的调用并行。
 func (t Tool) Writes() Tool { c := t.clone(); c.t.Risk = toolhub.Write; c.t.NoAuth = false; return c }
 
+// attrDestructive 与权限插件约定的工具属性名：声明本工具有破坏性
+// （见 modules/security/permission.AttrDestructive、modules/tools/mcp.AttrDestructive）。
+const attrDestructive = "destructive"
+
 // Dangerous 标成"危险"：权限插件按档位要人确认（缺省档位下也要）。
+//
+// 实现上除了 Risk（影响取消语义与 span 记录），还设 attrDestructive——
+// 权限组件的档位判定读的是这个属性（见 modules/security/permission 的 decide：
+// 「服务端声明此操作具有破坏性」→ AskUser）。只设 Risk 的话权限插件根本不看它，
+// Dangerous 就与 Writes 完全等价（2026-11-12 扫描发现，原文档承诺是假的）。
 func (t Tool) Dangerous() Tool {
 	c := t.clone()
 	c.t.Risk = toolhub.Dangerous
 	c.t.NoAuth = false
+	if c.t.Attrs == nil {
+		c.t.Attrs = map[string]any{}
+	}
+	c.t.Attrs[attrDestructive] = true
 	return c
 }
 
