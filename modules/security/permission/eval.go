@@ -27,31 +27,26 @@ func suggest(it toolhub.Item, root Mode) toolhub.ItemAction {
 	return toolhub.ActionAsk
 }
 
-// suggestLevel level 型项在内置档位 root 下的建议级别：插件建议 → 第一个级别。
-func suggestLevel(it toolhub.Item, root Mode) string {
-	if lv, ok := it.SuggestLevel[string(root)]; ok {
-		return lv
-	}
-	if len(it.Levels) > 0 {
-		return it.Levels[0]
-	}
-	return ""
-}
-
 // ItemValue 权限项在档位 d 下的取值（含回落），以及取值来源说明（mode show 用）。
 func ItemValue(d *ModeDef, it toolhub.Item) (ItemSetting, string) {
 	s, ok := d.ItemOf(it.ID)
 	src := "档位 " + d.Title
-	if !ok || (s.Default == "" && it.Type != toolhub.ItemLevel) || (it.Type == toolhub.ItemLevel && s.Level == "") {
+	// 该项「没写值」的判定：level 型看 Level，其它型看 Default。
+	// 2026-11-12（M3）：原来是三重取反 `!ok || (s.Default == "" && it.Type != ItemLevel) ||
+	// (it.Type == ItemLevel && s.Level == "")`，专门处理「同一字段三种含义」；
+	// 现在「哪种型看哪个字段」由 Item 自己回答。
+	missing := !ok || (it.NeedsLevel() && s.Level == "") || (!it.NeedsLevel() && s.Default == "")
+	if missing {
 		fb := "建议值（" + it.Owner + "）"
 		if d.Root == "" {
 			fb = "无内置基础档位，回落询问"
 		}
-		if s.Default == "" {
+		if it.NeedsLevel() {
+			if s.Level == "" {
+				s.Level = it.DefaultLevel(string(d.Root))
+			}
+		} else if s.Default == "" {
 			s.Default = suggest(it, d.Root)
-		}
-		if it.Type == toolhub.ItemLevel && s.Level == "" {
-			s.Level = suggestLevel(it, d.Root)
 		}
 		if !ok {
 			src = fb

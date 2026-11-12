@@ -126,6 +126,29 @@ func (it Item) Validate() error {
 	return nil
 }
 
+// NeedsLevel 该项的取值是不是「级别」而不是「动作」（switch / match 用动作，level 用级别）。
+//
+// 2026-11-12（M2）：原来调用方到处写 `it.Type == ItemLevel` 来选字段，
+// 与 `Item.Validate()` 里那 4 条「不应带 / 必须提供」检查是同源问题——
+// 一个 Type 决定哪些字段有意义。把判断收进这里，调用方只问语义，不再问类型。
+func (it Item) NeedsLevel() bool { return it.Type == ItemLevel }
+
+// DefaultLevel 该型在没写值时的建议级别（level 型：插件建议 → 第一个级别；其它型返回空）。
+//
+// 把「按型回落」的逻辑收进类型自身，`eval.ItemValue` 里那个三重取反条件就消失了。
+func (it Item) DefaultLevel(mode string) string {
+	if it.Type != ItemLevel {
+		return ""
+	}
+	if lv, ok := it.SuggestLevel[mode]; ok {
+		return lv
+	}
+	if len(it.Levels) > 0 {
+		return it.Levels[0]
+	}
+	return ""
+}
+
 func hasLevel(levels []string, v string) bool {
 	for _, l := range levels {
 		if l == v {
