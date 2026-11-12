@@ -370,6 +370,28 @@ type Header struct {
 	CompactionBase        int // 最近一次压缩的 upto（无压缩则为 0）；恢复默认从这里加载
 }
 
+// clearPending 清空全部「回合内暂存」字段（回合结束时用）。
+//
+// 2026-11-12（M4）：这 7 个字段的有效性依赖 Status——只在非 Idle 时有意义，
+// 是「一个结构体 + 一个判别字段」的形态。但**不拆子结构体**：Header 直接 json.Marshal
+// 存进 sessions.header 列，字段名就是数据库 schema，拆了破坏已有库的兼容性。
+//
+// 所以把散在 endTurn 里的 7 行清零收进这里，好处是：
+//
+//	· 将来加「回合内暂存」字段时，只需改这一处（不会漏清）
+//	· 「回合结束要清什么」成为一个有名字的概念
+//
+// 注意 Status 不在本方法里——调用方先做收尾动作（落暂存条目、应用配置），最后才设 Idle。
+func (h *Header) clearPending() {
+	h.Turn = nil
+	h.PendingCalls = nil
+	h.PendingInputs = nil
+	h.PendingConfig = nil
+	h.PendingCompact = nil
+	h.Redirected = false
+	h.PendingModelRequestID = ""
+}
+
 // Snapshot：快照 = 头部 + 条目窗口（M4 §3.1）。
 type Snapshot struct {
 	Header  Header

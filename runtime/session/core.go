@@ -280,13 +280,7 @@ func (c *Core) endTurn(reason EndReason, unconsumed []PendingInput) *Need {
 		_ = c.applyConfigPatch(p)
 	}
 	c.hdr.Status = StatusIdle
-	c.hdr.Turn = nil
-	c.hdr.PendingCalls = nil
-	c.hdr.PendingInputs = nil
-	c.hdr.PendingConfig = nil
-	c.hdr.PendingCompact = nil
-	c.hdr.Redirected = false
-	c.hdr.PendingModelRequestID = ""
+	c.hdr.clearPending() // 7 个「回合内暂存」字段集中清（M4：将来加字段只改一处）
 	return c.emitNeed(&Need{Kind: NeedDone, Done: &DoneNeed{Reason: reason, Turn: turn, Unconsumed: unconsumed}})
 }
 
