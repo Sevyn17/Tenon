@@ -13,10 +13,12 @@ import (
 	"time"
 
 	"github.com/Sevyn17/tenon"
+	"github.com/Sevyn17/tenon/adapters/configfile"
 	"github.com/Sevyn17/tenon/appapi"
 	compact "github.com/Sevyn17/tenon/modules/context/compact-basic"
 	"github.com/Sevyn17/tenon/modules/security/permission"
 	"github.com/Sevyn17/tenon/runtime/agent"
+	"github.com/Sevyn17/tenon/runtime/appid"
 	"github.com/Sevyn17/tenon/runtime/assemble"
 	"github.com/Sevyn17/tenon/runtime/bus"
 	"github.com/Sevyn17/tenon/runtime/component"
@@ -142,6 +144,8 @@ func Start(o StartOptions) (*Runtime, error) {
 	opts := []tenon.Option{
 		tenon.WithProfile(p), tenon.WithWorkdir(root), tenon.WithProjectTrust(trusted),
 		tenon.WithWorkspace(WorkspaceKey(root)), tenon.WithPackages(ps),
+		// 部署期配置从文件读（18 方案）：用户级 <home>，项目级 <dir>/.tenon，项目层按信任标记。
+		tenon.WithLayeredConfig(configfile.New(Home(), appid.Project(root), trusted)),
 		tenon.WithSleepAfter(o.SleepAfter), tenon.WithModeApprovals(TrustApprovals{Root: modesWD}),
 		tenon.WithReadyErrors(func(errs []error) { r.readyErrs = errs }),
 		tenon.WithProtocolOptions(func(ao *appapi.Options) {

@@ -90,6 +90,8 @@ type config struct {
 	secrets      func(string) (string, error) // WithSecrets
 	// useSource 租户/用户层使用配置来源（WithConfigSource，06 6.3）。
 	useSource useconf.Source
+	// layers 部署期配置的分层来源（WithLayeredConfig，18 方案第四节）。
+	layers component.LayeredConfig
 }
 
 // Default 标准组件预设（10 10.2）：内核、上下文、模型、工具、权限、沙箱、协作。
@@ -258,6 +260,16 @@ func WithKernel(kv map[string]any) Option {
 		for k, v := range kv {
 			c.kernel[k] = v
 		}
+		return nil
+	}
+}
+
+// WithLayeredConfig 提供部署期配置的分层来源（18 方案第四节）：hooks、permission、mcp
+// 从这里按层取配置，不再自己读文件。nil（缺省）= 没有外部配置，组件只用代码里给的值。
+// 与 WithConfigSource 不是一回事：那个是会话级 [use.*] 的租户 / 用户层。
+func WithLayeredConfig(src component.LayeredConfig) Option {
+	return func(c *config) error {
+		c.layers = src
 		return nil
 	}
 }
@@ -559,6 +571,9 @@ func buildInject(c *config, h *host.Host, ui assemble.UI, workdir string,
 	}
 	if c.models != nil {
 		inject[assemble.ServiceModelhub] = c.models
+	}
+	if c.layers != nil {
+		inject[component.KeyLayers.Name()] = c.layers
 	}
 	return inject
 }

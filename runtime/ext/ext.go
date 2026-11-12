@@ -45,6 +45,7 @@ const (
 	ServiceWorkdir  = "service:workdir"  // string：工作目录绝对路径
 	ServiceTrust    = "service:trust"    // bool：项目是否受信；未预置按受信
 	ServicePackages = "service:packages" // []*pkgs.Package：已加载的插件包
+	ServiceLayers   = "service:layers"   // component.LayeredConfig：部署期配置的分层来源
 )
 
 // 组件提供的服务。

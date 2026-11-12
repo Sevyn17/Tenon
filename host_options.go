@@ -36,11 +36,12 @@ func WithProfile(p *component.Profile) Option {
 
 // reserved 由别的选项管的服务键：用 WithService 设它们会和对应选项冲突。
 var reserved = map[string]string{
-	assemble.ServiceHost:    "（SDK 自己建宿主）",
-	assemble.ServiceUI:      "WithUI / WithProtocolUI",
-	assemble.ServiceWorkdir: "WithWorkdir",
-	assemble.ServiceTrust:   "WithProjectTrust",
-	assemble.ServiceDB:      "WithStore",
+	assemble.ServiceHost:       "（SDK 自己建宿主）",
+	assemble.ServiceUI:         "WithUI / WithProtocolUI",
+	assemble.ServiceWorkdir:    "WithWorkdir",
+	assemble.ServiceTrust:      "WithProjectTrust",
+	assemble.ServiceDB:         "WithStore",
+	component.KeyLayers.Name(): "WithLayeredConfig",
 }
 
 // WithService 给组件预置一项服务（装配时按服务键注入，如插件包列表 pkgs.Service）。

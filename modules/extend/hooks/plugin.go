@@ -1,14 +1,14 @@
 package hooks
 
-// 插件登记（thin-kernel-plan §2.2）：用户脚本钩子。用户级 ~/.tenon/hooks.toml 总是加载；
-// 项目级 <dir>/.tenon/hooks.toml 会执行仓库里写的命令，需配置 project_hooks（命令行 -project-hooks）显式开启。
+// 插件登记（thin-kernel-plan §2.2）：用户脚本钩子。
+// 配置不自己读文件：从部署期配置来源（component.KeyLayers）按层取（18 方案第四节）。
+// 用户层总是加载；项目层会执行仓库里写的命令，需 project_hooks（命令行 -project-hooks）
+// 显式开启，或项目层标了受信。插件包里的钩子走 pkgs.Service，排在两层之后。
 // 前置钩子是 Guard（排在权限之后：被拒的调用不触发钩子），后置钩子是 Transform（只处理执行成功的结果）。
 
 import (
 	"context"
-	"path/filepath"
 
-	"github.com/Sevyn17/tenon/runtime/appid"
 	"github.com/Sevyn17/tenon/runtime/assemble"
 	"github.com/Sevyn17/tenon/runtime/component"
 	"github.com/Sevyn17/tenon/runtime/pkgs"
@@ -26,7 +26,7 @@ func init() { component.Register("hooks", func() component.Component { return &p
 
 func (*plug) Meta() component.Meta {
 	return component.Meta{Name: "hooks", Version: "0.1.0", Effects: []string{component.EffectExec, component.EffectRewriteResult}, Config: &PluginConfig{},
-		Requires: []string{assemble.ServiceWorkdir, assemble.ServiceUI, "?" + assemble.ServiceTrust, toolhub.KeySandbox.Maybe(), "?" + pkgs.Service}}
+		Requires: []string{assemble.ServiceWorkdir, assemble.ServiceUI, component.KeyLayers.Maybe(), toolhub.KeySandbox.Maybe(), "?" + pkgs.Service}}
 }
 
 func (p *plug) Setup(cx *component.Registrar) error {
@@ -43,24 +43,35 @@ func (p *plug) Setup(cx *component.Registrar) error {
 		return err
 	}
 	var cs []Config
-	if home := userHome(); home != "" {
-		c, err := LoadConfig(filepath.Join(home, "hooks.toml"))
-		if err != nil {
-			return err
-		}
-		cs = append(cs, c)
+	src, ok, err := component.GetOptional(cx, component.KeyLayers)
+	if err != nil {
+		return err
 	}
-	// 项目级钩子：显式 project_hooks，或应用明确预置“项目受信”（未预置信任服务时不自动加载）。
-	trusted, known, _ := component.UseOptional[bool](cx, assemble.ServiceTrust)
-	if cfg.ProjectHooks || (known && trusted) {
-		c, err := LoadConfig(filepath.Join(appid.Project(root), "hooks.toml"))
+	if ok {
+		layers, err := src.Layers(context.Background())
 		if err != nil {
 			return err
 		}
-		for i := range c.Hook {
-			c.Hook[i].scrub = true // 项目目录来源：不给宿主密钥
+		for _, l := range layers {
+			// 项目层是执行闸门：显式 project_hooks，或该层标了受信，才加载。
+			if l.Origin == component.OriginProject && !cfg.ProjectHooks && !l.Trusted {
+				continue
+			}
+			var c Config
+			if err := component.DecodeValue(l.File("hooks"), &c); err != nil {
+				return err
+			}
+			if err := checkHooks(c.Hook); err != nil {
+				return err
+			}
+			// 脱敏跟来源走，不跟层的位置走：用户来源给宿主环境，其余来源不给密钥。
+			if l.Origin != component.OriginUser {
+				for i := range c.Hook {
+					c.Hook[i].scrub = true
+				}
+			}
+			cs = append(cs, c)
 		}
-		cs = append(cs, c)
 	}
 	// 插件包里的钩子（已由 runtime/pkgs 校验）：排在用户级、项目级之后。
 	ps, err := pkgs.From(cx)
@@ -101,6 +112,3 @@ func (p *plug) Start(sc *component.Scope) error {
 	})
 	return nil
 }
-
-// userHome 用户全局目录：应用的用户级目录（appid.Home）；取不到返回空（与权限、技能、指令组件同一约定）。
-func userHome() string { return appid.Home() }
