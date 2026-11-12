@@ -18,6 +18,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/Sevyn17/tenon/modules/internal/httpx"
 	"github.com/Sevyn17/tenon/runtime/modelhub"
 	"github.com/Sevyn17/tenon/runtime/session"
 )
@@ -36,8 +37,8 @@ func (a OpenAIChat) Stream(ctx context.Context, r *modelhub.Request, ep modelhub
 	if ep.APIKey != "" {
 		auth = "Bearer " + ep.APIKey
 	}
-	return modelhub.RunStream(func(out chan<- modelhub.Event) modelhub.Event {
-		body, f := modelhub.PostSSE(ctx, modelhub.SSERequest{Client: a.HTTP, BaseURL: ep.BaseURL,
+	return httpx.RunStream(func(out chan<- modelhub.Event) modelhub.Event {
+		body, f := httpx.PostSSE(ctx, httpx.SSERequest{Client: a.HTTP, BaseURL: ep.BaseURL,
 			Default: "https://api.openai.com/v1", Path: "/chat/completions", Body: openAIBody(r, ep),
 			Header: map[string]string{"Authorization": auth}}, nil)
 		if f != nil {

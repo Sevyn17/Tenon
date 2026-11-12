@@ -1,4 +1,4 @@
-package modelhub
+package httpx
 
 import (
 	"context"
@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/Sevyn17/tenon/runtime/modelhub"
 )
 
 // PostSSE 的失败归一（审查 P1-60：三个适配器共用）：非 200 走 HTTPFailure 并可修正，取消归 Aborted，
@@ -36,19 +38,22 @@ func TestPostSSE(t *testing.T) {
 	if string(b) != "data: {}\n\n" {
 		t.Fatalf("响应体：%q", b)
 	}
-	if _, f := PostSSE(context.Background(), req("/nope"), nil); f == nil || f.Code != CodeAuth {
+	if _, f := PostSSE(context.Background(), req("/nope"), nil); f == nil || f.Code != modelhub.CodeAuth {
 		t.Fatalf("401 应归 Auth：%+v", f)
 	}
 	fixed := false
-	if _, f := PostSSE(context.Background(), req("/busy"), func(s int, f *Failure) { fixed = s == 529; f.Code = CodeServer }); f == nil || f.Code != CodeServer || !fixed {
+	if _, f := PostSSE(context.Background(), req("/busy"), func(s int, f *modelhub.Failure) {
+		fixed = s == 529
+		f.Code = modelhub.CodeServer
+	}); f == nil || f.Code != modelhub.CodeServer || !fixed {
 		t.Fatalf("fix 应能按状态码修正：%+v", f)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, f := PostSSE(ctx, req("/ok"), nil); f == nil || f.Code != CodeAborted {
+	if _, f := PostSSE(ctx, req("/ok"), nil); f == nil || f.Code != modelhub.CodeAborted {
 		t.Fatalf("取消应归 Aborted：%+v", f)
 	}
-	if _, f := PostSSE(context.Background(), SSERequest{BaseURL: srv.URL, Body: func() {}}, nil); f == nil || f.Code != CodeInvalidRequest {
+	if _, f := PostSSE(context.Background(), SSERequest{BaseURL: srv.URL, Body: func() {}}, nil); f == nil || f.Code != modelhub.CodeInvalidRequest {
 		t.Fatalf("序列化失败应归 InvalidRequest：%+v", f)
 	}
 }

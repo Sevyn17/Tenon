@@ -20,6 +20,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/Sevyn17/tenon/modules/internal/httpx"
 	"github.com/Sevyn17/tenon/runtime/modelhub"
 	"github.com/Sevyn17/tenon/runtime/session"
 )
@@ -43,8 +44,8 @@ func (Anthropic) Protocol() string { return "anthropic-messages" }
 
 // Stream 单次流式调用。
 func (a Anthropic) Stream(ctx context.Context, r *modelhub.Request, ep modelhub.Endpoint) <-chan modelhub.Event {
-	return modelhub.RunStream(func(out chan<- modelhub.Event) modelhub.Event {
-		body, f := modelhub.PostSSE(ctx, modelhub.SSERequest{Client: a.HTTP, BaseURL: ep.BaseURL,
+	return httpx.RunStream(func(out chan<- modelhub.Event) modelhub.Event {
+		body, f := httpx.PostSSE(ctx, httpx.SSERequest{Client: a.HTTP, BaseURL: ep.BaseURL,
 			Default: "https://api.anthropic.com/v1", Path: "/messages", Body: anthropicBody(r, ep),
 			Header: map[string]string{"anthropic-version": AnthropicVersion, "x-api-key": ep.APIKey}},
 			func(status int, f *modelhub.Failure) {

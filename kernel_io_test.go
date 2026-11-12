@@ -39,9 +39,6 @@ var kernelIOAllow = map[string][]string{
 	// 第 3 步评估后保留：store.SQL 的方法签名用到 *sql.DB，是类型引用不是读写。
 	// 去掉它要另造一套不带 *sql.DB 的迁移接口，而现在只有 SQLite 一个实现，没有第二个方言来证明新接口。
 	"store/sql.go": {"database/sql"},
-	// 第 5 步移出内核
-	"modelhub/helpers.go": {"net/http"},
-	"modelhub/sse.go":     {"net/http"},
 	// 例外：沙箱接口签名只用到 exec.Cmd 类型，没有实际读写（18 方案第五节）
 	"toolhub/attrs.go": {"os/exec"},
 }
