@@ -71,7 +71,6 @@ github.com/Sevyn17/tenon: func MemoryStore() Store
 github.com/Sevyn17/tenon: type Meta map[string]any
 github.com/Sevyn17/tenon: func Minimal() Option
 github.com/Sevyn17/tenon: type ModelHub = github.com/Sevyn17/tenon/runtime/modelhub.Hub struct{OnSpan func(github.com/Sevyn17/tenon/runtime/modelhub.AttemptSpan)}
-github.com/Sevyn17/tenon: method (ModelHub) AddLayer(l github.com/Sevyn17/tenon/runtime/modelhub.Layer)
 github.com/Sevyn17/tenon: method (ModelHub) Call(ctx context.Context, r *github.com/Sevyn17/tenon/runtime/modelhub.Request) <-chan github.com/Sevyn17/tenon/runtime/modelhub.Event
 github.com/Sevyn17/tenon: method (ModelHub) Catalog() *github.com/Sevyn17/tenon/runtime/modelhub.Catalog
 github.com/Sevyn17/tenon: method (ModelHub) RegisterAdapter(a github.com/Sevyn17/tenon/runtime/modelhub.Adapter) error

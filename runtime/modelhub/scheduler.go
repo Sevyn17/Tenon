@@ -49,20 +49,11 @@ type AttemptSpan struct {
 	Usage                                             session.Usage
 }
 
-// Layer 模型调用层（Transform / Guard），由外到内。
-type Layer struct {
-	Name     string
-	Guard    bool
-	FailOpen bool // 只对 Transform 有效
-	Call     func(ctx context.Context, r *Request, next func(context.Context, *Request) <-chan Event) <-chan Event
-}
-
 // Hub 模型管理器。
 type Hub struct {
 	cat      *Catalog
 	adapters map[string]Adapter
 	secret   func(ref string) (string, error)
-	layers   []Layer
 	pol      Policy
 	OnSpan   func(AttemptSpan)
 
@@ -96,17 +87,17 @@ func (h *Hub) RegisterAdapter(a Adapter) error {
 	return nil
 }
 
-// AddLayer 追加模型层（调用方已按 plugin-manager §5.2 排序）。
-func (h *Hub) AddLayer(l Layer) { h.layers = append(h.layers, l) }
-
 // Catalog 目录。
 func (h *Hub) Catalog() *Catalog { return h.cat }
 
-// Call 会话调用：Transform → Guard → 结构校验（R2）→ 调度器 → 适配器。
+// Call 会话调用：结构校验（R2）→ 调度器 → 适配器。
 // alias 取 r.Req.Model。返回的通道恰好有一个终止事件。
+//
+// 04 4.3.2：原来这里有「模型层」（modelhub.Layer，带 Guard/FailOpen 两个语义重载字段），
+// 但生产代码从未登记过任何层——ModelCall 点位的中间件（component.Wrap）已经承担了
+// 「包住一次模型请求」的全部职责。所以层机制删除（死代码 + 与 toolhub.Layer 同一反模式）。
 func (h *Hub) Call(ctx context.Context, r *Request) <-chan Event {
-	base := r.Req
-	return h.chain(0, base)(ctx, r)
+	return h.schedule(ctx, r)
 }
 
 // SideCall 侧调用：不经层，直进调度器，不发增量（只返回终止事件）。取消随 ctx（§4.4）。
@@ -126,40 +117,10 @@ func (h *Hub) SideCall(ctx context.Context, alias string, req session.Request) (
 	return done, fail
 }
 
-func (h *Hub) chain(i int, base session.Request) func(context.Context, *Request) <-chan Event {
-	if i >= len(h.layers) {
-		return func(ctx context.Context, r *Request) <-chan Event {
-			// 没有模型层时请求原样到这里，前缀必然相同：不做逐条 JSON 比对（审查 P1-39：原先每次调模型都把
-			// 整段历史序列化两遍，生产上没有模型层，纯空转）。
-			if len(h.layers) == 0 {
-				return h.schedule(ctx, r)
-			}
-			if err := checkShape(base, r.Req); err != nil {
-				return failNow(&Failure{Code: CodeShape, Message: err.Error()})
-			}
-			return h.schedule(ctx, r)
-		}
-	}
-	l := h.layers[i]
-	inner := h.chain(i+1, base)
-	return func(ctx context.Context, r *Request) (out <-chan Event) {
-		defer func() {
-			if p := recover(); p != nil {
-				if l.Guard || !l.FailOpen {
-					out = failNow(&Failure{Code: CodeShape, Message: fmt.Sprintf("层 %s 失败：%v", l.Name, p)})
-					return
-				}
-				out = inner(ctx, r)
-			}
-		}()
-		return l.Call(ctx, r, inner)
-	}
-}
-
-// checkShape 结构校验入口（测试可替换以计数）。
-var checkShape = CheckShape
-
 // CheckShape R2：最终请求的消息以基础请求为前缀（逐字节），工具是子集且定义不变。
+//
+// 04 4.3.2：原挂在 modelhub.Layer 链上；层删除后改由 agent 在 ModelCall 中间件链**外面**调用
+// （中间件能改 Request，包括偷偷放宽工具集，所以这个校验必须保留）。
 func CheckShape(base, final session.Request) error {
 	if len(final.Messages) < len(base.Messages) {
 		return fmt.Errorf("消息被删减（%d < %d）", len(final.Messages), len(base.Messages))

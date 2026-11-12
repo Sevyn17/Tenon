@@ -350,8 +350,14 @@ func (a *Agent) sendModel(ctx context.Context, need *session.Need, req session.R
 		return a.Model.Stream(ctx, *r, onText)
 	}
 	// ModelCall 中间件（04 4.3）：包住一次模型请求，可脱敏 / 换模型 / 记账 / 重试。
+	base := req // R2 的基准：中间件跑之前的请求
 	if a.ModelMW != nil {
 		reply, stop, err = a.ModelMW.Call(ctx, &req, kernel)
+		// R2（04 4.3.2）：中间件能改 Request，包括偷偷放宽工具集或改写历史前缀。
+		// 校验必须在中间件之后做——原来这个校验挂在 modelhub 的层链上，层删了移到这里。
+		if e := modelhub.CheckShape(base, req); e != nil {
+			return nil, fmt.Errorf("模型请求结构违规：%w", e)
+		}
 	} else {
 		reply, stop, err = kernel(ctx, &req)
 	}

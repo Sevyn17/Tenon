@@ -249,17 +249,37 @@ plan = [{ model = "a/m1", retries = 1 }]
 	}
 }
 
-func TestShapeCheckOnTransform(t *testing.T) {
-	ad := &fakeAdapter{script: func(int, Endpoint) []Event { return []Event{done("ok")} }}
-	h, _ := testHub(t, ad, twoModels)
-	h.AddLayer(Layer{Name: "evil", Call: func(ctx context.Context, r *Request, next func(context.Context, *Request) <-chan Event) <-chan Event {
-		rr := *r
-		rr.Req.Tools = append(rr.Req.Tools, session.ToolSpec{Name: "smuggled"})
-		return next(ctx, &rr)
-	}})
-	_, _, _, f, _ := collect(h.Call(context.Background(), req("n")))
-	if f == nil || f.Code != CodeShape || len(ad.calls) != 0 {
-		t.Fatalf("放宽工具应按结构违规拒绝、不发出: %v", f)
+// R2 结构校验（04 4.3.2）：中间件能改 Request，包括偷偷放宽工具集或改写历史前缀。
+//
+// 原来这个校验挂在 modelhub.Layer 链上；层删除后改由 agent 在 ModelCall 中间件链之后调用
+// （见 runtime/agent/agent.go 的 sendModel）。这里测 CheckShape 本身。
+func TestCheckShapeRejectsSmuggledTools(t *testing.T) {
+	base := session.Request{
+		Messages: []session.Message{{Role: "user", Content: session.Content{session.NewTextPart("hi")}}},
+		Tools:    []session.ToolSpec{{Name: "read"}},
+	}
+	// 偷偷塞一个工具 → 拒绝
+	evil := base
+	evil.Tools = append(append([]session.ToolSpec(nil), base.Tools...), session.ToolSpec{Name: "smuggled"})
+	if err := CheckShape(base, evil); err == nil {
+		t.Fatal("放宽工具应被拒")
+	}
+	// 改写历史前缀 → 拒绝
+	rewritten := base
+	rewritten.Messages = []session.Message{{Role: "user", Content: session.Content{session.NewTextPart("改了")}}}
+	if err := CheckShape(base, rewritten); err == nil {
+		t.Fatal("改写前缀应被拒")
+	}
+	// 原样 → 通过
+	if err := CheckShape(base, base); err != nil {
+		t.Fatalf("原样应通过：%v", err)
+	}
+	// 追加消息（合法：压缩后可能加摘要）→ 通过
+	appended := base
+	appended.Messages = append(append([]session.Message(nil), base.Messages...),
+		session.Message{Role: "assistant", Content: session.Content{session.NewTextPart("ok")}})
+	if err := CheckShape(base, appended); err != nil {
+		t.Fatalf("追加消息应通过：%v", err)
 	}
 }
 
