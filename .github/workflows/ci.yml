@@ -140,14 +140,31 @@ jobs:
           done
           exit 1
 
+      # 与 go test 同样的失败处理：先抓摘要，再对失败包 -v 重跑（D3/D4：偶发失败必须留完整断言消息）。
       - name: go test -race
         run: |
-          go test -race -count=1 \
-            ./runtime/host/ ./runtime/store/... ./runtime/session/ ./runtime/toolhub/ \
+          set -o pipefail
+          PKGS="./runtime/host/ ./runtime/store/... ./runtime/session/ ./runtime/toolhub/ \
             ./runtime/agent/ ./runtime/bus/ ./runtime/inject/ \
             ./modules/security/... ./modules/collab/... ./modules/extend/... \
+            ./modules/tools/... \
             ./runtime/extproc/ ./runtime/component/ ./runtime/callctx/ \
-            ./tenontest/ ./apphost/ ./transport/...
+            ./tenontest/ ./apphost/ ./transport/..."
+          if go test -race -count=1 $PKGS 2>&1 | tee /tmp/race.log; then
+            exit 0
+          fi
+          echo "=== 失败摘要 ==="
+          grep -E '^(FAIL|--- FAIL|panic)|\.go:[0-9]+:' /tmp/race.log | head -80 | while IFS= read -r line; do
+            echo "::error::$line"
+          done
+          echo "=== 失败包逐个 -v 重跑 ==="
+          grep -oP '^FAIL\s+\K\S+' /tmp/race.log | sort -u | while read -r pkg; do
+            echo "===== $pkg"
+            go test -race -count=1 -v "$pkg" 2>&1 | grep -E '^(=== RUN|--- FAIL|FAIL|panic)|\.go:[0-9]+:' | tail -60 | while IFS= read -r line; do
+              echo "::error::$pkg :: $line"
+            done
+          done
+          exit 1
 
   web:
     name: 前端（typecheck / test）
