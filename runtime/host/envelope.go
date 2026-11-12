@@ -265,7 +265,7 @@ func (h *Host) deliverAgentID(ctx context.Context, env mail.Envelope, bizMeta js
 		}
 	}
 	// 新建会话前守卫（08 8.1）：可联系名单、所属树深度等由组件规则表达。
-	if v, why := h.evalGuard(component.GuardRequest{Point: component.GuardSessionOpen, Envelope: &env, Agent: env.To.ID}); v == component.Deny {
+	if v, why := h.evalGuard(ctx, component.GuardRequest{Point: component.GuardSessionOpen, Envelope: &env, Agent: env.To.ID}); v == component.Deny {
 		h.guardDenied(env, "", why, "agent", env.To.ID)
 		return "", fmt.Errorf("%w: %s", ErrNotAllowed, why)
 	}
@@ -290,7 +290,7 @@ func (h *Host) deliverAgentID(ctx context.Context, env mail.Envelope, bizMeta js
 	meta := store.SessionMeta{ID: id, AgentID: env.To.ID, Creator: creator, SessionKey: env.Key, Origin: "agent", Meta: bizMeta, Workspace: h.Workspace}
 	probe := env
 	probe.To = mail.Address{Kind: mail.AddrSession, ID: id}
-	verdict, reason := h.evalGuard(component.GuardRequest{Point: component.GuardDeliver, Envelope: &probe})
+	verdict, reason := h.evalGuard(ctx, component.GuardRequest{Point: component.GuardDeliver, Envelope: &probe})
 	if verdict == component.Deny {
 		h.guardDenied(env, "", reason)
 		return "", fmt.Errorf("%w: %s", ErrNotAllowed, reason)
@@ -384,7 +384,7 @@ func (h *Host) deliverResident(ctx context.Context, env mail.Envelope, bizMeta j
 		return "", err
 	}
 	// 建会话前守卫（与 deliverAgentID 同）。
-	if v, why := h.evalGuard(component.GuardRequest{Point: component.GuardSessionOpen, Envelope: &env, Agent: env.To.ID}); v == component.Deny {
+	if v, why := h.evalGuard(ctx, component.GuardRequest{Point: component.GuardSessionOpen, Envelope: &env, Agent: env.To.ID}); v == component.Deny {
 		h.guardDenied(env, "", why, "agent", env.To.ID)
 		return "", fmt.Errorf("%w: %s", ErrNotAllowed, why)
 	}
@@ -392,7 +392,7 @@ func (h *Host) deliverResident(ctx context.Context, env mail.Envelope, bizMeta j
 		SessionKey: "", Origin: "agent", Meta: bizMeta, Workspace: h.Workspace}
 	probe := env
 	probe.To = mail.Address{Kind: mail.AddrSession, ID: id}
-	verdict, reason := h.evalGuard(component.GuardRequest{Point: component.GuardDeliver, Envelope: &probe})
+	verdict, reason := h.evalGuard(ctx, component.GuardRequest{Point: component.GuardDeliver, Envelope: &probe})
 	if verdict == component.Deny {
 		h.guardDenied(env, "", reason)
 		return "", fmt.Errorf("%w: %s", ErrNotAllowed, reason)
@@ -444,7 +444,7 @@ func (h *Host) deliverSession(ctx context.Context, env mail.Envelope) error {
 	}
 	// 联系名单（08 D4）：默认只放开创建者本人、登记组件、以及带 corr 的回信；
 	// 组件登记的 Allow 规则只能放开这条「往 session: 投递」的缺省限制（D4）。
-	verdict, reason := h.evalGuard(component.GuardRequest{Point: component.GuardDeliver, Envelope: &env})
+	verdict, reason := h.evalGuard(ctx, component.GuardRequest{Point: component.GuardDeliver, Envelope: &env})
 	if verdict == component.Deny {
 		h.guardDenied(env, id, reason)
 		return fmt.Errorf("%w: %s", ErrNotAllowed, reason)
@@ -971,8 +971,22 @@ var ErrUnsupportedAddr = errors.New("host: 不支持投递到该地址")
 // evalGuard 跑完该点位的全部守卫规则并合并结论（04 4.2、08 D4）：任一条 Deny 即拒绝；全部 Abstain 走内核缺省；
 // Allow 只放开「往 session: 投递」的缺省限制，放不开联系名单、预算、跳数和租户边界。
 // h.Guards 由装配期从组件登记取来（component.Assembly.GuardRules），装配结束后只读。
-func (h *Host) evalGuard(req component.GuardRequest) (component.Verdict, string) {
-	return component.EvalGuards(h.Guards, req)
+// evalGuard 跑某个点位上的判定区（04 4.3.2）。没装判定时恒 Abstain。
+//
+// 2026-11-12：原来走 component.EvalGuards(h.Guards, ...)，而 h.Guards 恒空（cx.Guard 生产零登记）；
+// 现在判定统一走 WrapGuard 登记的判定区，装配层按点位注入。
+func (h *Host) evalGuard(ctx context.Context, req component.GuardRequest) (component.Verdict, string) {
+	var fn func(context.Context, component.GuardRequest) (component.Verdict, string)
+	switch req.Point {
+	case component.GuardDeliver:
+		fn = h.GuardDeliver
+	case component.GuardSessionOpen:
+		fn = h.GuardSessionOpen
+	}
+	if fn == nil {
+		return component.Abstain, ""
+	}
+	return fn(ctx, req)
 }
 
 // recordTrace 记一条 trace 事件（08 8.7）：记录失败不影响投递本身。渲染在 appapi.RenderTrace。

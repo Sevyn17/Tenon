@@ -310,8 +310,6 @@ type Assembly struct {
 	agentSchemas map[string]useconf.Schema
 	// templates 组件登记的内置定义模板（03 3.5、计划/01 T1b-2c）；装配结束后只读。
 	templates []agentdef.Template
-	// guards 组件登记的守卫规则（04 4.2、08 D4）；装配结束后只读。
-	guards []GuardRule
 	// middleware 洋葱式中间件（04 4.3）：点位名 → 按登记顺序的中间件。
 	middleware map[string][]mwReg
 	// guardsByPoint 判定区规则（04 4.3.1）：点位名 → 按登记顺序的判定。

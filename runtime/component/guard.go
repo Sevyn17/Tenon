@@ -1,18 +1,18 @@
 package component
 
-import (
-	"encoding/json"
+import "github.com/Sevyn17/tenon/runtime/mail"
 
-	"github.com/Sevyn17/tenon/runtime/mail"
-)
-
-// 守卫规则（04 4.2、08 8.1 / D4）。组件在 Setup 里通过 Registrar.Guard 登记，
-// 守卫在内核里、紧贴投递和调用执行，中间件和模型绕不过去。
+// 判定结论与点位（04 4.2 / 4.3.2）。
 //
-// 合并规则：任一条 Deny 即拒绝；全部 Abstain 走内核缺省；Allow 只放开
-// 「往 session: 投递」的缺省限制，放不开联系名单、预算、跳数和租户边界。
+// 2026-11-12 复核：原 `GuardRule` / `GuardRequest` / `EvalGuards` / `Registrar.Guard` 整套删除——
+// 核查发现 `cx.Guard()` 在生产代码里**零登记**（只有 examples 与测试），所以
+// `GuardRules()` 恒空 → `Host.Guards` 恒空 → `evalGuard` 恒 Abstain → `toolGuard` 恒 false。
+// 整套机制空转，且与 `WrapGuard` 判定区做同一件事。
+//
+// 现在六个点位的判定统一走 `WrapGuard` + `EvalPoint`（见 guardpoint.go）。
+// 本文件只留两个共用类型：`Verdict`（结论）与 `GuardPoint`（点位标识）。
 
-// Verdict 一条规则的结论。
+// Verdict 一条判定的结论。
 type Verdict int
 
 const (
@@ -35,7 +35,10 @@ func (v Verdict) String() string {
 	}
 }
 
-// GuardPoint 守卫点位（与 04 4.3 的中间件点位同名）。
+// GuardPoint 判定点位（与 04 4.3 的中间件点位同名）。
+//
+// 2026-11-12：删掉 `GuardTurn` / `GuardModelCall`（零调用点）。
+// 剩下的 `GuardDeliver` / `GuardSessionOpen` 由 Host 用来跑该点位的判定区。
 type GuardPoint int
 
 const (
@@ -43,12 +46,6 @@ const (
 	GuardDeliver GuardPoint = iota
 	// GuardSessionOpen 新建会话前。
 	GuardSessionOpen
-	// GuardTurn 一轮开始或恢复前。
-	GuardTurn
-	// GuardModelCall 调模型前。
-	GuardModelCall
-	// GuardToolCall 调工具前。
-	GuardToolCall
 )
 
 func (p GuardPoint) String() string {
@@ -57,82 +54,18 @@ func (p GuardPoint) String() string {
 		return "deliver"
 	case GuardSessionOpen:
 		return "session_open"
-	case GuardTurn:
-		return "turn"
-	case GuardModelCall:
-		return "model_call"
-	case GuardToolCall:
-		return "tool_call"
 	default:
 		return "unknown"
 	}
 }
 
-// Risk 工具风险（04 4.2）。
-type Risk int
-
-const (
-	RiskLow Risk = iota
-	// RiskHigh external 触发时要人工确认（08 8.5）。
-	RiskHigh
-)
-
-// GuardRequest 一次守卫检查携带的信息（哪些字段有值由 Point 决定）。
+// GuardRequest 一次判定携带的信息（哪些字段有值由点位决定）。
+//
+// 2026-11-12：原 `GuardRule` / `EvalGuards` / `Registrar.Guard` 删除（生产零登记，整套空转）；
+// 但 `GuardRequest` 保留——它是 `Host` 跑投递/建会话判定区时传给 `EvalPoint` 的请求体，
+// 与 `WrapGuard` 的 `GuardFn[Req]` 是同一套。
 type GuardRequest struct {
 	Point    GuardPoint
 	Envelope *mail.Envelope // GuardDeliver、GuardSessionOpen 时有值
 	Agent    string         // 目标定义名，GuardSessionOpen 时有值
-	Tool     string         // GuardToolCall 时有值
-	Args     json.RawMessage
-	Risk     Risk   // GuardToolCall 时为工具声明的风险
-	Model    string // GuardModelCall 时有值
-}
-
-// GuardRule 一条守卫规则。Check 返回 (结论, 拒绝原因)；原因进 guard.denied 事件。
-type GuardRule struct {
-	Name  string
-	On    GuardPoint
-	Check func(req GuardRequest) (Verdict, string)
-}
-
-// Guard 向守卫登记规则。规则只能来自编译进程序的组件（04 4.8）。
-func (cx *Registrar) Guard(g GuardRule) {
-	name := g.Name
-	if name == "" {
-		name = cx.plugin
-	}
-	cx.asm.guards = append(cx.asm.guards, GuardRule{Name: name, On: g.On, Check: g.Check})
-	cx.asm.points = append(cx.asm.points, Registration{Plugin: cx.plugin, Point: "guard", Name: name})
-}
-
-// GuardRules 已登记的守卫规则（按装配顺序）。
-func (a *Assembly) GuardRules() []GuardRule {
-	out := make([]GuardRule, len(a.guards))
-	copy(out, a.guards)
-	return out
-}
-
-// EvalGuards 跑完 req.Point 上的全部规则并合并结论（04 4.2、08 D4）：任一条 Deny 即拒绝（原因为空时用规则名）；
-// 有 Allow 结论为 Allow；全部 Abstain 为 Abstain，由调用方走内核缺省。
-func EvalGuards(rules []GuardRule, req GuardRequest) (Verdict, string) {
-	verdict, reason := Abstain, ""
-	for _, r := range rules {
-		if r.On != req.Point || r.Check == nil {
-			continue
-		}
-		v, why := r.Check(req)
-		switch v {
-		case Deny:
-			if why == "" {
-				why = r.Name
-			}
-			return Deny, why
-		case Allow:
-			verdict = Allow
-			if why != "" {
-				reason = why
-			}
-		}
-	}
-	return verdict, reason
 }

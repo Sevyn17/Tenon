@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/Sevyn17/tenon"
+	"github.com/Sevyn17/tenon/runtime/component"
 	"github.com/Sevyn17/tenon/tenontest"
 )
 
@@ -54,12 +55,13 @@ func (user) Setup(cx *tenon.Registrar) error {
 	greet := tenon.Func("greet", "打招呼", func(_ context.Context, a args) (any, error) { return g.Greet(a.Name), nil })
 	forbidden := tenon.Func("forbidden", "不让用", func(context.Context, args) (any, error) { return "不该到这", nil })
 	tenon.RegisterAt(cx, tenon.PointTools, "greet-user", tenon.ToolsOf(60, greet, forbidden))
-	cx.Guard(tenon.GuardRule{Name: "no-forbidden", On: tenon.GuardToolCall, Check: func(r tenon.GuardRequest) (tenon.Verdict, string) {
-		if r.Tool == "forbidden" {
-			return tenon.Deny, "测试里禁用"
-		}
-		return tenon.Abstain, ""
-	}})
+	component.WrapGuard(cx, component.ToolCall, "no-forbidden",
+		func(ctx context.Context, req component.ToolCallReq) (component.Verdict, string) {
+			if req.Tool == "forbidden" {
+				return component.Deny, "测试里禁用"
+			}
+			return component.Abstain, ""
+		})
 	return nil
 }
 func (user) Start(*tenon.Scope) error { return nil }

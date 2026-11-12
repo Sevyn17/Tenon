@@ -22,6 +22,7 @@ import (
 	"sync/atomic"
 
 	"github.com/Sevyn17/tenon"
+	"github.com/Sevyn17/tenon/runtime/component"
 )
 
 // Catalog 订单目录服务：catalog 组件提供，support 组件使用。
@@ -53,15 +54,18 @@ func (catalogComponent) Setup(cx *tenon.Registrar) error {
 	if err := tenon.Provide[Catalog](cx, catalogKey, mapCatalog(c.Orders)); err != nil {
 		return err
 	}
-	// 守卫：黑名单里的订单不让查。被拒时失败结果交给模型，这一轮继续。
-	cx.Guard(tenon.GuardRule{Name: "blocked-orders", On: tenon.GuardToolCall,
-		Check: func(r tenon.GuardRequest) (tenon.Verdict, string) {
+	// 判定：黑名单里的订单不让查。被拒时失败结果交给模型，这一轮继续。
+	//
+	// 2026-11-12：原 cx.Guard(GuardRule{...}) 删除（生产零登记，整套机制空转），
+	// 统一走 component.WrapGuard 判定区。示例直接用 component 包（框架自己的示例）。
+	component.WrapGuard(cx, component.ToolCall, "blocked-orders",
+		func(ctx context.Context, req component.ToolCallReq) (component.Verdict, string) {
 			var a struct{ ID string }
-			if r.Tool == "order_query" && json.Unmarshal(r.Args, &a) == nil && slices.Contains(c.Blocked, a.ID) {
-				return tenon.Deny, "订单 " + a.ID + " 已冻结"
+			if req.Tool == "order_query" && json.Unmarshal(req.Args, &a) == nil && slices.Contains(c.Blocked, a.ID) {
+				return component.Deny, "订单 " + a.ID + " 已冻结"
 			}
-			return tenon.Abstain, ""
-		}})
+			return component.Abstain, ""
+		})
 	return nil
 }
 func (catalogComponent) Start(*tenon.Scope) error { return nil }

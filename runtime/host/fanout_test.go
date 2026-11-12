@@ -31,13 +31,14 @@ func (p *fanoutPlug) Setup(cx *component.Registrar) error {
 		return err
 	}
 	// 只放行"本组件转发、via 为本组件"的信封。名字缺省时记成本组件名。
-	cx.Guard(component.GuardRule{On: component.GuardDeliver, Check: func(req component.GuardRequest) (component.Verdict, string) {
-		env := req.Envelope
-		if env != nil && env.Via == cx.Plugin() && env.Origin == mail.OriginExternal {
-			return component.Allow, ""
-		}
-		return component.Abstain, ""
-	}})
+	component.WrapGuard(cx, component.Deliver, "board",
+		func(ctx context.Context, req component.GuardRequest) (component.Verdict, string) {
+			env := req.Envelope
+			if env != nil && env.Via == cx.Plugin() && env.Origin == mail.OriginExternal {
+				return component.Allow, ""
+			}
+			return component.Abstain, ""
+		})
 	p.mailer = cx.Mailer()
 	return nil
 }
@@ -92,7 +93,7 @@ func TestFanoutAcceptance(t *testing.T) {
 		t.Fatal(err)
 	}
 	// 先不接放行规则：u2 不是创建者，匹配的订阅者也收不到。
-	r.h.Guards = nil
+	r.h.GuardDeliver = nil
 
 	rec := component.ResourceRecord{
 		Resource: "group:g1", Seq: 1,
@@ -141,11 +142,15 @@ func TestFanoutAcceptance(t *testing.T) {
 	}
 
 	// 接上组件经 Registrar.Guard 登记的规则，再投一次。
-	rules := asm.GuardRules()
-	if len(rules) != 1 || rules[0].Name != "board" {
-		t.Fatalf("规则应记成本组件名：%+v", rules)
+	if !asm.HasGuards(component.PointDeliverMw) {
+		t.Fatal("判定应已登记")
 	}
-	r.h.Guards = rules
+	if names := asm.GuardNames(component.PointDeliverMw); len(names) != 1 || names[0] != "board" {
+		t.Fatalf("判定应记成本组件名：%v", names)
+	}
+	r.h.GuardDeliver = func(ctx context.Context, req component.GuardRequest) (component.Verdict, string) {
+		return component.EvalPoint(asm, component.PointDeliverMw, ctx, req)
+	}
 	rec.Seq = 2
 	result, err = plug.mailer.Fanout(ctx, rec, subs)
 	if err != nil {

@@ -54,10 +54,8 @@ github.com/Sevyn17/tenon: func GetOptional[T any](cx *Registrar, k Key[T]) (T, b
 github.com/Sevyn17/tenon: const GuardDeliver github.com/Sevyn17/tenon/runtime/component.GuardPoint
 github.com/Sevyn17/tenon: type GuardPoint = github.com/Sevyn17/tenon/runtime/component.GuardPoint
 github.com/Sevyn17/tenon: method (GuardPoint) String() string
-github.com/Sevyn17/tenon: type GuardRequest = github.com/Sevyn17/tenon/runtime/component.GuardRequest struct{Point github.com/Sevyn17/tenon/runtime/component.GuardPoint; Envelope *github.com/Sevyn17/tenon/runtime/mail.Envelope; Agent string; Tool string; Args encoding/json.RawMessage; Risk github.com/Sevyn17/tenon/runtime/component.Risk; Model string}
-github.com/Sevyn17/tenon: type GuardRule = github.com/Sevyn17/tenon/runtime/component.GuardRule struct{Name string; On github.com/Sevyn17/tenon/runtime/component.GuardPoint; Check func(req github.com/Sevyn17/tenon/runtime/component.GuardRequest) (github.com/Sevyn17/tenon/runtime/component.Verdict, string)}
+github.com/Sevyn17/tenon: type GuardRequest = github.com/Sevyn17/tenon/runtime/component.GuardRequest struct{Point github.com/Sevyn17/tenon/runtime/component.GuardPoint; Envelope *github.com/Sevyn17/tenon/runtime/mail.Envelope; Agent string}
 github.com/Sevyn17/tenon: const GuardSessionOpen github.com/Sevyn17/tenon/runtime/component.GuardPoint
-github.com/Sevyn17/tenon: const GuardToolCall github.com/Sevyn17/tenon/runtime/component.GuardPoint
 github.com/Sevyn17/tenon: type InitEntry = github.com/Sevyn17/tenon/runtime/assemble.InitEntry struct{Order int; Func github.com/Sevyn17/tenon/runtime/assemble.InitFunc}
 github.com/Sevyn17/tenon: type Internals struct{Host *github.com/Sevyn17/tenon/runtime/host.Host; Bus *github.com/Sevyn17/tenon/runtime/bus.Bus; Assembly *github.com/Sevyn17/tenon/runtime/component.Assembly; Models *github.com/Sevyn17/tenon/runtime/assemble.Models; Definitions github.com/Sevyn17/tenon/runtime/agentdef.Source; DB github.com/Sevyn17/tenon/runtime/store.Store; Blobs github.com/Sevyn17/tenon/runtime/toolhub.Artifacts; Builder *github.com/Sevyn17/tenon/runtime/assemble.Builder}
 github.com/Sevyn17/tenon: type Key[T any] = github.com/Sevyn17/tenon/runtime/ext.Key[T] struct{}
@@ -93,7 +91,6 @@ github.com/Sevyn17/tenon: method (Registrar) Collection(name string, spec github
 github.com/Sevyn17/tenon: method (Registrar) CollectionMigration(m github.com/Sevyn17/tenon/runtime/component.CollectionMigration) error
 github.com/Sevyn17/tenon: method (Registrar) Config() any
 github.com/Sevyn17/tenon: method (Registrar) FillSlot(name string, impl any) error
-github.com/Sevyn17/tenon: method (Registrar) Guard(g github.com/Sevyn17/tenon/runtime/component.GuardRule)
 github.com/Sevyn17/tenon: method (Registrar) Mailer() *github.com/Sevyn17/tenon/runtime/component.Mailer
 github.com/Sevyn17/tenon: method (Registrar) Matcher(name string, m github.com/Sevyn17/tenon/runtime/component.Matcher) error
 github.com/Sevyn17/tenon: method (Registrar) On(name string, fn github.com/Sevyn17/tenon/runtime/component.EventHandler) error

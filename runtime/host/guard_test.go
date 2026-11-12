@@ -43,10 +43,9 @@ func TestGuardRuleMerge(t *testing.T) {
 		return r.h.Deliver(ctx, mail.Envelope{From: from, To: mail.Address{Kind: mail.AddrSession, ID: "s1"}, Body: "hi"})
 	}
 	// 缺省当然允许创建者；Deny 规则应压过它，并带出规则给的拒绝原因。
-	r.h.Guards = []component.GuardRule{{
-		Name: "block", On: component.GuardDeliver,
-		Check: func(component.GuardRequest) (component.Verdict, string) { return component.Deny, "测试屏蔽" },
-	}}
+	r.h.GuardDeliver = func(context.Context, component.GuardRequest) (component.Verdict, string) {
+		return component.Deny, "测试屏蔽"
+	}
 	err := send(mail.Address{Kind: mail.AddrHuman, ID: "u1"})
 	if !errors.Is(err, ErrNotAllowed) || !strings.Contains(err.Error(), "测试屏蔽") {
 		t.Fatalf("Deny 应压过缺省允许：%v", err)
@@ -60,18 +59,16 @@ func TestGuardRuleMerge(t *testing.T) {
 		t.Fatal("应发布 guard.denied 事件")
 	}
 	// Allow 规则放开「往 session: 投递」的缺省联系限制（u2 不是创建者）。
-	r.h.Guards = []component.GuardRule{{
-		Name: "open", On: component.GuardDeliver,
-		Check: func(component.GuardRequest) (component.Verdict, string) { return component.Allow, "" },
-	}}
+	r.h.GuardDeliver = func(context.Context, component.GuardRequest) (component.Verdict, string) {
+		return component.Allow, ""
+	}
 	if err := send(mail.Address{Kind: mail.AddrHuman, ID: "u2"}); err != nil {
 		t.Fatalf("Allow 应放开 session 投递：%v", err)
 	}
 	// Allow 与 Deny 同时存在：Deny 胜。
-	r.h.Guards = append(r.h.Guards, component.GuardRule{
-		Name: "block2", On: component.GuardDeliver,
-		Check: func(component.GuardRequest) (component.Verdict, string) { return component.Deny, "仍要拦" },
-	})
+	r.h.GuardDeliver = func(context.Context, component.GuardRequest) (component.Verdict, string) {
+		return component.Deny, "仍要拦"
+	}
 	if err := send(mail.Address{Kind: mail.AddrHuman, ID: "u2"}); !errors.Is(err, ErrNotAllowed) {
 		t.Fatalf("Deny 应胜过 Allow：%v", err)
 	}
@@ -82,10 +79,9 @@ func TestGuardRuleMerge(t *testing.T) {
 func TestGuardDeniedPersists(t *testing.T) {
 	ctx := context.Background()
 	r := creatorRig(t)
-	r.h.Guards = []component.GuardRule{{
-		Name: "block", On: component.GuardDeliver,
-		Check: func(component.GuardRequest) (component.Verdict, string) { return component.Deny, "测试屏蔽" },
-	}}
+	r.h.GuardDeliver = func(context.Context, component.GuardRequest) (component.Verdict, string) {
+		return component.Deny, "测试屏蔽"
+	}
 	err := r.h.Deliver(ctx, mail.Envelope{
 		From: mail.Address{Kind: mail.AddrHuman, ID: "u1"},
 		To:   mail.Address{Kind: mail.AddrSession, ID: "s1"}, Body: "hi"})
@@ -119,15 +115,12 @@ func TestGuardDeniedPersists(t *testing.T) {
 func TestGuardRuleSessionOpen(t *testing.T) {
 	ctx := context.Background()
 	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{})
-	r.h.Guards = []component.GuardRule{{
-		Name: "no-worker", On: component.GuardSessionOpen,
-		Check: func(req component.GuardRequest) (component.Verdict, string) {
-			if req.Agent == "worker" {
-				return component.Deny, "不允许新建 worker"
-			}
-			return component.Abstain, ""
-		},
-	}}
+	r.h.GuardSessionOpen = func(_ context.Context, req component.GuardRequest) (component.Verdict, string) {
+		if req.Agent == "worker" {
+			return component.Deny, "不允许新建 worker"
+		}
+		return component.Abstain, ""
+	}
 	err := r.h.Deliver(ctx, mail.Envelope{
 		From: mail.Address{Kind: mail.AddrHuman, ID: "u1"},
 		To:   mail.Address{Kind: mail.AddrAgent, ID: "worker"},

@@ -183,8 +183,13 @@ type Host struct {
 	TreeRestarts int
 	// MaxHop 单封信封允许的最大跳数（08 8.4）；<=0 用内核缺省 MaxHop（8）。租户可调小（T4f）。
 	MaxHop int
-	// Guards 组件登记的守卫规则（04 4.2、08 D4），装配期从 Assembly 取来。
-	Guards []component.GuardRule
+	// GuardDeliver / GuardSessionOpen 两个点位的判定区（04 4.3.2），装配期从 Assembly 取来。
+	// nil = 没有登记判定（恒 Abstain）。
+	//
+	// 2026-11-12：原 `Guards []component.GuardRule` 删除——`cx.Guard()` 生产零登记，
+	// 整套 `GuardRule`/`EvalGuards` 空转；判定统一走 `WrapGuard` + `EvalPoint`。
+	GuardDeliver     func(ctx context.Context, req component.GuardRequest) (component.Verdict, string)
+	GuardSessionOpen func(ctx context.Context, req component.GuardRequest) (component.Verdict, string)
 	// DeliverChain 投递中间件链（04 4.3 Deliver 点位），由装配层用 SetDeliverMiddleware 装。
 	// nil = 没有中间件（直接走内核投递）。中间件在最外层，改写后的信封仍要过守卫。
 	DeliverChain func(ctx context.Context, req component.DeliverReq) (component.DeliverResp, error)

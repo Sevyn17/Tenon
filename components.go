@@ -45,21 +45,22 @@ func GetOptional[T any](cx *Registrar, k Key[T]) (T, bool, error) {
 	return component.GetOptional(cx, k)
 }
 
-// 守卫：组件在 Setup 里用 cx.Guard(GuardRule{…}) 登记。Check 返回 (结论, 拒绝原因)。
-// 同一位置上任何一条 Deny 就拒绝，其余按内核缺省处理；Allow 只放开"往 session: 投递"的缺省限制。
+// 判定：组件在 Setup 里用 component.WrapGuard(cx, 点位, 名字, 判定函数) 登记。
+// 判定函数返回 (结论, 拒绝原因)；同一点位上任何一条 Deny 就拒绝，其余按内核缺省处理。
 // 投递与建会话被拒时原因进 guard.denied 事件；工具调用被拒时原因作为失败结果交给模型，这一轮继续。
+//
+// 2026-11-12：原 `GuardRule` / `Registrar.Guard` 删除——生产代码零登记，整套机制空转，
+// 且与 `WrapGuard` 判定区做同一件事。现在统一走 `WrapGuard`。
 type (
-	GuardRule    = component.GuardRule
 	GuardRequest = component.GuardRequest
 	GuardPoint   = component.GuardPoint
 	Verdict      = component.Verdict
 )
 
-// 守卫位置。内核目前只在这三处执行规则。
+// 判定点位。内核目前在这两处跑判定区。
 const (
 	GuardDeliver     = component.GuardDeliver     // 信封投递（GuardRequest.Envelope）
 	GuardSessionOpen = component.GuardSessionOpen // 新建会话（GuardRequest.Agent 是定义名）
-	GuardToolCall    = component.GuardToolCall    // 调工具（GuardRequest.Tool、Args、Risk）
 )
 
 // 守卫结论。

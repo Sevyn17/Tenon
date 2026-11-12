@@ -93,8 +93,6 @@ type Builder struct {
 	Schemas []useconf.Schema
 	// UseSource 租户层与用户层的使用配置来源（06 6.3）；nil = 没有租户/用户层。
 	UseSource useconf.Source
-	// Guards 组件登记的守卫规则；GuardToolCall 上的规则装成每个会话工具栈里的一层守卫（toolGuard）。
-	Guards []component.GuardRule
 	// PointGuards 判定区（component.WrapGuard 登记的规则）：点位名 → 该点位的判定链。
 	// 04 4.3.2：与 Guards 并存——Guards 是内核守卫（GuardRule），PointGuards 是组件扩展点。
 	PointGuards func(ctx context.Context, req component.ToolCallReq) (component.Verdict, string)
@@ -186,9 +184,6 @@ func (b *Builder) Build(id, defName string, child bool) (*agent.Agent, *session.
 	// （「不能绕过守卫」）。中间件可短路（Denied → 不执行工具）。
 	for _, t := range b.ToolCallMW {
 		hub.PrependTransform(t)
-	}
-	if g, ok := toolGuard(b.Guards); ok { // 内核守卫规则（GuardRule）是纯判定，与 caps 等一起并行跑
-		hub.AddGate(g)
 	}
 	// 判定区（04 4.3.2，component.WrapGuard 登记）：组件在 ToolCall 点位上登记的准入判定。
 	// 必须接线，否则 WrapGuard 登记了却永不执行（安全防护静默失效）。
@@ -416,39 +411,12 @@ func intersectAllow(a, b []string) []string {
 	return out
 }
 
-// toolGuard 把 GuardToolCall 上的守卫规则做成一层工具守卫；没有这类规则时不装。
-// Deny 返回失败结果给模型（不中止回合）；Allow / Abstain 都交给下一层（授权仍由权限组件判定）。
-func toolGuard(rules []component.GuardRule) (toolhub.Gate, bool) {
-	var own []component.GuardRule
-	for _, r := range rules {
-		if r.On == component.GuardToolCall && r.Check != nil {
-			own = append(own, r)
-		}
+// toolNameOf 取本次调用的工具名（cx.Tool 可能为空）。
+func toolNameOf(cx *toolhub.Cx) string {
+	if cx == nil || cx.Tool == nil {
+		return ""
 	}
-	if len(own) == 0 {
-		return toolhub.Gate{}, false
-	}
-	// 04 4.3.2：组件守卫是纯判定（不改参数、无副作用），所以是 Gate 而不是 Transform。
-	// 直接复用 component.EvalGuards 的合并语义（任一 Deny 即拒）。
-	return toolhub.Gate{Name: "component-guard",
-		Check: func(ctx context.Context, cx *toolhub.Cx, args json.RawMessage) (toolhub.Verdict, string) {
-			req := component.GuardRequest{Point: component.GuardToolCall, Args: args}
-			if cx.Tool != nil {
-				req.Tool = cx.Tool.Spec.Name
-				if cx.Tool.Risk != toolhub.Read {
-					req.Risk = component.RiskHigh
-				}
-			}
-			v, why := component.EvalGuards(own, req)
-			switch v {
-			case component.Deny:
-				return toolhub.VerdictDeny, why
-			case component.Allow:
-				return toolhub.VerdictAllow, ""
-			default:
-				return toolhub.VerdictAbstain, ""
-			}
-		}}, true
+	return cx.Tool.Spec.Name
 }
 
 // sessionScope 把 SessionCx 适配成 component.SessionScope（04 4.3.1）。
@@ -475,12 +443,4 @@ func (s *sessionScope) History() (int, []*session.Entry) {
 		off = 0
 	}
 	return snap.Header.CompactionBase, snap.Entries[off:]
-}
-
-// toolNameOf 取本次调用的工具名（cx.Tool 可能为空）。
-func toolNameOf(cx *toolhub.Cx) string {
-	if cx == nil || cx.Tool == nil {
-		return ""
-	}
-	return cx.Tool.Spec.Name
 }

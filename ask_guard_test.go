@@ -15,8 +15,10 @@ type denyOpen struct{}
 
 func (denyOpen) Name() string { return "deny-open" }
 func (denyOpen) Setup(cx *component.Registrar) error {
-	cx.Guard(component.GuardRule{Name: "deny-open", On: component.GuardSessionOpen,
-		Check: func(component.GuardRequest) (component.Verdict, string) { return component.Deny, "测试拒绝" }})
+	component.WrapGuard(cx, component.SessionOpen, "deny-open",
+		func(ctx context.Context, req component.GuardRequest) (component.Verdict, string) {
+			return component.Deny, "测试拒绝"
+		})
 	return nil
 }
 func (denyOpen) Start(*component.Scope) error { return nil }

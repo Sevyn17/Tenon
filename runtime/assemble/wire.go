@@ -63,8 +63,18 @@ func Wire(o WireOptions) (*Wired, error) {
 	if h.DB == nil {
 		h.DB = o.DB
 	}
-	// 组件登记的守卫规则（04 4.2、08 D4）：投递 / 建会话等内核点位在 Host 里执行。
-	h.Guards = o.Asm.GuardRules()
+	// 投递 / 建会话两个点位的判定区（04 4.3.2，component.WrapGuard 登记）：
+	// 只有登记过判定才注入，没登记时 Host 的 evalGuard 恒 Abstain（与原来 h.Guards 空一致）。
+	if o.Asm.HasGuards(component.PointDeliverMw) {
+		h.GuardDeliver = func(ctx context.Context, req component.GuardRequest) (component.Verdict, string) {
+			return component.EvalPoint(o.Asm, component.PointDeliverMw, ctx, req)
+		}
+	}
+	if o.Asm.HasGuards(component.PointSessionOpenMw) {
+		h.GuardSessionOpen = func(ctx context.Context, req component.GuardRequest) (component.Verdict, string) {
+			return component.EvalPoint(o.Asm, component.PointSessionOpenMw, ctx, req)
+		}
+	}
 	// 投递中间件链（04 4.3 Deliver 点位）：只有登记过中间件才装，没登记时 Host 直接走内核投递。
 	if o.Asm.HasMiddleware(component.PointDeliverMw) {
 		h.SetDeliverChain(o.Asm.DeliverChain(h.DeliverKernel()))
@@ -121,7 +131,6 @@ func Wire(o WireOptions) (*Wired, error) {
 		Schemas:     o.Asm.AgentSchemas(),
 		UseSource:   o.UseSource,
 		Hooks:       o.Hooks,
-		Guards:      h.Guards,
 		PointGuards: pointGuards(o.Asm),
 	}
 	// 顶层会话带委派 / 领导工具；子会话与工作组成员按 child 构造（深度 1）。
