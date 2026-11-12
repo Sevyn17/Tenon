@@ -1,7 +1,7 @@
 # Tenon
 
 [![CI](https://github.com/Sevyn17/Tenon/actions/workflows/ci.yml/badge.svg)](https://github.com/Sevyn17/Tenon/actions/workflows/ci.yml)
-[![CI (Gitea)](https://????/sevn/Tenon/actions/workflows/ci.yml/badge.svg?branch=main)](https://????/sevn/Tenon/actions)
+[![CI (Gitea)](http://????/sevn/Tenon/actions/workflows/ci.yml/badge.svg?branch=main)](http://????/sevn/Tenon/actions)
 
 Go 智能体框架。运行时（`runtime/`）只提供机制：会话、信封、检查点、崩溃恢复、守卫；工具、权限、沙箱、提示词等能力由标准模块（`modules/`）的组件提供，应用经 SDK（根包 `tenon`）装配。
 
