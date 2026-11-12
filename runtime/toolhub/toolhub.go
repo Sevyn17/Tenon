@@ -86,9 +86,13 @@ type OutputKind int
 
 const (
 	Done    OutputKind = iota // 完成
-	Pending                   // 已受理，结果稍后回传
-	Confirm                   // 需人工确认（只能由 Guard 层返回）
+	Confirm                   // 需人工确认（只能由准入判定或授权决策者返回）
 )
+
+// 2026-11-12（H3）：删掉 Pending——全仓零生产者，设计文档也无依据。
+// 工具作者写 Output{Kind: Pending} 会得到「状态 ok、内容为空」的成功结果，
+// 幂等记录按 Done 落库，正是 Layer.FailOpen 那种「填了但无效」。
+// 真需要异步工具就另立独立返回路径，不要塞进 OutputKind。
 
 // Output 工具输出。
 type Output struct {
@@ -96,7 +100,7 @@ type Output struct {
 	Content session.Content
 	Status  session.ToolStatus
 	Data    any    // 结构化结果（前端渲染用，可空）
-	Reason  string // Confirm 的原因 / Pending 的说明
+	Reason  string // Confirm 的原因
 }
 
 // Text 构造文本完成结果。

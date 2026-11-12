@@ -37,7 +37,7 @@ func (a *Assembly) Explain(w io.Writer, profileSources map[string]string) {
 		if s, ok := profileSources[n]; ok {
 			src = "  ← " + s
 		}
-		fmt.Fprintf(w, "  %s %s%s%s\n", n, m.Version, tag, src)
+		fmt.Fprintf(w, "  %s %s%s%s%s\n", n, m.Version, tag, rewriteTag(m.Effects), src)
 		if cfg := a.configs[n]; cfg != nil {
 			v := reflect.ValueOf(cfg).Elem()
 			for i, f := range SchemaOf(cfg) {
@@ -122,4 +122,25 @@ func orDefault(s, d string) string {
 		return d
 	}
 	return s
+}
+
+// rewriteTag 标注该组件会不会改写模型所见内容（03 - 约束清单第 19 行：
+// 「开启后会改写模型所见内容的插件（如脱敏），要在 explain 和启动横幅里明示」）。
+//
+// 2026-11-12（H5）：原来 Meta.Effects 的注释承诺「explain / 启动横幅明示」，
+// 但两个消费方都不存在——只有 appapi 把它给前端 UI。这里补上 explain 侧。
+func rewriteTag(effects []string) string {
+	var parts []string
+	for _, e := range effects {
+		switch e {
+		case EffectSystemPrompt:
+			parts = append(parts, "改系统提示词")
+		case EffectRewriteResult:
+			parts = append(parts, "改写模型所见内容")
+		}
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return "  ⚠ " + strings.Join(parts, "、")
 }

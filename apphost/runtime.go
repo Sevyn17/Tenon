@@ -8,6 +8,8 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/Sevyn17/tenon"
@@ -184,6 +186,10 @@ func Start(o StartOptions) (*Runtime, error) {
 		return nil, fmt.Errorf("装配: 没有提供 %s 的存储组件", assemble.ServiceDB)
 	}
 	r.Notes = append(r.Notes, r.importLegacy(context.Background())...) // 旧版项目里的会话库并入用户级库
+	// H5（03 - 约束清单第 19 行）：开启会改写模型所见内容的组件时明示。
+	if n := rewriteNote(p); n != "" {
+		r.Notes = append(r.Notes, n)
+	}
 	return r, nil
 }
 
@@ -227,4 +233,27 @@ func (r *Runtime) BuildApp() (*Built, error) {
 		b.Perms, _ = v.(*permission.Sessions)
 	}
 	return b, nil
+}
+
+// rewriteNote 拼一条「开启了改写类组件」的启动提示（03 - 约束清单第 19 行）。
+// 没有这类组件时返回空串（不打扰）。
+func rewriteNote(p *component.Profile) string {
+	var on []string
+	for _, st := range p.States() {
+		if !st.On {
+			continue
+		}
+		for _, e := range st.Effects {
+			if e == component.EffectRewriteResult || e == component.EffectSystemPrompt {
+				on = append(on, st.Name)
+				break
+			}
+		}
+	}
+	if len(on) == 0 {
+		return ""
+	}
+	sort.Strings(on)
+	return "已开启会改写模型所见内容的组件：" + strings.Join(on, "、") +
+		"（它们会修改模型看到的提示词或工具结果；不想用可在 profile 里 enabled = false）"
 }

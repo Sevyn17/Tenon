@@ -20,7 +20,10 @@ import (
 //	ask   = ["shell(git push:*)"]
 //	deny  = ["shell(rm -rf:*)", "write_file(.env)"]
 type Config struct {
-	Mode  string   `toml:"mode"`
+	Mode string `toml:"mode"`
+	// Allow 恒为空：公共规则只认 deny / ask（§9.7「只能加严」），写了会在 LoadConfig 报错。
+	// 字段保留是为了 LoadConfig 能检测并给用户清晰提示（allow 应写进自定义档位的 [items]）。
+	// Parsed / Merge 不再处理它（2026-11-12 H2：原来那两个分支是死代码）。
 	Allow []string `toml:"allow"`
 	Ask   []string `toml:"ask"`
 	Deny  []string `toml:"deny"`
@@ -60,7 +63,7 @@ func (c Config) Parsed() ([]Rule, error) {
 	for _, g := range []struct {
 		list []string
 		a    Action
-	}{{c.Deny, Deny}, {c.Ask, AskUser}, {c.Allow, Allow}} {
+	}{{c.Deny, Deny}, {c.Ask, AskUser}} {
 		for _, s := range g.list {
 			r, err := ParseRule(s, g.a)
 			if err != nil {
@@ -79,7 +82,6 @@ func Merge(cs ...Config) Config {
 		if c.Mode != "" {
 			out.Mode = c.Mode
 		}
-		out.Allow = append(out.Allow, c.Allow...)
 		out.Ask = append(out.Ask, c.Ask...)
 		out.Deny = append(out.Deny, c.Deny...)
 	}
