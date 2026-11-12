@@ -137,15 +137,6 @@ type Cx struct {
 // Next 层的下一环。
 type Next func(ctx context.Context, cx *Cx, args json.RawMessage) (Output, error)
 
-// Layer 工具调用层（Transform / Guard）。
-type Layer struct {
-	Name     string
-	Guard    bool // false = Transform
-	Timeout  time.Duration
-	FailOpen bool // 只对 Transform 有效
-	Call     func(ctx context.Context, cx *Cx, args json.RawMessage, next Next) (Output, error)
-}
-
 // Record 幂等 / 挂起记录的视图。
 type Record struct {
 	Status   string // started / pending / delivered / done
@@ -181,7 +172,8 @@ type Artifacts interface {
 type Hub struct {
 	tools       map[string]*Tool
 	order       []string
-	layers      []Layer // 由外到内
+	transforms  []Transform // 改写层，由外到内
+	gates       []Gate      // 准入判定，并行跑
 	store       Store
 	art         Artifacts
 	maxParallel int
@@ -273,12 +265,6 @@ func (h *Hub) Register(t *Tool) error {
 	h.order = append(h.order, t.Spec.Name)
 	return nil
 }
-
-// AddLayer 追加一层（调用方按 plugin-manager §5.2 已排好序，由外到内）。
-func (h *Hub) AddLayer(l Layer) { h.layers = append(h.layers, l) }
-
-// PrependLayer 在最外层插一层（内核守卫先于组件层执行，如信封 caps 范围）。
-func (h *Hub) PrependLayer(l Layer) { h.layers = append([]Layer{l}, h.layers...) }
 
 // DefaultAuthorizer 没有装权限组件时的缺省授权层：只读与声明无需授权的工具放行，其余一律询问
 // （与"未声明权限项的工具按一律询问"同一口径，失败即收紧）。权限组件提供自己的授权层时不用它。

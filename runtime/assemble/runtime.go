@@ -78,8 +78,8 @@ type Builder struct {
 
 	Tools []ToolSet
 	Inits []InitFunc
-	// ToolCallMW ToolCall 中间件层（04 4.3），装配期由 Assembly 转成 toolhub.Layer，装在最外层。
-	ToolCallMW []toolhub.Layer
+	// ToolCallMW ToolCall 中间件（04 4.3.2 改写层），装配期由 Assembly 转成 toolhub.Transform，装在最外层。
+	ToolCallMW []toolhub.Transform
 	Blocks     []BlockFunc
 	Hooks      HooksFunc // 可空
 	// Items 权限项声明（装配级，见 PointPermItems）：每个会话的 hub 先登记注册表，再登记工具。
@@ -181,11 +181,11 @@ func (b *Builder) Build(id, defName string, child bool) (*agent.Agent, *session.
 	}
 	// ToolCall 中间件（04 4.3）：装在最外层——先于守卫跑，但它改写后的 args 仍会交给内层守卫重判
 	// （「不能绕过守卫」）。中间件可短路（Denied → 不执行工具）。
-	for _, l := range b.ToolCallMW {
-		hub.PrependLayer(l)
+	for _, t := range b.ToolCallMW {
+		hub.PrependTransform(t)
 	}
-	if l, ok := toolGuard(b.Guards); ok { // 组件守卫先于授权层判定：被拒的调用不再要人确认
-		hub.PrependLayer(l)
+	if g, ok := toolGuard(b.Guards); ok { // 组件守卫是纯判定，与 caps 等一起并行跑
+		hub.AddGate(g)
 	}
 	if !hub.Authorized() { // 没装权限组件：用内核缺省授权判定者（有副作用的工具一律询问，P0-7）
 		hub.AddAuthorizer(toolhub.DefaultAuthorizer())
@@ -391,7 +391,7 @@ func intersectAllow(a, b []string) []string {
 
 // toolGuard 把 GuardToolCall 上的守卫规则做成一层工具守卫；没有这类规则时不装。
 // Deny 返回失败结果给模型（不中止回合）；Allow / Abstain 都交给下一层（授权仍由权限组件判定）。
-func toolGuard(rules []component.GuardRule) (toolhub.Layer, bool) {
+func toolGuard(rules []component.GuardRule) (toolhub.Gate, bool) {
 	var own []component.GuardRule
 	for _, r := range rules {
 		if r.On == component.GuardToolCall && r.Check != nil {
@@ -399,10 +399,12 @@ func toolGuard(rules []component.GuardRule) (toolhub.Layer, bool) {
 		}
 	}
 	if len(own) == 0 {
-		return toolhub.Layer{}, false
+		return toolhub.Gate{}, false
 	}
-	return toolhub.Layer{Name: "component-guard", Guard: true,
-		Call: func(ctx context.Context, cx *toolhub.Cx, args json.RawMessage, next toolhub.Next) (toolhub.Output, error) {
+	// 04 4.3.2：组件守卫是纯判定（不改参数、无副作用），所以是 Gate 而不是 Transform。
+	// 直接复用 component.EvalGuards 的合并语义（任一 Deny 即拒）。
+	return toolhub.Gate{Name: "component-guard",
+		Check: func(ctx context.Context, cx *toolhub.Cx, args json.RawMessage) (toolhub.Verdict, string) {
 			req := component.GuardRequest{Point: component.GuardToolCall, Args: args}
 			if cx.Tool != nil {
 				req.Tool = cx.Tool.Spec.Name
@@ -410,10 +412,15 @@ func toolGuard(rules []component.GuardRule) (toolhub.Layer, bool) {
 					req.Risk = component.RiskHigh
 				}
 			}
-			if v, why := component.EvalGuards(own, req); v == component.Deny {
-				return toolhub.Failf("工具 %s 被守卫拒绝：%s", req.Tool, why), nil
+			v, why := component.EvalGuards(own, req)
+			switch v {
+			case component.Deny:
+				return toolhub.VerdictDeny, why
+			case component.Allow:
+				return toolhub.VerdictAllow, ""
+			default:
+				return toolhub.VerdictAbstain, ""
 			}
-			return next(ctx, cx, args)
 		}}, true
 }
 

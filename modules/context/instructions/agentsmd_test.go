@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/Sevyn17/tenon/runtime/callctx"
+	"github.com/Sevyn17/tenon/runtime/component"
 	"github.com/Sevyn17/tenon/runtime/session"
 	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
@@ -95,7 +96,7 @@ func TestInstructionsLayer(t *testing.T) {
 	if err := h.Register(fakeRead(root)); err != nil {
 		t.Fatal(err)
 	}
-	h.AddLayer(in.Layer())
+	h.AddTransform(transformOf(in.Middleware()))
 	run := h.Execute(context.Background(), kctx("s"), []session.ToolCall{
 		{ID: "1", Name: "read_file", Args: json.RawMessage(`{"path":"pkg/a.txt"}`)},
 		{ID: "2", Name: "read_file", Args: json.RawMessage(`{"path":"pkg/a.txt"}`)},
@@ -156,4 +157,23 @@ func TestInstructionsUntrustedProject(t *testing.T) {
 	if d := in.Discover("sub/x.go"); d != "" {
 		t.Fatalf("不受信项目不应嵌套发现: %q", d)
 	}
+}
+
+// transformOf 把 ToolCall 中间件包成 toolhub.Transform（测试用；生产路径由 assemble 装配）。
+func transformOf(mw component.ToolCallMw) toolhub.Transform {
+	return toolhub.Transform{Name: "instructions",
+		Call: func(ctx context.Context, cx *toolhub.Cx, args json.RawMessage, next toolhub.Next) (toolhub.Output, error) {
+			req := component.ToolCallReq{Args: args}
+			if cx != nil && cx.Tool != nil {
+				req.Tool = cx.Tool.Spec.Name
+			}
+			resp, err := mw(ctx, req, func(ctx context.Context, r component.ToolCallReq) (component.ToolCallResp, error) {
+				out, err := next(ctx, cx, r.Args)
+				return component.ToolCallResp{Output: out}, err
+			})
+			if err != nil {
+				return toolhub.Output{}, err
+			}
+			return resp.Output, nil
+		}}
 }

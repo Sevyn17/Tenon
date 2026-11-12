@@ -109,7 +109,7 @@ func Wire(o WireOptions) (*Wired, error) {
 		},
 		Tools:       col.Tools,
 		Inits:       col.Inits,
-		ToolCallMW:  o.Asm.ToolCallLayers(),
+		ToolCallMW:  o.Asm.ToolCallTransforms(),
 		Blocks:      col.Blocks, // 系统提示词由 prompt 组件提供
 		Items:       col.Items,
 		Kernel:      &k,

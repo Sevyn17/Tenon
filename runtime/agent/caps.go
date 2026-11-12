@@ -18,14 +18,15 @@ func (a *Agent) InstallCapsGuard() {
 	if a == nil || a.Hub == nil || !a.caps.markGuarded() {
 		return
 	}
-	a.Hub.PrependLayer(toolhub.Layer{
-		Name:  "caps",
-		Guard: true,
-		Call: func(ctx context.Context, cx *toolhub.Cx, args json.RawMessage, next toolhub.Next) (toolhub.Output, error) {
+	// 04 4.3.2：caps 是**纯判定**（看工具名在不在本轮授权范围），不改参数、不问人，
+	// 所以是 Gate 而不是 Transform——判定可并行、永远 fail-closed。
+	a.Hub.AddGate(toolhub.Gate{
+		Name: "caps",
+		Check: func(ctx context.Context, cx *toolhub.Cx, args json.RawMessage) (toolhub.Verdict, string) {
 			if name := cx.Tool.Spec.Name; !a.caps.allows(name) {
-				return toolhub.Failf("工具 %s 不在本轮授权范围（caps）", name), nil
+				return toolhub.VerdictDeny, "工具 " + name + " 不在本轮授权范围（caps）"
 			}
-			return next(ctx, cx, args)
+			return toolhub.VerdictAbstain, "" // 不表态，交给其它判定与内核
 		},
 	})
 }

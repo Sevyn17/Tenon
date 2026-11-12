@@ -24,7 +24,7 @@ func TestToolCallMWDeniesExecution(t *testing.T) {
 	if err := hub.Register(tool); err != nil {
 		t.Fatal(err)
 	}
-	hub.PrependLayer(toolhub.Layer{Name: "mw", Guard: false,
+	hub.PrependTransform(toolhub.Transform{Name: "mw",
 		Call: func(ctx context.Context, cx *toolhub.Cx, args json.RawMessage, next toolhub.Next) (toolhub.Output, error) {
 			return toolhub.Failf("被中间件拦截"), nil
 		}})
@@ -52,13 +52,13 @@ func TestToolCallMWOutsideGuard(t *testing.T) {
 		t.Fatal(err)
 	}
 	// 内层守卫：一律拒绝。
-	hub.AddLayer(toolhub.Layer{Name: "guard", Guard: true,
-		Call: func(ctx context.Context, cx *toolhub.Cx, args json.RawMessage, next toolhub.Next) (toolhub.Output, error) {
-			return toolhub.Failf("守卫拒绝"), nil
+	hub.AddGate(toolhub.Gate{Name: "guard",
+		Check: func(ctx context.Context, cx *toolhub.Cx, args json.RawMessage) (toolhub.Verdict, string) {
+			return toolhub.VerdictDeny, "守卫拒绝"
 		}})
 	// 外层中间件：能看到拒绝结果。
 	sawDeny := false
-	hub.PrependLayer(toolhub.Layer{Name: "mw", Guard: false,
+	hub.PrependTransform(toolhub.Transform{Name: "mw",
 		Call: func(ctx context.Context, cx *toolhub.Cx, args json.RawMessage, next toolhub.Next) (toolhub.Output, error) {
 			out, err := next(ctx, cx, args)
 			if out.Status == session.ToolError {
@@ -91,12 +91,12 @@ func TestToolCallMWRewriteSeenByGuard(t *testing.T) {
 	if err := hub.Register(tool); err != nil {
 		t.Fatal(err)
 	}
-	hub.AddLayer(toolhub.Layer{Name: "guard", Guard: true,
-		Call: func(ctx context.Context, cx *toolhub.Cx, args json.RawMessage, next toolhub.Next) (toolhub.Output, error) {
+	hub.AddGate(toolhub.Gate{Name: "guard",
+		Check: func(ctx context.Context, cx *toolhub.Cx, args json.RawMessage) (toolhub.Verdict, string) {
 			guardArgs = string(args)
-			return next(ctx, cx, args)
+			return toolhub.VerdictAbstain, ""
 		}})
-	hub.PrependLayer(toolhub.Layer{Name: "mw", Guard: false,
+	hub.PrependTransform(toolhub.Transform{Name: "mw",
 		Call: func(ctx context.Context, cx *toolhub.Cx, args json.RawMessage, next toolhub.Next) (toolhub.Output, error) {
 			return next(ctx, cx, json.RawMessage(`{"rewritten":true}`))
 		}})

@@ -12,7 +12,7 @@ import (
 	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
-// 登记在 ToolCall 点位的中间件会出现在 ToolCallLayers 里，并且真的包住调用。
+// 登记在 ToolCall 点位的中间件会出现在 ToolCallTransforms 里，并且真的包住调用。
 func TestToolCallPointReachesLayers(t *testing.T) {
 	asm := ctxTestAssembly(t, func(cx *component.Registrar) error {
 		component.Wrap(cx, component.ToolCall, func(ctx context.Context, req component.ToolCallReq,
@@ -27,7 +27,7 @@ func TestToolCallPointReachesLayers(t *testing.T) {
 	if !asm.HasMiddleware(component.PointToolCallMw) {
 		t.Fatal("ToolCall 点位应有中间件")
 	}
-	layers := asm.ToolCallLayers()
+	layers := asm.ToolCallTransforms()
 	if len(layers) != 1 {
 		t.Fatalf("应有一层，实际 %d", len(layers))
 	}

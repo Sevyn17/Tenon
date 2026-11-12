@@ -85,7 +85,7 @@ func TestLayerPersistsRedacted(t *testing.T) {
 		},
 	})
 	// 04 4.3.1：脱敏从「会话层」迁到 ToolCall 中间件；测试里把它包成一层挂上去。
-	h.AddLayer(toolhub.Layer{Name: "redact", Call: mwAsLayer(Middleware(New()))})
+	h.AddTransform(toolhub.Transform{Name: "redact", Call: mwAsLayer(Middleware(New()))})
 	res := h.Execute(context.Background(), kctx("s"), []session.ToolCall{{ID: "c1", Name: "leak", Args: json.RawMessage(`{}`)}}, nil)
 	r0, ok := res.Next()
 	if !ok || r0.Err != nil {

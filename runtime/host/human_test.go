@@ -32,7 +32,7 @@ func newHumanRig(t *testing.T, m agent.Model) (*Host, *sqlite.DB) {
 			Risk: toolhub.Dangerous, Call: func(ctx context.Context, _ *toolhub.Cx, args json.RawMessage) (toolhub.Output, error) {
 				return toolhub.Text("echoed"), nil
 			}}
-		hub.AddLayer(askLayer()) // 非只读工具先要求确认（D3）
+		hub.AddGate(askGate()) // 非只读工具先要求确认（D3）
 		if err := hub.Register(echo); err != nil {
 			return nil, nil, err
 		}

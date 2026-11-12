@@ -52,17 +52,21 @@ var ToolCall = NewMwPoint[ToolCallReq, ToolCallResp](PointToolCallMw)
 // ToolCallMw 便于组件书写的类型别名。
 type ToolCallMw = Middleware[ToolCallReq, ToolCallResp]
 
-// ToolCallLayers 把 ToolCall 点位的中间件包成 toolhub.Layer（装在最外层）。
+// ToolCallTransforms 把 ToolCall 点位的中间件包成 toolhub.Transform（04 4.3.2 改写层）。
 // 每个中间件一层，按登记顺序：先登记的在外层。没有中间件时返回 nil。
-func (a *Assembly) ToolCallLayers() []toolhub.Layer {
+//
+// 为什么是 Transform 不是 Gate：中间件能改参数/改结果（改写语义），而 Gate 是纯谓词。
+// 中间件想「拒绝」时返回 Denied，由 Transform 适配层翻成失败结果——这是改写层唯一能做的
+// 「软拒绝」，与 Gate 的硬拒绝（不执行、可 Confirm）不同。
+func (a *Assembly) ToolCallTransforms() []toolhub.Transform {
 	regs := a.middleware[PointToolCallMw]
 	if len(regs) == 0 {
 		return nil
 	}
-	out := make([]toolhub.Layer, 0, len(regs))
+	out := make([]toolhub.Transform, 0, len(regs))
 	for _, r := range regs {
 		reg := r
-		out = append(out, toolhub.Layer{Name: "mw:" + reg.plugin, Guard: false,
+		out = append(out, toolhub.Transform{Name: "mw:" + reg.plugin,
 			Call: func(ctx context.Context, cx *toolhub.Cx, args json.RawMessage, next toolhub.Next) (toolhub.Output, error) {
 				req := ToolCallReq{Tool: toolName(cx), Args: args, SessionID: cx.SessionID, Risk: riskOf(cx),
 					CallID: cx.CallID, Scope: scopeOf(cx)}

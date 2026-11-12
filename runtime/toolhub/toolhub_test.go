@@ -234,10 +234,10 @@ func TestParallelLimit(t *testing.T) {
 
 // —— 层：Guard 失败即拒、Transform 失败跳过、Transform 不能返回 Confirm ——
 
-func TestLayerFailurePolicies(t *testing.T) {
+func TestTransformFailurePolicies(t *testing.T) {
 	h := New(Options{})
 	_ = h.Register(&Tool{Spec: spec("r"), Call: func(context.Context, *Cx, json.RawMessage) (Output, error) { return Text("ran"), nil }})
-	h.AddLayer(Layer{Name: "t-broken", FailOpen: true, Call: func(context.Context, *Cx, json.RawMessage, Next) (Output, error) {
+	h.AddTransform(Transform{Name: "t-broken", FailOpen: true, Call: func(context.Context, *Cx, json.RawMessage, Next) (Output, error) {
 		return Output{}, errors.New("boom")
 	}})
 	rs := drain(h.Execute(context.Background(), kctx("s"), []session.ToolCall{call("1", "r", `{}`)}, nil))
@@ -254,7 +254,7 @@ func TestLayerFailurePolicies(t *testing.T) {
 			runs++
 			return Text("wrote"), nil
 		}})
-		hf.AddLayer(Layer{Name: "t-late", FailOpen: true, Timeout: 10 * time.Millisecond,
+		hf.AddTransform(Transform{Name: "t-late", FailOpen: true, Timeout: 10 * time.Millisecond,
 			Call: func(ctx context.Context, cx *Cx, args json.RawMessage, next Next) (Output, error) {
 				out, err := next(ctx, cx, args)
 				if mode == "panic" {
@@ -271,33 +271,34 @@ func TestLayerFailurePolicies(t *testing.T) {
 
 	h2 := New(Options{})
 	_ = h2.Register(&Tool{Spec: spec("r"), Call: func(context.Context, *Cx, json.RawMessage) (Output, error) { return Text("ran"), nil }})
-	h2.AddLayer(Layer{Name: "perm", Guard: true, Call: func(context.Context, *Cx, json.RawMessage, Next) (Output, error) {
-		panic("guard crash")
-	}})
+	h2.AddGate(Gate{Name: "perm",
+		Check: func(context.Context, *Cx, json.RawMessage) (Verdict, string) {
+			panic("gate crash")
+		}})
 	rs = drain(h2.Execute(context.Background(), kctx("s"), []session.ToolCall{call("1", "r", `{}`)}, nil))
 	if !strings.Contains(text(rs[0].Output), "拒绝") || rs[0].Output.Status != session.ToolError {
-		t.Fatalf("Guard panic 应拒绝: %q", text(rs[0].Output))
+		t.Fatalf("Gate panic 应拒绝: %q", text(rs[0].Output))
 	}
 
 	h3 := New(Options{})
 	_ = h3.Register(&Tool{Spec: spec("r"), Call: func(context.Context, *Cx, json.RawMessage) (Output, error) { return Text("ran"), nil }})
-	h3.AddLayer(Layer{Name: "sneaky", Call: func(context.Context, *Cx, json.RawMessage, Next) (Output, error) {
+	h3.AddTransform(Transform{Name: "sneaky", Call: func(context.Context, *Cx, json.RawMessage, Next) (Output, error) {
 		return Output{Kind: Confirm, Reason: "x"}, nil
 	}})
 	rs = drain(h3.Execute(context.Background(), kctx("s"), []session.ToolCall{call("1", "r", `{}`)}, nil))
-	if !strings.Contains(text(rs[0].Output), "只能由 Guard") {
-		t.Fatalf("Transform 返回 Confirm 应被拦: %q", text(rs[0].Output))
+	if !strings.Contains(text(rs[0].Output), "不允许返回 Confirm") {
+		t.Fatalf("Transform 自己返回 Confirm 应被拦: %q", text(rs[0].Output))
 	}
 }
 
-// 层超时只计本层自身耗时：next 慢不算本层超时。
-func TestLayerTimeoutExcludesInner(t *testing.T) {
+// 改写层超时只计本层自身耗时：next 慢不算本层超时。
+func TestTransformTimeoutExcludesInner(t *testing.T) {
 	h := New(Options{})
 	_ = h.Register(&Tool{Spec: spec("slow"), Call: func(context.Context, *Cx, json.RawMessage) (Output, error) {
 		time.Sleep(80 * time.Millisecond)
 		return Text("done"), nil
 	}})
-	h.AddLayer(Layer{Name: "g", Guard: true, Timeout: 30 * time.Millisecond,
+	h.AddTransform(Transform{Name: "g", Timeout: 30 * time.Millisecond,
 		Call: func(ctx context.Context, cx *Cx, a json.RawMessage, next Next) (Output, error) {
 			return next(ctx, cx, a)
 		}})

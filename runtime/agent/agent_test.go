@@ -108,7 +108,7 @@ func newAgent(t *testing.T, db *sqlite.DB, o agentOpts) *Agent {
 		t.Fatal(err)
 	}
 	if o.ask != nil {
-		a.Hub.AddLayer(askLayer())
+		a.Hub.AddGate(askGate())
 	}
 	if _, err := a.Open(context.Background(), testCfg()); err != nil {
 		t.Fatal(err)

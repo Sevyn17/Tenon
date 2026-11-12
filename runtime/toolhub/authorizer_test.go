@@ -101,7 +101,7 @@ func TestAuthorizerSeesRewrittenArgs(t *testing.T) {
 		t.Fatal(err)
 	}
 	// 一个改写层：把参数换成 patched。
-	h.AddLayer(Layer{Name: "rewrite", Call: func(ctx context.Context, cx *Cx, args json.RawMessage, next Next) (Output, error) {
+	h.AddTransform(Transform{Name: "rewrite", Call: func(ctx context.Context, cx *Cx, args json.RawMessage, next Next) (Output, error) {
 		return next(ctx, cx, json.RawMessage(`{"patched":true}`))
 	}})
 	h.SetAuthorizer(AuthorizerFunc(func(ctx context.Context, cx *Cx, args json.RawMessage) (Decision, error) {

@@ -13,15 +13,18 @@ import (
 	"github.com/Sevyn17/tenon/runtime/session"
 )
 
-// approvalGuard：有 delivered+approve 且参数哈希一致的记录才放行，否则要求确认。
-func approvalGuard(st *memStore) Layer {
-	return Layer{Name: "perm", Guard: true, Call: func(ctx context.Context, cx *Cx, args json.RawMessage, next Next) (Output, error) {
-		if r, ok, _ := st.Lookup(ctx, cx.SessionID, cx.CallID); ok && r.Status == "delivered" &&
-			r.Decision == "approve" && r.ArgsHash == ArgsHash(args) {
-			return next(ctx, cx, args)
-		}
-		return Output{Kind: Confirm, Reason: "写操作"}, nil
-	}}
+// approvalGate：有 delivered+approve 且参数哈希一致的记录才放行，否则要求确认。
+//
+// 04 4.3.2：这是纯判定（查记录、不改参数、无副作用），所以是 Gate 不是 Transform。
+func approvalGate(st *memStore) Gate {
+	return Gate{Name: "perm",
+		Check: func(ctx context.Context, cx *Cx, args json.RawMessage) (Verdict, string) {
+			if r, ok, _ := st.Lookup(ctx, cx.SessionID, cx.CallID); ok && r.Status == "delivered" &&
+				r.Decision == "approve" && r.ArgsHash == ArgsHash(args) {
+				return VerdictAllow, ""
+			}
+			return VerdictConfirm, "写操作"
+		}}
 }
 
 func confirmHub(t *testing.T, st *memStore, await Await) (*Hub, *int) {
@@ -30,7 +33,7 @@ func confirmHub(t *testing.T, st *memStore, await Await) (*Hub, *int) {
 	h := New(Options{Store: st, Await: await})
 	_ = h.Register(&Tool{Spec: spec("w"), Risk: Write,
 		Call: func(context.Context, *Cx, json.RawMessage) (Output, error) { ran++; return Text("written"), nil }})
-	h.AddLayer(approvalGuard(st))
+	h.AddGate(approvalGate(st))
 	return h, &ran
 }
 
@@ -109,9 +112,10 @@ func TestGuardShortCircuitWriteTool(t *testing.T) {
 	h := New(Options{Store: st})
 	h.Register(&Tool{Spec: spec("w"), Risk: Write,
 		Call: func(context.Context, *Cx, json.RawMessage) (Output, error) { return Text("ran"), nil }})
-	h.AddLayer(Layer{Name: "deny", Guard: true, Call: func(ctx context.Context, cx *Cx, a json.RawMessage, next Next) (Output, error) {
-		return Failf("不行"), nil
-	}})
+	h.AddGate(Gate{Name: "deny",
+		Check: func(ctx context.Context, cx *Cx, a json.RawMessage) (Verdict, string) {
+			return VerdictDeny, "不行"
+		}})
 	rs := drain(h.Execute(context.Background(), kctx("s"), []session.ToolCall{call("c1", "w", `{}`)}, nil))
 	if len(rs) != 1 || rs[0].Err != nil || rs[0].Output.Status != session.ToolError {
 		t.Fatalf("短路结果应为错误结果而非内部错误: %+v", rs)
@@ -132,7 +136,7 @@ func TestConfirmApproveReadRiskTool(t *testing.T) {
 	}})
 	_ = h.Register(&Tool{Spec: spec("fetch"), Risk: Read,
 		Call: func(context.Context, *Cx, json.RawMessage) (Output, error) { ran++; return Text("page"), nil }})
-	h.AddLayer(approvalGuard(st))
+	h.AddGate(approvalGate(st))
 	rs := drain(h.Execute(context.Background(), kctx("s"), []session.ToolCall{call("1", "fetch", `{}`)}, nil))
 	if rs[0].Err != nil || ran != 1 || text(rs[0].Output) != "page" {
 		t.Fatalf("批准后只读工具应执行并结清: ran=%d err=%v out=%q", ran, rs[0].Err, text(rs[0].Output))
@@ -184,9 +188,9 @@ func TestConfirmThroughTransform(t *testing.T) {
 		st.decide(cx.CallID, "approve")
 		return true, nil
 	})
-	h.layers = append([]Layer{{Name: "redact", Call: func(ctx context.Context, cx *Cx, a json.RawMessage, next Next) (Output, error) {
+	h.PrependTransform(Transform{Name: "redact", Call: func(ctx context.Context, cx *Cx, a json.RawMessage, next Next) (Output, error) {
 		return next(ctx, cx, a)
-	}}}, h.layers...)
+	}})
 	rs := drain(h.Execute(context.Background(), kctx("s"), []session.ToolCall{call("1", "w", `{}`)}, nil))
 	if asked != 1 || *ran != 1 || text(rs[0].Output) != "written" {
 		t.Fatalf("asked=%d ran=%d %+v", asked, *ran, rs[0].Output)
@@ -194,11 +198,15 @@ func TestConfirmThroughTransform(t *testing.T) {
 }
 
 // Transform 自己返回 Confirm 仍被拒。
+//
+// 04 4.3.2：类型上 `Transform` 不该返回 Confirm（那是 Gate 的 VerdictConfirm 或 Authorizer 的
+// DecisionConfirm）。但 Output 是共用类型，写代码仍能造出来——所以引擎这一层检查保留，
+// 作为「改写层越界」的最后一道防线。
 func TestTransformOwnConfirmRejected(t *testing.T) {
 	h := New(Options{})
 	_ = h.Register(&Tool{Spec: spec("r"), Risk: Read,
 		Call: func(context.Context, *Cx, json.RawMessage) (Output, error) { return Text("x"), nil }})
-	h.AddLayer(Layer{Name: "bad", Call: func(ctx context.Context, cx *Cx, a json.RawMessage, next Next) (Output, error) {
+	h.AddTransform(Transform{Name: "bad", Call: func(ctx context.Context, cx *Cx, a json.RawMessage, next Next) (Output, error) {
 		return Output{Kind: Confirm, Reason: "?"}, nil
 	}})
 	rs := drain(h.Execute(context.Background(), kctx("s"), []session.ToolCall{call("1", "r", `{}`)}, nil))

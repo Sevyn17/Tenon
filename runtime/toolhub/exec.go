@@ -173,7 +173,7 @@ func (h *Hub) one(ctx context.Context, ts *Toolset, k *callctx.Ctx, call session
 		return res
 	}
 
-	out, err := h.chain(0, call)(ctx, cx, call.Args)
+	out, err := h.chain(call)(ctx, cx, call.Args)
 	if err != nil {
 		res.Err = err
 		return res
@@ -237,7 +237,7 @@ func (h *Hub) confirm(ctx, sctx context.Context, cx *Cx, call session.ToolCall, 
 		return h.finish(sctx, cx.SessionID, cx.CallID, "delivered", denied("deny"))
 	}
 	cx.Approved = true
-	out, err := h.chain(0, call)(ctx, cx, call.Args)
+	out, err := h.chain(call)(ctx, cx, call.Args)
 	if err != nil {
 		return Output{}, err
 	}
@@ -262,80 +262,182 @@ func denied(decision string) Output {
 }
 
 // chain 构造第 i 层起的调用链；最内层是执行器。
-func (h *Hub) chain(i int, call session.ToolCall) Next {
-	if i >= len(h.layers) {
-		// 链的最内层（04 4.3.1）：授权判定者在这里。它在所有改写层之后（拿最终参数），
-		// 紧贴执行器（不能绕过）。没设 Authorizer 时退回 executor（Hub.Validate 已保证不会走到）。
-		if h.authorizer == nil {
-			return h.executor
+// chain 构造一次调用的执行链（04 4.3.2）：
+//
+//	改写层（外→内，可超时放行）
+//	  → 准入判定（并行，任一 Deny 即拒；可返回 Confirm）
+//	    → Authorizer（有状态决策者，可挂起问人）
+//	      → 执行器
+//
+// 准入在改写之内：改写完的最终参数才交给判定，「改写绕过守卫」不成立。
+func (h *Hub) chain(call session.ToolCall) Next {
+	return h.transformChain(0, call)
+}
+
+// transformChain 包第 i 个改写层。
+func (h *Hub) transformChain(i int, call session.ToolCall) Next {
+	if i >= len(h.transforms) {
+		return h.admitChain(call)
+	}
+	t := h.transforms[i]
+	inner := h.transformChain(i+1, call)
+	return func(ctx context.Context, cx *Cx, args json.RawMessage) (Output, error) {
+		// 内层只许执行一次：本层调过 next 之后才超时 / panic 时，FailOpen 不能再调一次 inner——
+		// 有副作用的工具会被重放（无存储时真的执行两次，有存储时被 started 记录挡住、真实结果丢失）
+		// （2026-11-04 审查 P0-8）。
+		var (
+			innerMu      sync.Mutex
+			innerDone    bool
+			innerOut     Output
+			innerErr     error
+			innerConfirm bool // 内层（准入/决策者）要求确认：穿过改写层上传是合法的
+		)
+		watched := func(ctx context.Context, cx *Cx, args json.RawMessage) (Output, error) {
+			o, e := inner(ctx, cx, args)
+			innerMu.Lock()
+			innerDone, innerOut, innerErr = true, o, e
+			if e == nil && o.Kind == Confirm {
+				innerConfirm = true
+			}
+			innerMu.Unlock()
+			return o, e
 		}
-		return func(ctx context.Context, cx *Cx, args json.RawMessage) (Output, error) {
+		out, err := runTransform(ctx, t, cx, args, watched)
+		if err != nil {
+			// 改写层失败：FailOpen 时用内层结果（跳过本层改动），否则拒绝。
+			if !t.FailOpen {
+				return Failf("调用被 %s 拒绝：%v", t.Name, err), nil
+			}
+			innerMu.Lock()
+			done, o, e := innerDone, innerOut, innerErr
+			innerMu.Unlock()
+			if done { // 内层已跑过 → 用它的结果，丢弃本层改动
+				return o, e
+			}
+			return inner(ctx, cx, args) // 跳过本层
+		}
+		// 改写层**自己造**的 Confirm 不允许（04 4.3.2）：那是准入层（Gate）与决策者（Authorizer）
+		// 的语义。内层传上来的 Confirm 是合法的（穿过改写层原样上传），不拦。
+		//
+		// 类型上 Transform 不该返回 Confirm，但 Output 是共用类型、仍能造出来——所以这里兜住，
+		// 否则改写层就偷偷获得了「问人权」。
+		if out.Kind == Confirm && !innerConfirm {
+			return Failf("改写层 %s 不允许返回 Confirm（只有准入判定与授权决策者能要求确认）", t.Name), nil
+		}
+		return out, nil
+	}
+}
+
+// admitChain 准入判定 + Authorizer + 执行器。
+//
+// Gate 是纯谓词（无 next、无副作用），所以**并行**跑，任一 Deny 即拒（reduce）；
+// 全部 Allow/Abstain 时交给 Authorizer（有状态、可挂起），最后执行。
+func (h *Hub) admitChain(call session.ToolCall) Next {
+	return func(ctx context.Context, cx *Cx, args json.RawMessage) (Output, error) {
+		// 1. 并行跑全部 Gate，取最严结论。
+		if v, why := h.evalGates(ctx, cx, args); v == VerdictDeny {
+			return Failf("工具 %s 被守卫拒绝：%s", toolName(cx), why), nil
+		} else if v == VerdictConfirm && !cx.Approved {
+			return Output{Kind: Confirm, Reason: why}, nil
+		}
+		// 2. Authorizer（可挂起问人的决策者）。
+		if h.authorizer != nil {
 			d, err := h.authorizer.Authorize(ctx, cx, args)
 			if err != nil {
 				return Failf("授权判定失败：%v", err), nil // 失败即收紧
 			}
 			switch d.Action {
 			case DecisionAllow:
-				return h.executor(ctx, cx, args)
+				// 继续到执行器
 			case DecisionDeny:
 				return Failf("权限拒绝：%s", d.Reason), nil
-			default: // DecisionConfirm：挂起等确认（与 Guard 层返回 Confirm 同一路径）
-				if cx.Approved {
-					return h.executor(ctx, cx, args) // 已批准且参数一致
+			default: // DecisionConfirm
+				if !cx.Approved {
+					return Output{Kind: Confirm, Reason: d.Reason}, nil
 				}
-				return Output{Kind: Confirm, Reason: d.Reason}, nil
 			}
+		}
+		// 3. 执行。
+		return h.executor(ctx, cx, args)
+	}
+}
+
+// evalGates 并行跑全部准入判定并合并：任一 Deny 即拒；否则任一 Confirm 即需确认；
+// 全 Allow/Abstain 返回 Allow/Abstain。
+//
+// 并行是安全的：Gate.Check 是纯谓词（不改参数、无副作用、不依赖顺序）。
+// 拒绝原因取**登记顺序最靠前**的那条，保证确定性（并行不改变可观测结果）。
+func (h *Hub) evalGates(ctx context.Context, cx *Cx, args json.RawMessage) (Verdict, string) {
+	n := len(h.gates)
+	if n == 0 {
+		return VerdictAbstain, ""
+	}
+	type res struct {
+		idx     int
+		verdict Verdict
+		reason  string
+	}
+	results := make([]res, n)
+	var wg sync.WaitGroup
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			// 准入判定 panic 必须 fail-closed（安全优先）：按 Deny 处理，不让进程崩。
+			defer func() {
+				if r := recover(); r != nil {
+					results[i] = res{idx: i, verdict: VerdictDeny,
+						reason: fmt.Sprintf("准入判定 %s panic: %v", h.gates[i].Name, r)}
+				}
+			}()
+			v, why := h.gates[i].Check(ctx, cx, args)
+			results[i] = res{idx: i, verdict: v, reason: why}
+		}(i)
+	}
+	wg.Wait()
+	// 合并：Deny > Confirm > Allow > Abstain，取最严。
+	verdict, reason := VerdictAbstain, ""
+	hasAllow := false
+	for _, r := range results {
+		switch {
+		case r.verdict == VerdictDeny:
+			if verdict != VerdictDeny { // 取第一个 Deny（登记顺序最靠前）
+				verdict = VerdictDeny
+				reason = r.reason
+				if reason == "" {
+					reason = h.gates[r.idx].Name
+				}
+			}
+		case r.verdict == VerdictConfirm && verdict != VerdictDeny:
+			if verdict != VerdictConfirm {
+				verdict = VerdictConfirm
+				reason = r.reason
+				if reason == "" {
+					reason = h.gates[r.idx].Name
+				}
+			}
+		case r.verdict == VerdictAllow:
+			hasAllow = true
 		}
 	}
-	l := h.layers[i]
-	inner := h.chain(i+1, call)
-	return func(ctx context.Context, cx *Cx, args json.RawMessage) (Output, error) {
-		// 内层（Guard）返回的 Confirm 经过 Transform 层原样上传是合法的；
-		// 只有 Transform 自己造出 Confirm 才拒绝。
-		innerConfirm := false
-		// 内层只许执行一次：本层调过 next 之后才超时 / panic 时，FailOpen 不能再调一次 inner——
-		// 有副作用的工具会被重放（无存储时真的执行两次，有存储时被 started 记录挡住、真实结果丢失）
-		// （2026-11-04 审查 P0-8）。
-		var (
-			innerMu   sync.Mutex
-			innerDone bool
-			innerOut  Output
-			innerErr  error
-		)
-		watched := func(ctx context.Context, cx *Cx, args json.RawMessage) (Output, error) {
-			o, e := inner(ctx, cx, args)
-			innerMu.Lock()
-			innerDone, innerOut, innerErr = true, o, e
-			innerMu.Unlock()
-			if e == nil && o.Kind == Confirm {
-				innerConfirm = true
-			}
-			return o, e
-		}
-		out, err := runLayer(ctx, l, cx, args, watched)
-		if err != nil {
-			if l.Guard || !l.FailOpen {
-				return Failf("调用被 %s 拒绝：%v", l.Name, err), nil // Guard FailClosed
-			}
-			innerMu.Lock()
-			done, o, e := innerDone, innerOut, innerErr
-			innerMu.Unlock()
-			if done { // Transform FailOpen：内层已跑过 → 用它的结果，丢弃本层改动
-				return o, e
-			}
-			return inner(ctx, cx, args) // Transform FailOpen：跳过本层
-		}
-		if out.Kind == Confirm && !l.Guard && !innerConfirm {
-			return Failf("层 %s 不允许返回 Confirm（只能由 Guard 返回）", l.Name), nil
-		}
-		return out, nil
+	if verdict == VerdictAbstain && hasAllow {
+		verdict = VerdictAllow
 	}
+	return verdict, reason
+}
+
+// toolName 取本次调用的工具名（cx.Tool 可能为空）。
+func toolName(cx *Cx) string {
+	if cx == nil || cx.Tool == nil {
+		return ""
+	}
+	return cx.Tool.Spec.Name
 }
 
 var errLayerTimeout = errors.New("层超时")
 
 // runLayer 执行一层；超时只计本层自身耗时（扣除 next 的耗时）。
-func runLayer(ctx context.Context, l Layer, cx *Cx, args json.RawMessage, next Next) (out Output, err error) {
+func runTransform(ctx context.Context, t Transform, cx *Cx, args json.RawMessage, next Next) (out Output, err error) {
 	var innerDur time.Duration
 	var mu sync.Mutex
 	wrapped := func(ctx context.Context, cx *Cx, args json.RawMessage) (Output, error) {
@@ -352,11 +454,11 @@ func runLayer(ctx context.Context, l Layer, cx *Cx, args json.RawMessage, next N
 		}
 	}()
 	start := time.Now()
-	out, err = l.Call(ctx, cx, args, wrapped)
+	out, err = t.Call(ctx, cx, args, wrapped)
 	mu.Lock()
 	own := time.Since(start) - innerDur
 	mu.Unlock()
-	if err == nil && l.Timeout > 0 && own > l.Timeout {
+	if err == nil && t.Timeout > 0 && own > t.Timeout {
 		return Output{}, errLayerTimeout
 	}
 	return out, err

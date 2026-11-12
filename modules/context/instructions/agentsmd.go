@@ -332,20 +332,3 @@ func (in *Instructions) discoverWithTimeout(ctx context.Context, path string) st
 		return "" // 超时：放行（FailOpen）
 	}
 }
-
-func (in *Instructions) Layer() toolhub.Layer {
-	return toolhub.Layer{Name: "agents_md", Timeout: 2 * time.Second, FailOpen: true,
-		Call: func(ctx context.Context, cx *toolhub.Cx, args json.RawMessage, next toolhub.Next) (toolhub.Output, error) {
-			out, err := next(ctx, cx, args)
-			if err != nil || out.Kind != toolhub.Done || out.Status != session.ToolOK || cx.Tool == nil || !agentsTools[cx.Tool.Spec.Name] {
-				return out, err
-			}
-			var a struct{ Path string }
-			_ = json.Unmarshal(args, &a)
-			if t := in.Discover(a.Path); t != "" {
-				out.Content = append(append(session.Content{}, out.Content...),
-					session.NewTextPart("\n\n<project-instructions>\n该目录有新的项目指令，后续在此目录工作时遵守：\n\n"+t+"\n</project-instructions>"))
-			}
-			return out, nil
-		}}
-}

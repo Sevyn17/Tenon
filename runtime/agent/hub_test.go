@@ -66,11 +66,13 @@ func TestHubConfirmDenied(t *testing.T) {
 }
 
 // askLayer 测试用的“每次询问” Guard：只读放行，其余未批准即要确认（内核测试不依赖权限插件）。
-func askLayer() toolhub.Layer {
-	return toolhub.Layer{Name: "permission", Guard: true, Call: func(ctx context.Context, cx *toolhub.Cx, args json.RawMessage, next toolhub.Next) (toolhub.Output, error) {
-		if cx.Approved || (cx.Tool != nil && cx.Tool.Risk == toolhub.Read) {
-			return next(ctx, cx, args)
-		}
-		return toolhub.Output{Kind: toolhub.Confirm, Reason: cx.Tool.Spec.Name + " 需要确认"}, nil
-	}}
+func askGate() toolhub.Gate {
+	// 04 4.3.2：纯判定（只读放行、其余要确认），所以是 Gate 不是 Transform。
+	return toolhub.Gate{Name: "permission",
+		Check: func(ctx context.Context, cx *toolhub.Cx, args json.RawMessage) (toolhub.Verdict, string) {
+			if cx.Approved || (cx.Tool != nil && cx.Tool.Risk == toolhub.Read) {
+				return toolhub.VerdictAllow, ""
+			}
+			return toolhub.VerdictConfirm, cx.Tool.Spec.Name + " 需要确认"
+		}}
 }

@@ -26,7 +26,7 @@ func TestToolCallLayerDenies(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	layers := asm.ToolCallLayers()
+	layers := asm.ToolCallTransforms()
 	if len(layers) != 1 {
 		t.Fatalf("应有一层：%d", len(layers))
 	}
@@ -73,7 +73,7 @@ func TestToolCallLayerRewritesArgs(t *testing.T) {
 		return toolhub.Text("ok"), nil
 	}
 	cx := &toolhub.Cx{Tool: &toolhub.Tool{Spec: sessionToolSpec("x")}}
-	if _, err := asm.ToolCallLayers()[0].Call(context.Background(), cx, json.RawMessage(`{"a":1}`), next); err != nil {
+	if _, err := asm.ToolCallTransforms()[0].Call(context.Background(), cx, json.RawMessage(`{"a":1}`), next); err != nil {
 		t.Fatal(err)
 	}
 	if seen != `{"patched":true}` {
@@ -102,7 +102,7 @@ func TestToolCallLayerRewritesOutput(t *testing.T) {
 		return toolhub.Text("secret"), nil
 	}
 	cx := &toolhub.Cx{Tool: &toolhub.Tool{Spec: sessionToolSpec("x")}}
-	out, err := asm.ToolCallLayers()[0].Call(context.Background(), cx, nil, next)
+	out, err := asm.ToolCallTransforms()[0].Call(context.Background(), cx, nil, next)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,13 +111,13 @@ func TestToolCallLayerRewritesOutput(t *testing.T) {
 	}
 }
 
-// 没有中间件时 ToolCallLayers 返回 nil（不装任何层）。
-func TestToolCallLayersEmpty(t *testing.T) {
+// 没有中间件时 ToolCallTransforms 返回 nil（不装任何层）。
+func TestToolCallTransformsEmpty(t *testing.T) {
 	asm, err := Assemble(Spec{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := asm.ToolCallLayers(); len(got) != 0 {
+	if got := asm.ToolCallTransforms(); len(got) != 0 {
 		t.Fatalf("没登记时应为 nil：%+v", got)
 	}
 }
