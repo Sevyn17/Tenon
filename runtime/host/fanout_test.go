@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/Sevyn17/tenon/runtime/agent"
 	"github.com/Sevyn17/tenon/runtime/component"
@@ -119,15 +120,27 @@ func TestFanoutAcceptance(t *testing.T) {
 		t.Fatalf("被拒的不应入信箱：%+v", got)
 	}
 	// 只数 guard.denied（其它组件事件与本次断言无关，避免被无关事件干扰）。
+	//
+	// 2026-11-12：guardDenied 里 appendGuardDenied 是**异步**写事件日志
+	// （用 context.Background()，不阻塞投递路径），所以这里要轮询等它落库，
+	// 不能读完一次就断言——并发负载下会偶发「读到 0 条」（-count=2 全量跑时暴露）。
 	var deniedEvents []store.ComponentEvent
-	if all, err := r.db.Read(ctx, 0, 0); err != nil {
-		t.Fatalf("读组件事件：%v", err)
-	} else {
-		for _, e := range all {
-			if e.Name == "guard.denied" {
-				deniedEvents = append(deniedEvents, e)
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		deniedEvents = deniedEvents[:0]
+		if all, err := r.db.Read(ctx, 0, 0); err != nil {
+			t.Fatalf("读组件事件：%v", err)
+		} else {
+			for _, e := range all {
+				if e.Name == "guard.denied" {
+					deniedEvents = append(deniedEvents, e)
+				}
 			}
 		}
+		if len(deniedEvents) > 0 || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 	if len(deniedEvents) != 1 {
 		t.Fatalf("应记一条 guard.denied，实际 %d 条（全部事件 %+v）", len(deniedEvents), deniedEvents)
