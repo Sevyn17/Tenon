@@ -676,7 +676,7 @@ func (a *actor) run() {
 	ctx := context.Background()
 	// 打开时有未完成回合：先续跑（WaitingModel 原样重发，WaitingTools 按原 id 续答）。
 	if a.ag.Pending() {
-		end, err := a.turn(ctx, func(tctx context.Context) (session.EndReason, error) { return a.ag.Recover(tctx) })
+		end, err := a.turn(ctx, true, func(tctx context.Context) (session.EndReason, error) { return a.ag.Recover(tctx) })
 		if err == nil {
 			err = turnErr(end)
 		}
@@ -919,7 +919,7 @@ func (a *actor) idle(ctx context.Context, c Command) (bool, error) {
 		if err != nil {
 			return false, err
 		}
-		end, terr := a.turn(ctx, func(tctx context.Context) (session.EndReason, error) { return a.ag.Drive(tctx, need) })
+		end, terr := a.turn(ctx, false, func(tctx context.Context) (session.EndReason, error) { return a.ag.Drive(tctx, need) })
 		if terr == nil {
 			terr = turnErr(end)
 		}
@@ -1099,7 +1099,7 @@ func (a *actor) drainInbox(ctx context.Context) (stop bool, err error) {
 		a.turnInputs = consume                  // 守卫放行后才记：被拒的输入不开回合
 		a.turnCaps = batchCaps(batch)           // 信封 caps 交集：本轮只许调这些工具（空=不限）
 		a.turnBudgetRef = batchBudgetRef(batch) // 本轮预算账（08 8.4）
-		end, terr := a.turn(ctx, func(tctx context.Context) (session.EndReason, error) {
+		end, terr := a.turn(ctx, false, func(tctx context.Context) (session.EndReason, error) {
 			return a.ag.SendContent(tctx, content, m, consume)
 		})
 		if terr == nil {
@@ -1197,7 +1197,8 @@ func inboxSet(ids []string) map[string]bool {
 }
 
 // turn 跑一个回合：可取消的 ctx、turn span、after_turn、回合中排队的 Idle 命令在回合后处理。
-func (a *actor) turn(ctx context.Context, f func(context.Context) (session.EndReason, error)) (session.EndReason, error) {
+// turn 跑一轮（含 Turn 中间件链）。resumed 表示这一轮是否是恢复后续跑。
+func (a *actor) turn(ctx context.Context, resumed bool, f func(context.Context) (session.EndReason, error)) (session.EndReason, error) {
 	// 先登记取消函数再排并发槽位：排队期间到达的 Cancel 要能取消这一轮（02 2.4）。
 	a.steered = nil
 	tctx, cancel := context.WithCancel(ctx)
@@ -1233,7 +1234,7 @@ func (a *actor) turn(ctx context.Context, f func(context.Context) (session.EndRe
 	a.turnInputs = nil
 	a.ag.SetCaps(a.turnCaps) // 本轮授权范围（信封 caps 交集，T3）
 	defer a.ag.SetCaps(nil)
-	end, err := a.turnWithMiddleware(tctx, f)
+	end, err := a.turnWithMiddleware(tctx, resumed, f)
 	if err != nil {
 		sp.Set("error", err.Error()).End("error")
 		return end, err
@@ -1283,9 +1284,14 @@ func turnErr(end session.EndReason) error {
 // turnWithMiddleware 跑一轮的中间件链（04 4.3 Turn 点位）：f 是链的最内层 kernel。
 //
 // **不跨挂起**：一轮等工具、等人、预算挂起或进程重启后，恢复时这条链会重新构造并跑一次，
-// 那时 Resumed=true（a.ag.Pending() 表示打开时还有未完成回合）。
-// 中间件不能把状态放在闭包或调用栈里等它「回来」，跨段状态要写进会话或组件集合。
-func (a *actor) turnWithMiddleware(ctx context.Context, f func(context.Context) (session.EndReason, error)) (session.EndReason, error) {
+// 那时 Resumed=true。中间件不能把状态放在闭包或调用栈里等它「回来」，
+// 跨段状态要写进会话或组件集合。
+//
+// resumed 由调用方**显式传入**（2026-11-12 D2）：原先读 a.ag.Pending()，而它依赖
+// 「TurnReq 在 f 执行之前构造」这个隐式时序——因为 Recover() 会清掉 resumed.need，
+// 一旦将来有人把构造挪到 kernel 里、或 f 提前执行，Resumed 就会失真。
+// 显式传参让这个语义不再依赖调用顺序。
+func (a *actor) turnWithMiddleware(ctx context.Context, resumed bool, f func(context.Context) (session.EndReason, error)) (session.EndReason, error) {
 	if a.h.TurnChain == nil {
 		return f(ctx)
 	}
@@ -1302,7 +1308,7 @@ func (a *actor) turnWithMiddleware(ctx context.Context, f func(context.Context) 
 		return component.TurnResp{End: raw}, nil
 	}
 	req := component.TurnReq{SessionID: a.id, Turn: a.ag.Core.TurnNumber(),
-		Resumed: a.ag.Pending(), Inputs: a.turnInputs}
+		Resumed: resumed, Inputs: a.turnInputs}
 	resp, err := a.h.TurnChain(kernel)(ctx, req)
 	if err != nil {
 		return session.EndReason{}, err
@@ -1337,7 +1343,7 @@ func (a *actor) turnFailed(ctx context.Context, err error) bool {
 			max = 1
 		}
 		for i := 0; i < max; i++ {
-			end, rerr := a.turn(ctx, a.ag.Retry)
+			end, rerr := a.turn(ctx, true, a.ag.Retry) // Retry 是续跑上次中断的回合，算恢复
 			if rerr == nil {
 				rerr = turnErr(end)
 			}
