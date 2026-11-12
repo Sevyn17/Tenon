@@ -52,7 +52,7 @@ func TestPackageAgents(t *testing.T) {
 	if ref.Namespace != agentdef.Platform || got.ID != "helper" {
 		t.Fatalf("解析结果 = %s %s", ref, got.ID)
 	}
-	direct, err := agentdef.Dir(p.AgentsDir).Load(ctx, ref)
+	direct, err := agentdef.FS(os.DirFS(p.AgentsDir), p.AgentsDir).Load(ctx, ref)
 	if err != nil {
 		t.Fatal(err)
 	}

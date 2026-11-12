@@ -176,8 +176,8 @@ func WithAgents(srcs ...AgentSource) Option {
 }
 
 // Dir 目录定义来源（agentdef.DirSource）：root/platform/<名>、root/tenant/<租户>/<名>、
-// root/user/<租户>/<用户>/<名>。
-func Dir(root string) AgentSource { return agentdef.Dir(root) }
+// root/user/<租户>/<用户>/<名>。读盘由调用方这一侧完成（os.DirFS），内核不自己读。
+func Dir(root string) AgentSource { return agentdef.FS(os.DirFS(root), root) }
 
 // WithWorkdir 会话工作目录（fs / shell / instructions 等组件要用）。
 func WithWorkdir(dir string) Option {

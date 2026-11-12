@@ -304,7 +304,7 @@ func TestDirSource(t *testing.T) {
 	must(t, os.MkdirAll(filepath.Join(root, "platform", "empty"), 0o755))
 	must(t, os.WriteFile(filepath.Join(root, "platform", "support", ".DS_Store"), []byte("x"), 0o644))
 
-	d := Dir(root)
+	d := FS(os.DirFS(root), root)
 
 	a, ref, err := Resolve(ctx, d, Scope{Tenant: "t1", User: "alice"}, "support")
 	if err != nil || ref.Namespace != Tenant || a.Description != "租户版" || a.Model != "" {

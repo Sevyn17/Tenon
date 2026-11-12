@@ -10,7 +10,7 @@ name = "web"
 config = { a = 1, b = 2 }
 [kernel]
 max_steps = 10
-`, ".")
+`, ".", nil, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -24,7 +24,7 @@ name = "mcp"
 disabled = true
 [kernel]
 tool_timeout = "30s"
-`, ".")
+`, ".", nil, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,7 +54,7 @@ tool_timeout = "30s"
 	}
 
 	// 后层未写 enabled 时保留前层开关。
-	proj, _ := ParseProfile("[[plugin]]\nname = \"web\"\nconfig = { a = 9 }\n", ".")
+	proj, _ := ParseProfile("[[plugin]]\nname = \"web\"\nconfig = { a = 9 }\n", ".", nil, "")
 	if err := base.Overlay(proj); err != nil {
 		t.Fatal(err)
 	}
@@ -62,7 +62,7 @@ tool_timeout = "30s"
 		t.Fatalf("未写 enabled 应保留开启: %+v", web)
 	}
 
-	off, _ := ParseProfile("[[plugin]]\nname = \"store\"\nenabled = false\n", ".")
+	off, _ := ParseProfile("[[plugin]]\nname = \"store\"\nenabled = false\n", ".", nil, "")
 	if err := base.Overlay(off); err == nil {
 		t.Fatal("关闭强制插件应报错")
 	}

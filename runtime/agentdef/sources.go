@@ -5,10 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"os"
 	"path"
-	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 )
 
@@ -36,37 +35,48 @@ func checkID(ref Ref, a Agent) error {
 
 // ---------- 目录来源 ----------
 
-// DirSource 从目录加载定义（桌面版、本地开发）。目录布局：
+// DirSource 从文件系统加载定义。目录布局（路径用 / 分隔，与操作系统无关）：
 //
 //	<root>/platform/<名字>/agent.toml
 //	<root>/tenant/<租户>/<名字>/agent.toml
 //	<root>/user/<租户>/<用户>/<名字>/agent.toml
 //
-// 每次 Load 都重新读盘，改了文件即得到新 Version。
+// 内核不自己读盘：调用方给 fs.FS（读磁盘用 os.DirFS）。每次 Load 都重新读，改了文件即得到新 Version。
 type DirSource struct {
+	// Root 错误信息里指给用户看的根（可空）。
 	Root string
+	FS   fs.FS
 }
 
-// Dir 返回以 root 为根的目录来源。
-func Dir(root string) *DirSource { return &DirSource{Root: root} }
+// FS 返回以 fsys 为根的目录来源。root 只写进错误信息，方便定位是哪一个目录；可空。
+func FS(fsys fs.FS, root string) *DirSource { return &DirSource{FS: fsys, Root: root} }
 
-// dir 引用对应的包目录。
+// dir 引用对应的包目录（/ 分隔）。
 func (d *DirSource) dir(r Ref) string {
 	switch r.Namespace {
 	case Platform:
-		return filepath.Join(d.Root, "platform", r.Name)
+		return path.Join("platform", r.Name)
 	case Tenant:
-		return filepath.Join(d.Root, "tenant", r.Tenant, r.Name)
+		return path.Join("tenant", r.Tenant, r.Name)
 	default:
-		return filepath.Join(d.Root, "user", r.Tenant, r.User, r.Name)
+		return path.Join("user", r.Tenant, r.User, r.Name)
 	}
+}
+
+// hasManifest dir 下是否有普通文件 agent.toml。
+func (d *DirSource) hasManifest(dir string) bool {
+	st, err := fs.Stat(d.FS, path.Join(dir, ManifestName))
+	return err == nil && st.Mode().IsRegular()
 }
 
 // List 实现 Source。
 func (d *DirSource) List(ctx context.Context, scope Scope) ([]Ref, error) {
+	if d.FS == nil {
+		return nil, errors.New("目录来源没有文件系统")
+	}
 	var out []Ref
 	add := func(base string, mk func(name string) Ref) error {
-		ents, err := os.ReadDir(base)
+		ents, err := fs.ReadDir(d.FS, base)
 		if errors.Is(err, fs.ErrNotExist) {
 			return nil
 		}
@@ -77,26 +87,25 @@ func (d *DirSource) List(ctx context.Context, scope Scope) ([]Ref, error) {
 			if !e.IsDir() || !ValidName(e.Name()) {
 				continue
 			}
-			if st, err := os.Stat(filepath.Join(base, e.Name(), ManifestName)); err != nil || !st.Mode().IsRegular() {
-				continue
+			if d.hasManifest(path.Join(base, e.Name())) {
+				out = append(out, mk(e.Name()))
 			}
-			out = append(out, mk(e.Name()))
 		}
 		return nil
 	}
-	if err := add(filepath.Join(d.Root, "platform"), func(n string) Ref {
+	if err := add("platform", func(n string) Ref {
 		return Ref{Namespace: Platform, Name: n}
 	}); err != nil {
 		return nil, err
 	}
 	if ValidName(scope.Tenant) {
-		if err := add(filepath.Join(d.Root, "tenant", scope.Tenant), func(n string) Ref {
+		if err := add(path.Join("tenant", scope.Tenant), func(n string) Ref {
 			return Ref{Namespace: Tenant, Tenant: scope.Tenant, Name: n}
 		}); err != nil {
 			return nil, err
 		}
 		if ValidName(scope.User) {
-			if err := add(filepath.Join(d.Root, "user", scope.Tenant, scope.User), func(n string) Ref {
+			if err := add(path.Join("user", scope.Tenant, scope.User), func(n string) Ref {
 				return Ref{Namespace: User, Tenant: scope.Tenant, User: scope.User, Name: n}
 			}); err != nil {
 				return nil, err
@@ -112,15 +121,22 @@ func (d *DirSource) Load(ctx context.Context, ref Ref) (Agent, error) {
 	if err := ref.Validate(); err != nil {
 		return Agent{}, err
 	}
+	if d.FS == nil {
+		return Agent{}, errors.New("目录来源没有文件系统")
+	}
 	dir := d.dir(ref)
-	if st, err := os.Stat(filepath.Join(dir, ManifestName)); err != nil || !st.Mode().IsRegular() {
+	if !d.hasManifest(dir) {
 		return Agent{}, fmt.Errorf("定义 %s：%w", ref, ErrNotFound)
 	}
-	files, err := ReadDir(dir)
+	files, err := ReadFS(d.FS, dir)
 	if err != nil {
 		return Agent{}, fmt.Errorf("定义 %s：%w", ref, err)
 	}
-	a, err := Parse(filepath.ToSlash(dir), files)
+	where := dir
+	if d.Root != "" {
+		where = path.Clean(strings.ReplaceAll(d.Root, `\`, "/")) + "/" + dir
+	}
+	a, err := Parse(where, files)
 	if err != nil {
 		return Agent{}, err
 	}
@@ -130,12 +146,12 @@ func (d *DirSource) Load(ctx context.Context, ref Ref) (Agent, error) {
 	return a, nil
 }
 
-// ReadDir 把目录读成定义包文件集合（路径 / 分隔）。跳过符号链接与以 . 开头的文件和目录；
-// 总大小超过 MaxPackageSize 报错。
-func ReadDir(dir string) (Files, error) {
+// ReadFS 把 fsys 里 dir 目录读成定义包文件集合（路径 / 分隔，dir 为空读整棵）。
+// 跳过符号链接与以 . 开头的文件和目录；总大小超过 MaxPackageSize 报错。
+func ReadFS(fsys fs.FS, dir string) (Files, error) {
 	files := Files{}
 	total := 0
-	err := filepath.WalkDir(dir, func(p string, e fs.DirEntry, err error) error {
+	err := fs.WalkDir(fsys, dir, func(p string, e fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -144,18 +160,14 @@ func ReadDir(dir string) (Files, error) {
 		}
 		if e.Name()[0] == '.' {
 			if e.IsDir() {
-				return filepath.SkipDir
+				return fs.SkipDir
 			}
 			return nil
 		}
 		if e.IsDir() || !e.Type().IsRegular() {
 			return nil
 		}
-		rel, err := filepath.Rel(dir, p)
-		if err != nil {
-			return err
-		}
-		b, err := os.ReadFile(p)
+		b, err := fs.ReadFile(fsys, p)
 		if err != nil {
 			return err
 		}
@@ -163,7 +175,11 @@ func ReadDir(dir string) (Files, error) {
 		if total > MaxPackageSize {
 			return fmt.Errorf("定义包超过上限 %d 字节", MaxPackageSize)
 		}
-		files[path.Clean(filepath.ToSlash(rel))] = b
+		rel := p
+		if dir != "" {
+			rel = strings.TrimPrefix(p, dir+"/")
+		}
+		files[path.Clean(rel)] = b
 		return nil
 	})
 	if err != nil {

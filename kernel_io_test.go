@@ -24,14 +24,18 @@ var kernelIOBanned = []string{
 // kernelIOAllow 允许名单：文件（相对 runtime/）→ 暂时允许的包。
 // 每条都要有理由；理由与清理计划见 18 方案第五、六节。
 var kernelIOAllow = map[string][]string{
-	// 第 4 步移到 apphost / adapters：读文件、扫目录、用户目录
-	"agentdef/sources.go":       {"os"},
-	"appid/appid.go":            {"os"},
-	"assemble/services.go":      {"os"},
-	"component/profile.go":      {"os"},
-	"component/profile_edit.go": {"os"},
-	"pkgs/pkgs.go":              {"os"},
-	"pkgs/ui.go":                {"os"},
+	// 第 4 步核实后留在内核，理由见 18 方案第十节：
+	// appid 被十来个标准模块引用，只拼目录名、读一个环境变量，不是读写文件。
+	"appid/appid.go": {"os"},
+	// EnvSecrets 是 env: 凭证引用的缺省实现，只读一个环境变量。
+	"assemble/services.go": {"os"},
+	// Parse 校验清单里写的路径确实存在；PromptText 读清单点名的片段。
+	// 四个标准模块都调 Parse，不能把读文件搬到 adapters。
+	"pkgs/pkgs.go": {"os"},
+	// [[ui]] 的 view_file 在解析清单时读，和 Parse 是同一件事。
+	"pkgs/ui.go": {"os"},
+	// 插件包带定义时，把清单点名的目录交给 agentdef.FS。目录由调用方给，不是内核自己扫。
+	"pkgs/agents.go": {"os"},
 	// 第 3 步评估后保留：store.SQL 的方法签名用到 *sql.DB，是类型引用不是读写。
 	// 去掉它要另造一套不带 *sql.DB 的迁移接口，而现在只有 SQLite 一个实现，没有第二个方言来证明新接口。
 	"store/sql.go": {"database/sql"},

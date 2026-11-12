@@ -1,10 +1,11 @@
 package pkgs
 
-// 插件包带定义（T4d，04 4.8）：agents 字段指向一份 agentdef.Dir 布局的目录。
+// 插件包带定义（T4d，04 4.8）：agents 字段指向一份 agentdef.DirSource 布局的目录。
 // 本包不解析定义，只把目录交给 agentdef，校验与信任规则都沿用现成的。
 
 import (
 	"context"
+	"os"
 
 	"github.com/Sevyn17/tenon/runtime/agentdef"
 	"github.com/Sevyn17/tenon/runtime/component"
@@ -16,7 +17,7 @@ func AgentSources(ps []*Package) []agentdef.Source {
 	var out []agentdef.Source
 	for _, p := range ps {
 		if p != nil && p.AgentsDir != "" {
-			out = append(out, agentdef.Dir(p.AgentsDir))
+			out = append(out, agentdef.FS(os.DirFS(p.AgentsDir), p.AgentsDir))
 		}
 	}
 	return out
@@ -33,7 +34,7 @@ func Infos(ctx context.Context, ps []*Package, scope agentdef.Scope) []component
 		}
 		info := component.PackageInfo{Name: p.Name, Scope: p.Scope, File: p.File, Contents: p.Contents()}
 		if p.AgentsDir != "" {
-			refs, err := agentdef.Dir(p.AgentsDir).List(ctx, scope)
+			refs, err := agentdef.FS(os.DirFS(p.AgentsDir), p.AgentsDir).List(ctx, scope)
 			if err != nil {
 				info.Agents = []string{"（读定义目录失败：" + err.Error() + "）"}
 				out = append(out, info)

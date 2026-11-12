@@ -17,6 +17,8 @@ import (
 
 	"github.com/BurntSushi/toml"
 
+	"github.com/Sevyn17/tenon/adapters/plugins"
+	"github.com/Sevyn17/tenon/adapters/profile"
 	"github.com/Sevyn17/tenon/runtime/appid"
 	"github.com/Sevyn17/tenon/runtime/component"
 	"github.com/Sevyn17/tenon/runtime/pkgs"
@@ -236,7 +238,7 @@ func HasProjectConfig(root string) bool {
 			return true
 		}
 	}
-	return pkgs.HasAny(filepath.Join(appid.Project(root), "plugins"))
+	return plugins.HasAny(filepath.Join(appid.Project(root), "plugins"))
 }
 
 // ResolveTrust 决定本次运行是否信任项目。force（-trust-project / -project-hooks）只对本次生效。
@@ -292,13 +294,13 @@ func LoadAll(base, extra, root string, trusted bool) (*component.Profile, []*pkg
 	if base == "" {
 		base = defaultProfileTOML
 	}
-	p, err := component.ParseProfile(base, ".")
+	p, err := component.ParseProfile(base, ".", nil, "")
 	if err != nil {
 		return nil, nil, nil, err
 	}
 	p.Sources = map[string]string{}
 	var notes []string
-	ps, pn, err := pkgs.Load(Home(), root, trusted)
+	ps, pn, err := plugins.Load(Home(), root, trusted)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -320,7 +322,7 @@ func LoadAll(base, extra, root string, trusted bool) (*component.Profile, []*pkg
 		if _, err := os.Stat(path); err != nil {
 			return nil
 		}
-		q, err := component.LoadProfile(path)
+		q, err := profile.Load(path)
 		if err != nil {
 			return err
 		}
@@ -347,7 +349,7 @@ func LoadAll(base, extra, root string, trusted bool) (*component.Profile, []*pkg
 		notes = append(notes, "项目未受信，未读 "+proj+"（"+appid.Command("trust")+" 可信任）")
 	}
 	if extra != "" {
-		q, err := component.LoadProfile(extra)
+		q, err := profile.Load(extra)
 		if err != nil {
 			return nil, nil, nil, err
 		}

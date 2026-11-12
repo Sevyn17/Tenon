@@ -3,8 +3,6 @@ package component
 import (
 	"context"
 	"errors"
-	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -165,60 +163,6 @@ func TestConfigDecodeAndSchema(t *testing.T) {
 	}
 	if _, err := Assemble(Spec{Plugins: []Entry{{Name: n, Config: map[string]any{"typo": 1}}}}); err == nil {
 		t.Fatal("未知配置键应报错")
-	}
-}
-
-func TestProfileIncludeMandatoryUnion(t *testing.T) {
-	dir := t.TempDir()
-	write := func(name, body string) string {
-		p := filepath.Join(dir, name)
-		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		return p
-	}
-	write("base.toml", `
-mandatory = ["permission"]
-[[plugin]]
-name = "permission"
-[[plugin]]
-name = "compact"
-config = { threshold = 0.8 }
-`)
-	child := write("child.toml", `
-include = ["base.toml"]
-mandatory = ["redact"]
-[[plugin]]
-name = "redact"
-[[plugin]]
-name = "compact"
-config = { threshold = 0.9 }
-`)
-	p, err := LoadProfile(child)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Join(p.Mandatory, ",") != "permission,redact" {
-		t.Fatalf("mandatory 应取并集: %v", p.Mandatory)
-	}
-	if len(p.Plugins) != 3 || p.Plugins[1].Config["threshold"] != 0.9 {
-		t.Fatalf("后写覆盖整行: %+v", p.Plugins)
-	}
-	if !strings.HasSuffix(p.Sources["compact"], "child.toml") || !strings.HasSuffix(p.Sources["permission"], "base.toml") {
-		t.Fatalf("来源 %v", p.Sources)
-	}
-	bad := write("bad.toml", `
-include = ["base.toml"]
-[[plugin]]
-name = "permission"
-disabled = true
-`)
-	if _, err := LoadProfile(bad); err == nil {
-		t.Fatal("子 profile 不能停用父 profile 的强制插件")
-	}
-	loop := write("loop.toml", `include = ["loop.toml"]`)
-	if _, err := LoadProfile(loop); err == nil {
-		t.Fatal("include 循环应报错")
 	}
 }
 

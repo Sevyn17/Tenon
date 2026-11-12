@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"slices"
 
+	"github.com/Sevyn17/tenon/adapters/profile"
 	"github.com/Sevyn17/tenon/appapi"
 	"github.com/Sevyn17/tenon/appapi/wire"
 	"github.com/Sevyn17/tenon/runtime/appid"
@@ -46,7 +47,7 @@ func (p Profiles) Scopes() []wire.ProfileScope {
 			out = append(out, wire.ProfileScope{Scope: s, Reason: err.Error()})
 			continue
 		}
-		rev, err := component.Revision(path)
+		rev, err := profile.Revision(path)
 		sc := wire.ProfileScope{Scope: s, Path: path, Revision: rev, Writable: err == nil}
 		if err != nil {
 			sc.Reason = err.Error()
@@ -77,7 +78,7 @@ func (p Profiles) Edit(scope string, e component.PluginEdit, ifRevision *string)
 			return "", appapi.Errorf(wire.CodeInvalid, "关掉 %s 就没有存储组件了：先开另一个提供 %s 的插件", e.Name, assemble.ServiceDB)
 		}
 	}
-	return component.EditProfile(path, e, ifRevision)
+	return profile.Edit(path, e, ifRevision)
 }
 
 // providesDB 插件是否提供会话存储（service:db）。

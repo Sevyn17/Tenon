@@ -19,7 +19,6 @@ package component
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 
 	"github.com/BurntSushi/toml"
@@ -39,6 +38,10 @@ type profileItem struct {
 	Config   map[string]any `toml:"config"`
 }
 
+// ProfileReader 按绝对路径读一份 profile 文本。内核自己不读文件；
+// include 展开由调用方注入（adapters/profile 用 os.ReadFile）。
+type ProfileReader func(abs string) ([]byte, error)
+
 // Profile 合并后的结果。Plugins 只含 profile 里写到的插件（Enabled 为 nil = 按缺省）；
 // Sources：插件名 → 最后写到它的文件；Kernel：[kernel] 节，KernelSources 键 → 文件。
 type Profile struct {
@@ -49,52 +52,48 @@ type Profile struct {
 	KernelSources map[string]string
 }
 
-// LoadProfile 读 profile 文件并展开 include。
-func LoadProfile(path string) (*Profile, error) {
-	return loadProfile(path, map[string]bool{})
+// ParseProfile 从内存解析。文本里写了 include 时必须给 read，相对路径按 dir 解析；
+// 没写 include 时 read 可以为 nil（apphost 的内置 profile 走这条）。
+// self 是这份文本的来源标记，写进 Sources；空串记成 "<inline>"。
+func ParseProfile(data, dir string, read ProfileReader, self string) (*Profile, error) {
+	if self == "" {
+		self = "<inline>"
+	}
+	return parseProfile(data, dir, self, map[string]bool{}, read)
 }
 
-// ParseProfile 从内存解析（无 include 时用；include 相对 dir 解析）。
-func ParseProfile(data, dir string) (*Profile, error) {
+func parseProfile(data, dir, self string, seen map[string]bool, read ProfileReader) (*Profile, error) {
 	var f profileFile
-	if _, err := toml.Decode(data, &f); err != nil {
-		return nil, err
-	}
-	return merge(f, dir, "<inline>", map[string]bool{})
-}
-
-func loadProfile(path string, seen map[string]bool) (*Profile, error) {
-	abs, err := filepath.Abs(path)
+	md, err := toml.Decode(data, &f)
 	if err != nil {
-		return nil, err
-	}
-	if seen[abs] {
-		return nil, fmt.Errorf("profile 循环 include: %s", abs)
-	}
-	seen[abs] = true
-	b, err := os.ReadFile(abs)
-	if err != nil {
-		return nil, err
-	}
-	var f profileFile
-	md, err := toml.Decode(string(b), &f)
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", abs, err)
+		return nil, fmt.Errorf("%s: %w", self, err)
 	}
 	if und := md.Undecoded(); len(und) > 0 {
-		return nil, fmt.Errorf("%s: 未知字段 %v", abs, und)
+		return nil, fmt.Errorf("%s: 未知字段 %v", self, und)
 	}
-	return merge(f, filepath.Dir(abs), abs, seen)
+	return merge(f, dir, self, seen, read)
 }
 
-func merge(f profileFile, dir, self string, seen map[string]bool) (*Profile, error) {
+func merge(f profileFile, dir, self string, seen map[string]bool, read ProfileReader) (*Profile, error) {
 	out := &Profile{Sources: map[string]string{}}
 	for _, inc := range f.Include {
+		if read == nil {
+			return nil, fmt.Errorf("%s: include 需要调用方提供读文件函数", self)
+		}
 		p := inc
 		if !filepath.IsAbs(p) {
 			p = filepath.Join(dir, p)
 		}
-		parent, err := loadProfile(p, seen)
+		p = filepath.Clean(p)
+		if seen[p] {
+			return nil, fmt.Errorf("profile 循环 include: %s", p)
+		}
+		seen[p] = true
+		b, err := read(p)
+		if err != nil {
+			return nil, err
+		}
+		parent, err := parseProfile(string(b), filepath.Dir(p), p, seen, read)
 		if err != nil {
 			return nil, err
 		}
