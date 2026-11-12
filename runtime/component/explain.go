@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"reflect"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -100,7 +101,7 @@ func (a *Assembly) Explain(w io.Writer, profileSources map[string]string) {
 
 func providerOf(a *Assembly, key string) string {
 	for _, n := range a.order {
-		if contains(a.metas[n].Provides, key) {
+		if slices.Contains(a.metas[n].Provides, key) {
 			return n
 		}
 	}

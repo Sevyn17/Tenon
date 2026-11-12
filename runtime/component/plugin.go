@@ -8,6 +8,7 @@ package component
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -185,7 +186,7 @@ func (cx *Registrar) Status(key string, fn inject.Func) error {
 // FillSlot 填插槽（必须在 Provides 里声明 "slot:<名>"）。
 func (cx *Registrar) FillSlot(name string, impl any) error {
 	key := "slot:" + name
-	if !contains(cx.meta.Provides, key) {
+	if !slices.Contains(cx.meta.Provides, key) {
 		return fmt.Errorf("插件 %s 未声明提供 %s", cx.plugin, key)
 	}
 	cx.asm.values[key] = impl
@@ -196,7 +197,7 @@ func (cx *Registrar) FillSlot(name string, impl any) error {
 // Provide 登记插件服务（必须在 Provides 里声明 "service:<名>"）。
 func (cx *Registrar) Provide(name string, svc any) error {
 	key := "service:" + name
-	if !contains(cx.meta.Provides, key) {
+	if !slices.Contains(cx.meta.Provides, key) {
 		return fmt.Errorf("插件 %s 未声明提供 %s", cx.plugin, key)
 	}
 	cx.asm.values[key] = svc
@@ -207,7 +208,7 @@ func (cx *Registrar) Provide(name string, svc any) error {
 // Use 取依赖：只能取 Requires 里声明过的（含插槽默认实现）。
 func Use[T any](cx *Registrar, key string) (T, error) {
 	var zero T
-	if !contains(cx.meta.Requires, key) && !contains(cx.meta.Requires, Optional+key) {
+	if !slices.Contains(cx.meta.Requires, key) && !slices.Contains(cx.meta.Requires, Optional+key) {
 		return zero, fmt.Errorf("插件 %s 未声明依赖 %s", cx.plugin, key)
 	}
 	v, ok := cx.asm.values[key]
@@ -224,7 +225,7 @@ func Use[T any](cx *Registrar, key string) (T, error) {
 // UseOptional 取可选依赖（Requires 写 "?<key>"）：提供者缺席返回零值与 false。
 func UseOptional[T any](cx *Registrar, key string) (T, bool, error) {
 	var zero T
-	if !contains(cx.meta.Requires, Optional+key) {
+	if !slices.Contains(cx.meta.Requires, Optional+key) {
 		return zero, false, fmt.Errorf("插件 %s 未声明可选依赖 %s", cx.plugin, key)
 	}
 	if _, ok := cx.asm.values[key]; !ok {
@@ -621,15 +622,6 @@ func (a *Assembly) Degraded() map[string][]string {
 		}
 	}
 	return out
-}
-
-func contains(xs []string, x string) bool {
-	for _, v := range xs {
-		if v == x {
-			return true
-		}
-	}
-	return false
 }
 
 // Get 按类型化键取依赖（审查 P1-48）：返回值类型由键推出，键名不必手写字符串。语义同 Use。

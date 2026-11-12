@@ -6,6 +6,7 @@ package session
 import (
 	"encoding/json"
 	"errors"
+	"strconv"
 	"testing"
 	"time"
 )
@@ -25,7 +26,7 @@ func newHarness(t *testing.T, maxSteps uint32) *harness {
 	clock := int64(0)
 	h := &harness{t: t, core: New(testConfig(maxSteps),
 		WithClock(func() time.Time { clock += 1000; return time.UnixMilli(clock) }),
-		WithIDs(func() string { *n++; return "id-" + itoa(*n) }))}
+		WithIDs(func() string { *n++; return "id-" + strconv.Itoa(*n) }))}
 	h.core.hdr.Config.Policy.MaxSteps = maxSteps
 	return h
 }

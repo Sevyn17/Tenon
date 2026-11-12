@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/Sevyn17/tenon/runtime/store"
@@ -109,7 +110,7 @@ func (db *DB) Import(ctx context.Context, path, workspace string) (ImportResult,
 		switch { // 撞 id 的会话：它的行都不导
 		case t == "sessions":
 			q += ` WHERE id NOT IN (SELECT id FROM temp.import_skip)`
-		case contains(cols, "session_id"):
+		case slices.Contains(cols, "session_id"):
 			q += ` WHERE session_id NOT IN (SELECT id FROM temp.import_skip)`
 		}
 		if _, err := tx.ExecContext(ctx, q); err != nil {
@@ -176,7 +177,7 @@ func commonColumns(ctx context.Context, tx *sql.Tx, table string) ([]string, err
 	}
 	var out []string
 	for _, c := range s {
-		if contains(m, c) {
+		if slices.Contains(m, c) {
 			out = append(out, c)
 		}
 	}
@@ -191,15 +192,6 @@ func quoteAll(ss []string) []string {
 		out[i] = quote(s)
 	}
 	return out
-}
-
-func contains(ss []string, s string) bool {
-	for _, x := range ss {
-		if x == s {
-			return true
-		}
-	}
-	return false
 }
 
 // ImportDir 把另一个工件目录里本目录没有的文件复制过来（内容寻址，同名即同内容）。

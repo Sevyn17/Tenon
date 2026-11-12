@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 
 	"github.com/Sevyn17/tenon/appapi/wire"
 	"github.com/Sevyn17/tenon/runtime/host"
@@ -34,7 +35,7 @@ func (v *App) respondAs(ctx context.Context, in wire.RespondArgs, p wire.Princip
 		return wire.RespondResult{}, err
 	}
 	it := v.wireInteraction(cur)
-	if !contains(it.Responders, p.ID) {
+	if !slices.Contains(it.Responders, p.ID) {
 		return wire.RespondResult{}, Errorf(wire.CodeForbidden, "身份 %s 不能回答交互 %s", p.ID, in.Interaction)
 	}
 	if cur.Outcome != "" {
@@ -146,7 +147,7 @@ func (v *App) interactionsFor(ctx context.Context, p wire.Principal) (wire.Inter
 	}
 	out := wire.InteractionsResult{Items: []wire.Interaction{}}
 	for _, q := range ps {
-		if it := v.wireInteraction(q); contains(it.Responders, p.ID) {
+		if it := v.wireInteraction(q); slices.Contains(it.Responders, p.ID) {
 			out.Items = append(out.Items, it)
 		}
 	}
@@ -209,13 +210,4 @@ func answerSchema(it wire.Interaction) json.RawMessage {
 	}
 	b, _ := json.Marshal(sc)
 	return b
-}
-
-func contains(xs []string, x string) bool {
-	for _, s := range xs {
-		if s == x {
-			return true
-		}
-	}
-	return false
 }

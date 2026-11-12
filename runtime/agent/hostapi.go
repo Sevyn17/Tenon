@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"slices"
 	"time"
 
 	"github.com/Sevyn17/tenon/runtime/mail"
@@ -126,21 +127,12 @@ func (a *Agent) effectiveCaps() []string {
 	caps := a.Caps()
 	out := []string{}
 	for _, n := range avail {
-		if caps != nil && !contains(caps, n) {
+		if caps != nil && !slices.Contains(caps, n) {
 			continue
 		}
 		out = append(out, n)
 	}
 	return out
-}
-
-func contains(xs []string, s string) bool {
-	for _, x := range xs {
-		if x == s {
-			return true
-		}
-	}
-	return false
 }
 
 // EnqueueOutbox 把一封待外发的信封记入本轮检查点：它与历史、工具结果在同一次提交里

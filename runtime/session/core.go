@@ -930,7 +930,7 @@ func (c *Core) validateCalls(calls []ToolCall) (map[string]string, bool) {
 	for i, call := range calls {
 		switch {
 		case i >= limit:
-			hints[call.ID] = "单步最多 " + itoa(limit) + " 个工具调用，请减少并行调用数量"
+			hints[call.ID] = "单步最多 " + strconv.Itoa(limit) + " 个工具调用，请减少并行调用数量"
 		case !known[call.Name]:
 			hints[call.ID] = "工具 " + call.Name + " 不存在，可用工具：" + c.toolNames()
 		case invalidArgs(call.Args):
@@ -962,8 +962,6 @@ func contentSize(ct Content) uint64 {
 	}
 	return uint64(len(b))
 }
-
-func itoa(i int) string { return strconv.Itoa(i) }
 
 // checkModelFact 模型事实（ModelDone / ModelInterrupted / ModelFailed）的公共前置校验：
 // 须在 WaitingModel，requestID / needID 与当前需求一致，否则 Stale（S2 / S7）。
