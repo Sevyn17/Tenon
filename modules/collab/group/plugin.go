@@ -16,6 +16,7 @@ package group
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/Sevyn17/tenon/runtime/assemble"
 	"github.com/Sevyn17/tenon/runtime/callctx"
@@ -46,7 +47,7 @@ type GroupConfig struct {
 
 type plug struct {
 	h     *host.Host
-	db    store.Store
+	dbh   assemble.DBHandle // Setup 只取句柄：DB() 在 Start 之前返回 nil（见 assemble.DBHandle）
 	ui    assemble.UI
 	msgs  store.Collection
 	reads store.Collection
@@ -71,7 +72,7 @@ func (p *plug) Setup(cx *component.Registrar) error {
 	if err != nil {
 		return err
 	}
-	p.db = dbh.DB()
+	p.dbh = dbh
 	if p.ui, err = component.Use[assemble.UI](cx, assemble.ServiceUI); err != nil {
 		return err
 	}
@@ -118,7 +119,13 @@ func (p *plug) Setup(cx *component.Registrar) error {
 }
 
 func (p *plug) Start(sc *component.Scope) error {
-	g, err := New(p.h, p.db, p.msgs, p.reads, p.ui)
+	// DB() 在 Start 之前返回 nil：存储由插件提供时，它要等自己的 Start 跑完才打开。
+	// 与 workgroup 同一写法（它也在 Start 里取），Setup 里取会拿到 nil 导致 New 报「缺少依赖」。
+	db := p.dbh.DB()
+	if db == nil {
+		return fmt.Errorf("group: 存储尚未打开（DBHandle.DB() 返回 nil）")
+	}
+	g, err := New(p.h, db, p.msgs, p.reads, p.ui)
 	if err != nil {
 		return err
 	}
