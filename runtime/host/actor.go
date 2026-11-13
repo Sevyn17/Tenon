@@ -894,18 +894,24 @@ func (a *actor) wireConfirm() {
 	a.ag.Hub.SetAwait(a.ag.AwaitFunc(func(ctx context.Context, cx *toolhub.Cx, reason string, deadline time.Time) bool {
 		// 登记成 approval 交互（protocol 2，interaction.go）：打开与结束都是持久事件；登记失败时 corr 为空，
 		// 只发 call_id，回信路径不可用，Confirm 命令照常。
-		iid, corr := a.openInteraction("approval", cx.Tool.Spec.Name+" 需要确认", map[string]any{
-			"tool": cx.Tool.Spec.Name, "args": jsonArgs(cx.Args), "reason": reason}, deadline)
+		// 等待通道在 openInteraction 里**落库之前**挂上（register 回调），否则回答可能落在
+		// 「已落库但还没人等」的窗口里被误判成遗留交互而作废（D6）。
 		w := make(chan bool, 1)
-		a.mu.Lock()
-		a.waiters[cx.CallID] = w
-		a.mu.Unlock()
-		if corr != "" {
+		iid, corr := a.openInteraction("approval", cx.Tool.Spec.Name+" 需要确认", map[string]any{
+			"tool": cx.Tool.Spec.Name, "args": jsonArgs(cx.Args), "reason": reason}, deadline, func(corr string) {
 			a.h.humanMu.Lock()
 			if a.h.humanWait == nil {
 				a.h.humanWait = map[string]chan bool{}
 			}
 			a.h.humanWait[corr] = w
+			a.h.humanMu.Unlock()
+		})
+		a.mu.Lock()
+		a.waiters[cx.CallID] = w
+		a.mu.Unlock()
+		if corr != "" && iid == "" {
+			a.h.humanMu.Lock()
+			delete(a.h.humanWait, corr)
 			a.h.humanMu.Unlock()
 		}
 		outcome := OutcomeVoided

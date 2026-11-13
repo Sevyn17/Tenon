@@ -94,7 +94,13 @@ func (a *actor) responders() []string {
 
 // openInteraction 登记一次交互（同时是一条待回复）。登记失败时退回只登记 corr（回信路径仍可用），
 // 再失败 corr 为空。返回交互 id（空 = 没登记成交互）与 corr。
-func (a *actor) openInteraction(kind, title string, body map[string]any, deadline time.Time, extra ...map[string]any) (iid, corr string) {
+// openInteraction 登记一次交互，返回交互 id 与 corr。
+//
+// register 在**落库之前**调用（可为 nil），用来把等待通道挂进 humanWait / askWait：
+// 交互一旦落库，界面就可能立刻回答，而 Respond 靠这两个表判断「有没有人在等」。
+// 先落库再挂通道会留一个窗口，回答落进去会被误判成「上次进程留下的交互」而标成
+// voided（D6：CI 慢机器上偶发「已结束（voided）」）。所以在同一个临界区里先挂后落。
+func (a *actor) openInteraction(kind, title string, body map[string]any, deadline time.Time, register func(corr string), extra ...map[string]any) (iid, corr string) {
 	corr = mail.NewID()
 	iid = "i-" + NewItemID()
 	idx, turn := 0, uint32(0)
@@ -110,6 +116,10 @@ func (a *actor) openInteraction(kind, title string, body map[string]any, deadlin
 	p := store.Pending{Corr: corr, SessionID: a.id, Trace: a.ag.TraceID(), IssuedIdx: idx, Deadline: dl,
 		InteractionID: iid, Kind: kind, Root: rootOf(a.id),
 		Payload: interactionPayload(iid, a.id, turn, kind, title, body, a.responders(), deadline, firstMap(extra))}
+	// 先挂等待者，再落库：顺序反过来会留「已落库但还没人等」的窗口（见函数注释）。
+	if register != nil {
+		register(corr)
+	}
 	if err := a.h.DB.OpenInteraction(context.Background(), p, a.epoch); err == nil {
 		return iid, corr
 	}
@@ -231,20 +241,24 @@ func (h *Host) interact(ctx context.Context, sessionID string, r Request, opened
 	if body == nil {
 		body = map[string]any{}
 	}
-	iid, corr := a.openInteraction(r.Kind, r.Title, body, r.Deadline, extra)
+	ch := make(chan Answer, 1)
+	iid, corr := a.openInteraction(r.Kind, r.Title, body, r.Deadline, func(corr string) {
+		h.humanMu.Lock()
+		if h.askWait == nil {
+			h.askWait = map[string]chan Answer{}
+		}
+		h.askWait[corr] = ch
+		h.humanMu.Unlock()
+	}, extra)
 	if corr == "" || iid == "" {
+		h.humanMu.Lock()
+		delete(h.askWait, corr)
+		h.humanMu.Unlock()
 		if corr != "" {
 			_ = h.DB.VoidCorr(context.Background(), corr)
 		}
 		return Answer{}, fmt.Errorf("host: 交互登记失败")
 	}
-	ch := make(chan Answer, 1)
-	h.humanMu.Lock()
-	if h.askWait == nil {
-		h.askWait = map[string]chan Answer{}
-	}
-	h.askWait[corr] = ch
-	h.humanMu.Unlock()
 	outcome := OutcomeVoided
 	defer func() {
 		h.humanMu.Lock()
