@@ -138,7 +138,7 @@ func checkSource(t *testing.T, s *Source) {
 		t.Fatalf("工具数 %d", len(s.Tools))
 	}
 	for _, tl := range s.Tools {
-		if !tl.Deferred || tl.Risk != toolhub.Write || !strings.HasPrefix(tl.Spec.Name, "mcp__fake__") || !strings.Contains(tl.Spec.Description, "MCP 服务 fake") {
+		if tl.Risk != toolhub.Write || !strings.HasPrefix(tl.Spec.Name, "mcp__fake__") || !strings.Contains(tl.Spec.Description, "MCP 服务 fake") {
 			t.Fatalf("工具属性不对：%+v", tl.Spec)
 		}
 	}

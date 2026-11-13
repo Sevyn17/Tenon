@@ -33,7 +33,7 @@ func setup(t *testing.T) (*toolhub.Hub, *toolhub.Toolset, *[]string) {
 			t.Fatal(err)
 		}
 	}
-	return hub, hub.SpecsFor(nil, 0), &seen
+	return hub, hub.SpecsFor(nil), &seen
 }
 
 func call(t *testing.T, hub *toolhub.Hub, ts *toolhub.Toolset, code string) toolhub.Output {

@@ -350,21 +350,6 @@ func (c *Core) applyConfigPatch(p ConfigPatch) error {
 	if p.MaxSteps != nil {
 		cp.Policy.MaxSteps = *p.MaxSteps
 	}
-	// AddTools：显露集只增不减、按名去重（tool-hub D1；只对 tool-hub 开放由宿主白名单强制）。
-	if len(p.AddTools) > 0 {
-		have := make(map[string]bool, len(cp.Tools))
-		for _, t := range cp.Tools {
-			have[t.Name] = true
-		}
-		tools := append([]ToolSpec(nil), cp.Tools...)
-		for _, t := range p.AddTools {
-			if !have[t.Name] {
-				have[t.Name] = true
-				tools = append(tools, t)
-			}
-		}
-		cp.Tools = tools
-	}
 	c.hdr.Config = &cp
 	return nil
 }

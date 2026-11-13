@@ -55,7 +55,7 @@ func acceptHost(db acceptStore, executed *int) *Host {
 			}}); err != nil {
 			return nil, nil, err
 		}
-		ts := hub.SpecsFor(nil, 0)
+		ts := hub.SpecsFor(nil)
 		a := &agent.Agent{Store: db, SessionID: id, Model: &fakeModel{}, Hub: hub, Toolset: ts}
 		return a, &session.Config{Model: "m", Tools: hub.Exposed(ts), Policy: session.DefaultPolicy()}, nil
 	}}

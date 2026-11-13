@@ -84,7 +84,7 @@ func rig(t *testing.T) (*Group, *host.Host, *sqlite.DB, *echoModel) {
 				}
 			}
 			a := &agent.Agent{Store: db, SessionID: id, Model: m, Hub: hub}
-			return a, &session.Config{Model: "m", Tools: hub.Exposed(hub.SpecsFor(nil, 0)), Policy: session.DefaultPolicy()}, nil
+			return a, &session.Config{Model: "m", Tools: hub.Exposed(hub.SpecsFor(nil)), Policy: session.DefaultPolicy()}, nil
 		}
 	}
 	h.New = mk(true)

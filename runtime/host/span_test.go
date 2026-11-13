@@ -30,7 +30,7 @@ func TestSpanHierarchy(t *testing.T) {
 			return nil, nil, err
 		}
 		a.Hub = hub
-		return a, &session.Config{Model: "m", Tools: hub.Exposed(hub.SpecsFor(nil, 0)), Policy: session.DefaultPolicy()}, nil
+		return a, &session.Config{Model: "m", Tools: hub.Exposed(hub.SpecsFor(nil)), Policy: session.DefaultPolicy()}, nil
 	}}
 	hd, err := h.Open(ctx, "s")
 	if err != nil {

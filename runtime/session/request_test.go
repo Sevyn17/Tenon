@@ -171,16 +171,3 @@ func TestRequestHashDeterministic(t *testing.T) {
 		t.Fatalf("请求变化后哈希应变化")
 	}
 }
-
-func TestAddToolsAppendOnlyDedup(t *testing.T) {
-	h := newHarness(t, 8)
-	n0 := len(h.core.hdr.Config.Tools)
-	add := []ToolSpec{{Name: "echo"}, {Name: "grep"}, {Name: "grep"}}
-	if _, err := h.core.SetConfig(ConfigPatch{AddTools: add}); err != nil {
-		t.Fatalf("SetConfig: %v", err)
-	}
-	got := h.core.hdr.Config.Tools
-	if len(got) != n0+1 || got[len(got)-1].Name != "grep" {
-		t.Fatalf("AddTools 应只追加未存在的工具: %+v", got)
-	}
-}

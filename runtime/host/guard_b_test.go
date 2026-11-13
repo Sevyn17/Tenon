@@ -133,7 +133,7 @@ func TestOutboundCapsFromSenderPermissions(t *testing.T) {
 			}}); err != nil {
 			return nil, nil, err
 		}
-		ts := hub.SpecsFor(nil, 0)
+		ts := hub.SpecsFor(nil)
 		a := &agent.Agent{Store: db, SessionID: id, Model: &fakeModel{}, Hub: hub, Toolset: ts}
 		return a, &session.Config{Model: "m", Tools: hub.Exposed(ts), Policy: session.DefaultPolicy()}, nil
 	}}
@@ -210,7 +210,7 @@ func TestExternalTurnMarksCtxUntrusted(t *testing.T) {
 		}
 		a := &agent.Agent{Store: db, SessionID: id, Model: &fakeModel{}, Hub: hub,
 			Ctx: callctx.New(callctx.Options{SessionID: id})}
-		return a, &session.Config{Model: "m", Tools: hub.Exposed(hub.SpecsFor(nil, 0)), Policy: session.DefaultPolicy()}, nil
+		return a, &session.Config{Model: "m", Tools: hub.Exposed(hub.SpecsFor(nil)), Policy: session.DefaultPolicy()}, nil
 	}}
 	hd := mustOpen(t, h, "s1")
 	send := func(origin mail.Origin) {
@@ -249,7 +249,7 @@ func capsHost(t *testing.T) (*Host, *int) {
 			return nil, nil, err
 		}
 		a := &agent.Agent{Store: db, SessionID: id, Model: &fakeModel{}, Hub: hub}
-		return a, &session.Config{Model: "m", Tools: hub.Exposed(hub.SpecsFor(nil, 0)), Policy: session.DefaultPolicy()}, nil
+		return a, &session.Config{Model: "m", Tools: hub.Exposed(hub.SpecsFor(nil)), Policy: session.DefaultPolicy()}, nil
 	}}
 	return h, executed
 }

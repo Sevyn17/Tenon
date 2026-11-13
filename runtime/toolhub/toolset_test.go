@@ -9,50 +9,49 @@ import (
 	"github.com/Sevyn17/tenon/runtime/session"
 )
 
-// D1：工具少时全量显露、不出现 tool_search；超预算时 Deferred 工具移出显露集，
-// tool_search 选中后步边界追加；可用集外的调用按不存在处理。
-func TestToolsetDeferAndSearch(t *testing.T) {
+// 可用集与显露集（tool-hub D1）。
+//
+// 2026-11-13（L12）：延迟显露机制删除后，显露集恒等于可用集（减去档位判 deny 的）。
+// 原用例 TestToolsetDeferAndSearch 测的是「超预算把 Deferred 工具移出显露集、tool_search
+// 追加回来」那条链，已随机制一起删；这里保留仍有意义的两条：全量显露、可用集外不得执行。
+
+func specNames(ss []session.ToolSpec) string {
+	var n []string
+	for _, s := range ss {
+		n = append(n, s.Name)
+	}
+	return strings.Join(n, ",")
+}
+
+// 工具少时全量显露，没有隐藏项。
+func TestToolsetExposesAll(t *testing.T) {
 	h := New(Options{})
 	ok := func(context.Context, *Cx, json.RawMessage) (Output, error) { return Text("ok"), nil }
 	_ = h.Register(&Tool{Spec: spec("read"), Call: ok})
-	_ = h.Register(&Tool{Spec: session.ToolSpec{Name: "gh_issue", Description: "创建 GitHub issue",
-		Schema: json.RawMessage(`{"type":"object"}`)}, Deferred: true, Call: ok})
+	_ = h.Register(&Tool{Spec: spec("gh_issue"), Call: ok})
 	_ = h.Register(&Tool{Spec: spec("secret"), Call: ok})
 
-	small := h.SpecsFor([]string{"read", "gh_issue"}, 0)
-	names := func(ss []session.ToolSpec) string {
-		var n []string
-		for _, s := range ss {
-			n = append(n, s.Name)
-		}
-		return strings.Join(n, ",")
+	ts := h.SpecsFor([]string{"read", "gh_issue"})
+	if got := specNames(h.Exposed(ts)); got != "read,gh_issue" {
+		t.Fatalf("应全量显露可用集: %q", got)
 	}
-	if got := names(h.Exposed(small)); got != "read,gh_issue" || small.Catalog() != "" {
-		t.Fatalf("不超预算应全量显露且无 tool_search: %q", got)
+	if got := strings.Join(ts.Available(), ","); got != "read,gh_issue" {
+		t.Fatalf("可用集: %q", got)
 	}
+}
 
-	ts := h.SpecsFor([]string{"read", "gh_issue"}, 1)
-	if got := names(h.Exposed(ts)); got != "tool_search,read" { // 内置工具先登记
-		t.Fatalf("超预算显露集: %q", got)
-	}
-	if !strings.Contains(ts.Catalog(), "gh_issue") {
-		t.Fatalf("目录段缺延迟工具: %q", ts.Catalog())
-	}
+// 可用集外的工具不得执行（这条与延迟机制无关，是可用集本身的语义）。
+func TestToolsetRejectsOutsideAvailable(t *testing.T) {
+	h := New(Options{})
+	ok := func(context.Context, *Cx, json.RawMessage) (Output, error) { return Text("ok"), nil }
+	_ = h.Register(&Tool{Spec: spec("read"), Call: ok})
+	_ = h.Register(&Tool{Spec: spec("secret"), Call: ok})
+
+	ts := h.SpecsFor([]string{"read"})
 	rs := drain(h.ExecuteIn(context.Background(), ts, kctx("s"), []session.ToolCall{
-		call("1", "tool_search", `{"query":"issue"}`),
-		call("2", "secret", `{}`),
+		call("1", "secret", `{}`),
 	}, nil))
-	if !strings.Contains(text(rs[0].Output), "gh_issue") {
-		t.Fatalf("tool_search: %q", text(rs[0].Output))
-	}
-	if rs[1].Output.Status != session.ToolError {
+	if rs[0].Output.Status != session.ToolError {
 		t.Fatal("可用集外的工具不得执行")
-	}
-	add := ts.TakePending()
-	if len(add) != 1 || add[0].Name != "gh_issue" {
-		t.Fatalf("待追加: %+v", add)
-	}
-	if got := names(h.Exposed(ts)); !strings.Contains(got, "gh_issue") {
-		t.Fatalf("追加后显露集: %q", got)
 	}
 }

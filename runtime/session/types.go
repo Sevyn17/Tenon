@@ -340,8 +340,6 @@ type ConfigPatch struct {
 	// Reasoning：只改 Params.Reasoning（推理强度，"" = 回到厂商缺省），不动其余参数；用户可改，规则同 MaxSteps。
 	// 与 Params 同时给出时先整体替换 Params 再改这一项。
 	Reasoning *string
-	// AddTools：只追加、按名去重（tool-hub D1 显露集追加）；只开放给工具管理器，外部命令不可用。
-	AddTools []ToolSpec
 }
 
 // PendingCompact：暂存压缩（外部 compact 只触发压缩插件不接收 summary）。

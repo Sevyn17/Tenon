@@ -73,7 +73,7 @@ func newApp(t *testing.T) *App {
 		}
 		hub.AddGate(askGate())
 		a := &agent.Agent{Store: db, SessionID: id, Model: fakeModel{}, Hub: hub, Hooks: app.StreamHooks(id)}
-		cfg := &session.Config{Model: "m", Tools: hub.Exposed(hub.SpecsFor(nil, 0)), Policy: session.DefaultPolicy()}
+		cfg := &session.Config{Model: "m", Tools: hub.Exposed(hub.SpecsFor(nil)), Policy: session.DefaultPolicy()}
 		return a, cfg, nil
 	}
 	app, err = New(Options{Host: h, Bus: b, DB: db, Model: "m", Workdir: "w"})

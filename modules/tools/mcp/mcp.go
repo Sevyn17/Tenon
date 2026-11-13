@@ -387,7 +387,6 @@ func (c *Client) Tools(remote []RemoteTool) []*toolhub.Tool {
 			Risk:     risk,
 			Parallel: &no,
 			Timeout:  c.Server.timeout() + 5*time.Second,
-			Deferred: true,
 			Attrs:    attrs,
 			Items:    []string{ItemID(c.Server.Name)},
 			Call: func(ctx context.Context, cx *toolhub.Cx, args json.RawMessage) (toolhub.Output, error) {

@@ -34,7 +34,7 @@ func newExplainRig(t *testing.T, m agent.Model) (*Host, *sqlite.DB) {
 			return nil, nil, err
 		}
 		a.Hub = hub
-		cfg := &session.Config{Model: "m", Tools: hub.Exposed(hub.SpecsFor(nil, 0)), Policy: session.DefaultPolicy()}
+		cfg := &session.Config{Model: "m", Tools: hub.Exposed(hub.SpecsFor(nil)), Policy: session.DefaultPolicy()}
 		return a, cfg, nil
 	}
 	return h, db

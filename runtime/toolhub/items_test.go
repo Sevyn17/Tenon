@@ -146,7 +146,7 @@ func TestVisibility(t *testing.T) {
 	if err := h.SetVisible(func(string) bool { return true }); err == nil {
 		t.Fatal("可见性判定应只允许设置一次")
 	}
-	ts := h.SpecsFor(nil, 0)
+	ts := h.SpecsFor(nil)
 	names := map[string]bool{}
 	for _, s := range h.Exposed(ts) {
 		names[s.Name] = true

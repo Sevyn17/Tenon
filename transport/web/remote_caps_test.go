@@ -87,7 +87,7 @@ func newTestHost(t *testing.T) *host.Host {
 	h.New = func(id, def string) (*agent.Agent, *session.Config, error) {
 		hub := toolhub.New(toolhub.Options{Store: agent.ToolStore{DB: db}})
 		a := &agent.Agent{Store: db, SessionID: id, Hub: hub}
-		return a, &session.Config{Model: "m", Tools: hub.Exposed(hub.SpecsFor(nil, 0)), Policy: session.DefaultPolicy()}, nil
+		return a, &session.Config{Model: "m", Tools: hub.Exposed(hub.SpecsFor(nil)), Policy: session.DefaultPolicy()}, nil
 	}
 	hd, err := h.Open(ctx, "s1")
 	if err != nil {

@@ -50,7 +50,6 @@ type Tool struct {
 	Risk     Risk
 	Parallel *bool         // nil = Risk == Read
 	Timeout  time.Duration // 0 = DefaultTimeout
-	Deferred bool          // 可用但默认不显露（D1）
 	Attrs    map[string]any
 	// Items 本工具涉及的权限项 id（见 items.go）。为空且 NoAuth 为假时，判定方一律询问。
 	Items []string
@@ -124,7 +123,7 @@ type Cx struct {
 	Tool      *Tool
 	Args      json.RawMessage // 本次调用的原始参数（确认界面与“本次会话内都允许”用）
 	Resumed   bool            // 崩溃恢复后的重发
-	Toolset   *Toolset        // 本会话的工具视图（tool_search 用；可空）
+	Toolset   *Toolset        // 本会话的工具视图（可用集与显露集；可空）
 	// Items 本工具引用的权限项（hub 按注册表解析；工具未声明时为空，判定方据此询问）。
 	Items          []Item
 	ChildSessionID string // 委派类工具填写：子会话 id（tool span 记录，预留）
@@ -234,7 +233,7 @@ type Options struct {
 	ConfirmDeadline time.Duration
 }
 
-// New 构造。内置 read_artifact（Artifacts 非空时）与 tool_search。
+// New 构造。内置 read_artifact（Artifacts 非空时）。
 func New(o Options) *Hub {
 	h := &Hub{tools: map[string]*Tool{}, items: map[string]Item{}, store: o.Store, art: o.Artifacts, maxParallel: o.MaxParallel,
 		thresholds: DefaultThresholds, onSpan: o.OnSpan, onProgress: o.OnProgress, await: o.Await, timeout: o.ToolTimeout, deadline: o.ConfirmDeadline}
@@ -253,7 +252,6 @@ func New(o Options) *Hub {
 	if h.art != nil {
 		_ = h.Register(h.readArtifactTool())
 	}
-	_ = h.Register(h.searchTool())
 	return h
 }
 

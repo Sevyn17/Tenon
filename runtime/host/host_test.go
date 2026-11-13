@@ -85,7 +85,7 @@ func newRig(t *testing.T, path string, m *fakeModel) *rig {
 		}
 		hub.AddGate(askGate())
 		a := &agent.Agent{Store: db, SessionID: id, Model: m, Hub: hub}
-		cfg := &session.Config{Model: "m", Tools: hub.Exposed(hub.SpecsFor(nil, 0)), Policy: session.DefaultPolicy()}
+		cfg := &session.Config{Model: "m", Tools: hub.Exposed(hub.SpecsFor(nil)), Policy: session.DefaultPolicy()}
 		return a, cfg, nil
 	}}
 	return r

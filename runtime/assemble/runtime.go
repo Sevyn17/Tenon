@@ -226,7 +226,7 @@ func (b *Builder) Build(id, defName string, child bool) (*agent.Agent, *session.
 		}
 		allow = intersectAllow(allow, pa)
 	}
-	ts := hub.SpecsFor(allow, 0)
+	ts := hub.SpecsFor(allow)
 	a.Hub, a.Toolset = hub, ts
 	if b.Hooks != nil {
 		a.Hooks = b.Hooks(cx)

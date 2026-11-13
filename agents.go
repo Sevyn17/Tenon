@@ -142,7 +142,7 @@ func (a *App) putDefaultAgent(ctx context.Context) error {
 			continue
 		}
 		for _, t := range e.Tools() {
-			if t != nil && t.Risk == toolhub.Read && !t.Deferred {
+			if t != nil && t.Risk == toolhub.Read {
 				add(t.Spec.Name)
 			}
 		}

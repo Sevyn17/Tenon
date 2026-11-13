@@ -56,7 +56,7 @@ func newTestApp(t *testing.T, opts ...func(*appapi.Options)) *appapi.App {
 	h.New = func(id, def string) (*agent.Agent, *session.Config, error) {
 		hub := toolhub.New(toolhub.Options{Store: agent.ToolStore{DB: db}})
 		a := &agent.Agent{Store: db, SessionID: id, Model: fakeModel{}, Hub: hub, Hooks: app.StreamHooks(id)}
-		cfg := &session.Config{Model: "m", Tools: hub.Exposed(hub.SpecsFor(nil, 0)), Policy: session.DefaultPolicy()}
+		cfg := &session.Config{Model: "m", Tools: hub.Exposed(hub.SpecsFor(nil)), Policy: session.DefaultPolicy()}
 		return a, cfg, nil
 	}
 	o := appapi.Options{Host: h, Bus: b, DB: db, Model: "m", Workdir: "w", UI: appapi.NewUI(b)}
