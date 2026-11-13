@@ -142,6 +142,11 @@ func (a *App) Close(ctx context.Context) error {
 	if stop != nil {
 		stop()
 	}
+	// 先停 Host 的后台派发（kickFlush 起的协程用 context.Background()，不受调用方 context 约束）。
+	// 它要在关存储之前停下，否则会继续访问数据库（D5）。
+	if a.host != nil {
+		a.host.Close()
+	}
 	if scope != nil {
 		if err := scope.Close(ctx); err != nil {
 			errs = append(errs, err)

@@ -549,12 +549,12 @@ func (s *Shell) callOutput(ctx context.Context, cx *toolhub.Cx, raw json.RawMess
 	}
 	s.mu.Lock() // 读偏移只由本函数推进
 	text, next, dropped := j.buf.since(j.read)
-	s.mu.Unlock()
 	// 清洗会去掉转义序列，但**尾部残缺的序列不能算读完**：它的终止字节还没写进来，
 	// 这时推进读偏移会把后半截（比如 "end"）当参数吞掉（D3 的偶发失败）。
 	// 让 clean 告诉调用方「末尾有多少字节要留到下次」，偏移就停在那里。
+	// 清洗要在锁内做：偏移的读和写必须是一个原子步骤，否则并发的两次 job_output
+	// 会各自读到旧偏移、再互相覆盖（后写的把前一次的推进冲掉，同一段输出被吐两次）。
 	text, hold := s.cleanHolding(text)
-	s.mu.Lock()
 	j.read = next - int64(hold)
 	s.mu.Unlock()
 	if dropped > 0 {
