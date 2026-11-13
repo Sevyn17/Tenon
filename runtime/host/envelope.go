@@ -93,8 +93,12 @@ func (h *Host) DeliverRemote(ctx context.Context, env mail.Envelope) error {
 	return h.deliver(ctx, env)
 }
 
-// deliverQueued 派发会话发件箱里的信封：内核字段是发送会话的回合在提交时写好的
-// （见 StampOutbound），沿链保留，只在这里继续加跳数。
+// deliverQueued 派发会话发件箱里的信封：内核字段是发送会话的回合在提交时写好的，
+// 沿链保留，只在这里继续加跳数。
+//
+// 内核字段的写入点是 agent.Agent.Outbound（runtime/agent/hostapi.go）：它按本回合的
+// TurnOrigin 盖 hop，按当前 TraceID 盖 trace，按有效权限盖 caps，然后入发件箱。
+// 这里只补负跳数归零，不重算——重算会把发送方的授权范围与 trace 抹掉。
 func (h *Host) deliverQueued(ctx context.Context, env mail.Envelope) error {
 	if env.Hop < 0 {
 		env.Hop = 0

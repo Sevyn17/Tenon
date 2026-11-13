@@ -146,8 +146,8 @@ func (a *Agent) EnqueueOutbox(id string, envelope []byte) {
 	})
 }
 
-// TurnOrigin 本回合的触发链信息（发出信封时由内核盖到信封上，见 host.StampOutbound）：
-// 触发本回合的信封里最大的跳数，以及触发来源是否不可信。host 在开回合时设置。
+// TurnOrigin 本回合的触发链信息：触发本回合的信封里最大的跳数，以及触发来源是否不可信。
+// host 在开回合时设置。发出信封时由 Agent.Outbound 按它盖到信封上（hop 与 origin）。
 type TurnOrigin struct {
 	Hop       int
 	Untrusted bool
