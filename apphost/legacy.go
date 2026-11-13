@@ -26,7 +26,10 @@ type LegacyImportResult struct {
 }
 
 // LegacyImporter 存储插件可选实现的旧库并入能力。
-// 存储插件的 DB() 返回值实现它，框架在打开工作区时用类型断言调用；没实现就跳过。
+// 由登记为 service:db 的存储句柄实现（assemble.DBHandle 那个值），
+// 框架在打开工作区时用类型断言调用；没实现就跳过。
+// 断言打在句柄上而不是 DB() 的返回值上：并入要同时用到库和附件存储，
+// 两者都挂在句柄上，返回值（store.Store）只有库。
 type LegacyImporter interface {
 	// Import 把 path 处的旧库并进本库；源库里没记工作区的会话记成 workspace。
 	Import(ctx context.Context, path, workspace string) (LegacyImportResult, error)
@@ -50,7 +53,7 @@ func (r *Runtime) importLegacy(ctx context.Context) []string {
 	if err != nil || st.IsDir() {
 		return nil
 	}
-	db, ok := r.Rt.Store.DB().(LegacyImporter)
+	db, ok := r.Rt.Store.(LegacyImporter)
 	if !ok {
 		return nil // 存储插件不支持并入旧库，不动
 	}
