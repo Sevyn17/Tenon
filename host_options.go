@@ -22,7 +22,7 @@ import (
 
 // WithProfile 按 profile 装配：开哪些组件按各组件声明的缺省（Meta.Default）加 profile 里的开关，
 // 组件配置取 profile 的 [plugin.<名>] 节，内核参数取 [kernel] 节（WithKernel 再覆盖它）。
-// 与 Default() / Minimal() / Without 二选一。profile 里有提供 service:db 的组件（如 store-sqlite）时
+// 与 Default() / Minimal() / Without 二选一。profile 里有提供 service:db 的组件（由产品登记）时
 // 不必 WithStore。
 func WithProfile(p *component.Profile) Option {
 	return func(c *config) error {

@@ -5,14 +5,13 @@ package web
 import (
 	"context"
 	"net/http/httptest"
-	"path/filepath"
 	"testing"
 
-	"github.com/Sevyn17/tenon/modules/storage/sqlite"
 	"github.com/Sevyn17/tenon/runtime/agent"
 	"github.com/Sevyn17/tenon/runtime/host"
 	"github.com/Sevyn17/tenon/runtime/mail"
 	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/store/memstore"
 	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
@@ -74,14 +73,11 @@ func TestDeliverRemoteUnknownSession(t *testing.T) {
 	}
 }
 
-// newTestHost 建一个真实 Host（sqlite + 最小会话构造），并开一个会话 s1。
+// newTestHost 建一个真实 Host（内存存储 + 最小会话构造），并开一个会话 s1。
 func newTestHost(t *testing.T) *host.Host {
 	t.Helper()
 	ctx := context.Background()
-	db, err := sqlite.Open(ctx, filepath.Join(t.TempDir(), "s.db"), sqlite.Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	db := memstore.New()
 	t.Cleanup(func() { db.Close() })
 	h := &host.Host{DB: db}
 	h.New = func(id, def string) (*agent.Agent, *session.Config, error) {

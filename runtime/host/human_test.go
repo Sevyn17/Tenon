@@ -3,26 +3,23 @@ package host
 import (
 	"context"
 	"encoding/json"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/Sevyn17/tenon/modules/storage/sqlite"
 	"github.com/Sevyn17/tenon/runtime/agent"
 	"github.com/Sevyn17/tenon/runtime/bus"
 	"github.com/Sevyn17/tenon/runtime/mail"
 	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/store/memstore"
 	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 // newHumanRig 用会触发确认的工具（Dangerous）搭一个宿主。
-func newHumanRig(t *testing.T, m agent.Model) (*Host, *sqlite.DB) {
+func newHumanRig(t *testing.T, m agent.Model) (*Host, store.Store) {
 	t.Helper()
-	db, err := sqlite.Open(context.Background(), filepath.Join(t.TempDir(), "state.db"), sqlite.Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	db := memstore.New()
 	t.Cleanup(func() { db.Close() })
 	h := &Host{DB: db, Bus: bus.New(0)}
 	h.New = func(id, def string) (*agent.Agent, *session.Config, error) {

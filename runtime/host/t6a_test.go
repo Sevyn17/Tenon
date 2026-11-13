@@ -4,7 +4,6 @@ package host
 
 import (
 	"context"
-	"path/filepath"
 	"testing"
 
 	"github.com/Sevyn17/tenon/runtime/agentdef"
@@ -23,7 +22,7 @@ func (f *fakeRemote) Send(ctx context.Context, host string, env mail.Envelope) e
 }
 
 func TestDeliverRemoteViaSender(t *testing.T) {
-	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{})
+	r := newRig(t, nil, &fakeModel{})
 	fr := &fakeRemote{}
 	r.h.Remote = fr
 	err := r.h.Deliver(context.Background(), mail.Envelope{
@@ -40,7 +39,7 @@ func TestDeliverRemoteViaSender(t *testing.T) {
 }
 
 func TestDeliverRemoteNoSender(t *testing.T) {
-	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{})
+	r := newRig(t, nil, &fakeModel{})
 	err := r.h.Deliver(context.Background(), mail.Envelope{
 		From: mail.Address{Kind: mail.AddrHuman, ID: "u1"},
 		To:   mail.Address{Kind: mail.AddrRemote, Host: "peer", ID: "worker"},
@@ -52,7 +51,7 @@ func TestDeliverRemoteNoSender(t *testing.T) {
 }
 
 func TestAgentCardNoLeak(t *testing.T) {
-	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{})
+	r := newRig(t, nil, &fakeModel{})
 	m := agentdef.Mem()
 	man := "format = \"tenon/v1\"\nid = \"bot\"\ndescription = \"客服\"\nprompt = \"绝密提示词\"\ntools = [\"a\",\"b\"]\n"
 	if err := m.Put(agentdef.Ref{Namespace: agentdef.Platform, Name: "bot"}, agentdef.Files{agentdef.ManifestName: []byte(man)}); err != nil {

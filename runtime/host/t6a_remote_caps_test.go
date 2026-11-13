@@ -5,7 +5,6 @@ package host
 
 import (
 	"context"
-	"path/filepath"
 	"testing"
 
 	"github.com/Sevyn17/tenon/runtime/mail"
@@ -15,7 +14,7 @@ import (
 // 用同一封带 caps 的信投给不存在的会话，借报错路径观察 caps 是否被清。
 func TestCapsEntrySemantics(t *testing.T) {
 	ctx := context.Background()
-	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{})
+	r := newRig(t, nil, &fakeModel{})
 	mk := func() mail.Envelope {
 		return mail.Envelope{
 			From: mail.Address{Kind: mail.AddrComponent, ID: "peer"},
@@ -34,7 +33,7 @@ func TestCapsEntrySemantics(t *testing.T) {
 func TestDeliverRemoteNarrowsTurnCaps(t *testing.T) {
 	ctx := context.Background()
 	m := &fakeModel{}
-	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), m)
+	r := newRig(t, nil, m)
 	hd, err := r.h.Open(ctx, "s1")
 	if err != nil {
 		t.Fatal(err)

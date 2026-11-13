@@ -2,7 +2,6 @@ package host
 
 import (
 	"context"
-	"path/filepath"
 	"sync/atomic"
 	"testing"
 
@@ -27,7 +26,7 @@ func (c *fullLoadCounter) Load(ctx context.Context, id string, base *int) (*stor
 // 成本随日志长度增长）。
 func TestDeliverReadsHeadOnly(t *testing.T) {
 	ctx := context.Background()
-	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{})
+	r := newRig(t, nil, &fakeModel{})
 	// 打开会话之前就包上计数器：回合结束会在后台派发发件箱、读 h.DB，回合后再换字段是数据竞争。
 	c := &fullLoadCounter{Store: r.db}
 	r.h.DB = c

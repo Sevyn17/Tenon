@@ -3,7 +3,7 @@ package group
 // 组件生命周期用例（2026-11-13）：此前 group 的 Setup 里就取 DBHandle.DB()，
 // 而 DB() 在 Start 之前返回 nil（存储由插件提供时，它要等自己的 Start 跑完才打开），
 // 于是 group 的 Start 里 New(...) 拿到 nil db、报「缺少依赖（host / store / messages / reads）」。
-// 走 apphost（存储来自 store-sqlite 组件）时必然踩到，group 装了也用不了。
+// 走 apphost（存储来自产品的存储组件）时必然踩到，group 装了也用不了。
 //
 // 现有 group_test.go 的 rig() 直接调 New(...)，绕过了 Setup→Start，所以抓不到。
 // 本文件用真实的 component.Assemble + Assembly.Start 覆盖那条路径。
@@ -20,8 +20,8 @@ import (
 	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
-// lateStore 模拟 store-sqlite：Provide 句柄时存储还没打开（DB() 返回 nil），
-// 自己的 Start 跑完才打开。这是 modules/storage/store-sqlite/plugin.go 的真实时序。
+// lateStore 模拟产品的存储插件：Provide 句柄时存储还没打开（DB() 返回 nil），
+// 自己的 Start 跑完才打开。这是存储插件的真实时序（Setup 里 Provide，Start 里打开）。
 type lateStore struct {
 	db    store.Store
 	ready bool

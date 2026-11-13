@@ -427,7 +427,7 @@ func finishApp(c *config, in *assemblyInput, asm *component.Assembly) (*App, err
 			st, _ = v.(assemble.DBHandle)
 		}
 		if st == nil {
-			return nil, fmt.Errorf("%w: 没有存储：WithStore，或在 profile 里开一个提供 %s 的组件（如 store-sqlite）", ErrInvalid, assemble.ServiceDB)
+			return nil, fmt.Errorf("%w: 没有存储：WithStore，或在 profile 里开一个提供 %s 的组件", ErrInvalid, assemble.ServiceDB)
 		}
 	}
 	app := &App{asm: asm, defs: defs, host: in.host, bus: in.bus, handle: st, own: c.store, workdir: in.workdir,

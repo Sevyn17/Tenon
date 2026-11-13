@@ -3,7 +3,7 @@ package workgroup
 // 插件登记（thin-kernel-plan §2.2）：工作组。顶层会话是领导（team_spawn + 看板），
 // 成员会话（定义 workgroup-member，会话 id 里的 /m- 只是命名约定）只有 team_send + 看板；
 // 成员经 service:host 的 Child 构造（可空 = New）。
-// 数据库在 store-sqlite 启动后才打开，所以 Group 在 Start 里建；会话构造器就绪后（ready 点位）补投上次未送达的结果。
+// 数据库在存储插件启动后才打开，所以 Group 在 Start 里建；会话构造器就绪后（ready 点位）补投上次未送达的结果。
 // 任务板与投递账都是集合，不依赖 SQL；service:sql 只在把 v0.2.x 的旧表搬进集合时用，可选。
 
 import (

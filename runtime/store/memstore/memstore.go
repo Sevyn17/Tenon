@@ -1,6 +1,6 @@
 // Package memstore：内存版 store.Store（T1a，测试与 tenontest 用）。
 //
-// 语义以 modules/storage/sqlite 为准，共用 runtime/store/storetest 一致性测试：
+// 语义以存储接口的契约为准，共用 runtime/store/storetest 一致性测试：
 // 头部条件写、截断入归档、会话级单调 sync_seq、inbox 消费标记、会话键唯一、
 // 工具记录状态机、定义版本 + 哈希、提交后通知。
 // 条目、头部、外壳一律按 JSON 存取（与 sqlite 一样不与调用方共享指针）。
@@ -732,6 +732,23 @@ func (s *Store) SessionsWithMeta(ctx context.Context, key string, limit int) ([]
 }
 
 var _ store.SessionMetaStore = (*Store)(nil)
+
+// SpansForTest 返回某会话已写入的 span（测试用：Span 只写不读，没有正式读接口）。
+func (s *Store) SpansForTest(sessionID string) []store.Span {
+	if err := s.lock(); err != nil {
+		return nil
+	}
+	defer s.mu.Unlock()
+	x := s.sessions[sessionID]
+	if x == nil {
+		return nil
+	}
+	out := make([]store.Span, len(x.spans))
+	for i, sp := range x.spans {
+		out[i] = sp.s
+	}
+	return out
+}
 
 // SessionStats 汇总会话用量与最近一次请求组成。未知会话返回零值统计。
 func (s *Store) SessionStats(ctx context.Context, sessionID string) (store.Stats, error) {

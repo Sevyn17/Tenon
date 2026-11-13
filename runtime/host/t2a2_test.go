@@ -5,7 +5,6 @@ package host
 import (
 	"context"
 	"encoding/json"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -38,7 +37,7 @@ func textOf(msgs []session.Message) string {
 // 09 9.4 T2a-2：空闲超时后释放进程内对象与租约；投递（Open）能唤醒并继续。
 func TestIdleSleepsAndWakesOnOpen(t *testing.T) {
 	m := &scriptedModel{}
-	r := newT2Rig(t, filepath.Join(t.TempDir(), "s.db"), m, 0, nil)
+	r := newT2Rig(t, nil, m, 0, nil)
 	r.h.SleepAfter = 60 * time.Millisecond
 	hd := mustOpen(t, r.h, "s1")
 	if err := hd.Do(Command{Kind: Send, Text: "一"}); err != nil {
@@ -75,7 +74,7 @@ func TestIdleSleepsAndWakesOnOpen(t *testing.T) {
 // 09 9.4 T2a-2：兜底扫描唤醒「有信件的休眠会话」，且只处理一次。
 func TestScanOnceWakesSleepingWithMail(t *testing.T) {
 	m := &scriptedModel{}
-	r := newT2Rig(t, filepath.Join(t.TempDir(), "s.db"), m, 0, nil)
+	r := newT2Rig(t, nil, m, 0, nil)
 	r.h.SleepAfter = 50 * time.Millisecond
 	hd := mustOpen(t, r.h, "s1")
 	if err := hd.Do(Command{Kind: Send, Text: "一"}); err != nil {
@@ -129,7 +128,7 @@ func TestScanOnceWakesSleepingWithMail(t *testing.T) {
 // 09 9.4 T2a-2：回合未结束不休眠。
 func TestRunningTurnDoesNotSleep(t *testing.T) {
 	m := &scriptedModel{start: make(chan int, 1), gate: make(chan struct{})}
-	r := newT2Rig(t, filepath.Join(t.TempDir(), "s.db"), m, 0, nil)
+	r := newT2Rig(t, nil, m, 0, nil)
 	r.h.SleepAfter = 40 * time.Millisecond
 	hd := mustOpen(t, r.h, "s1")
 	if err := hd.Do(Command{Kind: Send, Text: "长任务"}); err != nil {
@@ -152,7 +151,7 @@ func TestRunningTurnDoesNotSleep(t *testing.T) {
 // 原先信箱非空就不睡，背景信件把会话钉在内存里，还会唤醒休眠会话）。
 func TestContextOnlyInboxSleepsAndStaysAsleep(t *testing.T) {
 	m := &scriptedModel{}
-	r := newT2Rig(t, filepath.Join(t.TempDir(), "s.db"), m, 0, nil)
+	r := newT2Rig(t, nil, m, 0, nil)
 	r.h.SleepAfter = 50 * time.Millisecond
 	hd := mustOpen(t, r.h, "s1")
 	body, _ := json.Marshal(session.Content{session.NewTextPart("背景")})

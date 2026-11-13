@@ -4,7 +4,6 @@ package host
 
 import (
 	"context"
-	"path/filepath"
 	"testing"
 
 	"github.com/Sevyn17/tenon/runtime/component"
@@ -13,7 +12,7 @@ import (
 // 拒绝创建：会话不落库，Open 返回错误。
 func TestSessionOpenMWDenies(t *testing.T) {
 	ctx := context.Background()
-	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{})
+	r := newRig(t, nil, &fakeModel{})
 	r.h.SessionOpenChain = func(ctx context.Context, req component.SessionOpenReq) (component.SessionOpenResp, error) {
 		return component.SessionOpenResp{Denied: true, Reason: "测试拒绝"}, nil
 	}
@@ -29,7 +28,7 @@ func TestSessionOpenMWDenies(t *testing.T) {
 // 只在新建时跑：打开已有会话不触发。
 func TestSessionOpenMWOnlyOnCreate(t *testing.T) {
 	ctx := context.Background()
-	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{})
+	r := newRig(t, nil, &fakeModel{})
 	calls := 0
 	r.h.SessionOpenChain = func(ctx context.Context, req component.SessionOpenReq) (component.SessionOpenResp, error) {
 		calls++
@@ -62,7 +61,7 @@ func TestSessionOpenMWOnlyOnCreate(t *testing.T) {
 // 中间件能拿到会话 id 与定义名。
 func TestSessionOpenMWSeesContext(t *testing.T) {
 	ctx := context.Background()
-	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{})
+	r := newRig(t, nil, &fakeModel{})
 	var got component.SessionOpenReq
 	r.h.SessionOpenChain = func(ctx context.Context, req component.SessionOpenReq) (component.SessionOpenResp, error) {
 		got = req

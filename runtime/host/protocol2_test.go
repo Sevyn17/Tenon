@@ -3,7 +3,6 @@ package host
 import (
 	"context"
 	"errors"
-	"path/filepath"
 	"testing"
 
 	"github.com/Sevyn17/tenon/runtime/session"
@@ -12,7 +11,7 @@ import (
 
 // protocol 2 G1：OpenExisting 不隐式新建；Create 已存在返回 ErrConflict。
 func TestOpenExistingAndCreate(t *testing.T) {
-	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{})
+	r := newRig(t, nil, &fakeModel{})
 	ctx := context.Background()
 	if _, err := r.h.OpenExisting(ctx, "nope"); !errors.Is(err, ErrSessionNotFound) {
 		t.Fatalf("不存在应 ErrSessionNotFound：%v", err)
@@ -34,7 +33,7 @@ func TestOpenExistingAndCreate(t *testing.T) {
 
 // Send 带内容部件时原样进 user 条目（不再只收文本）。
 func TestSendContentParts(t *testing.T) {
-	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{})
+	r := newRig(t, nil, &fakeModel{})
 	ctx := context.Background()
 	hd, err := r.h.Create(ctx, "p", "", nil)
 	if err != nil {
@@ -60,7 +59,7 @@ func TestSendContentParts(t *testing.T) {
 
 // IfCursor：游标不符的 Rewind / Fork 返回 ErrStale，日志不变；相符则执行。
 func TestIfCursor(t *testing.T) {
-	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{})
+	r := newRig(t, nil, &fakeModel{})
 	ctx := context.Background()
 	hd, err := r.h.Create(ctx, "s", "", nil)
 	if err != nil {
@@ -99,7 +98,7 @@ func TestIfCursor(t *testing.T) {
 
 // Rewind{ToTurn}：保留 ToTurn 之前的回合；同一 ToTurn 重发不再截（绝对目标，幂等）。
 func TestRewindToTurn(t *testing.T) {
-	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{})
+	r := newRig(t, nil, &fakeModel{})
 	ctx := context.Background()
 	hd, err := r.h.Create(ctx, "s", "", nil)
 	if err != nil {
@@ -132,7 +131,7 @@ func TestRewindToTurn(t *testing.T) {
 
 // SetConfig 空闲时提交，Committed 置 true。
 func TestSetConfigCommitted(t *testing.T) {
-	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{})
+	r := newRig(t, nil, &fakeModel{})
 	hd, err := r.h.Create(context.Background(), "s", "", nil)
 	if err != nil {
 		t.Fatal(err)
@@ -149,7 +148,7 @@ func TestSetConfigCommitted(t *testing.T) {
 
 // session.forked / session.closed 是持久事件（06 10.5 表一）：forked 与建分叉会话同事务，closed 随关闭的检查点写。
 func TestForkedAndClosedEventsDurable(t *testing.T) {
-	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{})
+	r := newRig(t, nil, &fakeModel{})
 	ctx := context.Background()
 	src, err := r.h.Create(ctx, "src", "", nil)
 	if err != nil {
@@ -190,7 +189,7 @@ func TestForkedAndClosedEventsDurable(t *testing.T) {
 
 // session.forked / session.closed 是持久事件（06 10.5 表一）：重连回放能看到，不再只是总线上的易失事件。
 func TestForkAndCloseAreDurable(t *testing.T) {
-	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{})
+	r := newRig(t, nil, &fakeModel{})
 	ctx := context.Background()
 	src, err := r.h.Create(ctx, "src", "", nil)
 	if err != nil {

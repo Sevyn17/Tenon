@@ -9,7 +9,6 @@ package host
 import (
 	"context"
 	"encoding/json"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -80,7 +79,7 @@ func inboxOf(t *testing.T, db interface {
 // 记录进来后只有匹配的订阅者收到信封；不登记放行规则时谁都收不到，拒绝记 guard.denied。
 func TestFanoutAcceptance(t *testing.T) {
 	ctx := context.Background()
-	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{})
+	r := newRig(t, nil, &fakeModel{})
 	openAs(t, r.h, "s1", "u1")
 	openAs(t, r.h, "s2", "u1")
 
@@ -128,7 +127,7 @@ func TestFanoutAcceptance(t *testing.T) {
 	deadline := time.Now().Add(5 * time.Second)
 	for {
 		deniedEvents = deniedEvents[:0]
-		if all, err := r.db.Read(ctx, 0, 0); err != nil {
+		if all, err := r.db.(store.EventLog).Read(ctx, 0, 0); err != nil {
 			t.Fatalf("读组件事件：%v", err)
 		} else {
 			for _, e := range all {
@@ -192,7 +191,7 @@ func TestFanoutAcceptance(t *testing.T) {
 	if missed := inboxOf(t, r.db, "s2"); len(missed) != 0 {
 		t.Fatalf("不匹配的订阅者不应收到：%+v", missed)
 	}
-	if again, err := r.db.Read(ctx, 0, 0); err != nil || len(again) != 1 {
+	if again, err := r.db.(store.EventLog).Read(ctx, 0, 0); err != nil || len(again) != 1 {
 		t.Fatalf("放行后不应再记拒绝：%v %+v", err, again)
 	}
 }

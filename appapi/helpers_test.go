@@ -3,16 +3,15 @@ package appapi
 import (
 	"context"
 	"encoding/json"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/Sevyn17/tenon/modules/storage/sqlite"
 	"github.com/Sevyn17/tenon/runtime/agent"
 	"github.com/Sevyn17/tenon/runtime/bus"
 	"github.com/Sevyn17/tenon/runtime/host"
 	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/store/memstore"
 	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
@@ -53,11 +52,7 @@ func askGate() toolhub.Gate {
 
 func newApp(t *testing.T) *App {
 	t.Helper()
-	ctx := context.Background()
-	db, err := sqlite.Open(ctx, filepath.Join(t.TempDir(), "s.db"), sqlite.Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	db := memstore.New()
 	b := bus.New(0)
 	// 顺序要紧：先停 Host 的后台派发，再关库。反过来会让派发协程在关库后继续访问数据库，
 	// 与 t.TempDir 的清理撞上（D5：CI 上偶发 "directory not empty"）。
@@ -78,7 +73,7 @@ func newApp(t *testing.T) *App {
 		cfg := &session.Config{Model: "m", Tools: hub.Exposed(hub.SpecsFor(nil)), Policy: session.DefaultPolicy()}
 		return a, cfg, nil
 	}
-	app, err = New(Options{Host: h, Bus: b, DB: db, Model: "m", Workdir: "w"})
+	app, err := New(Options{Host: h, Bus: b, DB: db, Model: "m", Workdir: "w"})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -247,7 +247,9 @@ github.com/Sevyn17/tenon/apphost: var ErrNoWorkspace error
 github.com/Sevyn17/tenon/apphost: type Flags struct{Base string; Model string; Workdir string; Profile string; Sandbox string; MCP string; Mode string; Yes bool; ProjectHooks bool; TrustProject bool; MaxSteps int; BaseProfile string}
 github.com/Sevyn17/tenon/apphost: func HasProjectConfig(root string) bool
 github.com/Sevyn17/tenon/apphost: func Home() string
+github.com/Sevyn17/tenon/apphost: type LegacyImportResult struct{Sessions int; Skipped []string}
 github.com/Sevyn17/tenon/apphost: const LegacyImportedSuffix untyped string
+github.com/Sevyn17/tenon/apphost: type LegacyImporter interface{Import(ctx context.Context, path string, workspace string) (LegacyImportResult, error); Path() string}
 github.com/Sevyn17/tenon/apphost: func LoadAll(base string, extra string, root string, trusted bool) (*github.com/Sevyn17/tenon/runtime/component.Profile, []*github.com/Sevyn17/tenon/runtime/pkgs.Package, []string, error)
 github.com/Sevyn17/tenon/apphost: func LoadProfiles(base string, extra string, root string, trusted bool) (*github.com/Sevyn17/tenon/runtime/component.Profile, []string, error)
 github.com/Sevyn17/tenon/apphost: func LoadTrust() (map[string]string, error)

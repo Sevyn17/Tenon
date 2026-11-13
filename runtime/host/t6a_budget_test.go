@@ -5,7 +5,6 @@ package host
 
 import (
 	"context"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -17,7 +16,7 @@ import (
 // 远端带 budget_ref 投递后，接收方账上不应有这笔（记账归发送方）。
 func TestRemoteTurnNotBudgetedLocally(t *testing.T) {
 	ctx := context.Background()
-	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{usage: sessionUsage()})
+	r := newRig(t, nil, &fakeModel{usage: sessionUsage()})
 	hd, err := r.h.Open(ctx, "s1")
 	if err != nil {
 		t.Fatal(err)
@@ -35,7 +34,7 @@ func TestRemoteTurnNotBudgetedLocally(t *testing.T) {
 	_ = hd.Wait()
 	// 等一小会儿确保记账逻辑（若有）跑完。
 	time.Sleep(200 * time.Millisecond)
-	if u, err := r.db.BudgetTotal(ctx, "shared-acct"); err != nil {
+	if u, err := r.db.(store.BudgetStore).BudgetTotal(ctx, "shared-acct"); err != nil {
 		t.Fatal(err)
 	} else if u.Total() != 0 {
 		t.Fatalf("远端触发的回合不该在接收方记账，实际 %v", u)
@@ -45,7 +44,7 @@ func TestRemoteTurnNotBudgetedLocally(t *testing.T) {
 // 对照：本机用户触发（带 budget_ref）时接收方照常记账。
 func TestLocalTurnStillBudgeted(t *testing.T) {
 	ctx := context.Background()
-	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{usage: sessionUsage()})
+	r := newRig(t, nil, &fakeModel{usage: sessionUsage()})
 	hd, err := r.h.Open(ctx, "s1")
 	if err != nil {
 		t.Fatal(err)
@@ -62,7 +61,7 @@ func TestLocalTurnStillBudgeted(t *testing.T) {
 	_ = hd.Wait()
 	deadline := time.Now().Add(5 * time.Second)
 	for {
-		if u, _ := r.db.BudgetTotal(ctx, "local-acct"); u.Total() > 0 {
+		if u, _ := r.db.(store.BudgetStore).BudgetTotal(ctx, "local-acct"); u.Total() > 0 {
 			break
 		}
 		if time.Now().After(deadline) {

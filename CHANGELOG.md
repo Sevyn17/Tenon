@@ -8,6 +8,38 @@
 
 ---
 
+## [v0.3.0] - 2026-11-13
+
+> 小版本：公开面有删除，按 07 篇 7.4.1 动 minor。从 `v0.2.2` 起。
+
+### 破坏性变更
+
+- **删除 `modules/storage/sqlite` 与 `modules/storage/store-sqlite` 两个包**。
+  SQLite 实现迁出框架，由产品在自己的仓库里提供存储插件并在入口包空导入。
+  框架 `go.mod` 不再依赖 `modernc.org/sqlite`。
+- **`apphost.Start` 不再自带存储插件**。按 profile 装配时，调用方必须自己登记一个
+  提供 `service:db` 的组件，否则报「装配: 没有提供 service:db 的存储组件」。
+  SDK 路径不受影响：`tenon.WithStore` 照旧注入。
+- **`tenontest.Stores()` 只返回内存实现**。用它跑多后端验收的测试少一个后端。
+
+### 新增
+
+- **`apphost.LegacyImporter` / `LegacyImportResult`**：旧库并入改为接口，
+  实现由产品的存储插件提供。`apphost` 不再直接打开 SQLite 文件。
+
+### 变更
+
+- 框架测试全部改用 `memstore`。`workgroup` 旧表搬迁的两处测试改用标准库
+  `database/sql` 加自注册内存驱动，不再依赖 SQLite 驱动。
+- `runtime/assemble/deps_test.go` 删掉为 SQLite 开的两个例外。
+- `examples/web-server` 改用内存存储（示例不需要持久化）。
+
+### 修复
+
+- 无。
+
+---
+
 ## [v0.2.2] - 2026-11-13
 
 > 补丁版：**Go 侧公开面不变**（`testdata/api.txt` 无差异）。标准组件不再依赖 SQL 出口。

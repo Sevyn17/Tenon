@@ -2,16 +2,15 @@ package workgroup
 
 import (
 	"context"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/Sevyn17/tenon/modules/storage/sqlite"
 	"github.com/Sevyn17/tenon/runtime/agent"
 	"github.com/Sevyn17/tenon/runtime/host"
 	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/store/memstore"
 	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
@@ -56,10 +55,7 @@ func (m *blockModel) has(sub string) bool {
 
 // 领导能用 team_stop 中止正在工作的成员，结果照常送回（审查 P1-27：原先只能等 30 分钟超时）。
 func TestTeamStopCancelsMember(t *testing.T) {
-	db, err := sqlite.Open(context.Background(), filepath.Join(t.TempDir(), "s.db"), sqlite.Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	db := memstore.New()
 	t.Cleanup(func() { db.Close() })
 	m := &blockModel{started: make(chan struct{}, 4)}
 	h := &host.Host{DB: db}
@@ -82,7 +78,7 @@ func TestTeamStopCancelsMember(t *testing.T) {
 	}
 	h.New = mk(true)
 	tasks, runs := openBoards(t, db)
-	g, err = New(context.Background(), h, db, tasks, runs, db, mk(false))
+	g, err := New(context.Background(), h, nil, tasks, runs, db, mk(false))
 	if err != nil {
 		t.Fatal(err)
 	}

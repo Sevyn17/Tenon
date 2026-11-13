@@ -87,19 +87,8 @@ func checkDep(t *testing.T, from, imp string, test bool) {
 	case strings.HasPrefix(to, "modules/internal/") && isModule(from):
 		// modules/internal/*：标准模块共用的辅助包（进程启动、命令拆分），不算模块之间互相 import（05 3.2）
 	case isModule(to) && isModule(from):
-		// 两个例外，都只针对 SQLite 实现这一个包：
-		// 1. store-sqlite 是它的组件外壳，引用自己的实现是职责，不是模块之间互相依赖；
-		// 2. 测试文件用它验证「关掉再打开仍在」，内存实现做不到（18 方案第九节）。
-		if to == "modules/storage/sqlite" && (from == "modules/storage/store-sqlite" || test) {
-			return
-		}
 		t.Errorf("标准模块 %s 不得 import 标准模块 %s", from, to)
 	case isModule(to):
-		// 测试例外：runtime/ 与 appapi/ 的测试可以用 SQLite 实现验证「关掉再打开仍在」这类内存实现做不到的事。
-		// 只放行这一个包，生产代码不受影响（18 方案第九节）。
-		if test && to == "modules/storage/sqlite" && (isRuntime(from) || isAppAPI(from)) {
-			return
-		}
 		t.Errorf("%s 不得 import 标准模块 %s", from, to)
 	case isAppAPI(to) && !isAppAPI(from):
 		t.Errorf("%s 不得 import 应用接口层 %s", from, to)

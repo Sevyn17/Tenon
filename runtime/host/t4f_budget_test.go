@@ -4,7 +4,6 @@ package host
 
 import (
 	"context"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -16,7 +15,7 @@ import (
 // 记账：带 budget_ref 的信封触发一轮后，账上累计到该回合的 usage。
 func TestBudgetAccountedPerTurn(t *testing.T) {
 	ctx := context.Background()
-	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{usage: session.Usage{Input: 100, Output: 50}})
+	r := newRig(t, nil, &fakeModel{usage: session.Usage{Input: 100, Output: 50}})
 	hd, err := r.h.Open(ctx, "s1")
 	if err != nil {
 		t.Fatal(err)
@@ -33,7 +32,7 @@ func TestBudgetAccountedPerTurn(t *testing.T) {
 	bs := r.db
 	deadline := time.Now().Add(5 * time.Second)
 	for {
-		u, err := bs.BudgetTotal(ctx, "acct-1")
+		u, err := bs.(store.BudgetStore).BudgetTotal(ctx, "acct-1")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -50,7 +49,7 @@ func TestBudgetAccountedPerTurn(t *testing.T) {
 // 超限：上限很小，回合结束后发 budget.exceeded 并挂起会话。
 func TestBudgetExceededSuspends(t *testing.T) {
 	ctx := context.Background()
-	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{usage: session.Usage{Input: 100, Output: 50}})
+	r := newRig(t, nil, &fakeModel{usage: session.Usage{Input: 100, Output: 50}})
 	hd, err := r.h.Open(ctx, "s1")
 	if err != nil {
 		t.Fatal(err)
@@ -59,7 +58,7 @@ func TestBudgetExceededSuspends(t *testing.T) {
 	// 宿主级上限 100；先把账打到 1000，再跑一轮必然超限。
 	r.h.DefaultBudget = 100
 	bs := r.db
-	if _, err := bs.AddBudget(ctx, "acct-2", store.BudgetUsage{Input: 1000}, 0); err != nil {
+	if _, err := bs.(store.BudgetStore).AddBudget(ctx, "acct-2", store.BudgetUsage{Input: 1000}, 0); err != nil {
 		t.Fatal(err)
 	}
 	if err := r.h.Deliver(ctx, mail.Envelope{

@@ -7,7 +7,6 @@ package agent
 import (
 	"context"
 	"errors"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -30,18 +29,14 @@ func TestCrashRecovery(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.point, func(t *testing.T) {
-			path := filepath.Join(t.TempDir(), "state.db")
+			db := openStore(t)
 			runs := 0
-
-			db1 := openStore(t, path)
-			a1 := newAgent(t, db1, agentOpts{runs: &runs, crash: tc.point})
+			a1 := newAgent(t, db, agentOpts{runs: &runs, crash: tc.point})
 			if _, err := a1.Send(context.Background(), "ping"); !errors.Is(err, errCrash) {
 				t.Fatalf("应在 %s 崩溃: %v", tc.point, err)
 			}
-			db1.Close()
-
-			db2 := openStore(t, path)
-			a2 := newAgent(t, db2, agentOpts{runs: &runs})
+			// 同一份已提交的存储上换一个执行体。文件级关库重开由存储实现方验证。
+			a2 := newAgent(t, db, agentOpts{runs: &runs})
 			if a2.Pending() != tc.wantPend {
 				t.Fatalf("Pending=%v，期望 %v", a2.Pending(), tc.wantPend)
 			}

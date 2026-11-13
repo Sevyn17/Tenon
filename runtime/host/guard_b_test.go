@@ -4,23 +4,22 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/Sevyn17/tenon/modules/storage/sqlite"
 	"github.com/Sevyn17/tenon/runtime/agent"
 	"github.com/Sevyn17/tenon/runtime/callctx"
 	"github.com/Sevyn17/tenon/runtime/mail"
 	"github.com/Sevyn17/tenon/runtime/session"
 	"github.com/Sevyn17/tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/store/memstore"
 	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 // B4：request / notify 随便带一个 corr 不能绕过联系名单；只有回信凭 corr 进门，且要通过核对。
 func TestFakeCorrDoesNotBypassContact(t *testing.T) {
 	ctx := context.Background()
-	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{})
+	r := newRig(t, nil, &fakeModel{})
 	mustOpen(t, r.h, "s1")
 	from := mail.Address{Kind: mail.AddrAgent, ID: "evil"}
 	to := mail.Address{Kind: mail.AddrSession, ID: "s1"}
@@ -41,7 +40,7 @@ func TestFakeCorrDoesNotBypassContact(t *testing.T) {
 // B5：入口 Deliver 忽略调用方给的内核字段（hop / trace / caps），组件不能自称 human。
 func TestDeliverIgnoresCallerKernelFields(t *testing.T) {
 	ctx := context.Background()
-	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{})
+	r := newRig(t, nil, &fakeModel{})
 	mustOpen(t, r.h, "s1")
 	env := mail.Envelope{ID: "e1", From: mail.Address{Kind: mail.AddrComponent, ID: "c"},
 		To: mail.Address{Kind: mail.AddrSession, ID: "s1"}, Kind: mail.KindNotify, Mode: mail.ModeContext,
@@ -113,10 +112,7 @@ func TestDisjointCapsDenyAll(t *testing.T) {
 // caps 由内核按发送会话的有效权限写入（Agent.Outbound），不靠调用方填。
 func TestOutboundCapsFromSenderPermissions(t *testing.T) {
 	ctx := context.Background()
-	db, err := sqlite.Open(ctx, filepath.Join(t.TempDir(), "s.db"), sqlite.Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	db := memstore.New()
 	t.Cleanup(func() { db.Close() })
 	executed := new(int)
 	// low 只有 read_file；high 有 echo。
@@ -193,10 +189,7 @@ func TestOutboundCapsFromSenderPermissions(t *testing.T) {
 // 权限层据此把 allow 降为询问；下一个可信回合重设。
 func TestExternalTurnMarksCtxUntrusted(t *testing.T) {
 	ctx := context.Background()
-	db, err := sqlite.Open(ctx, filepath.Join(t.TempDir(), "s.db"), sqlite.Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	db := memstore.New()
 	t.Cleanup(func() { db.Close() })
 	var seen []bool
 	h := &Host{DB: db, New: func(id, def string) (*agent.Agent, *session.Config, error) {
@@ -233,10 +226,7 @@ func TestExternalTurnMarksCtxUntrusted(t *testing.T) {
 // capsHost 带一个 echo 工具（只读）的宿主；fakeModel 收到 "tool" 时调 echo。
 func capsHost(t *testing.T) (*Host, *int) {
 	t.Helper()
-	db, err := sqlite.Open(context.Background(), filepath.Join(t.TempDir(), "s.db"), sqlite.Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	db := memstore.New()
 	t.Cleanup(func() { db.Close() })
 	executed := new(int)
 	h := &Host{DB: db, New: func(id, def string) (*agent.Agent, *session.Config, error) {

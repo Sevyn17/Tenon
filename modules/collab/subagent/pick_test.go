@@ -3,16 +3,15 @@ package subagent
 import (
 	"context"
 	"encoding/json"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 
-	"github.com/Sevyn17/tenon/modules/storage/sqlite"
 	"github.com/Sevyn17/tenon/runtime/agent"
 	"github.com/Sevyn17/tenon/runtime/callctx"
 	"github.com/Sevyn17/tenon/runtime/host"
 	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/store/memstore"
 	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
@@ -53,10 +52,7 @@ func TestPickDefinition(t *testing.T) {
 // 选中的定义名一路传到子会话的构造（会话行记 AgentID，恢复时还是同一个角色）。
 func TestSubagentToolUsesChosenDefinition(t *testing.T) {
 	ctx := context.Background()
-	db, err := sqlite.Open(ctx, filepath.Join(t.TempDir(), "s.db"), sqlite.Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	db := memstore.New()
 	t.Cleanup(func() { db.Close() })
 	var mu sync.Mutex
 	var defs []string

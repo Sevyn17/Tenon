@@ -52,9 +52,6 @@ func TestPluginsSetEndToEnd(t *testing.T) {
 		if x.Name == "compact-basic" {
 			compact = x
 		}
-		if x.Name == "store-sqlite" && (x.Mandatory || !x.On) {
-			t.Fatalf("store-sqlite 不再锁定，但缺省开着：%+v", x)
-		}
 	}
 	if compact.Name == "" || compact.Pending != nil {
 		t.Fatalf("compact-basic：%+v", compact)
@@ -99,7 +96,6 @@ func TestPluginsSetEndToEnd(t *testing.T) {
 		code string
 	}{
 		{wire.PluginsSetArgs{Name: "compact-basic", Scope: "project", Enabled: &on}, wire.CodeDenied},
-		{wire.PluginsSetArgs{Name: "store-sqlite", Scope: "user", Enabled: &off}, wire.CodeInvalid},
 		{wire.PluginsSetArgs{Name: "compact-basic", Scope: "user", Config: map[string]any{"nope": 1}}, wire.CodeInvalid},
 		{wire.PluginsSetArgs{Name: "compact-basic", Scope: "user", Config: map[string]any{"headroom": "x"}}, wire.CodeInvalid},
 		{wire.PluginsSetArgs{Name: "no-such", Scope: "user", Enabled: &on}, wire.CodeNotFound},
@@ -136,6 +132,7 @@ func newPluginsApp(t *testing.T, p *component.Profile, pr Profiles) *appapi.App 
 }
 
 // 存储不锁定是哪个插件，但 plugins.set 不能把最后一个提供 service:db 的插件关掉（关了下次启动就起不来）。
+// 框架不再自带存储插件，本包测试登记的 memstore 就是唯一的那个。
 func TestPluginsSetKeepsAStore(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("TENON_HOME", home)
@@ -146,7 +143,7 @@ func TestPluginsSetKeepsAStore(t *testing.T) {
 	}
 	a := newPluginsApp(t, p, Profiles{Root: root})
 	off := false
-	b, _ := json.Marshal(wire.PluginsSetArgs{Name: "store-sqlite", Scope: "user", Enabled: &off})
+	b, _ := json.Marshal(wire.PluginsSetArgs{Name: "memstore", Scope: "user", Enabled: &off})
 	_, err = a.Call(context.Background(), "plugins.set", b)
 	var e *appapi.Error
 	if !errors.As(err, &e) || e.Code != wire.CodeInvalid {

@@ -7,36 +7,31 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/Sevyn17/tenon/modules/storage/sqlite"
 	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/store"
 	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
-func hubAgent(t *testing.T, db *sqlite.DB, runs *int, ask Ask) *Agent {
+func hubAgent(t *testing.T, db store.Store, runs *int, ask Ask) *Agent {
 	t.Helper()
 	return newAgent(t, db, agentOpts{runs: runs, ask: ask})
 }
 
 func TestHubConfirmSurvivesCrash(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "state.db")
+	db := openStore(t)
 	runs := 0
-
-	db1 := openStore(t, path)
-	a1 := hubAgent(t, db1, &runs, func(context.Context, *toolhub.Cx, string, time.Time) bool { return true })
+	a1 := hubAgent(t, db, &runs, func(context.Context, *toolhub.Cx, string, time.Time) bool { return true })
 	a1.crashAt = "awaiting_confirm"
 	if _, err := a1.Send(context.Background(), "ping"); !errors.Is(err, errCrash) {
 		t.Fatalf("应在等确认时崩溃: %v", err)
 	}
-	db1.Close()
 
-	db2 := openStore(t, path)
 	asked := 0
-	a2 := hubAgent(t, db2, &runs, func(context.Context, *toolhub.Cx, string, time.Time) bool { asked++; return true })
+	a2 := hubAgent(t, db, &runs, func(context.Context, *toolhub.Cx, string, time.Time) bool { asked++; return true })
 	if !a2.Pending() {
 		t.Fatal("恢复后应有未完成回合")
 	}
@@ -53,7 +48,7 @@ func TestHubConfirmSurvivesCrash(t *testing.T) {
 
 func TestHubConfirmDenied(t *testing.T) {
 	runs := 0
-	db := openStore(t, filepath.Join(t.TempDir(), "state.db"))
+	db := openStore(t)
 	a := hubAgent(t, db, &runs, func(context.Context, *toolhub.Cx, string, time.Time) bool { return false })
 	var text strings.Builder
 	a.Hooks.OnText = func(d string) { text.WriteString(d) }

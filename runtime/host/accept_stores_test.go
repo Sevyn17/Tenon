@@ -1,18 +1,17 @@
 package host
 
-// v1 验收第 1 条：T3（09 9.6）的验收用例在 SQLite 与内存两种存储上都过。
-// 这里把五条验收按存储参数化跑一遍（各条的细节用例仍在 t3_test.go / guard_b_test.go，用 SQLite）。
+// v1 验收第 1 条：T3（09 9.6）的验收用例在存储接口上过。
+// 存储实现已迁出框架（docs/02 - 开发管理/20），这里只跑内存实现；
+// 持久化实现由产品侧跑同一套 storetest 验收。
 
 import (
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/Sevyn17/tenon/modules/storage/sqlite"
 	"github.com/Sevyn17/tenon/runtime/agent"
 	"github.com/Sevyn17/tenon/runtime/mail"
 	"github.com/Sevyn17/tenon/runtime/session"
@@ -29,14 +28,6 @@ type acceptStore interface {
 func acceptStores(t *testing.T) map[string]func() acceptStore {
 	return map[string]func() acceptStore{
 		"memstore": func() acceptStore { return memstore.New() },
-		"sqlite": func() acceptStore {
-			db, err := sqlite.Open(context.Background(), filepath.Join(t.TempDir(), "s.db"), sqlite.Options{})
-			if err != nil {
-				t.Fatal(err)
-			}
-			t.Cleanup(func() { db.Close() })
-			return db
-		},
 	}
 }
 

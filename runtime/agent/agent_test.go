@@ -4,13 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/Sevyn17/tenon/modules/storage/sqlite"
 	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/store/memstore"
 	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
@@ -52,12 +52,9 @@ func testCfg() *session.Config {
 	return &session.Config{Model: "m", Tools: []session.ToolSpec{echoSpec}, Policy: session.DefaultPolicy()}
 }
 
-func openStore(t *testing.T, path string) *sqlite.DB {
+func openStore(t *testing.T) store.Store {
 	t.Helper()
-	db, err := sqlite.Open(context.Background(), path, sqlite.Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	db := memstore.New()
 	t.Cleanup(func() { db.Close() })
 	return db
 }
@@ -92,7 +89,7 @@ type agentOpts struct {
 	model Model
 }
 
-func newAgent(t *testing.T, db *sqlite.DB, o agentOpts) *Agent {
+func newAgent(t *testing.T, db store.Store, o agentOpts) *Agent {
 	t.Helper()
 	m := o.model
 	if m == nil {
@@ -116,9 +113,7 @@ func newAgent(t *testing.T, db *sqlite.DB, o agentOpts) *Agent {
 	return a
 }
 
-func tempStore(t *testing.T) *sqlite.DB {
-	return openStore(t, filepath.Join(t.TempDir(), "state.db"))
-}
+func tempStore(t *testing.T) store.Store { return openStore(t) }
 
 func TestToolLoopEndToEnd(t *testing.T) {
 	db := tempStore(t)

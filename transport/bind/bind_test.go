@@ -1,6 +1,6 @@
 package bind
 
-// 绑定服务测试：用最小宿主（假模型、sqlite 临时库）驱动 Service.Call，并检查事件转发；
+// 绑定服务测试：用最小宿主（假模型、内存存储）驱动 Service.Call，并检查事件转发；
 // 另校验前端 web/src/commands.ts 的命令表与 appapi.ConnCommands() 一致。
 
 import (
@@ -17,11 +17,11 @@ import (
 
 	"github.com/Sevyn17/tenon/appapi"
 	"github.com/Sevyn17/tenon/appapi/wire"
-	"github.com/Sevyn17/tenon/modules/storage/sqlite"
 	"github.com/Sevyn17/tenon/runtime/agent"
 	"github.com/Sevyn17/tenon/runtime/bus"
 	"github.com/Sevyn17/tenon/runtime/host"
 	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/store/memstore"
 	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
@@ -42,11 +42,8 @@ func (fakeModel) Stream(_ context.Context, req session.Request, onText func(stri
 
 func newTestApp(t *testing.T) *appapi.App {
 	t.Helper()
-	ctx := context.Background()
-	db, err := sqlite.Open(ctx, filepath.Join(t.TempDir(), "s.db"), sqlite.Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	db := memstore.New()
+	t.Cleanup(func() { db.Close() })
 	b := bus.New(0)
 	t.Cleanup(func() { b.Close(); db.Close() })
 	var app *appapi.App
@@ -57,7 +54,7 @@ func newTestApp(t *testing.T) *appapi.App {
 		cfg := &session.Config{Model: "m", Tools: hub.Exposed(hub.SpecsFor(nil)), Policy: session.DefaultPolicy()}
 		return a, cfg, nil
 	}
-	app, err = appapi.New(appapi.Options{Host: h, Bus: b, DB: db, Model: "m", Workdir: "w", UI: appapi.NewUI(b)})
+	app, err := appapi.New(appapi.Options{Host: h, Bus: b, DB: db, Model: "m", Workdir: "w", UI: appapi.NewUI(b)})
 	if err != nil {
 		t.Fatal(err)
 	}

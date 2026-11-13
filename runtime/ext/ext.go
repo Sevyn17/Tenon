@@ -50,8 +50,8 @@ const (
 
 // 组件提供的服务。
 const (
-	ServiceDB         = "service:db"         // assemble.DBHandle（store-sqlite）
-	ServiceSQL        = "service:sql"        // store.SQL（store-sqlite）
+	ServiceDB         = "service:db"         // assemble.DBHandle（产品的存储插件）
+	ServiceSQL        = "service:sql"        // store.SQL（产品的存储插件，可选）
 	ServiceModelhub   = "service:modelhub"   // *assemble.Models（models）
 	ServiceCompactor  = "service:compactor"  // agent.Compactor，可实现 assemble.Redactable（compact-basic）
 	ServiceSandbox    = "service:sandbox"    // toolhub.Confiner（sandbox）

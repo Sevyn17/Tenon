@@ -3,15 +3,15 @@ package host
 import (
 	"context"
 	"encoding/json"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/Sevyn17/tenon/modules/storage/sqlite"
 	"github.com/Sevyn17/tenon/runtime/agent"
 	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/store/memstore"
 	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
@@ -58,21 +58,21 @@ func (m *fakeModel) Stream(ctx context.Context, req session.Request, onText func
 
 type rig struct {
 	h    *Host
-	db   *sqlite.DB
+	db   store.Store
 	m    *fakeModel
 	runs *int
-	path string
 }
 
-func newRig(t *testing.T, path string, m *fakeModel) *rig {
+// newRig 用内存存储搭一个宿主。db 非空时共用它（两个宿主写同一份存储）；空则新建。
+// 存储实现已迁出框架，这里不再打开 SQLite（docs/02 - 开发管理/20）。
+func newRig(t *testing.T, db store.Store, m *fakeModel) *rig {
 	t.Helper()
-	db, err := sqlite.Open(context.Background(), path, sqlite.Options{})
-	if err != nil {
-		t.Fatal(err)
+	if db == nil {
+		db = memstore.New()
 	}
 	t.Cleanup(func() { db.Close() })
 	runs := new(int)
-	r := &rig{db: db, m: m, runs: runs, path: path}
+	r := &rig{db: db, m: m, runs: runs}
 	r.h = &Host{DB: db, New: func(id, def string) (*agent.Agent, *session.Config, error) {
 		hub := toolhub.New(toolhub.Options{Store: agent.ToolStore{DB: db}})
 		echo := &toolhub.Tool{Spec: session.ToolSpec{Name: "echo", Schema: json.RawMessage(`{"type":"object"}`)},
@@ -97,7 +97,7 @@ func messages(t *testing.T, hd Handle) []session.Message {
 }
 
 func TestSendIdempotentAndNoteMerge(t *testing.T) {
-	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{})
+	r := newRig(t, nil, &fakeModel{})
 	hd, err := r.h.Open(context.Background(), "s1")
 	if err != nil {
 		t.Fatal(err)
@@ -131,7 +131,7 @@ func TestSendIdempotentAndNoteMerge(t *testing.T) {
 
 func TestCancelMidTurn(t *testing.T) {
 	m := &fakeModel{block: make(chan struct{})}
-	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), m)
+	r := newRig(t, nil, m)
 	hd, _ := r.h.Open(context.Background(), "s1")
 	var end session.EndReason
 	r.h.Hooks.AfterTurn = func(_ string, e session.EndReason) { end = e }
@@ -149,8 +149,7 @@ func TestCancelMidTurn(t *testing.T) {
 }
 
 func TestConfirmCommandAndCrashResume(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "s.db")
-	r := newRig(t, path, &fakeModel{})
+	r := newRig(t, nil, &fakeModel{})
 	hd, _ := r.h.Open(context.Background(), "s1")
 	if err := hd.Do(Command{Kind: Confirm, CallID: "nope", Approve: true}); err == nil {
 		t.Fatal("未等待确认的调用应报错")
@@ -160,9 +159,9 @@ func TestConfirmCommandAndCrashResume(t *testing.T) {
 	if *r.runs != 0 {
 		t.Fatal("确认前不得执行")
 	}
-	// 模拟进程被杀：直接关库，换一个宿主打开同一会话。
-	r.db.Close()
-	r2 := newRig(t, path, &fakeModel{})
+	// 模拟进程被杀：旧宿主不再写，换一个宿主打开同一份存储。
+	// 文件级「关库重开」由存储实现方验证；框架只验证换宿主后未完成的确认还在。
+	r2 := newRig(t, r.db, &fakeModel{})
 	hd2, err := r2.h.Open(context.Background(), "s1")
 	if err != nil {
 		t.Fatal(err)
@@ -188,7 +187,7 @@ func TestConfirmCommandAndCrashResume(t *testing.T) {
 }
 
 func TestBeforeTurnDenyAndRecord(t *testing.T) {
-	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{})
+	r := newRig(t, nil, &fakeModel{})
 	r.h.Hooks.BeforeTurn = func(_ string, in session.Content, _ bool) (session.Content, Decision, error) {
 		if strings.Contains(in[0].Text, "拒") {
 			return in, Deny, nil
@@ -208,7 +207,7 @@ func TestBeforeTurnDenyAndRecord(t *testing.T) {
 }
 
 func TestCreateHookRollback(t *testing.T) {
-	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{})
+	r := newRig(t, nil, &fakeModel{})
 	r.h.Hooks.OnCreate = func(string, Origin) error { return context.Canceled }
 	if _, err := r.h.Open(context.Background(), "s1"); err == nil {
 		t.Fatal("create 钩子失败应报错")
@@ -218,7 +217,7 @@ func TestCreateHookRollback(t *testing.T) {
 	}
 }
 
-func waitConfirm(t *testing.T, db *sqlite.DB, sid string) string {
+func waitConfirm(t *testing.T, db store.ToolResultStore, sid string) string {
 	t.Helper()
 	var id string
 	waitFor(t, func() bool {
@@ -246,7 +245,7 @@ func waitFor(t *testing.T, f func() bool) {
 
 // M4.5：fork 复制前缀、重分配 id、记 origin；分支各走各的，不影响来源。
 func TestForkAndSide(t *testing.T) {
-	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{})
+	r := newRig(t, nil, &fakeModel{})
 	ctx := context.Background()
 	src, err := r.h.Open(ctx, "src")
 	if err != nil {
@@ -284,11 +283,12 @@ func TestForkAndSide(t *testing.T) {
 	if len(messages(t, f)) != 4 || len(messages(t, src)) != 4 {
 		t.Fatalf("分支独立：fork=%d src=%d", len(messages(t, f)), len(messages(t, src)))
 	}
-	var origin, parent string
-	var upto int
-	r.db.DB().QueryRow(`SELECT origin, parent_id, fork_upto FROM sessions WHERE id='f1'`).Scan(&origin, &parent, &upto)
-	if origin != "fork" || parent != "src" || upto != 2 {
-		t.Fatalf("会话元数据: %s %s %d", origin, parent, upto)
+	loaded, err := r.db.Load(ctx, "f1", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.Meta.Origin != "fork" || loaded.Meta.ParentID != "src" || loaded.Meta.ForkUpto != 2 {
+		t.Fatalf("会话元数据: %+v", loaded.Meta)
 	}
 	if _, err := r.h.Fork(ctx, "src", "s1", 4, "side"); err != nil {
 		t.Fatalf("旁支: %v", err)

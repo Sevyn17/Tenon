@@ -5,7 +5,6 @@ package host
 
 import (
 	"context"
-	"path/filepath"
 	"testing"
 
 	"github.com/Sevyn17/tenon/runtime/agentdef"
@@ -26,7 +25,7 @@ func residentDefs(t *testing.T, name string) agentdef.Source {
 
 func TestResidentFixedSession(t *testing.T) {
 	ctx := context.Background()
-	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{})
+	r := newRig(t, nil, &fakeModel{})
 	r.h.Definitions = residentDefs(t, "bot")
 	// 两次投给 agent:bot（不带 key），应落到同一个常驻会话。
 	id1, err := r.h.DeliverAgent(ctx, mail.Envelope{From: mail.Address{Kind: mail.AddrHuman, ID: "u1"},
@@ -58,8 +57,7 @@ func TestResidentFixedSession(t *testing.T) {
 // 两个 Host 同投同一常驻定义：仍只一个会话（固定 id + 唯一约束冲突转投）。
 func TestResidentTwoHostsOneSession(t *testing.T) {
 	ctx := context.Background()
-	path := filepath.Join(t.TempDir(), "s.db")
-	r1 := newRig(t, path, &fakeModel{})
+	r1 := newRig(t, nil, &fakeModel{})
 	defs := residentDefs(t, "bot")
 	r1.h.Definitions = defs
 	// 第二个 Host 共用同一存储。

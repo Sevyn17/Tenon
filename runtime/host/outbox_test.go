@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -16,7 +15,7 @@ import (
 // 回合提交后 actor 自己派发发件箱：发给本会话的 control（close / interrupt）不能在 actor 协程里
 // 同步等自己受理命令（旧行为：FlushOutbox → control → hd.Do(Close) 等自己，死锁）。
 func TestOutboxControlToSelfDoesNotDeadlock(t *testing.T) {
-	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{})
+	r := newRig(t, nil, &fakeModel{})
 	hd := mustOpen(t, r.h, "s1")
 	env := mail.Envelope{From: mail.Address{Kind: mail.AddrComponent, ID: "test"},
 		To: mail.Address{Kind: mail.AddrSession, ID: "s1"}, Kind: mail.KindControl, Body: "close"}
@@ -39,7 +38,7 @@ func TestOutboxControlToSelfDoesNotDeadlock(t *testing.T) {
 // 每次派发都重试；发件箱每次只取 64 条，毒消息够多时正常的信永远派不出去）。
 func TestOutboxPoisonDeadLettered(t *testing.T) {
 	ctx := context.Background()
-	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{})
+	r := newRig(t, nil, &fakeModel{})
 	hd := mustOpen(t, r.h, "s1")
 	mustOpen(t, r.h, "s2")
 	put := func(env mail.Envelope) {
@@ -75,7 +74,7 @@ func TestOutboxPoisonDeadLettered(t *testing.T) {
 // C7：agent: 投递被联系名单拒绝时不留下会话（旧实现先建会话、开了 actor，再在投递时拒绝）。
 func TestDeliverAgentRejectedLeavesNoSession(t *testing.T) {
 	ctx := context.Background()
-	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{})
+	r := newRig(t, nil, &fakeModel{})
 	for i := 0; i < 3; i++ {
 		err := r.h.Deliver(ctx, mail.Envelope{From: mail.Address{Kind: mail.AddrAgent, ID: "stranger"},
 			To: mail.Address{Kind: mail.AddrAgent, ID: "worker"}, Body: "hi"})
@@ -97,9 +96,8 @@ func TestDeliverAgentRejectedLeavesNoSession(t *testing.T) {
 // A9 / C6：两个宿主（两个进程）共用一个库同时派发，同一条外发只投递一次。
 func TestOutboxTwoHostsDeliverOnce(t *testing.T) {
 	ctx := context.Background()
-	path := filepath.Join(t.TempDir(), "s.db")
-	r1 := newRig(t, path, &fakeModel{})
-	r2 := newRig(t, path, &fakeModel{})
+	r1 := newRig(t, nil, &fakeModel{})
+	r2 := newRig(t, r1.db, &fakeModel{})
 	hd := mustOpen(t, r1.h, "s1")
 	env := mail.Envelope{From: mail.Address{Kind: mail.AddrComponent, ID: "test"},
 		To: mail.Address{Kind: mail.AddrAgent, ID: "worker"}, Body: "任务"}
@@ -130,7 +128,7 @@ func TestOutboxTwoHostsDeliverOnce(t *testing.T) {
 // 同一条外发只能投递一次（不带 key 的 agent: 投递每次都新建会话，重复即可见）。
 func TestOutboxConcurrentFlushDeliversOnce(t *testing.T) {
 	ctx := context.Background()
-	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{})
+	r := newRig(t, nil, &fakeModel{})
 	hd := mustOpen(t, r.h, "s1")
 	env := mail.Envelope{From: mail.Address{Kind: mail.AddrComponent, ID: "test"},
 		To: mail.Address{Kind: mail.AddrAgent, ID: "worker"}, Body: "任务"}
@@ -175,7 +173,7 @@ func TestOutboxConcurrentFlushDeliversOnce(t *testing.T) {
 // 不动未派发的外发。
 func TestMaintainPrunesOldRows(t *testing.T) {
 	ctx := context.Background()
-	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{})
+	r := newRig(t, nil, &fakeModel{})
 	hd := mustOpen(t, r.h, "s1")
 	for _, id := range []string{"sent", "open"} {
 		env := mail.Envelope{ID: id, From: mail.Address{Kind: mail.AddrComponent, ID: "t"},
@@ -208,7 +206,7 @@ func TestMaintainPrunesOldRows(t *testing.T) {
 // 信件也只进一次（2026-11-04 审查 P1-17：原先每次随机会话 id，重投就多建一个会话）。
 func TestAgentDeliverRetryCreatesOneSession(t *testing.T) {
 	ctx := context.Background()
-	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{})
+	r := newRig(t, nil, &fakeModel{})
 	env := mail.Envelope{From: mail.Address{Kind: mail.AddrComponent, ID: "test"},
 		To: mail.Address{Kind: mail.AddrAgent, ID: "worker"}, Body: "任务"}
 	if err := env.Normalize(); err != nil {

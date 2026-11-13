@@ -3,7 +3,6 @@ package host
 import (
 	"context"
 	"encoding/json"
-	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -44,7 +43,7 @@ func (m *stepModel) Stream(_ context.Context, req session.Request, _ func(string
 // 回合内没有新信件时，步边界不读信箱（2026-11-04 审查 P1-36：原先每次调模型前都查两次信箱）。
 func TestNoInboxReadWithoutNewMail(t *testing.T) {
 	m := &stepModel{}
-	r := newT2Rig(t, filepath.Join(t.TempDir(), "s.db"), m, 0, nil)
+	r := newT2Rig(t, nil, m, 0, nil)
 	c := &inboxCounter{Store: r.h.DB}
 	m.c = c
 	r.h.DB = c

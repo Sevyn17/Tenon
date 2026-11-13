@@ -278,6 +278,7 @@ func ResolveTrust(force bool, root string, ask func(key string) bool) (bool, str
 }
 
 // projectDenied 受信项目也不能设的键（端点 / 凭据 / 存储位置）。
+// store-sqlite 是产品侧存储插件的名字（框架不再自带，见 20 篇），dir 决定库文件位置。
 var projectDenied = map[string][]string{
 	"models":       {"base_url", "catalog"},
 	"store-sqlite": {"dir"},

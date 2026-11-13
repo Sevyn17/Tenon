@@ -4,17 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/Sevyn17/tenon/modules/storage/sqlite"
 	"github.com/Sevyn17/tenon/runtime/agent"
 	"github.com/Sevyn17/tenon/runtime/host"
 	"github.com/Sevyn17/tenon/runtime/session"
 	"github.com/Sevyn17/tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/store/memstore"
 	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
@@ -61,12 +60,9 @@ func (m *echoModel) has(sub string) bool {
 	return false
 }
 
-func rig(t *testing.T) (*Group, *host.Host, *sqlite.DB, *echoModel) {
+func rig(t *testing.T) (*Group, *host.Host, store.Store, *echoModel) {
 	t.Helper()
-	db, err := sqlite.Open(context.Background(), filepath.Join(t.TempDir(), "s.db"), sqlite.Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	db := memstore.New()
 	t.Cleanup(func() { db.Close() })
 	m := &echoModel{}
 	h := &host.Host{DB: db}
@@ -89,7 +85,7 @@ func rig(t *testing.T) (*Group, *host.Host, *sqlite.DB, *echoModel) {
 	}
 	h.New = mk(true)
 	tasks, runs := openBoards(t, db)
-	g, err = New(context.Background(), h, db, tasks, runs, db, mk(false))
+	g, err := New(context.Background(), h, nil, tasks, runs, db, mk(false))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -98,21 +94,22 @@ func rig(t *testing.T) (*Group, *host.Host, *sqlite.DB, *echoModel) {
 }
 
 // openBoards 打开任务板与投递账两个集合（测试直接构造 Group，不走装配，版本要自己登记）。
-func openBoards(t *testing.T, db *sqlite.DB) (tasks, runs store.Collection) {
+func openBoards(t *testing.T, db store.Store) (tasks, runs store.Collection) {
 	t.Helper()
 	ctx := context.Background()
-	if err := db.SetCollectionVersion(ctx, store.Tenant, "workgroup", "tasks", 1); err != nil {
+	ms := db.(*memstore.Store)
+	if err := ms.SetCollectionVersion(ctx, store.Tenant, "workgroup", "tasks", 1); err != nil {
 		t.Fatal(err)
 	}
 	var err error
-	if tasks, err = db.Open(ctx, store.Tenant, "workgroup", "tasks", store.CollectionSpec{
+	if tasks, err = ms.Open(ctx, store.Tenant, "workgroup", "tasks", store.CollectionSpec{
 		Version: 1, Indexes: []string{"status", "owner"}, Partition: "team"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.SetCollectionVersion(ctx, store.Tenant, "workgroup", "runs", runsSpec.Version); err != nil {
+	if err := ms.SetCollectionVersion(ctx, store.Tenant, "workgroup", "runs", runsSpec.Version); err != nil {
 		t.Fatal(err)
 	}
-	if runs, err = db.Open(ctx, store.Tenant, "workgroup", "runs", runsSpec); err != nil {
+	if runs, err = ms.Open(ctx, store.Tenant, "workgroup", "runs", runsSpec); err != nil {
 		t.Fatal(err)
 	}
 	return tasks, runs
@@ -241,13 +238,12 @@ func TestBoard(t *testing.T) {
 
 // TestImportTasks 旧表 p_workgroup_tasks 在 Start（New）时搬进集合：行进去、表删掉、id 与 rev 保持原值。
 func TestImportTasks(t *testing.T) {
-	db, err := sqlite.Open(context.Background(), filepath.Join(t.TempDir(), "s.db"), sqlite.Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	db := memstore.New()
 	t.Cleanup(func() { db.Close() })
+	sq := openFakeStore()
+	t.Cleanup(func() { sq.DB().Close() })
 	ctx := context.Background()
-	if _, err := db.DB().ExecContext(ctx, `CREATE TABLE p_workgroup_tasks(
+	if _, err := sq.DB().ExecContext(ctx, `CREATE TABLE p_workgroup_tasks(
 		team TEXT NOT NULL, id INTEGER NOT NULL,
 		subject TEXT NOT NULL, description TEXT NOT NULL DEFAULT '',
 		owner TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'pending',
@@ -256,21 +252,21 @@ func TestImportTasks(t *testing.T) {
 		PRIMARY KEY(team, id))`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.DB().ExecContext(ctx, `INSERT INTO p_workgroup_tasks
+	if _, err := sq.DB().ExecContext(ctx, `INSERT INTO p_workgroup_tasks
 		(team, id, subject, description, owner, status, result, rev, created_at, updated_at) VALUES
 		('L', 2, '写文档', '说明', 'alice', 'in_progress', '', 3, 1, 1),
 		('L', 5, '跑测试', '', '', 'pending', '', 1, 1, 1)`); err != nil {
 		t.Fatal(err)
 	}
 	tasks, runs := openBoards(t, db)
-	g, err := New(ctx, &host.Host{DB: db}, db, tasks, runs, db, nil)
+	g, err := New(ctx, &host.Host{DB: db}, sq, tasks, runs, db, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(g.Close)
 
 	var left int
-	err = db.DB().QueryRowContext(ctx, `SELECT COUNT(*) FROM p_workgroup_tasks`).Scan(&left)
+	err = sq.DB().QueryRowContext(ctx, `SELECT COUNT(*) FROM p_workgroup_tasks`).Scan(&left)
 	if err == nil {
 		t.Fatalf("旧表应已删除，还剩 %d 行", left)
 	}
@@ -341,31 +337,30 @@ func TestRecoverRedelivers(t *testing.T) {
 
 // TestImportRuns 旧表 p_workgroup_runs 在 New 时搬进集合并删除，随后 Recover 照常补投。
 func TestImportRuns(t *testing.T) {
-	db, err := sqlite.Open(context.Background(), filepath.Join(t.TempDir(), "s.db"), sqlite.Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	db := memstore.New()
 	t.Cleanup(func() { db.Close() })
+	sq := openFakeStore()
+	t.Cleanup(func() { sq.DB().Close() })
 	ctx := context.Background()
-	if _, err := db.DB().ExecContext(ctx, `CREATE TABLE p_workgroup_runs(
+	if _, err := sq.DB().ExecContext(ctx, `CREATE TABLE p_workgroup_runs(
 		member TEXT NOT NULL PRIMARY KEY, leader TEXT NOT NULL, name TEXT NOT NULL,
 		item_id TEXT NOT NULL, state TEXT NOT NULL, msg TEXT NOT NULL DEFAULT '',
 		updated_at INTEGER NOT NULL)`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.DB().ExecContext(ctx, `INSERT INTO p_workgroup_runs
+	if _, err := sq.DB().ExecContext(ctx, `INSERT INTO p_workgroup_runs
 		(member, leader, name, item_id, state, msg, updated_at) VALUES
 		('L/m-a', 'L', 'a', 'item-a', 'done', '旧结果', 1),
 		('L/m-b', 'L', 'b', 'item-b', 'running', '', 2)`); err != nil {
 		t.Fatal(err)
 	}
 	tasks, runs := openBoards(t, db)
-	g, err := New(ctx, &host.Host{DB: db}, db, tasks, runs, db, nil)
+	g, err := New(ctx, &host.Host{DB: db}, sq, tasks, runs, db, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(g.Close)
-	if err := db.DB().QueryRowContext(ctx, `SELECT COUNT(*) FROM p_workgroup_runs`).Scan(new(int)); err == nil {
+	if err := sq.DB().QueryRowContext(ctx, `SELECT COUNT(*) FROM p_workgroup_runs`).Scan(new(int)); err == nil {
 		t.Fatal("旧投递账应已删除")
 	}
 	got, err := g.listRuns(ctx)

@@ -3,16 +3,15 @@ package appapi
 import (
 	"context"
 	"encoding/json"
-	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/Sevyn17/tenon/appapi/wire"
-	"github.com/Sevyn17/tenon/modules/storage/sqlite"
 	"github.com/Sevyn17/tenon/runtime/agent"
 	"github.com/Sevyn17/tenon/runtime/bus"
 	"github.com/Sevyn17/tenon/runtime/host"
 	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/store/memstore"
 	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
@@ -160,31 +159,29 @@ func TestConnViewerForbidden(t *testing.T) {
 	}
 }
 
-// 跨进程（10.2.4）：另一个进程（同一库文件上的另一个 Host、另一条总线）写入的事件靠按游标轮询补齐。
+// 跨进程（10.2.4）：另一个宿主（同一份存储、另一条总线）写入的事件靠按游标轮询补齐。
+// 文件级「两个进程打开同一库」由存储实现方验证；这里验证轮询补齐本身。
 func TestConnPollsOtherProcess(t *testing.T) {
 	old := PollInterval
 	PollInterval = 50 * time.Millisecond
 	defer func() { PollInterval = old }()
 	ctx := context.Background()
-	path := filepath.Join(t.TempDir(), "s.db")
-	open := func() (*sqlite.DB, *bus.Bus, *host.Host) {
-		db, err := sqlite.Open(ctx, path, sqlite.Options{})
-		if err != nil {
-			t.Fatal(err)
-		}
+	db := memstore.New()
+	t.Cleanup(func() { db.Close() })
+	open := func() (*bus.Bus, *host.Host) {
 		b := bus.New(0)
-		t.Cleanup(func() { b.Close(); db.Close() })
+		t.Cleanup(func() { b.Close() })
 		h := &host.Host{DB: db, Bus: b}
 		h.New = func(id, def string) (*agent.Agent, *session.Config, error) {
 			hub := toolhub.New(toolhub.Options{Store: agent.ToolStore{DB: db}})
 			return &agent.Agent{Store: db, SessionID: id, Model: fakeModel{}, Hub: hub},
 				&session.Config{Model: "m", Policy: session.DefaultPolicy()}, nil
 		}
-		return db, b, h
+		return b, h
 	}
-	db1, b1, h1 := open()
-	_, _, h2 := open()
-	app, err := New(Options{Host: h1, Bus: b1, DB: db1})
+	b1, h1 := open()
+	_, h2 := open()
+	app, err := New(Options{Host: h1, Bus: b1, DB: db})
 	if err != nil {
 		t.Fatal(err)
 	}

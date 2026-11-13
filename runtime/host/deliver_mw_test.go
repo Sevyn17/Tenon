@@ -4,7 +4,6 @@ package host
 
 import (
 	"context"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -15,7 +14,7 @@ import (
 // 中间件短路：信封不进信箱。
 func TestDeliverMiddlewareBlocks(t *testing.T) {
 	ctx := context.Background()
-	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{})
+	r := newRig(t, nil, &fakeModel{})
 	hd, err := r.h.Open(ctx, "s1")
 	if err != nil {
 		t.Fatal(err)
@@ -42,7 +41,7 @@ func TestDeliverMiddlewareBlocks(t *testing.T) {
 // 中间件改写：信封被改到别的会话，目标会话跑到这一轮。
 func TestDeliverMiddlewareReroutes(t *testing.T) {
 	ctx := context.Background()
-	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{})
+	r := newRig(t, nil, &fakeModel{})
 	hd1, err := r.h.Open(ctx, "s1")
 	if err != nil {
 		t.Fatal(err)
@@ -80,7 +79,7 @@ func TestDeliverMiddlewareReroutes(t *testing.T) {
 // 中间件不能绕过守卫：最内层仍在跑（用跳数超限验证）。
 func TestDeliverMiddlewareCannotBypassGuard(t *testing.T) {
 	ctx := context.Background()
-	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{})
+	r := newRig(t, nil, &fakeModel{})
 	hd, err := r.h.Open(ctx, "s1")
 	if err != nil {
 		t.Fatal(err)

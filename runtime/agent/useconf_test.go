@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Sevyn17/tenon/modules/storage/sqlite"
 	"github.com/Sevyn17/tenon/runtime/agentdef"
 	"github.com/Sevyn17/tenon/runtime/callctx"
 	"github.com/Sevyn17/tenon/runtime/store"
@@ -47,7 +46,7 @@ func memSchema(t *testing.T) useconf.Schema {
 }
 
 // useAgent 造一个能落库的会话执行体（工具管理器必需，这里不装工具）。
-func useAgent(t *testing.T, db *sqlite.DB, def *agentdef.Agent, schemas []useconf.Schema, src useconf.Source) *Agent {
+func useAgent(t *testing.T, db store.Store, def *agentdef.Agent, schemas []useconf.Schema, src useconf.Source) *Agent {
 	t.Helper()
 	a := &Agent{
 		Model: fakeModel{}, Store: db, SessionID: "s1",

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -42,7 +41,7 @@ func (m *failModel) getCalls() int {
 // TestTreePolicyGiveUpChild：缺省 give_up——子会话一轮失败，错误原样交回调用方，会话落库为 idle。
 func TestTreePolicyGiveUpChild(t *testing.T) {
 	ctx := context.Background()
-	r := newT2Rig(t, filepath.Join(t.TempDir(), "s.db"), &failModel{fail: -1}, 0, nil)
+	r := newT2Rig(t, nil, &failModel{fail: -1}, 0, nil)
 	if _, err := r.h.Spawn(ctx, "p", "p/sub-1", "", r.h.New, "任务"); err == nil {
 		t.Fatal("give_up：子会话失败应把错误交回调用方")
 	}
@@ -65,7 +64,7 @@ func TestTreePolicyGiveUpChild(t *testing.T) {
 func TestTreePolicyRestartChild(t *testing.T) {
 	ctx := context.Background()
 	m := &failModel{fail: 1}
-	r := newT2Rig(t, filepath.Join(t.TempDir(), "s.db"), m, 0, nil)
+	r := newT2Rig(t, nil, m, 0, nil)
 	r.h.TreePolicy = "restart"
 	r.h.TreeRestarts = 1
 	text, err := r.h.Spawn(ctx, "p", "p/sub-1", "", r.h.New, "任务")
@@ -83,7 +82,7 @@ func TestTreePolicyRestartChild(t *testing.T) {
 // TestInterruptPublishesAndKeepsSession：中断把回合收尾成 Cancelled，会话仍可继续收信。
 func TestInterruptPublishesAndKeepsSession(t *testing.T) {
 	m := &scriptedModel{gate: make(chan struct{}), start: make(chan int, 8)}
-	r := newT2Rig(t, filepath.Join(t.TempDir(), "s.db"), m, 0, nil)
+	r := newT2Rig(t, nil, m, 0, nil)
 	var mu sync.Mutex
 	var ends []session.EndReason
 	r.h.Hooks.AfterTurn = func(_ string, end session.EndReason) {
@@ -129,7 +128,7 @@ func TestInterruptPublishesAndKeepsSession(t *testing.T) {
 // TestSuspendStopsTurnsUntilResume：预算挂起收下信件但不开回合，Resume 后处理。
 func TestSuspendStopsTurnsUntilResume(t *testing.T) {
 	ctx := context.Background()
-	r := newT2Rig(t, filepath.Join(t.TempDir(), "s.db"), &scriptedModel{}, 0, nil)
+	r := newT2Rig(t, nil, &scriptedModel{}, 0, nil)
 	hd := mustOpen(t, r.h, "s1")
 	if err := hd.Do(Command{Kind: Send, ItemID: NewItemID(), Text: "一", Source: "user", Trust: "trusted"}); err != nil {
 		t.Fatal(err)
@@ -167,7 +166,7 @@ func TestSuspendStopsTurnsUntilResume(t *testing.T) {
 func TestSuspendRunsInActor(t *testing.T) {
 	ctx := context.Background()
 	m := &scriptedModel{start: make(chan int, 4), gate: make(chan struct{})}
-	r := newT2Rig(t, filepath.Join(t.TempDir(), "s.db"), m, 0, nil)
+	r := newT2Rig(t, nil, m, 0, nil)
 	hd := mustOpen(t, r.h, "s1")
 	if err := hd.Do(Command{Kind: Send, Text: "一"}); err != nil {
 		t.Fatal(err)
@@ -203,7 +202,7 @@ func TestSuspendRunsInActor(t *testing.T) {
 func TestSuspendDuringBacklog(t *testing.T) {
 	ctx := context.Background()
 	m := &scriptedModel{start: make(chan int, 8), gate: make(chan struct{})}
-	r := newT2Rig(t, filepath.Join(t.TempDir(), "s.db"), m, 0, nil)
+	r := newT2Rig(t, nil, m, 0, nil)
 	hd := mustOpen(t, r.h, "s1")
 	if err := hd.Do(Command{Kind: Send, Text: "一"}); err != nil {
 		t.Fatal(err)
@@ -246,7 +245,7 @@ func TestFailedTurnHandsBackInterjection(t *testing.T) {
 	ctx := context.Background()
 	m := &gatedFailModel{}
 	gate, inTool := make(chan struct{}), make(chan struct{}, 1)
-	r := newT2Rig(t, filepath.Join(t.TempDir(), "s.db"), m, 0, func(context.Context, json.RawMessage) (toolhub.Output, error) {
+	r := newT2Rig(t, nil, m, 0, func(context.Context, json.RawMessage) (toolhub.Output, error) {
 		inTool <- struct{}{}
 		<-gate
 		return toolhub.Text("echoed"), nil

@@ -3,24 +3,21 @@ package host
 import (
 	"context"
 	"encoding/json"
-	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/Sevyn17/tenon/modules/storage/sqlite"
 	"github.com/Sevyn17/tenon/runtime/agent"
 	"github.com/Sevyn17/tenon/runtime/mail"
 	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/store/memstore"
 	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 // newExplainRig 像运行时那样接上 toolhub → agent 的 span 观测，才能记录工具 trace 事件。
-func newExplainRig(t *testing.T, m agent.Model) (*Host, *sqlite.DB) {
+func newExplainRig(t *testing.T, m agent.Model) (*Host, store.Store) {
 	t.Helper()
-	db, err := sqlite.Open(context.Background(), filepath.Join(t.TempDir(), "state.db"), sqlite.Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	db := memstore.New()
 	t.Cleanup(func() { db.Close() })
 	h := &Host{DB: db}
 	h.New = func(id, def string) (*agent.Agent, *session.Config, error) {
@@ -113,7 +110,7 @@ func TestExplainTraceGuardDenied(t *testing.T) {
 }
 
 // traceText 把一个 trace 的事件拼成「kind session detail」行（渲染在 appapi.RenderTrace，这里只看落库的事件）。
-func traceText(t *testing.T, db *sqlite.DB, trace string) string {
+func traceText(t *testing.T, db store.TraceStore, trace string) string {
 	t.Helper()
 	evs, err := db.TraceEvents(context.Background(), trace)
 	if err != nil {

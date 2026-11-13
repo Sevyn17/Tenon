@@ -4,12 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/Sevyn17/tenon/modules/storage/sqlite"
 	"github.com/Sevyn17/tenon/runtime/agent"
 	"github.com/Sevyn17/tenon/runtime/bus"
 	"github.com/Sevyn17/tenon/runtime/component"
@@ -21,7 +19,7 @@ import (
 // creatorRig 建一个创建者为 u1 的会话 s1。
 func creatorRig(t *testing.T) *rig {
 	t.Helper()
-	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{})
+	r := newRig(t, nil, &fakeModel{})
 	if _, err := r.h.open(context.Background(), "s1", "", r.h.New, func(ag *agent.Agent, cfg *session.Config) error {
 		_, err := ag.OpenAs(context.Background(), cfg, store.SessionMeta{ID: "s1", Creator: "u1"})
 		return err
@@ -75,7 +73,7 @@ func TestGuardRuleMerge(t *testing.T) {
 }
 
 // TestGuardDeniedPersists：守卫拒绝同时写进组件事件日志（04 4.6，T4b）。
-// 关掉再打开同一存储，订阅者从序号 0 续读仍能读到，不依赖易失的总线。
+// 订阅者从序号 0 续读仍能读到，不依赖易失的总线。文件级关库重开由存储实现方验证。
 func TestGuardDeniedPersists(t *testing.T) {
 	ctx := context.Background()
 	r := creatorRig(t)
@@ -88,16 +86,10 @@ func TestGuardDeniedPersists(t *testing.T) {
 	if !errors.Is(err, ErrNotAllowed) {
 		t.Fatalf("应被拒绝：%v", err)
 	}
-	r.db.Close()
 
-	reopened, err := sqlite.Open(ctx, r.path, sqlite.Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer reopened.Close()
-	got, err := reopened.Read(ctx, 0, 0)
+	got, err := r.db.(store.EventLog).Read(ctx, 0, 0)
 	if err != nil || len(got) != 1 {
-		t.Fatalf("重启后应读到一条：%v %+v", err, got)
+		t.Fatalf("应读到一条：%v %+v", err, got)
 	}
 	if got[0].Seq != 1 || got[0].Source != "guard" || got[0].Name != "guard.denied" {
 		t.Fatalf("事件不对：%+v", got[0])
@@ -114,7 +106,7 @@ func TestGuardDeniedPersists(t *testing.T) {
 // TestGuardRuleSessionOpen：新建会话前的守卫（08 8.1）——Deny 时不建会话。
 func TestGuardRuleSessionOpen(t *testing.T) {
 	ctx := context.Background()
-	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{})
+	r := newRig(t, nil, &fakeModel{})
 	r.h.GuardSessionOpen = func(_ context.Context, req component.GuardRequest) (component.Verdict, string) {
 		if req.Agent == "worker" {
 			return component.Deny, "不允许新建 worker"

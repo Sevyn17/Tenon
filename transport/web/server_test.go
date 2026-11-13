@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"path/filepath"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -19,11 +18,11 @@ import (
 
 	"github.com/Sevyn17/tenon/appapi"
 	"github.com/Sevyn17/tenon/appapi/wire"
-	"github.com/Sevyn17/tenon/modules/storage/sqlite"
 	"github.com/Sevyn17/tenon/runtime/agent"
 	"github.com/Sevyn17/tenon/runtime/bus"
 	"github.com/Sevyn17/tenon/runtime/host"
 	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/store/memstore"
 	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
@@ -44,11 +43,8 @@ func (fakeModel) Stream(_ context.Context, req session.Request, onText func(stri
 
 func newTestApp(t *testing.T, opts ...func(*appapi.Options)) *appapi.App {
 	t.Helper()
-	ctx := context.Background()
-	db, err := sqlite.Open(ctx, filepath.Join(t.TempDir(), "s.db"), sqlite.Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	db := memstore.New()
+	t.Cleanup(func() { db.Close() })
 	b := bus.New(0)
 	t.Cleanup(func() { b.Close(); db.Close() })
 	var app *appapi.App
@@ -63,7 +59,7 @@ func newTestApp(t *testing.T, opts ...func(*appapi.Options)) *appapi.App {
 	for _, f := range opts {
 		f(&o)
 	}
-	app, err = appapi.New(o)
+	app, err := appapi.New(o)
 	if err != nil {
 		t.Fatal(err)
 	}

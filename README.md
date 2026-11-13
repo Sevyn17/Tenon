@@ -6,11 +6,11 @@ Go 智能体框架。运行时（`runtime/`）只提供机制：会话、信封�
 go get github.com/Sevyn17/tenon
 ```
 
-> **版本提示**：最新发布版是 `v0.1.2`（2026-11-09）。`main` 上已合入大量未发版内容
-> （T4–T6、扩展点重构、内核与 I/O 分离），且公开面有破坏性变更，按计划发 `v0.2.0`。
-> 需要未发版内容时用 `go get github.com/Sevyn17/tenon@main`，会解析成伪版本
-> （形如 `v0.1.3-0.<时间>-<hash>`——伪版本号按上一个 tag 推，**不代表下一个正式版是
-> v0.1.3**）。公开面还会变，请预期。变更见 [CHANGELOG](<CHANGELOG.md>)。
+> **版本提示**：最新发布版是 `v0.3.0`（2026-11-13）。`v0.3.0` 删除了框架自带的
+> SQLite 实现，持久化存储由产品提供；`go get` 不带版本号会拿到这个版本。
+> 需要 `main` 上尚未发版的内容时用 `go get github.com/Sevyn17/tenon@main`，会解析成伪版本
+> （形如 `v0.3.1-0.<时间>-<hash>`——伪版本号按上一个 tag 推，**不代表下一个正式版是
+> v0.3.1**）。变更见 [CHANGELOG](<CHANGELOG.md>)。
 
 ```go
 import (
@@ -41,7 +41,7 @@ app, err := tenon.New(tenon.Default(),
 | 目录 | 职责 |
 |---|---|
 | [runtime/](runtime/) | 内核机制：会话、宿主与回合循环、信封投递、注入、工具/模型枢纽、存储接口、装配 |
-| [modules/](modules/) | 标准组件（可选）：fs、shell、web、mcp、permission、sandbox、提示词、技能、脱敏、压缩、subagent、workgroup、三家模型适配器、sqlite 存储 |
+| [modules/](modules/) | 标准组件（可选）：fs、shell、web、mcp、permission、sandbox、提示词、技能、脱敏、压缩、subagent、workgroup、三家模型适配器。存储实现不在框架里，由产品提供 |
 | [appapi/](appapi/) | 应用协议：命令、事件与线上类型（`wire`，前端 TS 类型由它生成） |
 | 根包（`*.go`） | SDK：应用只 import 这一个包，[doc.go](doc.go) 是目录页 |
 | [apphost/](apphost/) | 应用宿主装配：读 profile、装内置插件（命令行 / 桌面端 / 网页服务共用） |

@@ -4,7 +4,6 @@ package host
 
 import (
 	"context"
-	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -14,8 +13,7 @@ import (
 
 // 崩溃恢复：换宿主打开同一会话，未完成回合的 Turn 链重跑且 Resumed=true。
 func TestTurnMWRerunOnResume(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "s.db")
-	r := newRig(t, path, &fakeModel{})
+	r := newRig(t, nil, &fakeModel{})
 	var mu sync.Mutex
 	var reqs []component.TurnReq
 	r.h.TurnChain = func(kernel func(context.Context, component.TurnReq) (component.TurnResp, error)) func(context.Context, component.TurnReq) (component.TurnResp, error) {
@@ -41,9 +39,8 @@ func TestTurnMWRerunOnResume(t *testing.T) {
 		t.Fatal("第一轮应跑过链")
 	}
 
-	// 模拟进程被杀：关库，换一个宿主打开同一会话。
-	r.db.Close()
-	r2 := newRig(t, path, &fakeModel{})
+	// 模拟进程被杀：换一个宿主打开同一份存储。文件级关库重开由存储实现方验证。
+	r2 := newRig(t, r.db, &fakeModel{})
 	r2.h.TurnChain = func(kernel func(context.Context, component.TurnReq) (component.TurnResp, error)) func(context.Context, component.TurnReq) (component.TurnResp, error) {
 		return func(ctx context.Context, req component.TurnReq) (component.TurnResp, error) {
 			mu.Lock()

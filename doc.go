@@ -21,7 +21,8 @@
 // # 应用选项
 //
 //   - 存储：[WithStore]。具体实现按需引入：内存用 tenon/runtime/store/memstore 的 MemoryStore，
-//     SQLite 用 tenon/modules/storage/sqlite 的 SQLiteStore——根包不带任何具体存储实现。
+//     存储用 tenon.WithStore 注入。框架只带内存实现 runtime/store/memstore，
+//     持久化实现（如 SQLite）由产品提供，见 docs/02 - 开发管理/20。
 //   - 模型：[WithOpenAI]、[WithOpenAIResponses]、[WithAnthropic]、[WithModel]、[WithModels]、[WithModelCatalog]；
 //     密钥只以引用出现（[Env]），接自己的密钥库用 [WithSecrets]。
 //   - 智能体：[WithAgent]、[WithAgents]、[Dir]、[WithDefaultAgent]。不给名字时的选法见 [App.NewSession]。

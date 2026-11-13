@@ -4,7 +4,6 @@ package host
 
 import (
 	"context"
-	"path/filepath"
 	"sync"
 	"testing"
 
@@ -14,7 +13,7 @@ import (
 // 中间件包住每一轮：一次用户消息跑一轮，链跑一次。
 func TestTurnMWWrapsEachTurn(t *testing.T) {
 	ctx := context.Background()
-	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{})
+	r := newRig(t, nil, &fakeModel{})
 	var mu sync.Mutex
 	var turns []component.TurnReq
 	r.h.TurnChain = func(kernel func(context.Context, component.TurnReq) (component.TurnResp, error)) func(context.Context, component.TurnReq) (component.TurnResp, error) {
@@ -52,7 +51,7 @@ func TestTurnMWWrapsEachTurn(t *testing.T) {
 // 中间件能改写 End：把回合结束原因换掉。
 func TestTurnMWRewritesEnd(t *testing.T) {
 	ctx := context.Background()
-	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{})
+	r := newRig(t, nil, &fakeModel{})
 	r.h.TurnChain = func(kernel func(context.Context, component.TurnReq) (component.TurnResp, error)) func(context.Context, component.TurnReq) (component.TurnResp, error) {
 		return func(ctx context.Context, req component.TurnReq) (component.TurnResp, error) {
 			resp, err := kernel(ctx, req)

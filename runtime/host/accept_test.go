@@ -3,7 +3,6 @@ package host
 import (
 	"context"
 	"errors"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -12,7 +11,7 @@ import (
 
 // M4.9：回合结束（inbox 已消费）后重放同一 item id，不再开回合。
 func TestReplayAfterConsumed(t *testing.T) {
-	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{})
+	r := newRig(t, nil, &fakeModel{})
 	hd, err := r.h.Open(context.Background(), "s1")
 	if err != nil {
 		t.Fatal(err)
@@ -33,9 +32,8 @@ func TestReplayAfterConsumed(t *testing.T) {
 // M4.9：两个进程（两个 Host、同一 DB 文件）写同一会话：后写者被拒，已提交的日志不被破坏。
 // T2a-1 起第二个 Host 打开会话即接管更新的租约纪元（02 2.2 fencing），旧写者得到 ErrLeaseLost。
 func TestSecondHostConflicts(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "s.db")
-	r1 := newRig(t, path, &fakeModel{})
-	r2 := newRig(t, path, &fakeModel{})
+	r1 := newRig(t, nil, &fakeModel{})
+	r2 := newRig(t, r1.db, &fakeModel{})
 	ctx := context.Background()
 	h1, err := r1.h.Open(ctx, "s")
 	if err != nil {

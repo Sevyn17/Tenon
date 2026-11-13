@@ -1,6 +1,6 @@
 package memstore
 
-// inbox 与工具记录（语义同 modules/storage/sqlite 的 inbox.go / tool_results.go / toolstore.go）。
+// inbox 与工具记录（语义同存储实现的 inbox.go / tool_results.go / toolstore.go）。
 
 import (
 	"context"

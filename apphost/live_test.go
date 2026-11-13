@@ -7,7 +7,6 @@ package apphost
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -16,9 +15,6 @@ import (
 	"testing"
 	"time"
 
-	_ "modernc.org/sqlite"
-
-	"github.com/Sevyn17/tenon/appapi"
 	"github.com/Sevyn17/tenon/runtime/agentdef"
 )
 
@@ -121,28 +117,18 @@ func (l *live) ask(session, definition, msg string, timeout time.Duration, done 
 	return ""
 }
 
-func (l *live) db() *sql.DB {
-	l.t.Helper()
-	db, err := sql.Open("sqlite", "file:"+filepath.ToSlash(filepath.Join(l.home, "state.db"))+"?mode=ro")
-	if err != nil {
-		l.t.Fatal(err)
-	}
-	l.t.Cleanup(func() { db.Close() })
-	return db
-}
-
 func (l *live) children(parent string) []string {
 	l.t.Helper()
-	rows, err := l.db().Query(`SELECT id FROM sessions WHERE parent_id = ? ORDER BY id`, parent)
+	// 存储实现已迁出框架，不再直接打开库文件查表；子会话关系走存储接口。
+	list, err := l.built.DB.ListSessions(context.Background(), 0, 0, false)
 	if err != nil {
 		l.t.Fatal(err)
 	}
-	defer rows.Close()
 	var out []string
-	for rows.Next() {
-		var id string
-		_ = rows.Scan(&id)
-		out = append(out, id)
+	for _, s := range list {
+		if s.ParentID == parent {
+			out = append(out, s.ID)
+		}
 	}
 	return out
 }
@@ -210,27 +196,7 @@ func TestLive(t *testing.T) {
 			}
 			t.Logf("子会话 %s 条目：%s", k, clipText(kt, 1500))
 		}
-		// explain trace：本会话涉及的 trace 逐个渲染，能看到经过的会话与工具。
-		rows, err := l.db().Query(`SELECT DISTINCT trace FROM trace_events WHERE session = 'guard' OR session LIKE 'guard/%'`)
-		if err != nil {
-			t.Fatal(err)
-		}
-		var traces []string
-		for rows.Next() {
-			var tr string
-			_ = rows.Scan(&tr)
-			traces = append(traces, tr)
-		}
-		rows.Close()
-		for _, tr := range traces {
-			out, err := appapi.RenderTrace(context.Background(), l.built.DB, tr)
-			if err != nil {
-				t.Fatal(err)
-			}
-			t.Logf("explain trace:\n%s", out)
-		}
-		if len(traces) == 0 {
-			t.Log("没有 trace 记录")
-		}
+		// 轨迹渲染要先知道 trace id，而 trace id 存在存储实现自己的表里。
+		// 存储实现已迁出框架，这条只记日志的查询不再在框架里跑。
 	})
 }

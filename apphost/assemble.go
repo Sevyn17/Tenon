@@ -10,12 +10,13 @@ import (
 	"github.com/Sevyn17/tenon/runtime/assemble"
 	"github.com/Sevyn17/tenon/runtime/component"
 
-	// 核心插件：存储、模型、协议适配器、压缩
+	// 核心插件：模型、协议适配器、压缩。
+	// 存储插件不在这里登记：它是产品的选择（SQLite、PostgreSQL 或别的），
+	// 由调用方在自己的 main 包里空导入。装配时没有组件提供 service:db 会报错。
 	_ "github.com/Sevyn17/tenon/modules/model/adapter-anthropic"
 	_ "github.com/Sevyn17/tenon/modules/model/adapter-openai-chat"
 	_ "github.com/Sevyn17/tenon/modules/model/adapter-openai-responses"
 	_ "github.com/Sevyn17/tenon/modules/model/models"
-	_ "github.com/Sevyn17/tenon/modules/storage/store-sqlite"
 
 	// 插件登记（init 里 component.Register）；装配哪些由 profile 决定
 	_ "github.com/Sevyn17/tenon/modules/collab/subagent"

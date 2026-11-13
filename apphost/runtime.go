@@ -38,7 +38,7 @@ type Flags struct {
 
 // Overrides 命令行参数 → 插件配置覆盖（只覆盖给了值的项）。
 func Overrides(f Flags, root string) map[string]map[string]any {
-	// 会话库位置由 store-sqlite 自己决定（缺省用户级目录），这里不覆盖：覆盖在 profile 之后合并，会盖掉用户的配置。
+	// 会话库位置由产品的存储插件自己决定（缺省用户级目录），这里不覆盖：覆盖在 profile 之后合并，会盖掉用户的配置。
 	ov := map[string]map[string]any{}
 	set := func(plugin, key string, v any) {
 		if ov[plugin] == nil {

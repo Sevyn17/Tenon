@@ -4,16 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/Sevyn17/tenon/modules/storage/sqlite"
 	"github.com/Sevyn17/tenon/runtime/agent"
 	"github.com/Sevyn17/tenon/runtime/session"
 	"github.com/Sevyn17/tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/store/memstore"
 	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
@@ -79,15 +78,15 @@ func (m *scriptedModel) getCalls() int {
 // t2Rig 是 T2a-1 的迷你装配：sqlite + 一个可替换的模型 + echo 工具。
 type t2Rig struct {
 	h    *Host
-	db   *sqlite.DB
+	db   store.Store
 	runs *int
 }
 
-func newT2Rig(t *testing.T, path string, m agent.Model, limit int, call func(context.Context, json.RawMessage) (toolhub.Output, error)) *t2Rig {
+// newT2Rig 用内存存储搭宿主。db 非空时共用它；空则新建。
+func newT2Rig(t *testing.T, db store.Store, m agent.Model, limit int, call func(context.Context, json.RawMessage) (toolhub.Output, error)) *t2Rig {
 	t.Helper()
-	db, err := sqlite.Open(context.Background(), path, sqlite.Options{})
-	if err != nil {
-		t.Fatal(err)
+	if db == nil {
+		db = memstore.New()
 	}
 	t.Cleanup(func() { db.Close() })
 	runs := new(int)
@@ -145,7 +144,7 @@ func joinParts(c session.Content) string {
 // 09 9.4 ①：同一智能体的多个会话同时推理，互不等待。
 func TestConcurrentSessionsInfer(t *testing.T) {
 	m := &scriptedModel{start: make(chan int, 2), gate: make(chan struct{})}
-	r := newT2Rig(t, filepath.Join(t.TempDir(), "s.db"), m, 0, nil)
+	r := newT2Rig(t, nil, m, 0, nil)
 	a, b := mustOpen(t, r.h, "s1"), mustOpen(t, r.h, "s2")
 	if err := a.Do(Command{Kind: Send, Text: "甲"}); err != nil {
 		t.Fatal(err)
@@ -170,7 +169,7 @@ func TestConcurrentSessionsInfer(t *testing.T) {
 // 09 9.4 ③：并发上限生效，超出上限的会话排队等待，不报错。
 func TestConcurrencyLimitQueues(t *testing.T) {
 	m := &scriptedModel{start: make(chan int, 4), gate: make(chan struct{})}
-	r := newT2Rig(t, filepath.Join(t.TempDir(), "s.db"), m, 1, nil)
+	r := newT2Rig(t, nil, m, 1, nil)
 	a, b := mustOpen(t, r.h, "s1"), mustOpen(t, r.h, "s2")
 	if err := a.Do(Command{Kind: Send, Text: "一"}); err != nil {
 		t.Fatal(err)
@@ -203,7 +202,7 @@ func TestConcurrencyLimitQueues(t *testing.T) {
 // C3：排队等并发槽位时到达的 Cancel 要生效（旧实现：取消函数在拿到槽位后才登记，Cancel 落空，回合照跑）。
 func TestCancelWhileQueuedForSlot(t *testing.T) {
 	m := &scriptedModel{start: make(chan int, 4), gate: make(chan struct{})}
-	r := newT2Rig(t, filepath.Join(t.TempDir(), "s.db"), m, 1, nil)
+	r := newT2Rig(t, nil, m, 1, nil)
 	a, b := mustOpen(t, r.h, "s1"), mustOpen(t, r.h, "s2")
 	if err := a.Do(Command{Kind: Send, Text: "一"}); err != nil {
 		t.Fatal(err)
@@ -254,7 +253,7 @@ func TestMidTurnUserMessageInserted(t *testing.T) {
 		}
 		return toolhub.Text("echoed"), nil
 	}
-	r := newT2Rig(t, filepath.Join(t.TempDir(), "s.db"), m, 0, call)
+	r := newT2Rig(t, nil, m, 0, call)
 	hd := mustOpen(t, r.h, "s1")
 	if err := hd.Do(Command{Kind: Send, Text: "开始任务"}); err != nil {
 		t.Fatal(err)
@@ -288,7 +287,7 @@ func TestMidTurnUserMessageInserted(t *testing.T) {
 // 落到 NeedTools 边界时留在 inbox，等结果到齐后的调模型边界再插。
 func TestMidTurnMessageNotBetweenCallAndResult(t *testing.T) {
 	m := &scriptedModel{firstTool: true, start: make(chan int, 4), gate: make(chan struct{})}
-	r := newT2Rig(t, filepath.Join(t.TempDir(), "s.db"), m, 0, nil)
+	r := newT2Rig(t, nil, m, 0, nil)
 	hd := mustOpen(t, r.h, "s1")
 	if err := hd.Do(Command{Kind: Send, Text: "开始任务"}); err != nil {
 		t.Fatal(err)
@@ -342,7 +341,7 @@ func TestCancelDuringToolKeepsSession(t *testing.T) {
 		<-ctx.Done()
 		return toolhub.Text("partial"), nil
 	}
-	r := newT2Rig(t, filepath.Join(t.TempDir(), "s.db"), m, 0, call)
+	r := newT2Rig(t, nil, m, 0, call)
 	hd := mustOpen(t, r.h, "s1")
 	if err := hd.Do(Command{Kind: Send, Text: "开始任务"}); err != nil {
 		t.Fatal(err)
@@ -373,8 +372,7 @@ func TestCancelDuringToolKeepsSession(t *testing.T) {
 
 // 09 9.4 ④：租约带纪元——旧持有者的写入被拒绝，接管者可以继续。
 func TestLeaseTakeoverRejectsStaleWrites(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "s.db")
-	rA := newT2Rig(t, path, &scriptedModel{}, 0, nil)
+	rA := newT2Rig(t, nil, &scriptedModel{}, 0, nil)
 	hdA := mustOpen(t, rA.h, "s1")
 	if err := hdA.Do(Command{Kind: Send, Text: "一"}); err != nil {
 		t.Fatal(err)
@@ -383,7 +381,7 @@ func TestLeaseTakeoverRejectsStaleWrites(t *testing.T) {
 		t.Fatal(err)
 	}
 	// 另一个进程内宿主接管：epoch 加一。
-	rB := newT2Rig(t, path, &scriptedModel{}, 0, nil)
+	rB := newT2Rig(t, rA.db, &scriptedModel{}, 0, nil)
 	hdB := mustOpen(t, rB.h, "s1")
 	// 旧宿主再写：下一个检查点应被存储拒绝。
 	if err := hdA.Do(Command{Kind: Send, Text: "二"}); err != nil {

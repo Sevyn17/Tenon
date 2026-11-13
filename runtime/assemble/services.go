@@ -20,7 +20,7 @@ const SlotSecrets = ext.SlotSecrets
 
 // 内核约定的服务键。
 const (
-	ServiceDB        = ext.ServiceDB        // DBHandle（store-sqlite）
+	ServiceDB        = ext.ServiceDB        // DBHandle（产品的存储插件）
 	ServiceModelhub  = ext.ServiceModelhub  // *Models（models）
 	ServiceCompactor = ext.ServiceCompactor // 实现 agent.Compactor；可实现 Redactable（compact-basic）
 )

@@ -3,7 +3,6 @@ package host
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 	"testing"
 
 	"github.com/Sevyn17/tenon/runtime/session"
@@ -14,7 +13,7 @@ import (
 // 后面有信件的会话永远扫不到）。
 func TestScanFindsMailBehindManySleepers(t *testing.T) {
 	ctx := context.Background()
-	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{})
+	r := newRig(t, nil, &fakeModel{})
 	sleep := func(id string) {
 		t.Helper()
 		c := session.New(&session.Config{Model: "m", Policy: session.DefaultPolicy()})

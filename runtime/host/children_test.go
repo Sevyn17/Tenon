@@ -3,7 +3,6 @@ package host
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -16,7 +15,7 @@ import (
 // （2026-11-04 审查 P1-38：原先扫 ListSessions(…, 500)，按更新时间倒序最多 500 条，老子会话漏掉）。
 func TestCancelChildrenFindsOldChild(t *testing.T) {
 	ctx := context.Background()
-	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{})
+	r := newRig(t, nil, &fakeModel{})
 	mustOpen(t, r.h, "p")
 	if _, err := r.h.open(ctx, "p/old", "", r.h.New, func(ag *agent.Agent, cfg *session.Config) error {
 		_, err := ag.OpenAs(ctx, cfg, store.SessionMeta{ID: "p/old", ParentID: "p", Origin: "subagent"})

@@ -3,22 +3,19 @@ package host
 import (
 	"context"
 	"encoding/json"
-	"path/filepath"
 	"testing"
 
-	"github.com/Sevyn17/tenon/modules/storage/sqlite"
 	"github.com/Sevyn17/tenon/runtime/agent"
 	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/store/memstore"
 	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
-// M4.7：span 层级 turn → step → attempt / tool，全部落 trace_spans。
+// M4.7：span 层级 turn → step → attempt / tool。
+// 存储实现已迁出框架，这里只断言宿主写进存储的 span，不查表。
 func TestSpanHierarchy(t *testing.T) {
 	ctx := context.Background()
-	db, err := sqlite.Open(ctx, filepath.Join(t.TempDir(), "s.db"), sqlite.Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	db := memstore.New()
 	defer db.Close()
 	h := &Host{DB: db, New: func(id, def string) (*agent.Agent, *session.Config, error) {
 		a := &agent.Agent{Store: db, SessionID: id, Model: &fakeModel{}}
@@ -42,21 +39,12 @@ func TestSpanHierarchy(t *testing.T) {
 	if err := hd.Wait(); err != nil {
 		t.Fatal(err)
 	}
-	rows, err := db.DB().QueryContext(ctx, `SELECT span_id, parent_span, kind FROM trace_spans WHERE session_id = ?`, "s")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer rows.Close()
 	kind := map[string]string{}
 	parent := map[string]string{}
 	count := map[string]int{}
-	for rows.Next() {
-		var id, p, k string
-		if err := rows.Scan(&id, &p, &k); err != nil {
-			t.Fatal(err)
-		}
-		kind[id], parent[id] = k, p
-		count[k]++
+	for _, sp := range db.SpansForTest("s") {
+		kind[sp.ID], parent[sp.ID] = sp.Kind, sp.Parent
+		count[sp.Kind]++
 	}
 	if count["turn"] != 1 || count["step"] != 2 || count["attempt"] != 2 || count["tool"] != 1 {
 		t.Fatalf("span 数量不符: %v", count)

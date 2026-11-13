@@ -5,22 +5,21 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/Sevyn17/tenon/modules/storage/sqlite"
 	"github.com/Sevyn17/tenon/runtime/agent"
 	"github.com/Sevyn17/tenon/runtime/bus"
 	"github.com/Sevyn17/tenon/runtime/mail"
 	"github.com/Sevyn17/tenon/runtime/session"
 	"github.com/Sevyn17/tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/store/memstore"
 	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 // admitEnvelope 直接往 inbox 写一封信封（绕过投递守卫，测信箱合并语义）。
-func admitEnvelope(t *testing.T, db *sqlite.DB, sessionID string, env mail.Envelope) {
+func admitEnvelope(t *testing.T, db store.InboxStore, sessionID string, env mail.Envelope) {
 	t.Helper()
 	if err := env.Normalize(); err != nil {
 		t.Fatal(err)
@@ -42,7 +41,7 @@ func admitEnvelope(t *testing.T, db *sqlite.DB, sessionID string, env mail.Envel
 
 func TestInboxMergeByPermissionSubject(t *testing.T) {
 	ctx := context.Background()
-	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{})
+	r := newRig(t, nil, &fakeModel{})
 	hd, err := r.h.Open(ctx, "s1")
 	if err != nil {
 		t.Fatal(err)
@@ -86,7 +85,7 @@ func TestInboxMergeByPermissionSubject(t *testing.T) {
 
 func TestDeliverContextWaitsForWake(t *testing.T) {
 	ctx := context.Background()
-	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{})
+	r := newRig(t, nil, &fakeModel{})
 	hd, err := r.h.Open(ctx, "s1")
 	if err != nil {
 		t.Fatal(err)
@@ -123,7 +122,7 @@ func TestDeliverContextWaitsForWake(t *testing.T) {
 
 func TestDeliverNoticeBecomesStatusEntry(t *testing.T) {
 	ctx := context.Background()
-	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{})
+	r := newRig(t, nil, &fakeModel{})
 	hd, err := r.h.Open(ctx, "s1")
 	if err != nil {
 		t.Fatal(err)
@@ -165,7 +164,7 @@ func TestDeliverNoticeBecomesStatusEntry(t *testing.T) {
 
 func TestDeliverReplyCorrCheck(t *testing.T) {
 	ctx := context.Background()
-	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{})
+	r := newRig(t, nil, &fakeModel{})
 	hd, err := r.h.Open(ctx, "s1")
 	if err != nil {
 		t.Fatal(err)
@@ -211,7 +210,7 @@ func TestDeliverReplyCorrCheck(t *testing.T) {
 
 func TestDeliverControlOnlyCreator(t *testing.T) {
 	ctx := context.Background()
-	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{block: make(chan struct{})})
+	r := newRig(t, nil, &fakeModel{block: make(chan struct{})})
 	hd, err := r.h.open(ctx, "s1", "", r.h.New, func(ag *agent.Agent, cfg *session.Config) error {
 		_, err := ag.OpenAs(ctx, cfg, store.SessionMeta{ID: "s1", Creator: "u1"})
 		return err
@@ -254,7 +253,7 @@ func TestDeliverControlOnlyCreator(t *testing.T) {
 // （审查 P0-6：原先同步等整个回合，期间卡住整个发件箱派发）。
 func TestControlCloseMidTurnDoesNotBlock(t *testing.T) {
 	ctx := context.Background()
-	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{block: make(chan struct{})})
+	r := newRig(t, nil, &fakeModel{block: make(chan struct{})})
 	hd, err := r.h.open(ctx, "s1", "", r.h.New, func(ag *agent.Agent, cfg *session.Config) error {
 		_, err := ag.OpenAs(ctx, cfg, store.SessionMeta{ID: "s1", Creator: "u1"})
 		return err
@@ -294,7 +293,7 @@ func TestControlCloseMidTurnDoesNotBlock(t *testing.T) {
 
 func TestRewindVoidsCorr(t *testing.T) {
 	ctx := context.Background()
-	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{})
+	r := newRig(t, nil, &fakeModel{})
 	hd, err := r.h.Open(ctx, "s1")
 	if err != nil {
 		t.Fatal(err)
@@ -346,10 +345,7 @@ func textOfMsg(t *testing.T, m session.Message) string {
 // TestDeliverAgentCreatesAndReusesKey：agent: 地址不带 key 每次新建；带 key 按
 // （定义, 创建者, key）查或建（13 13.3 B19）。
 func TestDeliverAgentCreatesAndReusesKey(t *testing.T) {
-	db, err := sqlite.Open(context.Background(), filepath.Join(t.TempDir(), "s.db"), sqlite.Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	db := memstore.New()
 	t.Cleanup(func() { db.Close() })
 	var defs []string
 	h := &Host{DB: db, New: func(id, def string) (*agent.Agent, *session.Config, error) {
@@ -400,7 +396,7 @@ func TestDeliverAgentCreatesAndReusesKey(t *testing.T) {
 // TestGuardContactAndHop：联系名单第一版 + 跳数上限（08 D4）。
 func TestGuardContactAndHop(t *testing.T) {
 	ctx := context.Background()
-	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{})
+	r := newRig(t, nil, &fakeModel{})
 	if _, err := r.h.open(ctx, "s1", "", r.h.New, func(ag *agent.Agent, cfg *session.Config) error {
 		_, err := ag.OpenAs(ctx, cfg, store.SessionMeta{ID: "s1", Creator: "u1"})
 		return err
@@ -433,7 +429,7 @@ func TestGuardContactAndHop(t *testing.T) {
 // 才派发出站信封，派发成功后发件箱清空。
 func TestOutboxDispatchedAfterCommit(t *testing.T) {
 	ctx := context.Background()
-	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{})
+	r := newRig(t, nil, &fakeModel{})
 	h1 := mustOpen(t, r.h, "s1")
 	h2 := mustOpen(t, r.h, "s2")
 	env := mail.Envelope{From: mail.Address{Kind: mail.AddrComponent, ID: "test"},
@@ -484,10 +480,7 @@ func toolResults(a *agent.Agent) string {
 // 模型请求范围外的工具时返回错误结果、不交给执行器；下一轮换新 caps 生效，回合结束清空。
 func TestCapsRestrictToolCall(t *testing.T) {
 	ctx := context.Background()
-	db, err := sqlite.Open(ctx, filepath.Join(t.TempDir(), "s.db"), sqlite.Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	db := memstore.New()
 	t.Cleanup(func() { db.Close() })
 	executed := new(int)
 	m := &fakeModel{}
@@ -552,7 +545,7 @@ func TestCapsRestrictToolCall(t *testing.T) {
 // 09 9.6 ⑤：两个并发 agent: 投递同一 key，只建一个会话（B19）。
 func TestConcurrentAgentKeyOneSession(t *testing.T) {
 	ctx := context.Background()
-	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{})
+	r := newRig(t, nil, &fakeModel{})
 	env := func(id string) mail.Envelope {
 		return mail.Envelope{
 			ID: id, From: mail.Address{Kind: mail.AddrHuman, ID: "u1"},
@@ -596,7 +589,7 @@ func TestDeliverWakeMergedDuringTurn(t *testing.T) {
 			return toolhub.Output{}, ctx.Err()
 		}
 	}
-	r := newT2Rig(t, filepath.Join(t.TempDir(), "s.db"), m, 0, call)
+	r := newT2Rig(t, nil, m, 0, call)
 	hd := mustOpen(t, r.h, "s1")
 	if err := hd.Do(Command{Kind: Send, Text: "开始任务"}); err != nil {
 		t.Fatal(err)

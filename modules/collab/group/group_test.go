@@ -2,18 +2,17 @@ package group
 
 import (
 	"context"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 
-	"github.com/Sevyn17/tenon/modules/storage/sqlite"
 	"github.com/Sevyn17/tenon/runtime/agent"
 	"github.com/Sevyn17/tenon/runtime/callctx"
 	"github.com/Sevyn17/tenon/runtime/host"
 	"github.com/Sevyn17/tenon/runtime/mail"
 	"github.com/Sevyn17/tenon/runtime/session"
 	"github.com/Sevyn17/tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/store/memstore"
 	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
@@ -54,13 +53,10 @@ func (m *echoModel) has(sub string) bool {
 }
 
 // rig 用真实 host + sqlite，直接构造 Group（不走组件装配），测 Group 逻辑。
-func rig(t *testing.T) (*Group, *host.Host, *sqlite.DB, *echoModel) {
+func rig(t *testing.T) (*Group, *host.Host, store.Store, *echoModel) {
 	t.Helper()
 	ctx := context.Background()
-	db, err := sqlite.Open(ctx, filepath.Join(t.TempDir(), "g.db"), sqlite.Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	db := memstore.New()
 	t.Cleanup(func() { db.Close() })
 	m := &echoModel{}
 	h := &host.Host{DB: db}

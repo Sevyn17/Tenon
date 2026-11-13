@@ -53,7 +53,7 @@ func normalize(reqs []session.Request) []session.Request {
 func TestRequestSnapshot(t *testing.T) {
 	ctx := context.Background()
 	m := &fakeModel{}
-	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), m)
+	r := newRig(t, nil, m)
 	hd, err := r.h.Open(ctx, "s1")
 	if err != nil {
 		t.Fatal(err)

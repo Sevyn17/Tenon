@@ -2,7 +2,6 @@ package host
 
 import (
 	"context"
-	"path/filepath"
 	"testing"
 
 	"github.com/Sevyn17/tenon/runtime/agent"
@@ -11,7 +10,7 @@ import (
 )
 
 func TestSpawnSubagent(t *testing.T) {
-	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{})
+	r := newRig(t, nil, &fakeModel{})
 	ctx := context.Background()
 	if _, err := r.h.Open(ctx, "p"); err != nil {
 		t.Fatal(err)
@@ -47,7 +46,7 @@ func TestSpawnSubagent(t *testing.T) {
 // 子会话关闭后被 Open 重新打开（休眠唤醒、重启后收信、control 都走 Open）仍按 Child 构造；
 // 普通会话仍按 New（审查 P0-5：原先一律 New，委派工具重新可见、深度限制失效）。
 func TestReopenedChildUsesChildFactory(t *testing.T) {
-	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{})
+	r := newRig(t, nil, &fakeModel{})
 	ctx := context.Background()
 	var built []string
 	newF := r.h.New
@@ -97,7 +96,7 @@ func mustGet(t *testing.T, h *Host, id string) Handle {
 
 // 不可信回合派出的子任务按不可信投给子会话（审查 P1-3：原先一律可信，子回合的权限不再降级）。
 func TestSpawnInheritsUntrusted(t *testing.T) {
-	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{})
+	r := newRig(t, nil, &fakeModel{})
 	ctx := context.Background()
 	// 测试工厂不带调用上下文；生产会话由 Builder 建（assemble.Build）。
 	withCtx := func(id, def string) (*agent.Agent, *session.Config, error) {

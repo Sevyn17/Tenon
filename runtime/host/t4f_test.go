@@ -5,7 +5,6 @@ package host
 import (
 	"context"
 	"errors"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -15,7 +14,7 @@ import (
 // 租户把跳数上限调小后，超限投递被拒（MaxHop 从 Host.MaxHop 取，0 = 内核缺省 8）。
 func TestMaxHopConfigurable(t *testing.T) {
 	ctx := context.Background()
-	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), &fakeModel{})
+	r := newRig(t, nil, &fakeModel{})
 	hd, err := r.h.Open(ctx, "s1")
 	if err != nil {
 		t.Fatal(err)
@@ -46,7 +45,7 @@ func TestMaxHopConfigurable(t *testing.T) {
 func TestControlByTurnTrigger(t *testing.T) {
 	ctx := context.Background()
 	m := &fakeModel{block: make(chan struct{})}
-	r := newRig(t, filepath.Join(t.TempDir(), "s.db"), m)
+	r := newRig(t, nil, m)
 	hd, err := r.h.Open(ctx, "s1")
 	if err != nil {
 		t.Fatal(err)

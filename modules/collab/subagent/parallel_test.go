@@ -3,17 +3,16 @@ package subagent
 import (
 	"context"
 	"encoding/json"
-	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/Sevyn17/tenon/modules/storage/sqlite"
 	"github.com/Sevyn17/tenon/runtime/agent"
 	"github.com/Sevyn17/tenon/runtime/callctx"
 	"github.com/Sevyn17/tenon/runtime/host"
 	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/store/memstore"
 	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
@@ -55,10 +54,7 @@ func (m *overlapModel) Stream(ctx context.Context, req session.Request, onText f
 // 一批里的两个委派并行跑（2026-11-04 审查 P2 工具体验：原先 Parallel=false，串行）。
 func TestSubagentCallsRunInParallel(t *testing.T) {
 	ctx := context.Background()
-	db, err := sqlite.Open(ctx, filepath.Join(t.TempDir(), "s.db"), sqlite.Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	db := memstore.New()
 	t.Cleanup(func() { db.Close() })
 	m := &overlapModel{release: make(chan struct{})}
 	h := &host.Host{DB: db, New: func(id, def string) (*agent.Agent, *session.Config, error) {

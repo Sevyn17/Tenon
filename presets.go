@@ -3,7 +3,7 @@ package tenon
 // 预设组件清单（10 10.2）。名字与 plugin.Register 一致；装配顺序由 Requires 拓扑排序决定。
 //
 // 本包空 import 这些插件：它们各自在 init 里登记，Default / Minimal 才能实例化。
-// 存储（store-sqlite）不在预设里：存储由 WithStore 提供。
+// 存储不在预设里：存储由 WithStore 提供，或由产品登记的存储组件提供。
 
 import (
 	_ "github.com/Sevyn17/tenon/modules/collab/group"

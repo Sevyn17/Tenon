@@ -13,12 +13,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"path/filepath"
 	"sync"
 	"testing"
 
 	"github.com/Sevyn17/tenon"
-	"github.com/Sevyn17/tenon/modules/storage/sqlite"
 	"github.com/Sevyn17/tenon/runtime/modelhub"
 	"github.com/Sevyn17/tenon/runtime/session"
 	"github.com/Sevyn17/tenon/runtime/store"
@@ -82,28 +80,17 @@ func New(t *testing.T, opts ...tenon.Option) *App {
 	return NewOn(t, memstore.New(), opts...)
 }
 
-// Backend 一种存储实现（Stores 给出 SQLite 与内存两种）。
+// Backend 一种存储实现。存储实现已迁出框架（docs/02 - 开发管理/20），这里只剩内存实现；
+// 持久化实现由产品侧跑同一套验收。
 type Backend struct {
 	Name string
 	Open func(t *testing.T) store.Store
 }
 
-// Stores 验收用例要在两种存储上都跑（计划/01 第三节 v1 验收第 1 条）：
-//
-//	for _, b := range tenontest.Stores() {
-//		t.Run(b.Name, func(t *testing.T) { app := tenontest.NewOn(t, b.Open(t), ...) })
-//	}
+// Stores 验收用例要跑的存储。框架不再带 SQLite 实现，只返回内存实现。
 func Stores() []Backend {
 	return []Backend{
 		{Name: "memstore", Open: func(*testing.T) store.Store { return memstore.New() }},
-		{Name: "sqlite", Open: func(t *testing.T) store.Store {
-			t.Helper()
-			db, err := sqlite.Open(context.Background(), filepath.Join(t.TempDir(), "state.db"), sqlite.Options{})
-			if err != nil {
-				t.Fatalf("sqlite.Open: %v", err)
-			}
-			return db // 由 App.Close 关闭（WithStore 的存储归应用所有）
-		}},
 	}
 }
 

@@ -35,7 +35,7 @@
 | 组 | 名字 |
 |---|---|
 | 建应用 | `New`、`App.Start` / `Open` / `Close`、`Default`、`Minimal`、`With`、`Without` |
-| 应用选项 | 存储 `WithStore`（具体实现按需引入：`runtime/store/memstore` 的 `MemoryStore`、`modules/storage/sqlite` 的 `SQLiteStore`，根包不带存储实现）；模型 `WithOpenAI`、`WithOpenAIResponses`、`WithAnthropic`、`WithModel`、`WithModels`、`WithModelCatalog`、`WithSecrets`、`Env`；智能体 `WithAgent`、`WithAgents`、`Dir`、`WithDefaultAgent`；工具 `WithTools`；其余 `WithWorkdir`、`WithUI`、`WithConfig`、`WithProtocolUI`、`WithSleepAfter`、`WithProjectTrust`、`WithKernel` |
+| 应用选项 | 存储 `WithStore`（框架只带 `runtime/store/memstore` 的 `MemoryStore`，SQLite 等持久化实现由产品提供，见 `docs/02 - 开发管理/20`）；模型 `WithOpenAI`、`WithOpenAIResponses`、`WithAnthropic`、`WithModel`、`WithModels`、`WithModelCatalog`、`WithSecrets`、`Env`；智能体 `WithAgent`、`WithAgents`、`Dir`、`WithDefaultAgent`；工具 `WithTools`；其余 `WithWorkdir`、`WithUI`、`WithConfig`、`WithProtocolUI`、`WithSleepAfter`、`WithProjectTrust`、`WithKernel` |
 | 应用宿主选项 | `WithProfile`、`WithService`、`WithWorkspace`、`WithSessionHooks`、`WithModeApprovals`、`WithProtocolOptions`、`WithReadyErrors`；`App.Internals()`（不在承诺里，见上） |
 | 会话 | `App.Ask` / `NewSession` / `Session` / `History`、`Session.Send` / `Stream` / `History` / `Cancel`、`Event` 与 `Event*`、`Reply`、`Meta`、`WithTenant`、`WithUser` |
 | 工具 | `Func`、`Raw`、`SchemaOf`、`Tool` 的修饰方法、`CallInfoFrom` |
@@ -160,7 +160,7 @@ github.com/Sevyn17/tenon v0.1.0 v0.1.1 v0.1.2   # 加 -retracted 才看得到
 | SSRF 拦截：`web` 工具在**实际连接的 IP** 上校验，不在 URL 上校验（DNS 重绑定绕不过） | `modules/tools/web/web.go` 的 `publicAddr` + `Dialer.Control` |
 | 路径穿越防护：`fs` 工具按字面路径与**真实路径**双重检查（防 junction / symlink 逃逸） | `modules/tools/fs/tools.go` 的 `resolve` |
 | 命令执行不经 shell 拼接：`exec.CommandContext` 传参，`-Command` 由 argv 传 | `runtime/host` 与 `modules/internal/proc` |
-| SQL 全参数化；动态标识符经 `quote()` 转义 | `modules/storage/sqlite` |
+| SQL 全参数化；动态标识符经 `quote()` 转义 | 存储实现（已迁出框架，见 20 篇）；框架的 `store.SQL` 只给组件自有表用 |
 | 沙箱 **fail-closed**：无法强制执行时返回 `ErrUnavailable`，调用方必须拒绝，不降级 | `modules/security/sandbox` |
 | 权限默认 `AskUser`，不是默认放行 | `modules/security/permission` |
 | 不可信输入不跨会话「洗白」：父回合不可信则子会话按不可信投递 | `Host.SpawnAs` 的 `untrusted` |
@@ -203,7 +203,7 @@ PRAGMA wal_checkpoint(TRUNCATE);
 **恢复**：停进程 → 用备份文件替换 `state.db` → 删掉残留的 `state.db-wal` / `state.db-shm`
 → 启动。启动时迁移会校验 schema 版本，版本过高会拒绝打开（不会静默改坏数据）。
 
-**写入是串行的**：SQLite 单写者语义，`modules/storage/sqlite` 用单写连接
+**写入是串行的**：SQLite 单写者语义，存储实现用单写连接
 （`SetMaxOpenConns(1)`）+ 4 个只读连接。高并发写会排队，这是 SQLite 的固有特性，
-不是缺陷；需要更高写吞吐时换存储实现。
+不是缺陷；需要更高写吞吐时换存储实现。实现已迁出框架（见 20 篇）。
 
