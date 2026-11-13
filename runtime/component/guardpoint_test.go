@@ -143,6 +143,29 @@ func TestEvalPointEmpty(t *testing.T) {
 	}
 }
 
+// L11（2026-11-13）：点位与 Req 类型写错时，判定退化为 Abstain，不拿零值 req 猜结论。
+//
+// 这不是编译错误（点位只给名字，Req 由 fn 的类型单独定），所以只能运行时兜。
+// 修复前：断言丢 ok，fn 拿到零值 req 照常执行，结论照样生效——一条写错的判定
+// 可能因此放行或拒绝，比不判更危险。
+func TestEvalPointTypeMismatchAbstains(t *testing.T) {
+	p := regMw(t, "g8", func(cx *Registrar) error {
+		// 故意写错：点位是 ToolCall，Req 却用 DeliverReq。
+		WrapGuard(cx, ToolCall, "mismatch", func(ctx context.Context, req DeliverReq) (Verdict, string) {
+			return Deny, "这条不该生效"
+		})
+		return nil
+	})
+	asm, err := Assemble(Spec{Plugins: entries(p)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	v, why := EvalPoint(asm, PointToolCallMw, context.Background(), ToolCallReq{Tool: "shell"})
+	if v != Abstain {
+		t.Fatalf("类型不符应退化为 Abstain，实际 %v %q", v, why)
+	}
+}
+
 // GuardNames 按登记顺序列出。
 func TestGuardNames(t *testing.T) {
 	p := regMw(t, "g7", func(cx *Registrar) error {

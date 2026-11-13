@@ -27,7 +27,11 @@ func NewMwPoint[Req, Resp any](name string) MwPoint[Req, Resp] { return MwPoint[
 // Name 点位名（explain 用）。
 func (p MwPoint[Req, Resp]) Name() string { return p.name }
 
-// mwReg 一条已登记的中间件（按点位名存，类型由登记时保证）。
+// mwReg 一条已登记的中间件（按点位名存）。
+//
+// 注意：类型**不是**由编译器保证的。`Wrap` 的 `p` 与 `mw` 都是泛型参数，
+// 但登记表按点位名（string）存，所以 `Wrap(cx, ToolCall, ..., 一个 Deliver 签名的中间件)`
+// 能编译通过，只在运行时才发现 req 的类型对不上。见 Wrap 的注释。
 type mwReg struct {
 	plugin string
 	order  int
@@ -35,6 +39,10 @@ type mwReg struct {
 }
 
 // Wrap 向点位登记一个中间件（04 4.3）。同一点位按登记顺序包：先登记的在外层。
+//
+// 类型不匹配**不是**编译错误：`p` 只用来取点位名，`mw` 的类型是独立的泛型参数。
+// 登记按名字存，求值时把 req / 响应断言成 Req / Resp；断言失败时 req 取零值、
+// 响应取零值，中间件照常执行。写错类型编译器拦不住，请自己核对点位与签名是否配对。
 func Wrap[Req, Resp any](cx *Registrar, p MwPoint[Req, Resp], mw Middleware[Req, Resp]) {
 	if mw == nil {
 		return
@@ -79,6 +87,9 @@ func Chain[Req, Resp any](regs []mwReg, kernel func(context.Context, Req) (Resp,
 			r := regs[i]
 			chain = func(ctx context.Context, req Req) (Resp, error) {
 				out, err := r.run(ctx, req, func(c context.Context, rr any) (any, error) {
+					// 这里断言必定成立：rr 由外层中间件按 Req 传入（上面 mw 的 next 签名
+					// 就是 func(..., Req)），只有写错类型的中间件才可能破坏它——那种情况
+					// 在 Wrap 里已经退化成零值 req，不会走到这里。
 					return inner(c, rr.(Req))
 				})
 				resp, _ := out.(Resp)

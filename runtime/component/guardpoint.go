@@ -38,7 +38,11 @@ type Named interface{ Name() string }
 // WrapGuard 向点位登记一条判定规则（04 4.3.1）。
 //
 // 判定区并行跑（纯谓词无依赖），任一 Deny 即拒。`name` 进 explain 与拒绝原因。
-// Req 由 fn 的类型决定，点位只用来取名字——两者类型不符是编译错误（fn 里 req 的字段访问会报错）。
+//
+// 类型不匹配**不是**编译错误：点位参数是 `Named`（只给名字），Req 由 fn 的类型单独定，
+// 所以 `WrapGuard(cx, ToolCall, ..., func(..., DeliverReq) ...)` 能编译通过。
+// 登记时按点位名存，求值时把 req 断言成 Req；断言失败会拿到零值 req 并静默继续，
+// 而判定结论照样生效。写错类型不会被编译器拦住，请自己核对点位与 Req 是否配对。
 func WrapGuard[Req any](cx *Registrar, p Named, name string, fn GuardFn[Req]) {
 	if fn == nil {
 		return
@@ -49,7 +53,12 @@ func WrapGuard[Req any](cx *Registrar, p Named, name string, fn GuardFn[Req]) {
 	point := p.Name()
 	reg := guardReg{name: name, order: len(cx.asm.guardsByPoint[point]),
 		check: func(ctx context.Context, req any) (Verdict, string) {
-			r, _ := req.(Req)
+			r, ok := req.(Req)
+			if !ok {
+				// 类型不符：判定的前提已经不成立，不能拿零值 req 猜结论（那会让一条写错的
+				// 判定按零值放行或拒绝，比不判更危险）。Abstain 等于这条规则不参与。
+				return Abstain, ""
+			}
 			return fn(ctx, r)
 		}}
 	cx.asm.guardsByPoint[point] = append(cx.asm.guardsByPoint[point], reg)
