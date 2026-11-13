@@ -1,9 +1,11 @@
 package pkgs
 
-// 插件包的界面贡献（[[ui]] 段，计划/05 F10）：往前端插槽放声明式视图（web/src/ui/declarative.tsx 的 DeclNode），
-// 不写前端代码。视图可以写在清单里（view，TOML 内联表）或单独的 JSON 文件（view_file，相对包目录）。
+// 插件包的界面贡献（[[ui]] 段，计划/05 F10）：往前端插槽放声明式视图（形状见
+// declarative.go 的 DeclNode），不写前端代码。视图可以写在清单里（view，TOML 内联表）
+// 或单独的 JSON 文件（view_file，相对包目录）。
 // data 可选：一条只读协议命令，结果用来替换视图里的 {{路径}} 占位（{{session}} 是插槽所在的会话）。
 // 本包只校验形状与大小；视图里认不认识的节点由前端判断（不认识的显示一行说明，不会让界面出错）。
+// 渲染器不在框架：界面层属应用（如 Mortise 的 client/web/src/ui/declarative.tsx）。
 //
 //	[[ui]]
 //	id = "deploy-status"            # 包内唯一
