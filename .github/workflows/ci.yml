@@ -141,15 +141,20 @@ jobs:
           exit 1
 
       # 与 go test 同样的失败处理：先抓摘要，再对失败包 -v 重跑（D3/D4：偶发失败必须留完整断言消息）。
+      #
+      # 包列表按「有没有并发」挑，不是按目录顺手列：appapi（16 处 go func / 定时器 / 锁）、
+      # modelhub（9 处）、agentdef、memstore 都曾漏在外面，而 D5/D6 两个并发缺陷正出在 appapi 与
+      # runtime/host 的交互上。新增带协程或共享状态的包时，记得加进来。
       - name: go test -race
         run: |
           set -o pipefail
           PKGS="./runtime/host/ ./runtime/store/... ./runtime/session/ ./runtime/toolhub/ \
             ./runtime/agent/ ./runtime/bus/ ./runtime/inject/ \
+            ./runtime/modelhub/ ./runtime/agentdef/ ./runtime/component/ ./runtime/callctx/ \
+            ./runtime/extproc/ ./runtime/reqlog/ \
             ./modules/security/... ./modules/collab/... ./modules/extend/... \
             ./modules/tools/... \
-            ./runtime/extproc/ ./runtime/component/ ./runtime/callctx/ \
-            ./tenontest/ ./apphost/ ./transport/..."
+            ./appapi/ ./apphost/ ./transport/... ./tenontest/"
           if go test -race -count=1 $PKGS 2>&1 | tee /tmp/race.log; then
             exit 0
           fi
