@@ -259,7 +259,9 @@ func ResolveTrust(force bool, root string, ask func(key string) bool) (bool, str
 		return false, "trust.toml", nil
 	}
 	if !HasProjectConfig(root) {
-		return false, "无记录（项目无 .tenon 配置）", nil
+		// 用应用自己的目录名（appid.DirName）：产品叫 mortise 时这里是 .mortise，
+		// 硬编码 .tenon 会让用户按提示去找一个不存在的目录。
+		return false, "无记录（项目无 " + appid.DirName() + " 配置）", nil
 	}
 	if ask == nil {
 		return false, "无记录（非交互，按不受信）", nil
