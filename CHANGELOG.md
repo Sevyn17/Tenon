@@ -8,6 +8,26 @@
 
 ---
 
+## [v0.2.2] - 2026-11-13
+
+> 补丁版：**Go 侧公开面不变**（`testdata/api.txt` 无差异）。标准组件不再依赖 SQL 出口。
+
+### 变更
+
+- **`workgroup` 投递账改走集合**：`p_workgroup_runs` 改为集合 `workgroup.runs`
+  （固定分区 `runs`、索引 `state`、成员 id 作 key）。`workgroup` 不再声明
+  `Requires{SQL: true}`，`service:sql` 降为可选依赖，只用于把 v0.2.x 已发布库里的
+  旧表搬进集合后删除；存储没有 SQL 出口（如内存实现）时跳过导入，不阻塞装配。
+- **SDK 不再因存储没有 SQL 出口而悄悄去掉 `workgroup`**（`tenon.go` 的
+  `resolveComponents`）。任何实现了 `store.Store` 的存储都能装起全部标准插件，
+  不必再实现 `DB() *sql.DB`。
+
+### 修复
+
+- 无。
+
+---
+
 ## [v0.2.1] - 2026-11-13
 
 > 补丁版：**Go 侧公开面不变**（`testdata/api.txt` 无差异），只修文案、补契约、调整前端分层。

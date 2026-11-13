@@ -40,10 +40,8 @@ func TestSettleRetriesInBackground(t *testing.T) {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	if left, _ := g.SQL.DB().QueryContext(context.Background(), `SELECT 1 FROM p_workgroup_runs`); left != nil {
-		defer left.Close()
-		if left.Next() {
-			t.Fatal("送达后应销账")
-		}
+	id := MemberID("L", "alice")
+	if g.hasRun(context.Background(), id) {
+		t.Fatal("送达后应销账")
 	}
 }

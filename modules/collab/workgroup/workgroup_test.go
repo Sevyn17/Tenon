@@ -88,20 +88,34 @@ func rig(t *testing.T) (*Group, *host.Host, *sqlite.DB, *echoModel) {
 		}
 	}
 	h.New = mk(true)
-	if err := db.SetCollectionVersion(context.Background(), store.Tenant, "workgroup", "tasks", 1); err != nil {
-		t.Fatal(err)
-	}
-	tasks, err := db.Open(context.Background(), store.Tenant, "workgroup", "tasks", store.CollectionSpec{
-		Version: 1, Indexes: []string{"status", "owner"}, Partition: "team"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	g, err = New(context.Background(), h, db, tasks, db, mk(false))
+	tasks, runs := openBoards(t, db)
+	g, err = New(context.Background(), h, db, tasks, runs, db, mk(false))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(g.Close)
 	return g, h, db, m
+}
+
+// openBoards 打开任务板与投递账两个集合（测试直接构造 Group，不走装配，版本要自己登记）。
+func openBoards(t *testing.T, db *sqlite.DB) (tasks, runs store.Collection) {
+	t.Helper()
+	ctx := context.Background()
+	if err := db.SetCollectionVersion(ctx, store.Tenant, "workgroup", "tasks", 1); err != nil {
+		t.Fatal(err)
+	}
+	var err error
+	if tasks, err = db.Open(ctx, store.Tenant, "workgroup", "tasks", store.CollectionSpec{
+		Version: 1, Indexes: []string{"status", "owner"}, Partition: "team"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.SetCollectionVersion(ctx, store.Tenant, "workgroup", "runs", runsSpec.Version); err != nil {
+		t.Fatal(err)
+	}
+	if runs, err = db.Open(ctx, store.Tenant, "workgroup", "runs", runsSpec); err != nil {
+		t.Fatal(err)
+	}
+	return tasks, runs
 }
 
 func call(t *testing.T, g *Group, tools []*toolhub.Tool, name, sid, args string) toolhub.Output {
@@ -248,15 +262,8 @@ func TestImportTasks(t *testing.T) {
 		('L', 5, '跑测试', '', '', 'pending', '', 1, 1, 1)`); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.SetCollectionVersion(ctx, store.Tenant, "workgroup", "tasks", 1); err != nil {
-		t.Fatal(err)
-	}
-	tasks, err := db.Open(ctx, store.Tenant, "workgroup", "tasks", store.CollectionSpec{
-		Version: 1, Indexes: []string{"status", "owner"}, Partition: "team"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	g, err := New(ctx, &host.Host{DB: db}, db, tasks, db, nil)
+	tasks, runs := openBoards(t, db)
+	g, err := New(ctx, &host.Host{DB: db}, db, tasks, runs, db, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -288,18 +295,17 @@ func TestImportTasks(t *testing.T) {
 }
 
 func TestRecoverRedelivers(t *testing.T) {
-	g, h, db, m := rig(t)
+	g, h, _, m := rig(t)
 	ctx := context.Background()
 	if _, err := h.Open(ctx, "L"); err != nil {
 		t.Fatal(err)
 	}
 	now := time.Now().UnixMilli()
-	for _, r := range [][]string{
-		{"L/m-a", "a", "item-a", "done", "[成员 a 完成]\nre:旧结果"},
-		{"L/m-b", "b", "item-b", "running", ""},
+	for _, r := range []run{
+		{member: "L/m-a", leader: "L", name: "a", item: "item-a", state: "done", msg: "[成员 a 完成]\nre:旧结果", updated: now},
+		{member: "L/m-b", leader: "L", name: "b", item: "item-b", state: "running", updated: now + 1},
 	} {
-		if _, err := db.DB().Exec(`INSERT INTO p_workgroup_runs(member, leader, name, item_id, state, msg, updated_at) VALUES(?, 'L', ?, ?, ?, ?, ?)`,
-			r[0], r[1], r[2], r[3], r[4], now); err != nil {
+		if err := g.putRun(ctx, r); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -330,5 +336,40 @@ func TestRecoverRedelivers(t *testing.T) {
 	}
 	if m.has("dup") {
 		t.Fatal("重投不应再次进入")
+	}
+}
+
+// TestImportRuns 旧表 p_workgroup_runs 在 New 时搬进集合并删除，随后 Recover 照常补投。
+func TestImportRuns(t *testing.T) {
+	db, err := sqlite.Open(context.Background(), filepath.Join(t.TempDir(), "s.db"), sqlite.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+	ctx := context.Background()
+	if _, err := db.DB().ExecContext(ctx, `CREATE TABLE p_workgroup_runs(
+		member TEXT NOT NULL PRIMARY KEY, leader TEXT NOT NULL, name TEXT NOT NULL,
+		item_id TEXT NOT NULL, state TEXT NOT NULL, msg TEXT NOT NULL DEFAULT '',
+		updated_at INTEGER NOT NULL)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.DB().ExecContext(ctx, `INSERT INTO p_workgroup_runs
+		(member, leader, name, item_id, state, msg, updated_at) VALUES
+		('L/m-a', 'L', 'a', 'item-a', 'done', '旧结果', 1),
+		('L/m-b', 'L', 'b', 'item-b', 'running', '', 2)`); err != nil {
+		t.Fatal(err)
+	}
+	tasks, runs := openBoards(t, db)
+	g, err := New(ctx, &host.Host{DB: db}, db, tasks, runs, db, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(g.Close)
+	if err := db.DB().QueryRowContext(ctx, `SELECT COUNT(*) FROM p_workgroup_runs`).Scan(new(int)); err == nil {
+		t.Fatal("旧投递账应已删除")
+	}
+	got, err := g.listRuns(ctx)
+	if err != nil || len(got) != 2 || got[0].item != "item-a" || got[0].msg != "旧结果" || got[1].state != "running" {
+		t.Fatalf("搬迁后的账：%+v %v", got, err)
 	}
 }

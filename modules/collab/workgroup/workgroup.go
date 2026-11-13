@@ -4,7 +4,10 @@
 // 领导用 team_spawn 异步派活：成员回合在后台跑，结束时把最终文本作为一条输入投递回领导 inbox
 // （领导空闲则立即开回合，忙则排队）。team_send 双向发消息（同样走 inbox，item id 幂等）。
 // 看板存集合 workgroup.tasks（T4a），按领导会话 id 分区；领取 / 完成用文档版本做条件写。
-// 成员回合的投递账仍是 SQL 表 p_workgroup_runs。
+// 成员回合的投递账存集合 workgroup.runs（按成员分区）。两个集合都不碰 SQL，
+// 所以任何实现了 store.CollectionStore 的存储都能装上工作组。
+// v0.2.x 已发布的库里投递账还在 SQL 表 p_workgroup_runs：只有存储提供 store.SQL 时才搬，
+// 搬完删表；不提供就跳过（内存存储没有这张表）。
 package workgroup
 
 import (
@@ -13,6 +16,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -31,23 +35,24 @@ const MaxMembers = 8
 
 var nameRe = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
 
-var migrations = []store.Migration{{Version: 1, Stmts: []string{
-	// 任务板建表曾在这里。T4a 起任务板改集合 workgroup.tasks，旧表由 importTasks 搬完删除。
-	// 版本号不能改：已发布的库 schema_versions 里记着 1，改了号已有库的后续迁移会被跳过。
-}}, {Version: 2, Stmts: []string{
-	// 成员回合的投递账：开始时记 running，结束时记 done + 结果；投递成功后删除。
-	// 重启后 Recover 补投（item id 固定，inbox 准入幂等，不会重复）。
-	`CREATE TABLE p_workgroup_runs(
-		member TEXT NOT NULL PRIMARY KEY, leader TEXT NOT NULL, name TEXT NOT NULL,
-		item_id TEXT NOT NULL, state TEXT NOT NULL, msg TEXT NOT NULL DEFAULT '',
-		updated_at INTEGER NOT NULL)`,
-}}}
+// legacyMigrations 只给旧库用：v0.1.x / v0.2.x 的 schema_versions 里记着 workgroup 的 1 和 2，
+// 版本号不能改，改了已有库的后续迁移会被跳过。表本身不再新建——任务板与投递账都已改集合，
+// 旧行由 importTasks / importRuns 搬完删除。没有 SQL 出口的存储不跑这段。
+var legacyMigrations = []store.Migration{{Version: 1, Stmts: []string{}}, {Version: 2, Stmts: []string{}}}
+
+// runsPart 投递账的固定分区。账要全量补投，集合又没有"列出全部分区"，
+// 所以不按成员分区，成员 id 放进 key；state 是索引，Recover 按它分段查。
+const runsPart = "runs"
+
+// runsSpec 投递账集合的结构。
+var runsSpec = store.CollectionSpec{Version: 1, Indexes: []string{"state"}, Partition: "part"}
 
 // Group 进程内工作组服务。
 type Group struct {
 	Host     *host.Host
-	SQL      store.SQL          // 自有 p_workgroup_runs 表的 SQL（Requires{SQL: true}）
+	SQL      store.SQL          // 可选：只用于把 v0.2.x 的旧表搬进集合。没有 SQL 出口的存储为 nil
 	Tasks    store.Collection   // 任务板（集合 workgroup.tasks，Assembly.Start 前由框架打开）
+	Runs     store.Collection   // 投递账（集合 workgroup.runs，固定分区）
 	Sessions store.SessionStore // 会话存在性检查
 	Member   host.Factory       // 成员会话工厂（成员工具集，不含 team_spawn）
 
@@ -58,13 +63,20 @@ type Group struct {
 	cancel  context.CancelFunc
 }
 
-// New 建投递账表并返回服务。tasks 是已打开的任务板集合（T4a）。
-func New(ctx context.Context, h *host.Host, sq store.SQL, tasks store.Collection, sessions store.SessionStore, member host.Factory) (*Group, error) {
-	if err := sq.Migrate(ctx, "workgroup", migrations); err != nil {
+// New 返回服务。tasks、runs 是已打开的集合（Assembly.Start 前由框架打开）。
+// sq 只给旧库搬家用，可以为 nil：没有 SQL 出口的存储没有旧表可搬。
+func New(ctx context.Context, h *host.Host, sq store.SQL, tasks, runs store.Collection, sessions store.SessionStore, member host.Factory) (*Group, error) {
+	if sq != nil {
+		// 版本号占位，不建表：已发布库的 schema_versions 记着 1 和 2，跳过会让以后的迁移被漏掉。
+		if err := sq.Migrate(ctx, "workgroup", legacyMigrations); err != nil {
+			return nil, err
+		}
+	}
+	g := &Group{Host: h, SQL: sq, Tasks: tasks, Runs: runs, Sessions: sessions, Member: member, running: map[string]bool{}}
+	if err := g.importTasks(ctx); err != nil {
 		return nil, err
 	}
-	g := &Group{Host: h, SQL: sq, Tasks: tasks, Sessions: sessions, Member: member, running: map[string]bool{}}
-	if err := g.importTasks(ctx); err != nil {
+	if err := g.importRuns(ctx); err != nil {
 		return nil, err
 	}
 	g.ctx, g.cancel = context.WithCancel(context.Background())
@@ -77,6 +89,9 @@ func New(ctx context.Context, h *host.Host, sq store.SQL, tasks store.Collection
 // 新库的迁移也不再建它）。失败返回错误且不删表，下次启动重跑；已搬过的行 Put 会冲突，按"已存在"跳过。
 // 计数器取已搬任务的最大 id，否则下一次 Create 会与旧 id 撞车。
 func (g *Group) importTasks(ctx context.Context) error {
+	if g.SQL == nil {
+		return nil // 没有 SQL 出口就没有旧表
+	}
 	rows, err := g.readOldTasks(ctx)
 	if err != nil || rows == nil {
 		return err
@@ -100,6 +115,145 @@ func (g *Group) importTasks(ctx context.Context) error {
 		return fmt.Errorf("workgroup: 删除旧任务板：%w", err)
 	}
 	return nil
+}
+
+// run 一条投递账：成员回合开始时记 running，结束时记 done + 结果，投递成功后删除。
+type run struct {
+	member, leader, name, item, state, msg string
+	updated                                int64
+}
+
+func runBody(r run) map[string]any {
+	return map[string]any{
+		"part": runsPart, "member": r.member, "leader": r.leader, "name": r.name, "item": r.item,
+		"state": r.state, "msg": r.msg, "updated": r.updated,
+	}
+}
+
+func runFromDoc(d store.Doc) run {
+	return run{
+		member: strOf(d.Body["member"]), leader: strOf(d.Body["leader"]), name: strOf(d.Body["name"]),
+		item: strOf(d.Body["item"]), state: strOf(d.Body["state"]), msg: strOf(d.Body["msg"]),
+		updated: numOf(d.Body["updated"]),
+	}
+}
+
+// putRun 写入一条账。同成员已有账则覆盖（版本条件写，冲突重试）。
+func (g *Group) putRun(ctx context.Context, r run) error {
+	doc := store.Doc{Key: r.member, Body: runBody(r)}
+	ver := int64(0)
+	for {
+		have, err := g.Runs.Get(ctx, runsPart, r.member)
+		switch {
+		case errors.Is(err, store.ErrNotFound):
+			ver = 0
+		case err != nil:
+			return err
+		default:
+			ver = have.Version
+		}
+		if err := g.Runs.Put(ctx, runsPart, doc, ver); err != nil {
+			if errors.Is(err, store.ErrConflict) {
+				continue
+			}
+			return err
+		}
+		return nil
+	}
+}
+
+// deleteRun 销账。账已被别人改过（版本不符）就留下，下次 Recover 再投。
+func (g *Group) deleteRun(ctx context.Context, member, item string) error {
+	have, err := g.Runs.Get(ctx, runsPart, member)
+	if errors.Is(err, store.ErrNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if runFromDoc(have).item != item {
+		return nil // 这条账已经是下一次派活的了，不能删
+	}
+	err = g.Runs.Delete(ctx, runsPart, member, have.Version)
+	if errors.Is(err, store.ErrConflict) || errors.Is(err, store.ErrNotFound) {
+		return nil
+	}
+	return err
+}
+
+// listRuns 读出全部未投递的账，按更新时间升序（补投顺序与写入顺序一致）。
+func (g *Group) listRuns(ctx context.Context) ([]run, error) {
+	var out []run
+	for _, st := range []string{"running", "done"} {
+		page := store.Page{}
+		for {
+			docs, next, err := g.Runs.Query(ctx, runsPart, "state", st, page)
+			if err != nil {
+				return nil, err
+			}
+			for _, d := range docs {
+				out = append(out, runFromDoc(d))
+			}
+			if next.After == "" {
+				break
+			}
+			page = next
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].updated < out[j].updated })
+	return out, nil
+}
+
+// hasRun 成员是否还有未销的账（测试用）。
+func (g *Group) hasRun(ctx context.Context, member string) bool {
+	_, err := g.Runs.Get(ctx, runsPart, member)
+	return err == nil
+}
+
+// importRuns 把 v0.2.x 的旧投递账 p_workgroup_runs 搬进集合 workgroup.runs。
+//
+// 规则与 importTasks 相同：没有 SQL 出口或表不存在就跳过；读完关掉再写（写连接只有一条）；
+// 失败返回错误且不删表，下次启动重跑；集合里已有同成员的账按"已搬过"跳过，不覆盖。
+func (g *Group) importRuns(ctx context.Context) error {
+	if g.SQL == nil {
+		return nil
+	}
+	rs, err := g.readOldRuns(ctx)
+	if err != nil || rs == nil {
+		return err
+	}
+	for _, r := range rs {
+		doc := store.Doc{Key: r.member, Body: runBody(r)}
+		if err := g.Runs.Put(ctx, runsPart, doc, 0); err != nil && !errors.Is(err, store.ErrConflict) {
+			return fmt.Errorf("workgroup: 搬投递账 %s：%w", r.member, err)
+		}
+	}
+	if _, err := g.SQL.DB().ExecContext(ctx, `DROP TABLE p_workgroup_runs`); err != nil {
+		return fmt.Errorf("workgroup: 删除旧投递账：%w", err)
+	}
+	return nil
+}
+
+// readOldRuns 读出旧投递账的全部行。表不存在返回 nil。
+func (g *Group) readOldRuns(ctx context.Context) ([]run, error) {
+	rows, err := g.SQL.DB().QueryContext(ctx, `SELECT member, leader, name, item_id, state, msg, updated_at
+		FROM p_workgroup_runs`)
+	if err != nil {
+		if isNoSuchTable(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("workgroup: 读旧投递账：%w", err)
+	}
+	defer rows.Close()
+	out := []run{}
+	for rows.Next() {
+		var r run
+		if err := rows.Scan(&r.member, &r.leader, &r.name, &r.item, &r.state, &r.msg, &r.updated); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
 }
 
 // oldTask 旧表 p_workgroup_tasks 的一行。
@@ -267,10 +421,9 @@ func (g *Group) start(leader, id, name, task string, untrusted bool) error {
 	g.running[id] = true
 	g.mu.Unlock()
 	item := host.NewItemID()
-	if _, err := g.SQL.DB().Exec(`INSERT INTO p_workgroup_runs(member, leader, name, item_id, state, updated_at)
-		VALUES(?, ?, ?, ?, 'running', ?) ON CONFLICT(member) DO UPDATE SET leader = excluded.leader, name = excluded.name,
-		item_id = excluded.item_id, state = 'running', msg = '', updated_at = excluded.updated_at`,
-		id, leader, name, item, time.Now().UnixMilli()); err != nil {
+	if err := g.putRun(context.Background(), run{
+		member: id, leader: leader, name: name, item: item, state: "running", updated: time.Now().UnixMilli(),
+	}); err != nil {
 		g.mu.Lock()
 		delete(g.running, id)
 		g.mu.Unlock()
@@ -293,8 +446,9 @@ func (g *Group) start(leader, id, name, task string, untrusted bool) error {
 			msg = fmt.Sprintf("[成员 %s 失败] %v", name, err)
 		}
 		bg := context.Background()
-		if _, err := g.SQL.DB().ExecContext(bg, `UPDATE p_workgroup_runs SET state = 'done', msg = ?, updated_at = ?
-			WHERE member = ? AND item_id = ?`, msg, time.Now().UnixMilli(), id, item); err != nil {
+		if err := g.putRun(bg, run{
+			member: id, leader: leader, name: name, item: item, state: "done", msg: msg, updated: time.Now().UnixMilli(),
+		}); err != nil {
 			return
 		}
 		g.settleRetry(bg, id, leader, name, item, msg, tainted)
@@ -308,8 +462,7 @@ func (g *Group) settle(ctx context.Context, member, leader, name, item, msg stri
 	if err := g.deliverID(ctx, leader, "member:"+name, item, msg, untrusted); err != nil {
 		return err
 	}
-	_, err := g.SQL.DB().ExecContext(ctx, `DELETE FROM p_workgroup_runs WHERE member = ? AND item_id = ?`, member, item)
-	return err
+	return g.deleteRun(ctx, member, item)
 }
 
 // settleRetry 投递成员结果，失败后台退避重试，直到成功或进程退出（审查 P1-27：原先失败只留账、
@@ -340,22 +493,8 @@ var (
 // Recover 补投上次进程未投递的成员结果：已完成的投结果；进程退出时仍在跑的，告知领导它被中断。
 // 启动时调用一次（在开始派新成员之前）。返回补投条数。
 func (g *Group) Recover(ctx context.Context) (int, error) {
-	rows, err := g.SQL.DB().QueryContext(ctx, `SELECT member, leader, name, item_id, state, msg FROM p_workgroup_runs ORDER BY updated_at`)
+	rs, err := g.listRuns(ctx)
 	if err != nil {
-		return 0, err
-	}
-	type run struct{ member, leader, name, item, state, msg string }
-	var rs []run
-	for rows.Next() {
-		var r run
-		if err := rows.Scan(&r.member, &r.leader, &r.name, &r.item, &r.state, &r.msg); err != nil {
-			rows.Close()
-			return 0, err
-		}
-		rs = append(rs, r)
-	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
 		return 0, err
 	}
 	n := 0

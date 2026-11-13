@@ -447,8 +447,8 @@ func finishApp(c *config, in *assemblyInput, asm *component.Assembly) (*App, err
 	return app, nil
 }
 
-// resolveComponents 整理组件清单：去重、应用 Without、WithModels 替换 models 组，
-// 并处理「外部存储没有 SQL 出口时去掉 workgroup」。返回最终清单与已收集的错误。
+// resolveComponents 整理组件清单：去重、应用 Without、WithModels 替换 models 组。
+// 返回最终清单与已收集的错误。
 func resolveComponents(c *config) ([]string, []error, error) {
 	var errs []error
 	preset := make([]string, 0, len(c.components))
@@ -487,18 +487,6 @@ func resolveComponents(c *config) ([]string, []error, error) {
 			}
 		}
 		names = kept
-	}
-	if c.profile == nil {
-		if _, hasSQL := c.store.(store.SQL); !hasSQL {
-			kept := names[:0]
-			for _, n := range names {
-				if n == "workgroup" {
-					continue
-				}
-				kept = append(kept, n)
-			}
-			names = kept
-		}
 	}
 	return names, errs, nil
 }

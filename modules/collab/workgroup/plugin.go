@@ -4,7 +4,7 @@ package workgroup
 // 成员会话（定义 workgroup-member，会话 id 里的 /m- 只是命名约定）只有 team_send + 看板；
 // 成员经 service:host 的 Child 构造（可空 = New）。
 // 数据库在 store-sqlite 启动后才打开，所以 Group 在 Start 里建；会话构造器就绪后（ready 点位）补投上次未送达的结果。
-// 自有 p_workgroup_* 表要 SQL，所以声明 Requires{SQL: true}，装配期就检查存储是否给得出 SQL。
+// 任务板与投递账都是集合，不依赖 SQL；service:sql 只在把 v0.2.x 的旧表搬进集合时用，可选。
 
 import (
 	"context"
@@ -52,8 +52,9 @@ func TemplateSource() (agentdef.Source, error) {
 type plug struct {
 	h     *host.Host
 	db    assemble.DBHandle
-	sql   store.SQL
+	sql   store.SQL        // 可选：只用于把 v0.2.x 的旧表搬进集合
 	tasks store.Collection // 任务板（集合 workgroup.tasks，Assembly.Start 前由框架打开）
+	runs  store.Collection // 投递账（集合 workgroup.runs）
 	ui    assemble.UI
 	g     *Group
 }
@@ -62,11 +63,8 @@ func init() { component.Register("workgroup", func() component.Component { retur
 
 func (*plug) Meta() component.Meta {
 	return component.Meta{Name: "workgroup", Version: "0.1.0", Effects: []string{component.EffectTools},
-		Requires: []string{assemble.ServiceHost, assemble.ServiceDB, component.ServiceSQL, assemble.ServiceUI}}
+		Requires: []string{assemble.ServiceHost, assemble.ServiceDB, "?" + component.ServiceSQL, assemble.ServiceUI}}
 }
-
-// Requires 自有表要 SQL（框架设计 05 §5.7）。
-func (*plug) Requires() component.Requires { return component.Requires{SQL: true} }
 
 func (p *plug) Setup(cx *component.Registrar) error {
 	var err error
@@ -76,8 +74,11 @@ func (p *plug) Setup(cx *component.Registrar) error {
 	if p.db, err = component.Use[assemble.DBHandle](cx, assemble.ServiceDB); err != nil {
 		return err
 	}
-	if p.sql, err = component.Use[store.SQL](cx, component.ServiceSQL); err != nil {
+	// 可选：没有 SQL 出口的存储（如内存实现）装不上 service:sql，旧表搬家就跳过。
+	if sq, ok, err := component.UseOptional[store.SQL](cx, component.ServiceSQL); err != nil {
 		return err
+	} else if ok {
+		p.sql = sq
 	}
 	if p.ui, err = component.Use[assemble.UI](cx, assemble.ServiceUI); err != nil {
 		return err
@@ -89,6 +90,13 @@ func (p *plug) Setup(cx *component.Registrar) error {
 	}
 	// 版本 1 没有集合内的数据要改：旧表 p_workgroup_tasks 的搬运在 Start 里，迁移函数拿不到 SQL。
 	if err := cx.CollectionMigration(component.CollectionMigration{Collection: "tasks", From: 0}); err != nil {
+		return err
+	}
+	// 投递账（原 p_workgroup_runs）。同样：集合内没有数据要改，旧表的搬运在 Start 里。
+	if p.runs, err = cx.Collection("runs", runsSpec); err != nil {
+		return err
+	}
+	if err := cx.CollectionMigration(component.CollectionMigration{Collection: "runs", From: 0}); err != nil {
 		return err
 	}
 	for _, it := range Items() {
@@ -134,7 +142,7 @@ func (p *plug) Setup(cx *component.Registrar) error {
 }
 
 func (p *plug) Start(sc *component.Scope) error {
-	g, err := New(context.Background(), p.h, p.sql, p.tasks, p.db.DB(), p.h.ChildFactory())
+	g, err := New(context.Background(), p.h, p.sql, p.tasks, p.runs, p.db.DB(), p.h.ChildFactory())
 	if err != nil {
 		return err
 	}
