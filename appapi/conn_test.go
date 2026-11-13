@@ -162,9 +162,6 @@ func TestConnViewerForbidden(t *testing.T) {
 // 跨进程（10.2.4）：另一个宿主（同一份存储、另一条总线）写入的事件靠按游标轮询补齐。
 // 文件级「两个进程打开同一库」由存储实现方验证；这里验证轮询补齐本身。
 func TestConnPollsOtherProcess(t *testing.T) {
-	old := PollInterval
-	PollInterval = 50 * time.Millisecond
-	defer func() { PollInterval = old }()
 	ctx := context.Background()
 	db := memstore.New()
 	t.Cleanup(func() { db.Close() })
@@ -190,6 +187,7 @@ func TestConnPollsOtherProcess(t *testing.T) {
 		t.Fatal(err)
 	}
 	c := app.NewConn(ctx, LocalPrincipal)
+	c.poll = 50 * time.Millisecond
 	defer c.Close()
 	if err := c.Subscribe(ctx, wire.SubscribeArgs{Session: "x"}); err != nil {
 		t.Fatal(err)
@@ -221,11 +219,9 @@ func TestConnBackpressure(t *testing.T) {
 		t.Fatalf("合并与丢弃不对：%+v", out)
 	}
 
-	oldS, oldH := SoftQueue, HardQueue
-	SoftQueue, HardQueue = 4, 8
-	defer func() { SoftQueue, HardQueue = oldS, oldH }()
 	app := newApp(t)
 	c := app.NewConn(context.Background(), LocalPrincipal)
+	c.soft, c.hard = 4, 8
 	defer c.Close()
 	sctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

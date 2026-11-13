@@ -5,13 +5,13 @@ package appapi
 //
 // 订阅的事件来源：
 //   - 持久事件一律从事件表读（按游标升序，不漏不重）。本进程提交时总线上的提交通知只是"该去读了"的信号：
-//     游标正好接上就直接用，否则按游标补读；另外每 PollInterval 按游标轮询一次，补上别的进程写的事件（10.2.4）。
+//     游标正好接上就直接用，否则按游标补读；另外按连接的 poll 间隔轮询一次，补上别的进程写的事件（10.2.4）。
 //   - 易失事件来自总线，和提交通知在同一个协程里按发布顺序处理，所以本进程内两类事件的相对顺序不变。
 //
 // 只推 10.5 两张表里的公开事件，只推连接订阅了的会话（children 时含子会话）。
 //
-// 背压（10.2.3）：出站队列超过 SoftQueue 时合并同一 stream_id 的 message.delta、同一 call_id 的 tool.args_delta，
-// 丢弃 tool.progress 与 notice；仍超过 HardQueue 时断开积压最多的那个订阅，发 session.lagged {cursor}，
+// 背压（10.2.3）：出站队列超过 softQueue 时合并同一 stream_id 的 message.delta、同一 call_id 的 tool.args_delta，
+// 丢弃 tool.progress 与 notice；仍超过 hardQueue 时断开积压最多的那个订阅，发 session.lagged {cursor}，
 // cursor 是那个会话最后一条确实交给传输层的持久事件。
 
 import (
@@ -30,11 +30,12 @@ import (
 	"github.com/Sevyn17/tenon/runtime/store"
 )
 
-// 连接参数。
-var (
-	PollInterval = 500 * time.Millisecond // 跨进程轮询间隔（只在有订阅时轮询）
-	SoftQueue    = 256                    // 出站队列超过它开始合并与丢弃易失事件
-	HardQueue    = 1024                   // 合并后仍超过它就断开积压最多的订阅
+// pollInterval 跨进程轮询间隔（只在有订阅时轮询）。
+const pollInterval = 500 * time.Millisecond
+
+const (
+	softQueue = 256  // 出站队列超过它开始合并与丢弃易失事件
+	hardQueue = 1024 // 合并后仍超过它就断开积压最多的订阅
 )
 
 // viewerCommands viewer 可以执行的命令：只查询和订阅（10.8）。
@@ -51,13 +52,15 @@ type Conn struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	mu        sync.Mutex
-	subs      map[string]*subscription
-	queue     []wire.Envelope
-	delivered map[string]int64 // 会话 → 已交给传输层的最后一个持久游标（lagged 用）
-	wake      chan struct{}    // 队列有新事件（容量 1）
-	space     chan struct{}    // 队列被取走时关闭并换新（回放时等空间用）
-	closed    bool
+	mu         sync.Mutex
+	subs       map[string]*subscription
+	queue      []wire.Envelope
+	delivered  map[string]int64 // 会话 → 已交给传输层的最后一个持久游标（lagged 用）
+	wake       chan struct{}    // 队列有新事件（容量 1）
+	space      chan struct{}    // 队列被取走时关闭并换新（回放时等空间用）
+	closed     bool
+	poll       time.Duration // 跨进程轮询间隔；0 = pollInterval
+	soft, hard int           // 背压阈值；0 = softQueue / hardQueue
 }
 
 type subscription struct {
@@ -77,6 +80,26 @@ func (a *App) NewConn(ctx context.Context, p wire.Principal) *Conn {
 
 // Principal 连接身份。
 func (c *Conn) Principal() wire.Principal { return c.p }
+
+// pollEvery 这个连接的跨进程轮询间隔。
+func (c *Conn) pollEvery() time.Duration {
+	if c.poll > 0 {
+		return c.poll
+	}
+	return pollInterval
+}
+
+// limits 这个连接的背压阈值。
+func (c *Conn) limits() (int, int) {
+	soft, hard := c.soft, c.hard
+	if soft == 0 {
+		soft = softQueue
+	}
+	if hard == 0 {
+		hard = hardQueue
+	}
+	return soft, hard
+}
 
 // Close 结束全部订阅；之后 Next 返回错误。可重复调用。
 func (c *Conn) Close() {
@@ -217,7 +240,7 @@ func (c *Conn) run(ctx context.Context, id string, live *bus.Sub, replay []bus.E
 		}
 		return true
 	}
-	tick := time.NewTicker(PollInterval)
+	tick := time.NewTicker(c.pollEvery())
 	defer tick.Stop()
 	for {
 		select {
@@ -422,10 +445,11 @@ func (c *Conn) push(ctx context.Context, evs []wire.Envelope) {
 		return
 	}
 	c.queue = append(c.queue, evs...)
-	if len(c.queue) > SoftQueue {
+	soft, hard := c.limits()
+	if len(c.queue) > soft {
 		c.queue = compact(c.queue)
 	}
-	for len(c.queue) > HardQueue && c.lagLocked() {
+	for len(c.queue) > hard && c.lagLocked(hard) {
 	}
 	c.signalLocked()
 }
@@ -438,7 +462,8 @@ func (c *Conn) pushWait(ctx context.Context, evs []wire.Envelope) bool {
 			c.mu.Unlock()
 			return false
 		}
-		if len(c.queue) < SoftQueue {
+		soft, _ := c.limits()
+		if len(c.queue) < soft {
 			c.queue = append(c.queue, evs...)
 			c.signalLocked()
 			c.mu.Unlock()
@@ -470,7 +495,7 @@ func (c *Conn) lag(id string) {
 }
 
 // lagLocked 断开积压最多的订阅；没有可断开的（只剩连接级事件）返回 false。
-func (c *Conn) lagLocked() bool {
+func (c *Conn) lagLocked(hard int) bool {
 	count := map[string]int{}
 	for _, e := range c.queue {
 		if _, ok := c.subs[e.Session]; ok {
@@ -484,7 +509,7 @@ func (c *Conn) lagLocked() bool {
 		}
 	}
 	if top == "" {
-		c.queue = c.queue[len(c.queue)-HardQueue:] // 只剩连接级易失事件：丢最旧的
+		c.queue = c.queue[len(c.queue)-hard:] // 只剩连接级易失事件：丢最旧的
 		return false
 	}
 	c.lagSessionLocked(top)
