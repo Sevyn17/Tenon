@@ -232,4 +232,10 @@ var coreMigrations = []migration{
 			updated_at INTEGER NOT NULL,
 			PRIMARY KEY(tenant, ref))`,
 	}},
+	// v16：inbox 项带 trace（2026-11-13，16 篇 L17）。Send 不是信封，投递时没有 trace，
+	// 于是子智能体/工作组成员的回合 trace 被置空，explain <父 trace> 看不到子会话。
+	// 只加列、有默认值：旧库升级后已有 inbox 项的 trace 为空，行为与升级前一致。
+	{version: 16, stmts: []string{
+		`ALTER TABLE session_inbox ADD COLUMN trace TEXT NOT NULL DEFAULT ''`,
+	}},
 }

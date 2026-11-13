@@ -690,10 +690,22 @@ func collectInboxBatch(items []store.InboxItem, skip map[string]bool) []store.In
 // renderBatch 把一批 inbox 项变成一条用户消息内容（按 13 的 <msg> 格式），
 // 并返回这批里第一封信封（用于 meta 的 from / origin）与是否不可信。
 func renderBatch(items []store.InboxItem) (session.Content, mail.Envelope, bool) {
+	content, env, untrusted, _ := renderBatchWithTrace(items)
+	return content, env, untrusted
+}
+
+// renderBatchWithTrace 同 renderBatch，另外返回本批输入带的 trace：
+// 信封路径取信封自己的 trace；非信封输入（Send / Note）取 inbox 项的 Trace（16 篇 L17）。
+// 取第一个非空值——同一批里的输入属于同一条触发链，谁带的都一样。
+func renderBatchWithTrace(items []store.InboxItem) (session.Content, mail.Envelope, bool, string) {
 	var content session.Content
 	var first mail.Envelope
 	hasEnv, untrusted := false, false
+	trace := ""
 	for _, it := range items {
+		if trace == "" {
+			trace = it.Trace
+		}
 		if e, ok := parseEnvelope(it); ok {
 			content = append(content, session.NewTextPart(mail.Render([]mail.Envelope{e})))
 			if !hasEnv {
@@ -716,7 +728,7 @@ func renderBatch(items []store.InboxItem) (session.Content, mail.Envelope, bool)
 			untrusted = true
 		}
 	}
-	return content, first, untrusted
+	return content, first, untrusted, trace
 }
 
 // envelopeMeta 按信封填条目 meta（source / from / trust）。

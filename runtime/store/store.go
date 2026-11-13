@@ -337,7 +337,11 @@ type InboxItem struct {
 	Trust  string
 	// Envelope 信封的 JSON（runtime/mail.Envelope）；空 = 旧格式（T1b/T2 的纯文本补报/输入）。
 	Envelope string
-	At       time.Time
+	// Trace 本次输入所属的 trace（2026-11-13，16 篇 L17）。Send 不是信封，没有信封可带 trace；
+	// 由「延续某个任务」的调用方（子智能体、工作组成员）显式传入，回合开始时据此设置 trace，
+	// 让子会话的事件与父会话记在同一条链上。空 = 独立任务，回合 trace 置空（原行为）。
+	Trace string
+	At    time.Time
 }
 
 // OutboxItem 是一条待外发的信封（08 9.6：外发与检查点同事务、提交后派发）。

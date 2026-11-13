@@ -87,7 +87,11 @@ type Command struct {
 	RewoundTo *int
 	// Committed SetExt / SetConfig：非空时，空闲下已提交则置 true；回合中只改内存、随下个检查点落库时保持 false（protocol 2 committed）。
 	Committed *bool
-	done      chan error
+	// Trace Send / Note：本次输入所属的 trace（2026-11-13，16 篇 L17）。空 = 独立任务，
+	// 回合 trace 置空（原行为）。只有「延续某个任务」的调用方传它（子智能体、工作组成员），
+	// 普通 Send 不传，行为不变。
+	Trace string
+	done  chan error
 }
 
 // Decision before_turn 的结论。

@@ -72,7 +72,7 @@ func (a *actor) enqueue(c Command) error {
 		}
 		body, _ := json.Marshal(in)
 		fresh, err := a.h.DB.Admit(context.Background(), a.id, store.InboxItem{ItemID: c.ItemID, Kind: kind,
-			Input: string(body), Trust: c.Trust})
+			Input: string(body), Trust: c.Trust, Trace: c.Trace})
 		if err != nil {
 			return err
 		}
@@ -478,7 +478,7 @@ func (a *actor) drainInbox(ctx context.Context) (stop bool, err error) {
 		if batch == nil {
 			return false, nil
 		}
-		content, env, untrusted := renderBatch(batch)
+		content, env, untrusted, batchTrace := renderBatchWithTrace(batch)
 		consume := make([]string, len(batch))
 		for i, it := range batch {
 			consume[i] = it.ItemID
@@ -488,8 +488,14 @@ func (a *actor) drainInbox(ctx context.Context) (stop bool, err error) {
 		for _, id := range consume {     // 本回合消费的项不算「早先排队」——它们就是本条消息
 			delete(a.turnQueued, id)
 		}
-		// 每回合都按本批信封重设 trace：非信封输入（Send/Note）置空，免得沿用上一回合的 trace。
-		a.ag.SetTrace(env.Trace)
+		// 每回合都按本批输入重设 trace：信封用自己的 trace；非信封输入（Send/Note）默认置空，
+		// 免得沿用上一回合的 trace。只有「延续某个任务」的调用方（子智能体、工作组成员）会带 trace，
+		// 那种情况用批次里的（16 篇 L17：否则子会话链路断开，explain <父 trace> 看不到子会话）。
+		trace := env.Trace
+		if trace == "" {
+			trace = batchTrace
+		}
+		a.ag.SetTrace(trace)
 		// 触发链信息：本回合发出的信封沿用本批里最大的跳数、来源可信度只降不升（08 8.7）。
 		a.ag.SetTurnOrigin(agent.TurnOrigin{Hop: batchHop(batch), Untrusted: untrusted, From: env.From.String()})
 		a.ag.Ctx.SetUntrusted(untrusted) // 权限组件据此把 allow 降为询问
@@ -499,8 +505,10 @@ func (a *actor) drainInbox(ctx context.Context) (stop bool, err error) {
 		} else {
 			a.ag.Ctx.SetTrigger("")
 		}
-		if env.Trace != "" {
-			a.h.recordTrace(env.Trace, a.id, "session", "")
+		// 用算好的 trace（可能是信封的，也可能是 Send 带上来的），不要只看 env.Trace：
+		// 非信封输入的 env 是零值，只看它会漏记子会话的 trace 事件（16 篇 L17）。
+		if trace != "" {
+			a.h.recordTrace(trace, a.id, "session", "")
 		}
 		m := envelopeMeta(env, untrusted)
 		m[session.MetaClientIDs] = consume // 本回合吃进的输入（protocol 2 entry.client_ids、turn.started.inputs）

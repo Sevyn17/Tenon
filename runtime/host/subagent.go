@@ -86,7 +86,15 @@ func (h *Host) spawn(ctx context.Context, parent, id, origin, def string, f Fact
 			return "", err
 		}
 	}
-	if err := hd.Do(Command{Kind: Send, ItemID: NewItemID(), Text: task, Source: "agent", Trust: TrustOf(untrusted)}); err != nil {
+	// 带上父会话当前的 trace：子会话的 span 与 trace 事件要记在同一条链上，
+	// 否则 explain <父 trace> 看不到子会话（16 篇 L17）。父会话没在跑（取不到）时为空，
+	// 行为与改动前一致。
+	parentTrace := ""
+	if phd, ok := h.Get(parent); ok {
+		parentTrace = phd.Agent().TraceID()
+	}
+	if err := hd.Do(Command{Kind: Send, ItemID: NewItemID(), Text: task, Source: "agent",
+		Trust: TrustOf(untrusted), Trace: parentTrace}); err != nil {
 		return "", err
 	}
 	done := make(chan error, 1)
