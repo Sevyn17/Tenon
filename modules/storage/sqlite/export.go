@@ -1,7 +1,11 @@
 package sqlite
 
 // 导出（data-contract D1）：一个会话的完整事实按 JSONL 输出，一行一条记录。
-// 记录种类：session / entry / archived / request / tool / span。用于备份、排查与轨迹投影。
+// 记录种类：session / entry / archived / request / tool / span。
+//
+// 用于排查与轨迹投影，**不可反向导入**：Import 是库对库并表（ATTACH 后按列名 INSERT），
+// 与这里的 JSONL 不是一对格式。备份整库请用 SQLite 的 VACUUM INTO 或
+// wal_checkpoint(TRUNCATE) 后拷文件，见 07 篇 7.7「数据与备份」。
 
 import (
 	"context"

@@ -11,7 +11,6 @@ package anthropic
 //   - 恰好一个终止事件；失败归一为稳定 code。
 
 import (
-	"bufio"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -392,15 +391,10 @@ func parseAnthropic(ctx context.Context, r io.Reader, model string, out chan<- m
 		p := build()
 		return modelhub.Event{Failed: &modelhub.Failure{Code: code, Message: msg, Partial: &p}}
 	}
-	sc := bufio.NewScanner(r)
-	sc.Buffer(make([]byte, 0, 64<<10), 8<<20)
+	sc := httpx.NewSSEScanner(r)
 	for sc.Scan() {
-		line := sc.Text()
-		if !strings.HasPrefix(line, "data:") {
-			continue
-		}
-		data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
-		if data == "" {
+		data, ok := httpx.SSELine(sc.Text())
+		if !ok {
 			continue
 		}
 		var ev anEvent

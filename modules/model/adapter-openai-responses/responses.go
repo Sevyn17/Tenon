@@ -7,7 +7,6 @@ package responses
 // 单次调用：不重试、不聚合；恰好一个终止事件；缓存用量取 input_tokens_details.cached_tokens。
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -300,16 +299,11 @@ func parseResponses(ctx context.Context, r io.Reader, model string, out chan<- m
 		p := build()
 		return modelhub.Event{Failed: &modelhub.Failure{Code: code, Message: msg, Partial: &p}}
 	}
-	sc := bufio.NewScanner(r)
-	sc.Buffer(make([]byte, 0, 64<<10), 8<<20)
+	sc := httpx.NewSSEScanner(r)
 loop:
 	for sc.Scan() {
-		line := sc.Text()
-		if !strings.HasPrefix(line, "data:") {
-			continue
-		}
-		data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
-		if data == "" || data == "[DONE]" {
+		data, ok := httpx.SSELine(sc.Text())
+		if !ok || data == "[DONE]" {
 			continue
 		}
 		var ev rsEvent

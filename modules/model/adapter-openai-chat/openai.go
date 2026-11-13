@@ -8,7 +8,6 @@ package openaichat
 // 厂商没报用量时 Source = Missing（不当作未命中）。
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -301,15 +300,10 @@ func parseOpenAI(ctx context.Context, r io.Reader, model, reasoningField string,
 		p := build()
 		return modelhub.Event{Failed: &modelhub.Failure{Code: code, Message: msg, Partial: &p}}
 	}
-	sc := bufio.NewScanner(r)
-	sc.Buffer(make([]byte, 0, 64<<10), 8<<20)
+	sc := httpx.NewSSEScanner(r)
 	for sc.Scan() {
-		line := sc.Text()
-		if !strings.HasPrefix(line, "data:") {
-			continue
-		}
-		data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
-		if data == "" {
+		data, ok := httpx.SSELine(sc.Text())
+		if !ok {
 			continue
 		}
 		if data == "[DONE]" {

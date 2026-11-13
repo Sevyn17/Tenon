@@ -145,3 +145,65 @@ github.com/Sevyn17/tenon v0.1.0 v0.1.1 v0.1.2   # 加 -retracted 才看得到
 | `Fork` / `Rewind` / `Migrate` / `SetMeta` | 会话操作 | 应用协议里有对应命令，根包未暴露 |
 | 多租户鉴权（`WithAuthenticator`） | 服务按请求取租户和用户 | v1 后（T4）；现在 `transport/web` 只有令牌 + Host / Origin 检查 |
 | 守卫只在投递、建会话、工具调用三处执行 | 回合与模型调用也能拦 | `GuardTurn` / `GuardModelCall` 已在 2026-11-12 的 H4 治理中删除（零调用点）。有需要时再在 agent 里加执行点 |
+
+## 7.7 框架负责什么、应用负责什么
+
+框架是库不是服务：它提供机制，不替应用做部署决策。安全与数据两类责任最容易混淆，
+所以各列一张清单。
+
+### 安全
+
+**框架负责**：
+
+| 项 | 实现位置 |
+|---|---|
+| SSRF 拦截：`web` 工具在**实际连接的 IP** 上校验，不在 URL 上校验（DNS 重绑定绕不过） | `modules/tools/web/web.go` 的 `publicAddr` + `Dialer.Control` |
+| 路径穿越防护：`fs` 工具按字面路径与**真实路径**双重检查（防 junction / symlink 逃逸） | `modules/tools/fs/tools.go` 的 `resolve` |
+| 命令执行不经 shell 拼接：`exec.CommandContext` 传参，`-Command` 由 argv 传 | `runtime/host` 与 `modules/internal/proc` |
+| SQL 全参数化；动态标识符经 `quote()` 转义 | `modules/storage/sqlite` |
+| 沙箱 **fail-closed**：无法强制执行时返回 `ErrUnavailable`，调用方必须拒绝，不降级 | `modules/security/sandbox` |
+| 权限默认 `AskUser`，不是默认放行 | `modules/security/permission` |
+| 不可信输入不跨会话「洗白」：父回合不可信则子会话按不可信投递 | `Host.SpawnAs` 的 `untrusted` |
+
+**应用负责**（框架不做）：
+
+| 项 | 为什么框架不做 |
+|---|---|
+| 传输加密（TLS）、证书管理 | 部署层决定，框架不持有证书 |
+| 存储加密 | 库文件由应用保管，密钥管理方案属应用 |
+| PII 清单、数据分级、留存期限、跨境评估 | 框架不知道业务数据含义与合规要求 |
+| 身份认证与会话鉴权（多租户） | v1 后（T4）；现在 `transport/web` 只有令牌与 Host / Origin 检查 |
+| 审计留存的期限与导出 | 框架记录事件，怎么留、留多久由应用定 |
+
+### 数据与备份
+
+**框架负责**：会话数据以标准 SQLite 文件存储，`export` 导出 JSONL 供**排查与轨迹投影**。
+
+**应用负责**：备份与恢复。框架不做，原因是存哪由应用决定（见 18 方案），
+备份策略要跟着存储实现走。
+
+> **`export` 的 JSONL 不可反向导入。** `Import` 是库对库并表（`ATTACH` 后按列名 `INSERT`），
+> 与 `Export` 的 JSONL 不是一对格式。要恢复整库请用下面的 SQLite 方法。
+
+**备份会话库的正确做法**：
+
+```sql
+-- 方式一（推荐）：生成一致的快照文件，不阻塞写
+VACUUM INTO '/path/to/backup.db';
+
+-- 方式二：先合并 WAL 再拷文件
+PRAGMA wal_checkpoint(TRUNCATE);
+-- 然后拷 state.db（此时 -wal 已空）
+```
+
+**不要直接拷 `state.db`**：库用 WAL 模式（`journal_mode=WAL`），
+未合并的数据在 `state.db-wal` 里。只拷 `.db` 会拿到一个缺最近提交的旧快照，
+而且看起来「能打开」，问题要等恢复后才发现。
+
+**恢复**：停进程 → 用备份文件替换 `state.db` → 删掉残留的 `state.db-wal` / `state.db-shm`
+→ 启动。启动时迁移会校验 schema 版本，版本过高会拒绝打开（不会静默改坏数据）。
+
+**写入是串行的**：SQLite 单写者语义，`modules/storage/sqlite` 用单写连接
+（`SetMaxOpenConns(1)`）+ 4 个只读连接。高并发写会排队，这是 SQLite 的固有特性，
+不是缺陷；需要更高写吞吐时换存储实现。
+
