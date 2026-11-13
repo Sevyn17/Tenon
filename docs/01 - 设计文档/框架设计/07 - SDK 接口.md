@@ -39,7 +39,7 @@
 | 应用宿主选项 | `WithProfile`、`WithService`、`WithWorkspace`、`WithSessionHooks`、`WithModeApprovals`、`WithProtocolOptions`、`WithReadyErrors`；`App.Internals()`（不在承诺里，见上） |
 | 会话 | `App.Ask` / `NewSession` / `Session` / `History`、`Session.Send` / `Stream` / `History` / `Cancel`、`Event` 与 `Event*`、`Reply`、`Meta`、`WithTenant`、`WithUser` |
 | 工具 | `Func`、`Raw`、`SchemaOf`、`Tool` 的修饰方法、`CallInfoFrom` |
-| 写组件 | `Component`、`ComponentInfo`、`Registrar`、`Scope`；点位 `Point`、`RegisterAt`、`PointTools` / `ToolsOf`、`PointSystemBlock`、`PointLayer`、`PointAfterTurn`；服务 `Key`、`NewKey`、`Provide`、`Get`、`GetOptional`；守卫 `GuardRule`、`GuardDeliver` / `GuardSessionOpen` / `GuardToolCall`、`Allow` / `Deny` / `Abstain` |
+| 写组件 | `Component`、`ComponentInfo`、`Registrar`、`Scope`；点位 `Point`、`RegisterAt`、`PointTools` / `ToolsOf`、`PointSystemBlock`、`PointSessionInit`、`PointAfterTurn`；服务 `Key`、`NewKey`、`Provide`、`Get`、`GetOptional`；结论 `Verdict` / `Allow` / `Deny` / `Abstain`、点位 `GuardDeliver` / `GuardSessionOpen`、请求 `GuardRequest`。**注意：登记判定区用的 `WrapGuard` 与登记中间件用的 `Wrap` 目前没有在根包导出**（见 7.6 的现状差距），写组件要登记它们得 import `runtime/component`，而那个包不在承诺里 |
 | 前端 | `App.API()`，交给 `transport/web` 或 `transport/bind` |
 | 错误 | `ErrNotStarted`、`ErrInvalid`、`ErrNotFound`、`ErrConflict`、`ErrDenied`，用 `errors.Is` 判断 |
 
@@ -62,23 +62,86 @@
 - 定义包格式有自己的版本（03 3.4）：新 SDK 读旧格式必须兼容，读到不认识的新格式直接拒绝。
 - `meta` 与 `x.*` 的内容框架原样保存，不解释。
 
+### 7.4.1 什么时候该发版（2026-11-13 补）
+
+原版本规则只写了「版本号怎么定」，没写「什么时候该打 tag」，结果是 v0.1.2 之后
+积压 133 个提交、公开面已有破坏性变更却没发版。补一节判据。
+
+**发版的三个触发条件（满足任一就发）：**
+
+1. **公开面有变化**。`testdata/api.txt` 与上一个 tag 有差异，无论增删。
+   这是最主要的触发条件——下游只看得到 tag，看不到 `main`。
+2. **有下游要用**。任何外部项目/产品要 `go get` 一个还没发过的行为时，
+   先发版再让对方引用，不要让对方依赖伪版本（`v0.0.0-<时间>-<hash>`）。
+3. **修了安全或正确性问题**。即使公开面没变也要发，让下游能拿到修复。
+
+**不需要发版的情况**：纯文档、注释、测试、CI 调整；内部重构而公开面未变
+（这类可以攒着，等下一次公开面变化一起发）。
+
+**发版前必须逐条过（缺一不可）：**
+
+| # | 检查 | 怎么验 |
+|---|---|---|
+| 1 | 工作区干净、本地与两个远程同步 | `git status --short` 空；`git rev-list --left-right --count origin/main...HEAD` 为 `0 0` |
+| 2 | 全量测试与两套快照通过 | `go test ./...`、`apphost` 回归快照、`TestAPISnapshot` |
+| 3 | `gofmt -l .` 与 `go vet ./...` 干净 | 同上 |
+| 4 | 双仓库 CI 在待发提交上全绿 | GitHub Actions + Gitea 两个 job |
+| 5 | **公开面差异已过目** | `git diff <上个tag>:testdata/api.txt testdata/api.txt`，逐条确认是有意改动 |
+| 6 | **CHANGELOG 写好了** | 见下 |
+| 7 | 版本号与改动性质匹配 | 见下表 |
+| 8 | 打**附注 tag**（`git tag -a`，带一句说明），推两个远程 | `git push origin <tag> && git push gitea <tag>` |
+| 9 | 发版后验证 tag 能被解析 | `GOPROXY=https://goproxy.cn go list -m -versions <模块路径>` 应列出新版本 |
+
+**版本号怎么定（v0 期间）：**
+
+| 改动性质 | 版本号 | 例子 |
+|---|---|---|
+| 只有修 bug / 内部重构，公开面不变 | patch（`v0.1.3`） | 修 flake、改注释 |
+| **公开面有增删或签名变化** | **minor（`v0.2.0`）** | 删 `MemoryStore`、`GuardRule` 体系重构 |
+| 只增不删（加选项、加方法、加字段） | patch 或 minor 均可，倾向 patch | 加 `WithLayeredConfig` |
+
+> **注意**：v0 期间「接口可以改」说的是**允许改**，不是说**不用升 minor**。
+> semver 的 `v0.x.y` 里 `x` 是 minor，破坏性变更该动 `x`。把破坏性变更塞进 patch 号
+> 会让下游以为是「无痛升级」而直接 `go get -u`，升级后编译失败——这是最该避免的体验。
+
+**一个已核实的坑（2026-11-13）**：`retract v0.1.0` 写在 `go.mod` 里，
+按 Go 的规则（`go help modules`：取 `@latest` 版本的 `go.mod` 读 retract 列表），
+它在 **v0.1.2 发布时就已生效**，不需要等新版本。实测：
+
+```console
+$ go list -m -versions github.com/Sevyn17/tenon
+github.com/Sevyn17/tenon v0.1.1 v0.1.2          # v0.1.0 已被隐藏
+$ go list -m -versions -retracted github.com/Sevyn17/tenon
+github.com/Sevyn17/tenon v0.1.0 v0.1.1 v0.1.2   # 加 -retracted 才看得到
+```
+
+所以「retract 要等下一个版本才生效」是**误解**，不要拿它当发版理由。
+
 ## 7.5 守卫执行的位置
 
-`Registrar.Guard` 登记的规则在这三处执行：
+判定区（`WrapGuard`）登记在点位上，由内核在对应时机跑。**2026-11-12 的 H4 治理之后**
+只剩两个点位由内核执行，且走的是 `WrapGuard` 判定区（不是旧的 `GuardRule`）：
 
 | 位置 | 时机 | 被拒时 |
 |---|---|---|
 | `GuardDeliver` | 信封投递前 | 投递失败，记 `guard.denied` |
 | `GuardSessionOpen` | 新建会话前 | `NewSession` / `Ask` 返回 `ErrDenied` |
-| `GuardToolCall` | 工具执行前（先于权限组件的授权层） | 失败结果交给模型，这一轮继续 |
 
-合并规则：任一条 Deny 即拒绝；全部 Abstain 走内核缺省；Allow 只放开"往 `session:` 投递"的缺省限制。`runtime/component` 里还有 `GuardTurn`、`GuardModelCall` 两个位置，内核没有执行它们，所以根包不导出。
+工具调用与其余点位走 `component.WrapGuard(cx, component.ToolCall, ...)` 等判定区，
+由 `Assembly.EvalPoint` 合并结论；`GuardTurn` / `GuardModelCall` 已随 H4 删除（零调用点）。
+
+合并规则：任一条 Deny 即拒绝；全部 Abstain 走内核缺省；Allow 只放开"往 `session:` 投递"的缺省限制。
+
+> **历史说明**：本节原写「`Registrar.Guard` 登记的规则在三处执行」并列出 `GuardToolCall`。
+> 那套 `GuardRule` / `Registrar.Guard` 机制在 2026-11-12 的 H4 治理中**整套删除**——
+> 核查发现它在生产代码里零登记、整套空转（详见 17 篇第二节 H4）。现在统一走判定区。
 
 ## 7.6 现状差距
 
 | 现状 | 目标 | 处理 |
 |---|---|---|
+| **`WrapGuard` / `Wrap` 未在根包导出**（2026-11-13 发现）。登记判定区与中间件必须 import `runtime/component`，而该包不在承诺里；框架自己的 `examples/component` 就是这么写的（注释里也注明了） | 写组件只 import `tenon` 一个包 | **待做**。H4/L1 重构把 `Registrar.Guard` 换成 `WrapGuard` 时，只在 `runtime/component` 落地、没在根包补导出与别名。补法：根包加 `WrapGuard` / `Wrap` 的薄包装 + 六个 `MwPoint` 别名 + 对应 `*Req` / `*Resp` 别名，然后重录快照 |
 | `Send(to, body)` 发信封、`Events(after)` 订阅、`Respond(corr)` 回答 | 应用用信封与地址和其他会话通信 | 未做。现在由 `Session.Send` / `Stream` 和应用协议覆盖；有外部需求再加到根包 |
 | `Fork` / `Rewind` / `Migrate` / `SetMeta` | 会话操作 | 应用协议里有对应命令，根包未暴露 |
 | 多租户鉴权（`WithAuthenticator`） | 服务按请求取租户和用户 | v1 后（T4）；现在 `transport/web` 只有令牌 + Host / Origin 检查 |
-| 守卫只在投递、建会话、工具调用三处执行 | 回合与模型调用也能拦 | 有需要时在 agent 里加执行点，再导出 `GuardTurn` / `GuardModelCall` |
+| 守卫只在投递、建会话、工具调用三处执行 | 回合与模型调用也能拦 | `GuardTurn` / `GuardModelCall` 已在 2026-11-12 的 H4 治理中删除（零调用点）。有需要时再在 agent 里加执行点 |

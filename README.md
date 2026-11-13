@@ -6,6 +6,12 @@ Go 智能体框架。运行时（`runtime/`）只提供机制：会话、信封�
 go get github.com/Sevyn17/tenon
 ```
 
+> **版本提示**：最新发布版是 `v0.1.2`（2026-11-09）。`main` 上已合入大量未发版内容
+> （T4–T6、扩展点重构、内核与 I/O 分离），且公开面有破坏性变更，按计划发 `v0.2.0`。
+> 需要未发版内容时用 `go get github.com/Sevyn17/tenon@main`，会解析成伪版本
+> （形如 `v0.1.3-0.<时间>-<hash>`——伪版本号按上一个 tag 推，**不代表下一个正式版是
+> v0.1.3**）。公开面还会变，请预期。变更见 [CHANGELOG](<CHANGELOG.md>)。
+
 ```go
 import (
     "github.com/Sevyn17/tenon"
