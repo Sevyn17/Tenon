@@ -59,9 +59,11 @@ func newApp(t *testing.T) *App {
 		t.Fatal(err)
 	}
 	b := bus.New(0)
-	t.Cleanup(func() { b.Close(); db.Close() })
+	// 顺序要紧：先停 Host 的后台派发，再关库。反过来会让派发协程在关库后继续访问数据库，
+	// 与 t.TempDir 的清理撞上（D5：CI 上偶发 "directory not empty"）。
 	var app *App
 	h := &host.Host{DB: db, Bus: b}
+	t.Cleanup(func() { h.Close(); b.Close(); db.Close() })
 	h.New = func(id, def string) (*agent.Agent, *session.Config, error) {
 		hub := toolhub.New(toolhub.Options{Store: agent.ToolStore{DB: db}})
 		echo := &toolhub.Tool{Spec: session.ToolSpec{Name: "echo", Schema: json.RawMessage(`{"type":"object"}`)},

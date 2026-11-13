@@ -194,7 +194,11 @@ func (s *Shell) command(ctx context.Context, command string, out *tailBuf) *exec
 	cmd.Dir = s.Root
 	cmd.Stdout, cmd.Stderr = out, out
 	proc.SetTree(cmd)
-	cmd.WaitDelay = 2 * time.Second
+	// WaitDelay 只在进程已退出、但还有子进程占着 stdout/stderr 管道时生效（否则 Wait 会一直挂着）。
+	// 它到点会关掉管道，**可能截断最后一段还没读到的输出**——D3 的「等待结束后输出不全」
+	// 就是高负载下 2 秒不够、尾部被切断。放宽到 10 秒：正常情况进程退出后管道立刻 EOF，
+	// 不会等满；只有残留子进程才走这条路径，宁可多等也不要丢输出。
+	cmd.WaitDelay = 10 * time.Second
 	return cmd
 }
 
@@ -378,9 +382,19 @@ func looksDenied(s string) bool {
 
 // stripANSI 去掉终端控制序列（颜色、光标移动、OSC 标题等），只影响返回给模型的文本
 // （docs/01 - 设计文档/03 - 约束清单.md“shell / job_output 输出清洗”）。
+// 单次执行的输出不是增量读，尾部残缺的序列直接丢掉。
 func stripANSI(s string) string {
+	out, _ := stripANSIHolding(s)
+	return out
+}
+
+// stripANSIHolding 同 stripANSI，另外返回**末尾需要留到下次读取的原始字节数**：
+// 尾部残缺的转义序列（读到一半，下次才补齐）不能在这里吞掉，否则它后面的正常文本
+// 会被当成序列参数丢掉——job_output 按增量读，切点可能正好落在 ESC 与终止字节之间，
+// 这是 D3 偶发失败的根因。调用方用返回的字节数回退读偏移，下次连同新输出一起拼。
+func stripANSIHolding(s string) (string, int) {
 	if !strings.ContainsRune(s, 0x1b) && !strings.ContainsRune(s, 0x9b) {
-		return s
+		return s, 0
 	}
 	var b strings.Builder
 	b.Grow(len(s))
@@ -389,19 +403,30 @@ func stripANSI(s string) string {
 		if c != 0x1b {
 			// 8 位 CSI（U+009B，UTF-8 为 C2 9B）
 			if c == 0xc2 && i+1 < len(s) && s[i+1] == 0x9b {
-				i = skipCSI(s, i+2)
+				n := skipCSI(s, i+2)
+				if n < 0 { // 残缺：余下全部留到下次
+					return b.String(), len(s) - i
+				}
+				i = n
 				continue
+			}
+			if c == 0xc2 && i+1 >= len(s) { // 可能是 U+009B 的前半，留着
+				return b.String(), len(s) - i
 			}
 			b.WriteByte(c)
 			i++
 			continue
 		}
-		if i+1 >= len(s) {
-			break // 末尾残缺的 ESC
+		if i+1 >= len(s) { // 末尾残缺的 ESC，留着
+			return b.String(), len(s) - i
 		}
 		switch s[i+1] {
 		case '[':
-			i = skipCSI(s, i+2)
+			n := skipCSI(s, i+2)
+			if n < 0 {
+				return b.String(), len(s) - i
+			}
+			i = n
 		case ']', 'P', '_', '^', 'X': // OSC / DCS / APC / PM / SOS：到 BEL 或 ST 为止
 			j := i + 2
 			for j < len(s) && s[j] != 0x07 && !(s[j] == 0x1b && j+1 < len(s) && s[j+1] == '\\') {
@@ -409,7 +434,8 @@ func stripANSI(s string) string {
 			}
 			switch {
 			case j >= len(s):
-				i = j
+				// 没等到终止符：可能是残缺，也可能是真的没结束。留到下次读补齐。
+				return b.String(), len(s) - i
 			case s[j] == 0x07:
 				i = j + 1
 			default:
@@ -419,18 +445,19 @@ func stripANSI(s string) string {
 			i += 2 // 两字节序列，如 ESC = / ESC >
 		}
 	}
-	return b.String()
+	return b.String(), 0
 }
 
-// skipCSI 跳过参数 / 中间字节，返回终止字节（0x40–0x7E）之后的位置。
+// skipCSI 跳过参数 / 中间字节，返回终止字节（0x40–0x7E）之后的位置；
+// 没有终止字节（被读取边界切断）返回 -1，调用方据此保留原文。
 func skipCSI(s string, j int) int {
 	for j < len(s) && s[j] >= 0x20 && s[j] <= 0x3f {
 		j++
 	}
 	if j < len(s) && s[j] >= 0x40 && s[j] <= 0x7e {
-		j++
+		return j + 1
 	}
-	return j
+	return -1
 }
 
 func failText(s string) toolhub.Output {
@@ -522,19 +549,25 @@ func (s *Shell) callOutput(ctx context.Context, cx *toolhub.Cx, raw json.RawMess
 	}
 	s.mu.Lock() // 读偏移只由本函数推进
 	text, next, dropped := j.buf.since(j.read)
-	j.read = next
 	s.mu.Unlock()
-	text = s.clean(text)
+	// 清洗会去掉转义序列，但**尾部残缺的序列不能算读完**：它的终止字节还没写进来，
+	// 这时推进读偏移会把后半截（比如 "end"）当参数吞掉（D3 的偶发失败）。
+	// 让 clean 告诉调用方「末尾有多少字节要留到下次」，偏移就停在那里。
+	text, hold := s.cleanHolding(text)
+	s.mu.Lock()
+	j.read = next - int64(hold)
+	s.mu.Unlock()
 	if dropped > 0 {
 		text = fmt.Sprintf("…（%d 字节输出已超出缓冲被丢弃）\n", dropped) + text
 	}
 	select {
 	case <-j.done:
 		// 已结束：上面读到的就是剩余的全部输出，交出后清理。
+		// 结束时进程不会再写，残缺的尾部不会再补齐——把它也算读完，否则这个 job 永远留着。
 		s.mu.Lock()
 		rest, _, _ := j.buf.since(j.read)
 		s.mu.Unlock()
-		if rest == "" {
+		if rest == "" || hold > 0 { // 结束时进程不会再写：残缺尾部也一并算读完，否则这个 job 永远留着
 			s.forget(j)
 		}
 		status := fmt.Sprintf("[%s 已结束，退出码 %d]", j.id, j.exit)
@@ -613,6 +646,15 @@ func (s *Shell) clean(t string) string {
 		return t
 	}
 	return stripANSI(t)
+}
+
+// cleanHolding 同 clean，另外告诉调用方末尾有多少**原始字节**是残缺的转义序列、
+// 需要留到下次读取再拼（增量读场景）。保留这些字节的清洗结果里不含它们。
+func (s *Shell) cleanHolding(t string) (string, int) {
+	if s.KeepANSI {
+		return t, 0
+	}
+	return stripANSIHolding(t)
 }
 
 func (s *Shell) hint(cx *toolhub.Cx, raw json.RawMessage, out string) string {

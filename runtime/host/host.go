@@ -209,6 +209,18 @@ type Host struct {
 	flushMu    sync.Mutex
 	flushing   bool
 	flushAgain bool
+	// closed 关闭后不再起新的后台派发。测试在 t.Cleanup 里关库，而这个派发协程用的是
+	// context.Background()，不受测试 context 约束——不挡住它就会在关库后继续访问数据库，
+	// 与 t.TempDir 的清理撞上（D5：CI 上偶发 "directory not empty"）。
+	closed bool
+}
+
+// Close 停止后台派发。调用方在关库前调用；之后 kickFlush 不再起新协程。
+// 已经跑起来的派发会自然结束（它自己的 SQL 会因库关闭而失败，不阻塞）。
+func (h *Host) Close() {
+	h.flushMu.Lock()
+	h.closed = true
+	h.flushMu.Unlock()
 }
 
 // Handle 会话句柄：只投递命令。

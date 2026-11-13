@@ -884,6 +884,10 @@ func guardContact(env mail.Envelope, meta store.SessionMeta, allow bool) error {
 // （本次提交的外发行可能在它读表之后才落库）。
 func (h *Host) kickFlush() {
 	h.flushMu.Lock()
+	if h.closed {
+		h.flushMu.Unlock()
+		return
+	}
 	if h.flushing {
 		h.flushAgain = true
 		h.flushMu.Unlock()
@@ -897,7 +901,7 @@ func (h *Host) kickFlush() {
 				h.publish("", "mail.failed", map[string]any{"error": err.Error()})
 			}
 			h.flushMu.Lock()
-			if !h.flushAgain {
+			if h.closed || !h.flushAgain {
 				h.flushing = false
 				h.flushMu.Unlock()
 				return
