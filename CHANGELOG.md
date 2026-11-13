@@ -8,6 +8,59 @@
 
 ---
 
+## [v0.2.1] - 2026-11-13
+
+> 补丁版：**Go 侧公开面不变**（`testdata/api.txt` 无差异），只修文案、补契约、调整前端分层。
+> 从 `v0.2.0` 起 13 个提交。
+>
+> **前端有破坏性变更**：包名 `@tenon/web` → `@tenon/client`，界面代码移出框架。
+> 前端不在 Go 的公开面承诺里（07 7.1 以 `testdata/api.txt` 为准），所以按 patch 发；
+> 但用前端的产品必须同步改依赖名与 import。
+
+### 破坏性变更（前端）
+
+- **包名 `@tenon/web` → `@tenon/client`**：框架不再提供界面代码，只留协议客户端。
+  - 框架侧 16981 行 → 2074 行；L1 hooks / L2 组件库 / L3 工作台**移到产品仓库**。
+  - `exports` 从 5 个入口收成 1 个：只剩 `"."`（原 `./client` 的内容，且不再有 `client/` 子目录）。
+  - 删掉只给应用用的 `web/embed.go`、`web/vite.config.ts`、`web/index.html`、`web/public`、
+    `web/scripts`。`examples/web-server` 的 `web.Config.Static` 改为不传（界面由应用提供）。
+  - 为什么：界面（布局、组件、快捷键）是产品决策，放在框架里是负担；但协议客户端
+    是 `appapi/wire` 的运行时对应物，留着才能验证「快照 + 游标订阅能还原状态」。
+    详见 `web/README.md`。
+
+### 新增
+
+- **`runtime/pkgs/declarative.go`**：`[[ui]]` 段声明式视图的形状契约——`DeclNode`
+  （15 种节点：stack/row/text/markdown/badge/code/diff/list/table/keyValue/progress/
+  button/link/form/divider）与 `DeclAction`（4 种动作：call/openPanel/insert/respond）。
+  原先 `UISlot.View` 是 `json.RawMessage`，只校验大小不校验形状；前端迁出后形状只在
+  产品仓库的渲染器里，框架的扩展点会变成「有定义、无约束」。补这份定义让第三方插件
+  与渲染器实现者都有据可依。
+
+### 修复
+
+- **信任提示里的目录名硬编码**：`apphost/trust.go` 写死「项目无 **.tenon** 配置」，
+  而产品（如 mortise）的目录是 `.mortise`，用户按提示找不到目录。改用 `appid.DirName()`。
+- **子会话继承父会话的 trace**：`spawn`（子智能体、工作组成员）投任务时带上父会话的 trace，
+  `explain <trace>` 现在能看到一次任务经过的所有子会话。实现上 `session_inbox` 加 `trace` 列
+  （迁移 v16，有默认值），所以**跨进程重启后链路仍然完整**。普通 `Send` 行为不变
+  （同一会话连发两条消息仍是两个独立任务，不共用 trace）。
+
+### 文档
+
+- 新增 `02 - 开发管理/19 - 框架侧交付与验收交接`：对产品仓库的交接记录。
+- `00 - 索引` 开头加「框架与产品」分工说明，避免两个仓库的文档混看。
+- `web/README.md` 重写：说明为什么框架只留协议客户端。
+- 修 9 处失效路径引用（`runtime/store/sqlite/*` 等第 3 步搬家后留下的）、
+  `StampOutbound` 注释指向不存在的函数。
+
+### 内部（不影响使用方）
+
+- `web/` 的 `pnpm-lock.yaml` 重新生成（旧 lock 还是 16981 行时期的，含已删的 React / vite）。
+- `web/src/client/*` 上移到 `web/src/`，去掉无意义的 `client/` 子目录。
+
+---
+
 ## [v0.2.0] - 2026-11-13
 
 > 本版含**破坏性变更**（公开面 10 处删除），按 semver 动 minor。
@@ -90,10 +143,6 @@
   原实现会把后续正常文本当成序列参数丢掉；改为回退读偏移、等序列闭合。
 - **交互登记与等待者挂载顺序**：原先先落库、后挂等待通道，中间窗口里到达的回答会把交互
   误判成「上次进程留下的」并标成 `voided`。改为落库前挂通道。
-- **子会话继承父会话的 trace**：`spawn`（子智能体、工作组成员）投任务时带上父会话的 trace，
-  `explain <trace>` 现在能看到一次任务经过的所有子会话。实现上 `session_inbox` 加 `trace` 列
-  （迁移 v16，有默认值），所以**跨进程重启后链路仍然完整**。普通 `Send` 行为不变
-  （同一会话连发两条消息仍是两个独立任务，不共用 trace）。
 
 ### 内部（不影响使用方）
 
