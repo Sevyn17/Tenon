@@ -23,7 +23,6 @@ import (
 	"github.com/Sevyn17/tenon"
 	"github.com/Sevyn17/tenon/modules/storage/sqlite"
 	web "github.com/Sevyn17/tenon/transport/web"
-	webui "github.com/Sevyn17/tenon/web"
 )
 
 func main() {
@@ -83,7 +82,9 @@ func run(dir, addr, storePath, base, model string, trust bool) error {
 	if err != nil {
 		return err
 	}
-	srv := web.New(web.Config{API: app.API(), Token: token, Hosts: web.LoopbackHosts(port), Static: webui.Dist()})
+	// Static 不传：框架不再内嵌前端产物（前端属应用层，见 web/README）。
+	// 应用要提供界面，把自己的 dist 用 os.DirFS 或 embed.FS 传进来。
+	srv := web.New(web.Config{API: app.API(), Token: token, Hosts: web.LoopbackHosts(port)})
 	hs := &http.Server{Handler: srv, BaseContext: func(net.Listener) context.Context { return ctx }}
 	go func() { <-ctx.Done(); _ = hs.Close() }()
 	fmt.Printf("打开：http://127.0.0.1:%d/?token=%s\n  会话库：%s\n  按 Ctrl+C 结束\n", port, token, storePath)

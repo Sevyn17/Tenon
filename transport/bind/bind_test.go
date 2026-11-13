@@ -1,7 +1,7 @@
 package bind
 
 // 绑定服务测试：用最小宿主（假模型、sqlite 临时库）驱动 Service.Call，并检查事件转发；
-// 另校验前端 web/src/client/commands.ts 的命令表与 appapi.ConnCommands() 一致。
+// 另校验前端 web/src/commands.ts 的命令表与 appapi.ConnCommands() 一致。
 
 import (
 	"context"
@@ -157,9 +157,9 @@ func TestServiceCall(t *testing.T) {
 	}
 }
 
-// 前端命令表（web/src/client/commands.ts 的 COMMANDS）必须与连接上可用的命令（appapi.ConnCommands）一致。
+// 前端命令表（web/src/commands.ts 的 COMMANDS）必须与连接上可用的命令（appapi.ConnCommands）一致。
 func TestProtocolCommands(t *testing.T) {
-	src, err := os.ReadFile(filepath.Join("..", "..", "web", "src", "client", "commands.ts"))
+	src, err := os.ReadFile(filepath.Join("..", "..", "web", "src", "commands.ts"))
 	if err != nil {
 		t.Fatal(err)
 	}

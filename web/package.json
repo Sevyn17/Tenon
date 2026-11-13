@@ -1,37 +1,19 @@
 {
-  "name": "@tenon/web",
+  "name": "@tenon/client",
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Tenon 的前端：L0 协议客户端、L1 hooks、L2 组件、L3 工作台。产品在自己的前端入口里 createShell({brand, contributions})。",
+  "description": "Tenon 的协议客户端（L0）：传输（Wails / WebSocket，断线重连）、会话状态机（快照 → 日志尾部 → 按游标订阅）、会话列表与未结束交互。不依赖 React，界面由应用自己写。",
   "exports": {
-    "./client": "./src/client/index.ts",
-    "./client/react": "./src/client/react/index.ts",
-    "./ui": "./src/ui/index.ts",
-    "./shell": "./src/shell/index.tsx",
-    "./shell/embed": "./src/shell/embed.tsx"
+    ".": "./src/index.ts"
   },
   "scripts": {
-    "dev": "vite",
-    "deps": "node scripts/check-deps.mjs",
-    "typecheck": "node scripts/check-deps.mjs && tsc --noEmit",
     "test": "vitest run",
-    "build": "node scripts/check-deps.mjs && tsc --noEmit && vite build"
-  },
-  "dependencies": {
-    "lucide-react": "1.66.0",
-    "react": "19.3.1",
-    "react-dom": "19.3.1"
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "@testing-library/dom": "10.4.2",
-    "@testing-library/react": "16.3.3",
-    "@types/react": "19.3.0",
-    "@types/react-dom": "19.3.0",
-    "@vitejs/plugin-react": "6.1.2",
     "happy-dom": "21.0.4",
     "typescript": "5.9.3",
-    "vite": "8.3.5",
     "vitest": "5.1.0"
   }
 }
