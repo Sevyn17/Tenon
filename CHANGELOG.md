@@ -8,6 +8,33 @@
 
 ---
 
+## [v0.3.2] - 2026-11-14
+
+> 补丁：Go 公开面不变（`testdata/api.txt` 无差异）。修 `[[ui]]` 形状契约与文档里的过时结论。
+
+### 修复
+
+- **`[[ui]]` 声明式视图契约的四处字段名与渲染器不一致**。`runtime/pkgs/declarative.go`
+  初版（`7c48b50`）是渲染器迁出之后凭描述转写的，写成了 `code.text`、`keyValue.keyValue`、
+  `button.text` / `link.text`；应用侧渲染器（Mortise `client/web/src/ui/declarative.tsx`）
+  实际读的是 `code`、`rows`、`label`。照契约写出的插件视图在应用里会渲染成**空代码块、
+  无文字的按钮**。现在按渲染器实现逐字段对齐，并在注释里写清三处「同一 JSON 字段两种语义」
+  （`label` / `rows` / `value`）。`badge` 的 tone 词表（`neutral/accent/success/danger/warning`）
+  与 `text` 的（`default/muted/danger/success`）也在契约里分开写明，此前只写了 text 那一套；
+  `button.variant` 补上 `ghost` / `outline`。
+  这类错误此前无法被发现：`UISlot.View` 是 `json.RawMessage`，框架只校验大小与顶层 `type`，
+  `DeclNode` 在框架里没有任何反序列化点。新增 `runtime/pkgs/declarative_test.go`
+  按「渲染器读什么」逐节点钉住 JSON 字段名（15 种节点 + 4 种动作），改错字段名测试即红。
+
+### 新增
+
+- **`appapi/entry_boundary_test.go`**：入口无关约束测试（19 篇第五节承诺的那条）。
+  三条规则：`appapi` 与 `appapi/wire` 不得 import 外壳与装配层；非测试源码不得出现
+  `cli` / `desktop` / `webhost` / `tui` / `gui` 字面量；不得读 `os.Args`。
+  核心不知道自己在被谁用，这条线要靠测试守，不能靠自觉。
+
+---
+
 ## [v0.3.1] - 2026-11-13
 
 > 补丁：公开面不变，修 v0.3.0 的一个正确性缺陷。从 `v0.3.0` 起。

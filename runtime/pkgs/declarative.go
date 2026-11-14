@@ -12,6 +12,12 @@ package pkgs
 //
 // 节点种类刻意保持小而稳定：只描述内容与有限的几种动作，不允许执行任意代码。
 // 未知节点由渲染器显示占位，不影响整块视图。
+//
+// **2026-11-14 订正**：本文件初版（7c48b50）是渲染器迁出之后凭描述转写的，
+// 有四处 JSON 字段名与渲染器实际读的不一致（code 用了 text、keyValue 用了 keyValue、
+// button/link 用了 text、tone 词表按 text 的一套写），照契约写出的视图在应用里会渲染成空。
+// 现在以渲染器实现为准逐字段对齐，并由 `declarative_test.go` 钉住 JSON 字段名。
+// 改这里的 JSON 标签就是改对外契约，必须同时改渲染器与那条测试。
 
 // DeclAction 声明式视图里按钮 / 链接能触发的动作。由应用决定怎么执行。
 //
@@ -39,6 +45,13 @@ type DeclAction struct {
 // DeclNode 声明式视图的一个节点。渲染器按 Type 分派。
 //
 // 各节点种类用哪些字段见 DeclNodeTypes 旁的说明；不相关的字段在 JSON 里不出现。
+//
+// 字段名按「渲染器读什么」定，不按 Go 侧的语义定。三处**同一 JSON 字段承载两种语义**
+// 是契约的一部分（渲染器按 Type 分别处理），所以 Go 侧也共用一个字段：
+//
+//	label  progress 的说明文字 / button、link 的文字
+//	rows   table 的行（每行是单元格数组）/ keyValue 的键值对（每行是 [键, 值]）
+//	value  progress 的进度（0–1）/ form 的初始值（对象）
 type DeclNode struct {
 	// Type 节点种类，取值见 DeclNodeTypes。
 	Type string `json:"type"`
@@ -48,32 +61,35 @@ type DeclNode struct {
 	Gap      int        `json:"gap,omitempty"`      // 间距
 	Align    string     `json:"align,omitempty"`    // row 的水平对齐：start / center / end
 
-	// —— 文本：text / markdown / badge / code / diff / button / link ——
-	Text string `json:"text,omitempty"` // 正文或按钮文字
-	Tone string `json:"tone,omitempty"` // text / badge 的色调：default / muted / danger / success
+	// —— 文本：text / markdown / badge ——
+	Text string `json:"text,omitempty"` // 正文
+	Tone string `json:"tone,omitempty"` // 色调；词表按节点不同，见 DeclNodeTypes
 	Size string `json:"size,omitempty"` // text 的字号：sm / md / lg
 	Bold bool   `json:"bold,omitempty"` // text 是否加粗
+
+	// —— 代码：code / diff ——
+	Code string `json:"code,omitempty"` // code 的正文
 	Lang string `json:"lang,omitempty"` // code 的语言标记
 	Diff string `json:"diff,omitempty"` // diff 的统一格式差异文本
 
 	// —— 列表：list / table / keyValue ——
-	Items    []DeclNode  `json:"items,omitempty"`    // list 的条目
-	Ordered  bool        `json:"ordered,omitempty"`  // list 是否有序
-	Columns  []string    `json:"columns,omitempty"`  // table 的列名
-	Rows     [][]any     `json:"rows,omitempty"`     // table 的行
-	KeyValue [][2]string `json:"keyValue,omitempty"` // keyValue 的键值对
+	Items   []DeclNode `json:"items,omitempty"`   // list 的条目
+	Ordered bool       `json:"ordered,omitempty"` // list 是否有序
+	Columns []string   `json:"columns,omitempty"` // table 的列名
+	// Rows table 的行 / keyValue 的键值对，见类型注释。
+	Rows [][]any `json:"rows,omitempty"`
 
 	// —— 进度：progress ——
 	// Value 语义随 Type 变：progress 时是进度（0–1）；form 时是初始值。
 	// 两者共用 JSON 字段名 `value`（契约如此，渲染器按 Type 分别处理），
 	// 所以 Go 侧也共用一个字段，用 any 承载两种类型。
 	Value any `json:"value,omitempty"`
-	// Label progress 的说明文字。
-	Label string `json:"label,omitempty"`
 
 	// —— 交互：button / link / form ——
+	// Label 文字：progress 的说明 / button、link 的按钮文字，见类型注释。
+	Label   string         `json:"label,omitempty"`
 	Action  *DeclAction    `json:"action,omitempty"`  // 点击后的动作
-	Variant string         `json:"variant,omitempty"` // button 的样式：default / primary / danger
+	Variant string         `json:"variant,omitempty"` // button 的样式：default / primary / ghost / danger / outline
 	Schema  map[string]any `json:"schema,omitempty"`  // form 的 JSON Schema
 	Submit  string         `json:"submit,omitempty"`  // form 的提交按钮文字
 }
@@ -81,20 +97,25 @@ type DeclNode struct {
 // DeclNodeTypes 合法的节点种类，以及每种用到的 JSON 字段：
 //
 //	stack     children, gap
-//	row       children, gap, align
+//	row       children, gap, align（start / center / end）
 //	text      text, tone, size, bold
 //	markdown  text
 //	badge     text, tone
-//	code      text, lang
+//	code      code, lang
 //	diff      diff
 //	list      items, ordered
 //	table     columns, rows
-//	keyValue  keyValue
+//	keyValue  rows（每行是 [键, 值]）
 //	progress  value（数字 0–1）, label
-//	button    text, action, variant
-//	link      text, action
+//	button    label, action, variant
+//	link      label, action
 //	form      schema, value（初始值，对象）, submit, action
 //	divider   （无字段）
+//
+// tone 的词表按节点不同，不要混用：
+//
+//	text   default / muted / danger / success
+//	badge  neutral / accent / success / danger / warning
 var DeclNodeTypes = []string{
 	"stack", "row",
 	"text", "markdown", "badge", "code", "diff",
