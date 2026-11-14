@@ -18,6 +18,8 @@ func group(cmd *exec.Cmd) {
 // 不用 taskkill /T：它是另一个进程，负载高时要几百毫秒到几秒，偶尔还会失败（退出码非零），
 // 失败时退回只杀主进程就把孙进程留下、占着管道（2026-11-07 CI 全量并行下 proc.TestKillTree 偶发超时）；
 // 快照 + TerminateProcess 是纯系统调用，快且不依赖外部程序。快照失败时才退回 taskkill。
+//
+// 语义与 Unix 侧一致：「进程已经退出」算成功（见 tree_other.go 的说明）。
 func killTree(cmd *exec.Cmd) error {
 	if cmd == nil || cmd.Process == nil {
 		return nil

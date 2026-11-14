@@ -60,3 +60,52 @@ func TestSupervisorStopNoRestart(t *testing.T) {
 		t.Fatal("Stop 后 Available 应为 false")
 	}
 }
+
+// TestSupervisorStopAfterCrash 进程**已经自行退出**之后再 Stop，必须返回 nil。
+//
+// 这是 2026-11-14 CI 失败（16 篇 D8）的回归测试，也是原 TestSupervisorStopNoRestart
+// 抓不稳的那个场景：crashArgv 是立即退出的命令，Stop 与进程退出在赛跑；
+// 原测试没等进程退出就 Stop，窗口只有微秒级，本地跑不出来、CI 高负载才撞上。
+// 这里显式先等进程崩掉再 Stop，把竞态变成确定性场景。
+func TestSupervisorStopAfterCrash(t *testing.T) {
+	var crashed atomic.Int32
+	s := &Supervisor{
+		Argv:       crashArgv(),
+		MaxCrashes: 100,
+		Backoff:    10 * time.Millisecond,
+		OnCrash:    func(error) { crashed.Add(1) },
+	}
+	if err := s.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	// 等它至少崩一次（进程确定已退出并被回收）。
+	deadline := time.Now().Add(30 * time.Second)
+	for crashed.Load() == 0 {
+		if time.Now().After(deadline) {
+			s.Stop()
+			t.Fatal("进程没有按预期崩溃")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	// 此时 s.cmd 指向的进程可能已退出、或已被重启成新进程，两种都不该让 Stop 报错。
+	if err := s.Stop(); err != nil {
+		t.Fatalf("进程已崩溃后再 Stop 应返回 nil，实际：%v（D8 回归）", err)
+	}
+	if s.Available() {
+		t.Fatal("Stop 后 Available 应为 false")
+	}
+}
+
+// TestSupervisorStopTwice 重复 Stop 必须幂等。
+func TestSupervisorStopTwice(t *testing.T) {
+	s := &Supervisor{Argv: crashArgv(), MaxCrashes: 100, Backoff: 10 * time.Millisecond}
+	if err := s.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Stop(); err != nil {
+		t.Fatalf("第一次 Stop：%v", err)
+	}
+	if err := s.Stop(); err != nil {
+		t.Fatalf("第二次 Stop 应返回 nil，实际：%v（D8 回归）", err)
+	}
+}
