@@ -8,7 +8,46 @@
 
 ---
 
-## [v0.3.2] - 2026-11-14
+## [v0.3.3] - 2026-11-14
+
+> 补丁：**公开面不变**（`testdata/api.txt` 与 v0.3.2 无差异）。
+> 修 `proc.Kill` 的跨平台语义不一致——一个真实缺陷，只在 Linux 上暴露。
+
+### 修复
+
+- **`proc.Kill` 对已经退出的进程不再报错，两个平台语义统一**。
+  Unix 侧 `killTree` 原先直接返回 `syscall.Kill` 的错误；进程已经自行退出并被回收时
+  是 `ESRCH`（`no such process`）。Windows 侧一直显式吞掉「主进程已退出」。
+  后果是同一份代码在 Linux 上会失败、Windows 上不会：
+  - `Supervisor.Stop()` 对已经崩溃的插件进程返回错误，调用方以为停止失败；
+  - `exec.CommandContext` 的 `Cancel` 回调（`SetTree`）在进程刚退出时触发同一问题。
+
+  现在 `killTree` 把 `ESRCH` 当成功返回 nil（`Kill` 的语义是「确保它结束」，
+  它已经结束就达成了目的）；`ESRCH` 之外的真实错误（如 `EPERM` 权限不足）照常返回。
+  Windows 侧补注释声明与 Unix 一致，防止将来被改回去。
+
+  **影响面已核**：`proc.Kill` 的其他调用方（`hooks` 的超时 `Cancel`、`mcp` 的 `close`）
+  都用 `_ =` 忽略返回值，改语义对它们无影响；只有 `Supervisor.Stop()` 会把错误交给上层。
+
+  **发现途径**：v0.3.2 发版时 CI 的 Go job 挂在 `TestSupervisorStopNoRestart`
+  （`supervisor_test.go:57: no such process`），重跑后绿才打的 tag。当时只记录了现象
+  （16 篇 D8），随后单独定位并修掉。触发窗口是微秒级——插件进程恰好 `Stop()` 取
+  `s.cmd` 之后、`Kill` 执行之前完成退出并被回收——本地 50 次探针 0 次复现，
+  CI 高负载才撞上。
+
+### 新增（测试）
+
+- `modules/internal/proc/kill_exited_test.go`：
+  - `TestKillAlreadyExited`：先 `Wait` 到进程结束再 `Kill`，必须返回 nil；
+  - `TestKillTwice`：连杀两次，第二次进程已不在仍须 nil。这条**不依赖 `ESRCH`
+    的具体错误值**，Windows 上命中「主进程已退出」、Unix 上命中 `ESRCH`，
+    两个平台都必须通过——正是本次要统一的语义。
+- `modules/extend/extproc/supervisor_test.go`：
+  - `TestSupervisorStopAfterCrash`：把原来「靠赛跑才暴露」的场景改成确定性场景
+    （显式等进程崩溃再 `Stop`）；
+  - `TestSupervisorStopTwice`：重复 `Stop` 幂等。
+
+---
 
 > 补丁：公开面**新增** 5 个符号（`wire.DeclNode` / `DeclAction` / `DeclNodeTypes` /
 > `DeclActionKinds` / `ValidateView`），无删除、无签名变更。修 `[[ui]]` 形状契约、
