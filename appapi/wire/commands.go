@@ -485,7 +485,7 @@ type PackageInfo struct {
 	UI []UISlot `json:"ui,omitempty"`
 }
 
-// UISlot 一条界面贡献：插槽位置 + 声明式视图（web/src/ui/declarative.tsx 的 DeclNode 或数组）+ 可选的数据来源。
+// UISlot 一条界面贡献：插槽位置 + 声明式视图（形状见 declarative.go 的 DeclNode 或数组）+ 可选的数据来源。
 // 视图里的 {{路径}} 用 data 命令的结果替换（{{session}} = 插槽所在会话）。
 type UISlot struct {
 	ID       string          `json:"id"`

@@ -56,6 +56,24 @@ var tsConsts = []struct {
 
 var rawType = reflect.TypeOf(json.RawMessage(nil))
 
+// tsFieldOverride 线上是 json.RawMessage、但语义已经定死的字段：TS 侧给出精确类型，
+// 而不是 unknown。键是「类型名.字段名」。
+//
+// 为什么不改 Go 侧的字段类型：`UISlot.View` 是 json.RawMessage 有实际原因——视图既可能是
+// 单个节点也可能是节点数组，且要原样透传给前端（占位替换在客户端做）。改成具体类型会
+// 改变公开面且丢掉透传语义。TS 侧收窄没有这些约束。
+var tsFieldOverride = map[string]string{
+	"UISlot.view": "DeclNode | DeclNode[]",
+}
+
+// tsFieldType 字段的 TS 类型：先查 override，再按 Go 类型推。
+func tsFieldType(owner string, f tsField, named map[reflect.Type]bool) string {
+	if t, ok := tsFieldOverride[owner+"."+f.name]; ok {
+		return t
+	}
+	return tsOf(f.typ, named)
+}
+
 // tsName 线上类型在 TS 里的名字：Error 改叫 ProtocolError，免得遮住 JS 内置的 Error。
 func tsName(t reflect.Type) string {
 	if t.Name() == "Error" {
@@ -85,10 +103,14 @@ func TypeScript() string {
 		t := reflect.TypeOf(v)
 		fmt.Fprintf(&b, "export interface %s {\n", tsName(t))
 		for _, f := range fields(t) {
-			fmt.Fprintf(&b, "  %s%s: %s;\n", f.name, map[bool]string{true: "?", false: ""}[f.optional], tsOf(f.typ, named))
+			fmt.Fprintf(&b, "  %s%s: %s;\n", f.name, map[bool]string{true: "?", false: ""}[f.optional], tsFieldType(tsName(t), f, named))
 		}
 		b.WriteString("}\n\n")
 	}
+	// 声明式视图的节点是**可辨识联合**（按 type 分派），不是普通 interface：
+	// 渲染器要能靠 type 收窄，所以单独生成，形状由 declKinds 表驱动（declarative.go）。
+	b.WriteString(declActionTS() + "\n\n")
+	b.WriteString(declNodeTS() + "\n")
 	return strings.TrimRight(b.String(), "\n") + "\n"
 }
 

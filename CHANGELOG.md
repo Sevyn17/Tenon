@@ -10,21 +10,41 @@
 
 ## [v0.3.2] - 2026-11-14
 
-> 补丁：Go 公开面不变（`testdata/api.txt` 无差异）。修 `[[ui]]` 形状契约与文档里的过时结论。
+> 补丁：公开面**新增** 5 个符号（`wire.DeclNode` / `DeclAction` / `DeclNodeTypes` /
+> `DeclActionKinds` / `ValidateView`），无删除、无签名变更。修 `[[ui]]` 形状契约、
+> 把它的定义收归一处、并补上协议边界校验。
 
 ### 修复
 
-- **`[[ui]]` 声明式视图契约的四处字段名与渲染器不一致**。`runtime/pkgs/declarative.go`
-  初版（`7c48b50`）是渲染器迁出之后凭描述转写的，写成了 `code.text`、`keyValue.keyValue`、
-  `button.text` / `link.text`；应用侧渲染器（Mortise `client/web/src/ui/declarative.tsx`）
-  实际读的是 `code`、`rows`、`label`。照契约写出的插件视图在应用里会渲染成**空代码块、
-  无文字的按钮**。现在按渲染器实现逐字段对齐，并在注释里写清三处「同一 JSON 字段两种语义」
-  （`label` / `rows` / `value`）。`badge` 的 tone 词表（`neutral/accent/success/danger/warning`）
-  与 `text` 的（`default/muted/danger/success`）也在契约里分开写明，此前只写了 text 那一套；
-  `button.variant` 补上 `ghost` / `outline`。
-  这类错误此前无法被发现：`UISlot.View` 是 `json.RawMessage`，框架只校验大小与顶层 `type`，
-  `DeclNode` 在框架里没有任何反序列化点。新增 `runtime/pkgs/declarative_test.go`
-  按「渲染器读什么」逐节点钉住 JSON 字段名（15 种节点 + 4 种动作），改错字段名测试即红。
+- **`[[ui]]` 声明式视图契约的四处字段名与渲染器不一致**。初版（`7c48b50`）是渲染器
+  迁出之后凭描述转写的，写成了 `code.text`、`keyValue.keyValue`、`button.text` /
+  `link.text`；应用侧渲染器（Mortise `client/web/src/ui/declarative.tsx`）实际读的是
+  `code`、`rows`、`label`。照契约写出的插件视图在应用里会渲染成**空代码块、无文字的按钮**。
+  这类错误此前无法被发现：`UISlot.View` 是 `json.RawMessage`，框架只校验大小与顶层
+  `type`，`DeclNode` 在框架里没有任何反序列化点。现在契约按渲染器实现逐字段对齐，
+  并写清三处「同一 JSON 字段两种语义」（`label` / `rows` / `value`）；
+  `badge` 的 tone 词表（`neutral/accent/success/danger/warning`）与 `text` 的
+  （`default/muted/danger/success`）分开写明；`button.variant` 补上 `ghost` / `outline`。
+
+### 变更（架构：契约收归一处，与框架既有做法一致）
+
+- **声明式视图的形状从 `runtime/pkgs` 移到 `appapi/wire/declarative.go`**。
+  原先 `pkgs` 里有一份 `DeclNode`，而框架里**所有**线上类型（`Entry`、`UISlot`……）
+  都由 `appapi/wire` 定义、经 `tsgen` 生成到 `web/src/wire.gen.ts`——视图是
+  `UISlot.View` 的载荷，属于线上类型，之前是唯一的例外。这个例外正是错误的来源：
+  `pkgs` 属 `runtime/`，依赖规则禁止它 import `appapi`，所以它只能**复制**一份形状，
+  而复制品没有任何手段与权威定义校验。
+  现在：
+  - 形状只在 `wire` 定义一处，一张 `declKinds` 表同时驱动**校验、TS 类型生成、文档**；
+  - `pkgs` 只做清单层校验（大小、顶层 `type`、id/slot、`data.cmd` 只读），不再知道节点形状；
+  - `runtime/pkgs/contract_ownership_test.go` 钉住「本包不得再定义这些类型」，
+    防止有人重新复制一份（变异验证：加回 `type DeclNode struct` 立刻红）。
+- **协议边界补上视图校验**：`adapters/plugins` 加载插件包时调 `wire.ValidateView`，
+  按 `declKinds` 检查必填字段、`action.kind`、递归子节点。未知 `type` **不报错**
+  （渲染器显示占位，前向兼容优先）。此前这类错误要等到界面上渲染成空白才被发现。
+- **TS 类型由同一张表生成**：`wire.gen.ts` 新增 `DeclNode` / `DeclAction` 可辨识联合，
+  `UISlot.view` 从 `unknown` 收窄为 `DeclNode | DeclNode[]`（Go 侧仍是 `json.RawMessage`：
+  视图可能是单节点或数组，且要原样透传给前端做占位替换）。
 
 ### 新增
 
@@ -32,6 +52,16 @@
   三条规则：`appapi` 与 `appapi/wire` 不得 import 外壳与装配层；非测试源码不得出现
   `cli` / `desktop` / `webhost` / `tui` / `gui` 字面量；不得读 `os.Args`。
   核心不知道自己在被谁用，这条线要靠测试守，不能靠自觉。
+- **`appapi/wire/declarative_test.go`**：契约护栏。表引用的字段必须真的在 `DeclNode` 上；
+  校验器按表工作（必填缺失报错、未知节点放行、历史错误写法要拒）；生成的 TS 与表一致。
+- **`runtime/pkgs/contract_ownership_test.go`**：界面契约只在 `appapi/wire` 定义一处。
+
+### 说明
+
+- `DeclNodeTypes()` / `DeclActionKinds()` 是函数不是 `var`：返回副本，调用方改不动契约。
+- 应用侧（Mortise `client/web`）因 L2 层不得 import 协议客户端，保留一份结构等价的
+  `DeclNode` 声明，并用**编译期双向可赋值断言**（`src/shell/declarative-conformance.ts`）
+  与生成的类型绑定：任一边漂移，`tsc` 立刻失败。
 
 ---
 

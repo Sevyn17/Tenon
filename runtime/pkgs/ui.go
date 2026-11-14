@@ -1,11 +1,16 @@
 package pkgs
 
-// 插件包的界面贡献（[[ui]] 段，计划/05 F10）：往前端插槽放声明式视图（形状见
-// declarative.go 的 DeclNode），不写前端代码。视图可以写在清单里（view，TOML 内联表）
-// 或单独的 JSON 文件（view_file，相对包目录）。
+// 插件包的界面贡献（[[ui]] 段，计划/05 F10）：往前端插槽放声明式视图，不写前端代码。
+// 视图可以写在清单里（view，TOML 内联表）或单独的 JSON 文件（view_file，相对包目录）。
 // data 可选：一条只读协议命令，结果用来替换视图里的 {{路径}} 占位（{{session}} 是插槽所在的会话）。
-// 本包只校验形状与大小；视图里认不认识的节点由前端判断（不认识的显示一行说明，不会让界面出错）。
+// 本包只校验清单层的东西：大小、顶层 type、id/slot、view 与 view_file 二选一、data.cmd 只读。
 // 渲染器不在框架：界面层属应用（如 Mortise 的 client/web/src/ui/declarative.tsx）。
+//
+// 节点形状（有哪些节点、每种要哪些字段）的**权威定义在 `appapi/wire/declarative.go`**
+// （`wire.DeclNode` / `wire.declKinds`），由协议边界校验（`wire.ValidateView`，
+// 在 adapters/plugins 加载包时调用），TS 类型由同一条链生成到 web/src/wire.gen.ts。
+// 本包不复制那份定义：runtime 不能 import appapi（deps_test），复制一份"看起来一样"
+// 的定义在 2026-11-14 已经错过一次（与渲染器四处字段名不一致，且无测试能发现）。
 //
 //	[[ui]]
 //	id = "deploy-status"            # 包内唯一

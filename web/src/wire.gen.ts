@@ -752,7 +752,7 @@ export interface UISlot {
   title?: string;
   order?: number;
   requires?: string;
-  view: unknown;
+  view: DeclNode | DeclNode[];
   data?: UIData;
 }
 
@@ -774,3 +774,26 @@ export interface ProtocolError {
   retry: boolean;
   details?: Record<string, unknown>;
 }
+
+export type DeclAction =
+  | { kind: "call"; cmd: string; args?: unknown }
+  | { kind: "openPanel"; panel: string; params?: unknown }
+  | { kind: "insert"; text: string }
+  | { kind: "respond"; interaction: string; response: unknown };
+
+export type DeclNode =
+  | { type: "stack"; children: DeclNode[]; gap?: number }
+  | { type: "row"; children: DeclNode[]; gap?: number; align?: string }
+  | { type: "text"; text: string; tone?: string; size?: string; bold?: boolean }
+  | { type: "markdown"; text: string }
+  | { type: "badge"; text: string; tone?: string }
+  | { type: "code"; code: string; lang?: string }
+  | { type: "diff"; diff: string }
+  | { type: "list"; items: DeclNode[]; ordered?: boolean }
+  | { type: "table"; columns: string[]; rows: (string | number)[][] }
+  | { type: "keyValue"; rows: [string, string][] }
+  | { type: "progress"; value: number; label?: string }
+  | { type: "button"; label: string; action: DeclAction; variant?: string }
+  | { type: "link"; label: string; action: DeclAction }
+  | { type: "form"; schema: Record<string, unknown>; submit: string; action: DeclAction; value?: Record<string, unknown> }
+  | { type: "divider" };

@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/Sevyn17/tenon/appapi/wire"
 	"github.com/Sevyn17/tenon/runtime/appid"
 	"github.com/Sevyn17/tenon/runtime/pkgs"
 )
@@ -75,6 +76,14 @@ func Discover(root, scope string) ([]*pkgs.Package, []string, error) {
 		p, err := pkgs.Parse(dir, scope)
 		if err != nil {
 			return nil, nil, err
+		}
+		// 视图的节点形状在协议边界校验（契约定义在 appapi/wire/declarative.go）。
+		// pkgs 属 runtime/，不能 import appapi，所以只能在这里做——这里也是唯一
+		// 把包交给应用的入口，拦在这里等于拦在源头。
+		for _, u := range p.UISlots() {
+			if err := wire.ValidateView(u.View); err != nil {
+				return nil, nil, fmt.Errorf("插件包 %s 的 [[ui]] %s：%v", dir, u.ID, err)
+			}
 		}
 		out = append(out, p)
 	}

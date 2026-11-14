@@ -318,6 +318,10 @@ github.com/Sevyn17/tenon/appapi/wire: const ConflictLeased untyped string
 github.com/Sevyn17/tenon/appapi/wire: const ConflictStale untyped string
 github.com/Sevyn17/tenon/appapi/wire: type CreateArgs struct{Session string; Definition string; ClientID string}
 github.com/Sevyn17/tenon/appapi/wire: type CursorRef struct{Cursor int64}
+github.com/Sevyn17/tenon/appapi/wire: type DeclAction struct{Kind string; Cmd string; Args map[string]any; Panel string; Params map[string]any; Text string; Interaction string; Response any}
+github.com/Sevyn17/tenon/appapi/wire: func DeclActionKinds() []string
+github.com/Sevyn17/tenon/appapi/wire: type DeclNode struct{Type string; Children []DeclNode; Gap int; Align string; Text string; Tone string; Size string; Bold bool; Code string; Lang string; Diff string; Items []DeclNode; Ordered bool; Columns []string; Rows [][]any; Value any; Label string; Action *DeclAction; Variant string; Schema map[string]any; Submit string}
+github.com/Sevyn17/tenon/appapi/wire: func DeclNodeTypes() []string
 github.com/Sevyn17/tenon/appapi/wire: func Durable(kind string) bool
 github.com/Sevyn17/tenon/appapi/wire: type Empty struct{}
 github.com/Sevyn17/tenon/appapi/wire: type EntriesArgs struct{Session string; From *int; To *int; Tail int}
@@ -471,6 +475,7 @@ github.com/Sevyn17/tenon/appapi/wire: type UISlot struct{ID string; Slot string;
 github.com/Sevyn17/tenon/appapi/wire: type UpdateArgs struct{Session string; Title *string; Pinned *bool}
 github.com/Sevyn17/tenon/appapi/wire: type Usage struct{Input uint64; Output uint64; CacheRead uint64; CacheWrite uint64; Source string}
 github.com/Sevyn17/tenon/appapi/wire: func ValidReasoning(s string) bool
+github.com/Sevyn17/tenon/appapi/wire: func ValidateView(raw []byte) error
 github.com/Sevyn17/tenon/appapi/wire: const Version untyped int
 github.com/Sevyn17/tenon/appapi/wire: type WorkspaceInfo struct{Path string; Name string; Trusted bool; Current bool; OpenedAt int64; Missing bool}
 github.com/Sevyn17/tenon/appapi/wire: type WorkspaceListResult struct{Items []WorkspaceInfo}

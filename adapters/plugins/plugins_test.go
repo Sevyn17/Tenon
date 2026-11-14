@@ -76,6 +76,54 @@ func TestBadManifestStopsLoad(t *testing.T) {
 	}
 }
 
+// TestLoadValidatesUIView 加载包时按 wire 契约校验 [[ui]] 视图（校验点在协议边界）。
+// pkgs 只查清单层（大小、顶层 type），节点必填字段与 action.kind 在这里拦。
+func TestLoadValidatesUIView(t *testing.T) {
+	cases := []struct {
+		name    string
+		view    string
+		wantErr string
+	}{
+		{"好视图", `[{"type":"text","text":"hi"},{"type":"code","code":"x"}]`, ""},
+		{"未知节点放行", `{"type":"future","x":1}`, ""},
+		{"code 缺 code", `{"type":"code"}`, "缺必填字段"},
+		{"code 用历史错误字段", `{"type":"code","text":"x"}`, "缺必填字段"},
+		{"keyValue 缺 rows", `{"type":"keyValue"}`, "缺必填字段"},
+		{"button 缺 label", `{"type":"button","action":{"kind":"insert","text":"x"}}`, "缺必填字段"},
+		{"action.kind 不合法", `{"type":"button","label":"点","action":{"kind":"bogus"}}`, "action.kind"},
+		{"嵌套节点缺必填", `{"type":"stack","children":[{"type":"text"}]}`, "缺必填字段"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			home := t.TempDir()
+			mk(t, filepath.Join(home, "plugins"), "uipkg", `name = "uipkg"
+
+[[ui]]
+id = "demo"
+slot = "conversation.card"
+view_file = "ui/view.json"
+`)
+			dir := filepath.Join(home, "plugins", "uipkg", "ui")
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(dir, "view.json"), []byte(c.view), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			_, _, err := Load(home, t.TempDir(), true)
+			if c.wantErr == "" {
+				if err != nil {
+					t.Fatalf("应通过却被拒：%v", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), c.wantErr) {
+				t.Fatalf("应报 %q，实际：%v", c.wantErr, err)
+			}
+		})
+	}
+}
+
 func TestScaffold(t *testing.T) {
 	root := t.TempDir()
 	dir, err := Scaffold(root, "my-pkg")
