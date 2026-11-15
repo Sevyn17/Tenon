@@ -35,6 +35,8 @@ type WorkspaceOptions struct {
 	OnSwitch func(api *appapi.App)
 	// RecentPath 最近列表文件；空 = 用户级目录（Home）的 workspaces.json（取不到用户目录时不记）。
 	RecentPath string
+	// Platform 平台账号（platform.* 命令）；nil = 不接平台。切换工作区后新 App 沿用同一个。
+	Platform appapi.Platform
 }
 
 // Workspace 一个已打开的工作区：运行时 + 应用接口层。
@@ -91,7 +93,7 @@ func (m *WorkspaceManager) start(dir string) (*Workspace, error) {
 	f.Workdir = dir
 	// 网页端、桌面端都没有终端可问：无信任记录的项目按不受信（同启动时）；界面走协议（UI 为 nil）。
 	rt, err := Start(StartOptions{Flags: f, SleepAfter: m.o.SleepAfter,
-		App: AppOptions{MaxSteps: f.MaxSteps, Upload: m.o.Upload, Workspaces: m}})
+		App: AppOptions{MaxSteps: f.MaxSteps, Upload: m.o.Upload, Workspaces: m, Platform: m.o.Platform}})
 	if err != nil {
 		return nil, err
 	}

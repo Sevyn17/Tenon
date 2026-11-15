@@ -237,7 +237,7 @@ github.com/Sevyn17/tenon/adapters: method (PermModes) SessionRules(id string) []
 github.com/Sevyn17/tenon/adapters: method (PermModes) Set(id string, mode string, confirm bool) (github.com/Sevyn17/tenon/appapi.ModeState, error)
 github.com/Sevyn17/tenon/adapters: method (PermModes) Show(id string, mode string) ([]github.com/Sevyn17/tenon/appapi.ModeItem, error)
 github.com/Sevyn17/tenon/adapters: func TitlerFrom(m *github.com/Sevyn17/tenon/runtime/assemble.Models) func(ctx context.Context, model string, input string) (string, error)
-github.com/Sevyn17/tenon/apphost: type AppOptions struct{MaxSteps int; Hooks func(*github.com/Sevyn17/tenon/runtime/assemble.SessionCx) github.com/Sevyn17/tenon/runtime/agent.Hooks; ModesWorkdir string; Upload bool; Workspaces github.com/Sevyn17/tenon/appapi.Workspaces}
+github.com/Sevyn17/tenon/apphost: type AppOptions struct{MaxSteps int; Hooks func(*github.com/Sevyn17/tenon/runtime/assemble.SessionCx) github.com/Sevyn17/tenon/runtime/agent.Hooks; ModesWorkdir string; Upload bool; Workspaces github.com/Sevyn17/tenon/appapi.Workspaces; Platform github.com/Sevyn17/tenon/appapi.Platform}
 github.com/Sevyn17/tenon/apphost: func ApproveMode(root string, mode string, widened string) error
 github.com/Sevyn17/tenon/apphost: type Assembled struct{Asm *github.com/Sevyn17/tenon/runtime/component.Assembly; Store github.com/Sevyn17/tenon/runtime/assemble.DBHandle; Models *github.com/Sevyn17/tenon/runtime/assemble.Models; Compact *github.com/Sevyn17/tenon/modules/context/compact-basic.Compactor; Defs github.com/Sevyn17/tenon/runtime/agentdef.Source}
 github.com/Sevyn17/tenon/apphost: type Built struct{API *github.com/Sevyn17/tenon/appapi.App; DB github.com/Sevyn17/tenon/runtime/store.Store; Model string; Perms *github.com/Sevyn17/tenon/modules/security/permission.Sessions; Builder *github.com/Sevyn17/tenon/runtime/assemble.Builder}
@@ -286,7 +286,7 @@ github.com/Sevyn17/tenon/apphost: method (WorkspaceManager) Close()
 github.com/Sevyn17/tenon/apphost: method (WorkspaceManager) Current() *Workspace
 github.com/Sevyn17/tenon/apphost: method (WorkspaceManager) List() []github.com/Sevyn17/tenon/appapi/wire.WorkspaceInfo
 github.com/Sevyn17/tenon/apphost: method (WorkspaceManager) Open(_ context.Context, path string) (github.com/Sevyn17/tenon/appapi/wire.WorkspaceInfo, error)
-github.com/Sevyn17/tenon/apphost: type WorkspaceOptions struct{Flags Flags; SleepAfter time.Duration; Upload bool; OnSwitch func(api *github.com/Sevyn17/tenon/appapi.App); RecentPath string}
+github.com/Sevyn17/tenon/apphost: type WorkspaceOptions struct{Flags Flags; SleepAfter time.Duration; Upload bool; OnSwitch func(api *github.com/Sevyn17/tenon/appapi.App); RecentPath string; Platform github.com/Sevyn17/tenon/appapi.Platform}
 github.com/Sevyn17/tenon/appapi/wire: type AccountEntitlements struct{Configured bool; Cached bool; Features map[string]bool; Limits map[string]int64; Aliases []string; TTL int; Offline int; Version int64}
 github.com/Sevyn17/tenon/appapi/wire: type AccountLoginArgs struct{Step string; DeviceCode string}
 github.com/Sevyn17/tenon/appapi/wire: type AccountLoginResult struct{Done bool; UserCode string; VerificationURI string; ExpiresIn int; Interval int; DeviceCode string; Pending bool; Status *AccountStatus}
