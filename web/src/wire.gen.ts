@@ -765,6 +765,44 @@ export interface PackagesListResult {
   packages: PackageInfo[];
 }
 
+export interface AccountStatus {
+  configured: boolean;
+  server_url?: string;
+  logged_in?: boolean;
+  tenant?: string;
+  subject?: string;
+  product?: string;
+  channel?: string;
+  version?: string;
+}
+
+export interface AccountLoginArgs {
+  step: string;
+  device_code?: string;
+}
+
+export interface AccountLoginResult {
+  done?: boolean;
+  user_code?: string;
+  verification_uri?: string;
+  expires_in?: number;
+  interval?: number;
+  device_code?: string;
+  pending?: boolean;
+  status?: AccountStatus;
+}
+
+export interface AccountEntitlements {
+  configured: boolean;
+  cached?: boolean;
+  features?: Record<string, boolean>;
+  limits?: Record<string, number>;
+  aliases?: string[];
+  ttl?: number;
+  offline_grace?: number;
+  version?: number;
+}
+
 export interface Empty {
 }
 

@@ -61,6 +61,8 @@ type Options struct {
 	Files Files
 	// Upload 传输层挂了 UploadHandler（HTTP 上传大附件）：hello 的能力清单带 upload。
 	Upload bool
+	// Platform 平台账号能力（platform.* 命令）；nil = 这个应用不接平台。
+	Platform Platform
 	// Cleaners 删除会话时依次调用的插件清理回调（on_session_delete 点位）；可空。
 	Cleaners []store.Cleaner
 }

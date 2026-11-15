@@ -1,4 +1,4 @@
-// protocol 2 的命令表（docs/01 - 设计文档/06 - 应用协议契约.md 10.4）。线上类型全部来自 wire.gen.ts（由 Go 生成，不手写）；
+﻿// protocol 2 的命令表（docs/01 - 设计文档/06 - 应用协议契约.md 10.4）。线上类型全部来自 wire.gen.ts（由 Go 生成，不手写）；
 // 这里只把命令名对到参数与结果类型。COMMANDS 由 Go 测试 transport/bind/bind_test.go（TestProtocolCommands）
 // 校验与 appapi.ConnCommands() 一致。
 
@@ -38,6 +38,10 @@ export const COMMANDS = [
   "workspace.list",
   "workspace.open",
   "models.list",
+  "platform.status",
+  "platform.login",
+  "platform.logout",
+  "platform.entitlements",
   "artifact.get",
   "artifact.put",
   "trace.explain",
@@ -80,6 +84,10 @@ export interface CommandMap {
   "workspace.list": [W.Empty, W.WorkspaceListResult];
   "workspace.open": [W.WorkspaceOpenArgs, W.WorkspaceOpenResult];
   "models.list": [W.Empty, W.ModelsListResult];
+  "platform.status": [W.Empty, W.AccountStatus];
+  "platform.login": [W.AccountLoginArgs, W.AccountLoginResult];
+  "platform.logout": [W.Empty, W.AccountStatus];
+  "platform.entitlements": [W.Empty, W.AccountEntitlements];
   "artifact.get": [W.ArtifactGetArgs, W.ArtifactGetResult];
   "artifact.put": [W.ArtifactPutArgs, W.ArtifactPutResult];
   "trace.explain": [W.TraceArgs, W.TraceResult];

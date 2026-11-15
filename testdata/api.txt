@@ -287,6 +287,10 @@ github.com/Sevyn17/tenon/apphost: method (WorkspaceManager) Current() *Workspace
 github.com/Sevyn17/tenon/apphost: method (WorkspaceManager) List() []github.com/Sevyn17/tenon/appapi/wire.WorkspaceInfo
 github.com/Sevyn17/tenon/apphost: method (WorkspaceManager) Open(_ context.Context, path string) (github.com/Sevyn17/tenon/appapi/wire.WorkspaceInfo, error)
 github.com/Sevyn17/tenon/apphost: type WorkspaceOptions struct{Flags Flags; SleepAfter time.Duration; Upload bool; OnSwitch func(api *github.com/Sevyn17/tenon/appapi.App); RecentPath string}
+github.com/Sevyn17/tenon/appapi/wire: type AccountEntitlements struct{Configured bool; Cached bool; Features map[string]bool; Limits map[string]int64; Aliases []string; TTL int; Offline int; Version int64}
+github.com/Sevyn17/tenon/appapi/wire: type AccountLoginArgs struct{Step string; DeviceCode string}
+github.com/Sevyn17/tenon/appapi/wire: type AccountLoginResult struct{Done bool; UserCode string; VerificationURI string; ExpiresIn int; Interval int; DeviceCode string; Pending bool; Status *AccountStatus}
+github.com/Sevyn17/tenon/appapi/wire: type AccountStatus struct{Configured bool; ServerURL string; LoggedIn bool; Tenant string; Subject string; Product string; Channel string; Version string}
 github.com/Sevyn17/tenon/appapi/wire: type Approval struct{Tool string; Args encoding/json.RawMessage; Reason string; SessionRules []string; Blocked []string}
 github.com/Sevyn17/tenon/appapi/wire: type ArtifactGetArgs struct{Session string; Ref string; Offset int; Length int}
 github.com/Sevyn17/tenon/appapi/wire: type ArtifactGetResult struct{MIME string; Size int; Text string; Base64 string}

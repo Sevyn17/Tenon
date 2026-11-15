@@ -507,3 +507,64 @@ type UIData struct {
 type PackagesListResult struct {
 	Packages []PackageInfo `json:"packages"`
 }
+
+// —— 平台账号（protocol 2 的可选能力；应用没接平台时这些命令返回空状态）——
+
+// AccountStatus platform.status 的结果。
+//
+// Configured=false 表示这个应用没接平台（没配 server 地址），
+// 此时其余字段全空，界面应隐藏登录入口而不是报错。
+type AccountStatus struct {
+	Configured bool   `json:"configured"`
+	ServerURL  string `json:"server_url,omitempty"`
+	LoggedIn   bool   `json:"logged_in,omitempty"`
+	Tenant     string `json:"tenant,omitempty"`
+	Subject    string `json:"subject,omitempty"`
+	// Product / Channel / Version 客户端自报的标识（登录时带给平台）。
+	Product string `json:"product,omitempty"`
+	Channel string `json:"channel,omitempty"`
+	Version string `json:"version,omitempty"`
+}
+
+// AccountLoginArgs platform.login 的参数。
+//
+// 设备码登录是两步：先 Start 拿 user_code 展示给用户，用户确认后 Poll 换令牌。
+// 界面按 step 推进，不用自己做状态机。
+type AccountLoginArgs struct {
+	// Step start / poll。start 返回 user_code 与验证地址；poll 换令牌。
+	Step string `json:"step"`
+	// DeviceCode 第二步要带（第一步返回的）。
+	DeviceCode string `json:"device_code,omitempty"`
+}
+
+// AccountLoginResult platform.login 的结果。
+type AccountLoginResult struct {
+	// Done 登录完成（仅 poll 成功时 true）。
+	Done bool `json:"done,omitempty"`
+	// UserCode / VerificationURI / ExpiresIn / Interval 仅 start 返回。
+	UserCode        string `json:"user_code,omitempty"`
+	VerificationURI string `json:"verification_uri,omitempty"`
+	ExpiresIn       int    `json:"expires_in,omitempty"`
+	Interval        int    `json:"interval,omitempty"`
+	// DeviceCode start 返回，poll 时带回。
+	DeviceCode string `json:"device_code,omitempty"`
+	// Pending 用户还没确认（poll 期间）。
+	Pending bool `json:"pending,omitempty"`
+	// Status 登录后的账号状态（poll 成功时填）。
+	Status *AccountStatus `json:"status,omitempty"`
+}
+
+// AccountEntitlements platform.entitlements 的结果：权益摘要给界面展示。
+type AccountEntitlements struct {
+	// Configured 没接平台时为 false。
+	Configured bool `json:"configured"`
+	// Cached 这次是从缓存拿的（离线降级）。
+	Cached bool `json:"cached,omitempty"`
+	// Features / Limits / Aliases 权益内容。
+	Features map[string]bool  `json:"features,omitempty"`
+	Limits   map[string]int64 `json:"limits,omitempty"`
+	Aliases  []string         `json:"aliases,omitempty"`
+	TTL      int              `json:"ttl,omitempty"`
+	Offline  int              `json:"offline_grace,omitempty"`
+	Version  int64            `json:"version,omitempty"`
+}
