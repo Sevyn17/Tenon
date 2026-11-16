@@ -108,15 +108,19 @@ var commands = map[string]handler{
 	"workspace.files":     bind((*App).WorkspaceFiles),
 	"models.list":         bind((*App).ModelsList),
 	// 平台账号（可选能力；应用没接平台时返回 Configured=false，不报错）
-	"platform.status":        bind((*App).PlatformStatus),
-	"platform.login":         bind((*App).PlatformLogin),
-	"platform.logout":        bind((*App).PlatformLogout),
-	"platform.entitlements":  bind((*App).PlatformEntitlements),
-	"platform.apikey.list":   bind((*App).PlatformAPIKeyList),
-	"platform.apikey.create": bind((*App).PlatformAPIKeyCreate),
-	"platform.apikey.revoke": bind((*App).PlatformAPIKeyRevoke),
-	"workspace.list":         bind((*App).WorkspaceList),
-	"workspace.open":         bind((*App).WorkspaceOpen),
+	"platform.status":          bind((*App).PlatformStatus),
+	"platform.login":           bind((*App).PlatformLogin),
+	"platform.logout":          bind((*App).PlatformLogout),
+	"platform.entitlements":    bind((*App).PlatformEntitlements),
+	"platform.apikey.list":     bind((*App).PlatformAPIKeyList),
+	"platform.apikey.create":   bind((*App).PlatformAPIKeyCreate),
+	"platform.apikey.revoke":   bind((*App).PlatformAPIKeyRevoke),
+	"platform.byok.list":       bind((*App).PlatformBYOKList),
+	"platform.byok.save":       bind((*App).PlatformBYOKSave),
+	"platform.byok.remove":     bind((*App).PlatformBYOKRemove),
+	"platform.byok.setDefault": bind((*App).PlatformBYOKSetDefault),
+	"workspace.list":           bind((*App).WorkspaceList),
+	"workspace.open":           bind((*App).WorkspaceOpen),
 }
 
 // Commands protocol 2 支持的命令名（排序后）。

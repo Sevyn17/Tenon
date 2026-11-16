@@ -45,6 +45,10 @@ export const COMMANDS = [
   "platform.apikey.list",
   "platform.apikey.create",
   "platform.apikey.revoke",
+  "platform.byok.list",
+  "platform.byok.save",
+  "platform.byok.remove",
+  "platform.byok.setDefault",
   "artifact.get",
   "artifact.put",
   "trace.explain",
@@ -94,6 +98,10 @@ export interface CommandMap {
   "platform.apikey.list": [W.Empty, W.APIKeyListResult];
   "platform.apikey.create": [W.APIKeyCreateArgs, W.APIKeyCreateResult];
   "platform.apikey.revoke": [W.APIKeyRevokeArgs, W.APIKeyRevokeResult];
+  "platform.byok.list": [W.Empty, W.BYOKListResult];
+  "platform.byok.save": [W.BYOKSaveArgs, W.BYOKSaveResult];
+  "platform.byok.remove": [W.BYOKRemoveArgs, W.BYOKRemoveResult];
+  "platform.byok.setDefault": [W.BYOKSetDefaultArgs, W.BYOKSetDefaultResult];
   "artifact.get": [W.ArtifactGetArgs, W.ArtifactGetResult];
   "artifact.put": [W.ArtifactPutArgs, W.ArtifactPutResult];
   "trace.explain": [W.TraceArgs, W.TraceResult];

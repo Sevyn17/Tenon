@@ -617,3 +617,54 @@ type APIKeyRevokeArgs struct {
 
 // APIKeyRevokeResult platform.apikey.revoke 的结果（空）。
 type APIKeyRevokeResult struct{}
+
+// BYOKProfile BYOK 配置的界面视图（**不含明文 key**）。
+type BYOKProfile struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Protocol  string `json:"protocol"`
+	BaseURL   string `json:"base_url"`
+	Model     string `json:"model"`
+	MaskedKey string `json:"masked_key"`
+	CreatedAt string `json:"created_at"`
+	IsDefault bool   `json:"is_default"`
+}
+
+// BYOKListResult platform.byok.list 的结果。
+type BYOKListResult struct {
+	Profiles []BYOKProfile `json:"profiles"`
+	// Path 配置文件路径（界面上显示，便于用户手工编辑）。
+	Path string `json:"path,omitempty"`
+}
+
+// BYOKSaveArgs platform.byok.save 的参数。
+//
+// **APIKey 只在写入时传**：读回来的是 MaskedKey。
+type BYOKSaveArgs struct {
+	Name     string `json:"name"`
+	Protocol string `json:"protocol"`
+	BaseURL  string `json:"base_url"`
+	Model    string `json:"model"`
+	APIKey   string `json:"api_key"`
+}
+
+// BYOKSaveResult platform.byok.save 的结果。
+type BYOKSaveResult struct {
+	Profile BYOKProfile `json:"profile"`
+}
+
+// BYOKRemoveArgs platform.byok.remove 的参数。
+type BYOKRemoveArgs struct {
+	ID string `json:"id"`
+}
+
+// BYOKRemoveResult platform.byok.remove 的结果（空）。
+type BYOKRemoveResult struct{}
+
+// BYOKSetDefaultArgs platform.byok.setDefault 的参数。
+type BYOKSetDefaultArgs struct {
+	ID string `json:"id"`
+}
+
+// BYOKSetDefaultResult platform.byok.setDefault 的结果（空）。
+type BYOKSetDefaultResult struct{}

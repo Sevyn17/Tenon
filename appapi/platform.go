@@ -37,6 +37,18 @@ type Platform interface {
 	APIKeyCreate(ctx context.Context, in wire.APIKeyCreateArgs) (wire.APIKeyCreateResult, error)
 	// APIKeyRevoke 撤销一把密钥（幂等）。
 	APIKeyRevoke(ctx context.Context, in wire.APIKeyRevokeArgs) (wire.APIKeyRevokeResult, error)
+
+	// BYOKList 列出用户自己的模型配置（脱敏，不含明文 key）。
+	//
+	// **为什么在框架接口里**：BYOK 是「用户自带厂商凭据」的通用形态，
+	// 与具体平台无关——纯本地用户也需要多套配置。
+	BYOKList(ctx context.Context) (wire.BYOKListResult, error)
+	// BYOKSave 新增或更新一套配置（同名视为更新）。
+	BYOKSave(ctx context.Context, in wire.BYOKSaveArgs) (wire.BYOKSaveResult, error)
+	// BYOKRemove 删除一套配置。
+	BYOKRemove(ctx context.Context, in wire.BYOKRemoveArgs) (wire.BYOKRemoveResult, error)
+	// BYOKSetDefault 设为默认。
+	BYOKSetDefault(ctx context.Context, in wire.BYOKSetDefaultArgs) (wire.BYOKSetDefaultResult, error)
 }
 
 // PlatformStatus 返回账号状态。
@@ -101,4 +113,38 @@ func (v *App) PlatformAPIKeyRevoke(ctx context.Context, in wire.APIKeyRevokeArgs
 		return wire.APIKeyRevokeResult{}, Errorf(CodeUnsupported, "这个应用没有接入平台账号")
 	}
 	return v.o.Platform.APIKeyRevoke(ctx, in)
+}
+
+// —— BYOK（docs/37 批次 B）——
+
+// PlatformBYOKList 列出 BYOK 配置。
+func (v *App) PlatformBYOKList(ctx context.Context, _ wire.Empty) (wire.BYOKListResult, error) {
+	if v.o.Platform == nil {
+		return wire.BYOKListResult{}, nil
+	}
+	return v.o.Platform.BYOKList(ctx)
+}
+
+// PlatformBYOKSave 保存 BYOK 配置。
+func (v *App) PlatformBYOKSave(ctx context.Context, in wire.BYOKSaveArgs) (wire.BYOKSaveResult, error) {
+	if v.o.Platform == nil {
+		return wire.BYOKSaveResult{}, Errorf(CodeUnsupported, "这个应用没有接入模型配置")
+	}
+	return v.o.Platform.BYOKSave(ctx, in)
+}
+
+// PlatformBYOKRemove 删除 BYOK 配置。
+func (v *App) PlatformBYOKRemove(ctx context.Context, in wire.BYOKRemoveArgs) (wire.BYOKRemoveResult, error) {
+	if v.o.Platform == nil {
+		return wire.BYOKRemoveResult{}, Errorf(CodeUnsupported, "这个应用没有接入模型配置")
+	}
+	return v.o.Platform.BYOKRemove(ctx, in)
+}
+
+// PlatformBYOKSetDefault 设为默认。
+func (v *App) PlatformBYOKSetDefault(ctx context.Context, in wire.BYOKSetDefaultArgs) (wire.BYOKSetDefaultResult, error) {
+	if v.o.Platform == nil {
+		return wire.BYOKSetDefaultResult{}, Errorf(CodeUnsupported, "这个应用没有接入模型配置")
+	}
+	return v.o.Platform.BYOKSetDefault(ctx, in)
 }

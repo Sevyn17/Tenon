@@ -841,6 +841,48 @@ export interface APIKeyRevokeArgs {
 export interface APIKeyRevokeResult {
 }
 
+export interface BYOKProfile {
+  id: string;
+  name: string;
+  protocol: string;
+  base_url: string;
+  model: string;
+  masked_key: string;
+  created_at: string;
+  is_default: boolean;
+}
+
+export interface BYOKListResult {
+  profiles: BYOKProfile[];
+  path?: string;
+}
+
+export interface BYOKSaveArgs {
+  name: string;
+  protocol: string;
+  base_url: string;
+  model: string;
+  api_key: string;
+}
+
+export interface BYOKSaveResult {
+  profile: BYOKProfile;
+}
+
+export interface BYOKRemoveArgs {
+  id: string;
+}
+
+export interface BYOKRemoveResult {
+}
+
+export interface BYOKSetDefaultArgs {
+  id: string;
+}
+
+export interface BYOKSetDefaultResult {
+}
+
 export interface Empty {
 }
 

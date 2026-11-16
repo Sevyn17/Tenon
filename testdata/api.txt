@@ -302,6 +302,14 @@ github.com/Sevyn17/tenon/appapi/wire: type ArtifactGetArgs struct{Session string
 github.com/Sevyn17/tenon/appapi/wire: type ArtifactGetResult struct{MIME string; Size int; Text string; Base64 string}
 github.com/Sevyn17/tenon/appapi/wire: type ArtifactPutArgs struct{Session string; MIME string; Base64 string}
 github.com/Sevyn17/tenon/appapi/wire: type ArtifactPutResult struct{Ref string}
+github.com/Sevyn17/tenon/appapi/wire: type BYOKListResult struct{Profiles []BYOKProfile; Path string}
+github.com/Sevyn17/tenon/appapi/wire: type BYOKProfile struct{ID string; Name string; Protocol string; BaseURL string; Model string; MaskedKey string; CreatedAt string; IsDefault bool}
+github.com/Sevyn17/tenon/appapi/wire: type BYOKRemoveArgs struct{ID string}
+github.com/Sevyn17/tenon/appapi/wire: type BYOKRemoveResult struct{}
+github.com/Sevyn17/tenon/appapi/wire: type BYOKSaveArgs struct{Name string; Protocol string; BaseURL string; Model string; APIKey string}
+github.com/Sevyn17/tenon/appapi/wire: type BYOKSaveResult struct{Profile BYOKProfile}
+github.com/Sevyn17/tenon/appapi/wire: type BYOKSetDefaultArgs struct{ID string}
+github.com/Sevyn17/tenon/appapi/wire: type BYOKSetDefaultResult struct{}
 github.com/Sevyn17/tenon/appapi/wire: type Choice struct{Text string; Options []ChoiceOption; Multiple bool; Min int; Max int}
 github.com/Sevyn17/tenon/appapi/wire: type ChoiceOption struct{ID string; Label string; Description string}
 github.com/Sevyn17/tenon/appapi/wire: const CodeBadRequest untyped string

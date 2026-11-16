@@ -30,7 +30,8 @@ var tsTypes = []any{
 	ModeSetResult{}, ModeShowArgs{}, ModeItem{}, ModeShowResult{}, ArtifactGetArgs{}, ArtifactGetResult{},
 	ArtifactPutArgs{}, ArtifactPutResult{}, TraceArgs{}, TraceResult{}, FilesArgs{}, FileInfo{}, FilesResult{}, ConfigField{}, PluginInfo{},
 	PluginPending{}, ProfileScope{}, PluginsListResult{}, PluginsSetArgs{}, PluginsSetResult{}, PackageInfo{}, UISlot{}, UIData{}, PackagesListResult{}, AccountStatus{}, AccountLoginArgs{}, AccountLoginResult{}, AccountEntitlements{},
-	APIKey{}, APIKeyListResult{}, APIKeyCreateArgs{}, APIKeyCreateResult{}, APIKeyRevokeArgs{}, APIKeyRevokeResult{}, Empty{}, Error{},
+	APIKey{}, APIKeyListResult{}, APIKeyCreateArgs{}, APIKeyCreateResult{}, APIKeyRevokeArgs{}, APIKeyRevokeResult{},
+	BYOKProfile{}, BYOKListResult{}, BYOKSaveArgs{}, BYOKSaveResult{}, BYOKRemoveArgs{}, BYOKRemoveResult{}, BYOKSetDefaultArgs{}, BYOKSetDefaultResult{}, Empty{}, Error{},
 }
 
 // tsConsts 要生成的常量组：名字 → 取值（顺序即输出顺序）。

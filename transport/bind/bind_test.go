@@ -170,7 +170,7 @@ func TestProtocolCommands(t *testing.T) {
 		t.Fatal("commands.ts 的 COMMANDS 没有结束")
 	}
 	var got []string
-	for _, m := range regexp.MustCompile(`"([a-z_.]+)"`).FindAllStringSubmatch(s[i:i+j], -1) {
+	for _, m := range regexp.MustCompile(`"([a-zA-Z_.]+)"`).FindAllStringSubmatch(s[i:i+j], -1) {
 		got = append(got, m[1])
 	}
 	slices.Sort(got)

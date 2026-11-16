@@ -67,6 +67,30 @@ func (f *fakePlatform) APIKeyCreate(_ context.Context, in wire.APIKeyCreateArgs)
 func (f *fakePlatform) APIKeyRevoke(context.Context, wire.APIKeyRevokeArgs) (wire.APIKeyRevokeResult, error) {
 	return wire.APIKeyRevokeResult{}, nil
 }
+
+// BYOK（2026-11-16 扩展 Platform 接口后补的 mock）。
+func (f *fakePlatform) BYOKList(context.Context) (wire.BYOKListResult, error) {
+	return wire.BYOKListResult{Profiles: []wire.BYOKProfile{
+		{ID: "b1", Name: "测试配置", Protocol: "openai",
+			BaseURL: "https://api.example.com/v1", Model: "gpt-x",
+			MaskedKey: "sk-t…7890", IsDefault: true},
+	}, Path: "/tmp/byok.json"}, nil
+}
+
+func (f *fakePlatform) BYOKSave(_ context.Context, in wire.BYOKSaveArgs) (wire.BYOKSaveResult, error) {
+	return wire.BYOKSaveResult{Profile: wire.BYOKProfile{
+		ID: "b2", Name: in.Name, Protocol: in.Protocol,
+		BaseURL: in.BaseURL, Model: in.Model, MaskedKey: "sk-n…1234",
+	}}, nil
+}
+
+func (f *fakePlatform) BYOKRemove(context.Context, wire.BYOKRemoveArgs) (wire.BYOKRemoveResult, error) {
+	return wire.BYOKRemoveResult{}, nil
+}
+
+func (f *fakePlatform) BYOKSetDefault(context.Context, wire.BYOKSetDefaultArgs) (wire.BYOKSetDefaultResult, error) {
+	return wire.BYOKSetDefaultResult{}, nil
+}
 func (f *fakePlatform) Status(context.Context) (wire.AccountStatus, error) {
 	f.statusCalls++
 	return wire.AccountStatus{Configured: true, ServerURL: "http://x", LoggedIn: true, Tenant: "t1"}, nil
