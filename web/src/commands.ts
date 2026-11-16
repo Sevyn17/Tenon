@@ -49,6 +49,7 @@ export const COMMANDS = [
   "platform.byok.save",
   "platform.byok.remove",
   "platform.byok.setDefault",
+  "platform.adminModels",
   "artifact.get",
   "artifact.put",
   "trace.explain",
@@ -102,6 +103,7 @@ export interface CommandMap {
   "platform.byok.save": [W.BYOKSaveArgs, W.BYOKSaveResult];
   "platform.byok.remove": [W.BYOKRemoveArgs, W.BYOKRemoveResult];
   "platform.byok.setDefault": [W.BYOKSetDefaultArgs, W.BYOKSetDefaultResult];
+  "platform.adminModels": [W.Empty, W.AdminModelsResult];
   "artifact.get": [W.ArtifactGetArgs, W.ArtifactGetResult];
   "artifact.put": [W.ArtifactPutArgs, W.ArtifactPutResult];
   "trace.explain": [W.TraceArgs, W.TraceResult];

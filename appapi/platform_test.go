@@ -91,6 +91,18 @@ func (f *fakePlatform) BYOKRemove(context.Context, wire.BYOKRemoveArgs) (wire.BY
 func (f *fakePlatform) BYOKSetDefault(context.Context, wire.BYOKSetDefaultArgs) (wire.BYOKSetDefaultResult, error) {
 	return wire.BYOKSetDefaultResult{}, nil
 }
+
+// AdminModels（2026-11-16 扩展 Platform 接口后补的 mock）。
+func (f *fakePlatform) AdminModels(context.Context) (wire.AdminModelsResult, error) {
+	return wire.AdminModelsResult{
+		Providers: []wire.AdminModelProvider{
+			{ID: "p1", Key: "fake", Name: "假厂商", Protocol: "openai-chat",
+				BaseURL: "http://x", Status: "active", KeyCount: 2},
+		},
+		Aliases:  []wire.AdminAlias{{Alias: "fake-chat", Kind: "chat", Visible: true, StepCount: 1}},
+		ReadOnly: true,
+	}, nil
+}
 func (f *fakePlatform) Status(context.Context) (wire.AccountStatus, error) {
 	f.statusCalls++
 	return wire.AccountStatus{Configured: true, ServerURL: "http://x", LoggedIn: true, Tenant: "t1"}, nil

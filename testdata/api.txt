@@ -297,6 +297,11 @@ github.com/Sevyn17/tenon/appapi/wire: type AccountEntitlements struct{Configured
 github.com/Sevyn17/tenon/appapi/wire: type AccountLoginArgs struct{Step string; DeviceCode string}
 github.com/Sevyn17/tenon/appapi/wire: type AccountLoginResult struct{Done bool; UserCode string; VerificationURI string; ExpiresIn int; Interval int; DeviceCode string; Pending bool; Status *AccountStatus}
 github.com/Sevyn17/tenon/appapi/wire: type AccountStatus struct{Configured bool; ServerURL string; LoggedIn bool; Tenant string; Subject string; Product string; Channel string; Version string}
+github.com/Sevyn17/tenon/appapi/wire: type AdminAlias struct{Alias string; Kind string; PlanID string; Visible bool; StepCount int}
+github.com/Sevyn17/tenon/appapi/wire: type AdminModel struct{ID string; ProviderKey string; VendorModel string; Kind string}
+github.com/Sevyn17/tenon/appapi/wire: type AdminModelProvider struct{ID string; Key string; Name string; Protocol string; BaseURL string; Status string; KeyCount int}
+github.com/Sevyn17/tenon/appapi/wire: type AdminModelsResult struct{Providers []AdminModelProvider; Models []AdminModel; Aliases []AdminAlias; RateCards []AdminRateCard; ReadOnly bool}
+github.com/Sevyn17/tenon/appapi/wire: type AdminRateCard struct{ID string; Version int64; Status string; Rates string}
 github.com/Sevyn17/tenon/appapi/wire: type Approval struct{Tool string; Args encoding/json.RawMessage; Reason string; SessionRules []string; Blocked []string}
 github.com/Sevyn17/tenon/appapi/wire: type ArtifactGetArgs struct{Session string; Ref string; Offset int; Length int}
 github.com/Sevyn17/tenon/appapi/wire: type ArtifactGetResult struct{MIME string; Size int; Text string; Base64 string}

@@ -119,6 +119,7 @@ var commands = map[string]handler{
 	"platform.byok.save":       bind((*App).PlatformBYOKSave),
 	"platform.byok.remove":     bind((*App).PlatformBYOKRemove),
 	"platform.byok.setDefault": bind((*App).PlatformBYOKSetDefault),
+	"platform.adminModels":     bind((*App).PlatformAdminModels),
 	"workspace.list":           bind((*App).WorkspaceList),
 	"workspace.open":           bind((*App).WorkspaceOpen),
 }

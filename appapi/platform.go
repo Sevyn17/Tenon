@@ -49,6 +49,12 @@ type Platform interface {
 	BYOKRemove(ctx context.Context, in wire.BYOKRemoveArgs) (wire.BYOKRemoveResult, error)
 	// BYOKSetDefault 设为默认。
 	BYOKSetDefault(ctx context.Context, in wire.BYOKSetDefaultArgs) (wire.BYOKSetDefaultResult, error)
+
+	// AdminModels 拉平台侧的模型目录（**只读**，需要 operator 令牌）。
+	//
+	// **为什么在框架接口里**：任何「有运营后台的产品」都需要「看平台侧配了什么」。
+	// 与 BYOK 的区别是受众与权限：BYOK 是用户自己的，这个是平台的。
+	AdminModels(ctx context.Context) (wire.AdminModelsResult, error)
 }
 
 // PlatformStatus 返回账号状态。
@@ -147,4 +153,12 @@ func (v *App) PlatformBYOKSetDefault(ctx context.Context, in wire.BYOKSetDefault
 		return wire.BYOKSetDefaultResult{}, Errorf(CodeUnsupported, "这个应用没有接入模型配置")
 	}
 	return v.o.Platform.BYOKSetDefault(ctx, in)
+}
+
+// PlatformAdminModels 拉模型目录（只读）。
+func (v *App) PlatformAdminModels(ctx context.Context, _ wire.Empty) (wire.AdminModelsResult, error) {
+	if v.o.Platform == nil {
+		return wire.AdminModelsResult{}, Errorf(CodeUnsupported, "这个应用没有接入模型目录")
+	}
+	return v.o.Platform.AdminModels(ctx)
 }

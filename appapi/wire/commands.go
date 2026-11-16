@@ -668,3 +668,48 @@ type BYOKSetDefaultArgs struct {
 
 // BYOKSetDefaultResult platform.byok.setDefault 的结果（空）。
 type BYOKSetDefaultResult struct{}
+
+// AdminModelProvider 平台侧厂商（只读）。
+type AdminModelProvider struct {
+	ID       string `json:"id"`
+	Key      string `json:"key"`
+	Name     string `json:"name"`
+	Protocol string `json:"protocol"`
+	BaseURL  string `json:"base_url"`
+	Status   string `json:"status"`
+	KeyCount int    `json:"key_count"`
+}
+
+// AdminModel 平台侧模型（只读）。
+type AdminModel struct {
+	ID          string `json:"id"`
+	ProviderKey string `json:"provider_key"`
+	VendorModel string `json:"vendor_model"`
+	Kind        string `json:"kind"`
+}
+
+// AdminAlias 平台侧别名（只读）。
+type AdminAlias struct {
+	Alias     string `json:"alias"`
+	Kind      string `json:"kind"`
+	PlanID    string `json:"plan_id"`
+	Visible   bool   `json:"visible"`
+	StepCount int    `json:"step_count"`
+}
+
+// AdminRateCard 价目卡（只读）。
+type AdminRateCard struct {
+	ID      string `json:"id"`
+	Version int64  `json:"version"`
+	Status  string `json:"status"`
+	Rates   string `json:"rates"`
+}
+
+// AdminModelsResult platform.adminModels 的结果。
+type AdminModelsResult struct {
+	Providers []AdminModelProvider `json:"providers"`
+	Models    []AdminModel         `json:"models"`
+	Aliases   []AdminAlias         `json:"aliases"`
+	RateCards []AdminRateCard      `json:"rate_cards"`
+	ReadOnly  bool                 `json:"read_only"`
+}

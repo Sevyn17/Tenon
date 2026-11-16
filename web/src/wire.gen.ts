@@ -883,6 +883,46 @@ export interface BYOKSetDefaultArgs {
 export interface BYOKSetDefaultResult {
 }
 
+export interface AdminModelProvider {
+  id: string;
+  key: string;
+  name: string;
+  protocol: string;
+  base_url: string;
+  status: string;
+  key_count: number;
+}
+
+export interface AdminModel {
+  id: string;
+  provider_key: string;
+  vendor_model: string;
+  kind: string;
+}
+
+export interface AdminAlias {
+  alias: string;
+  kind: string;
+  plan_id: string;
+  visible: boolean;
+  step_count: number;
+}
+
+export interface AdminRateCard {
+  id: string;
+  version: number;
+  status: string;
+  rates: string;
+}
+
+export interface AdminModelsResult {
+  providers: AdminModelProvider[];
+  models: AdminModel[];
+  aliases: AdminAlias[];
+  rate_cards: AdminRateCard[];
+  read_only: boolean;
+}
+
 export interface Empty {
 }
 
