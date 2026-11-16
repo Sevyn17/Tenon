@@ -52,6 +52,21 @@ type fakePlatform struct {
 	loginErr    error
 }
 
+// API Key（2026-11-16 扩展 Platform 接口后补的 mock）。
+func (f *fakePlatform) APIKeyList(context.Context) (wire.APIKeyListResult, error) {
+	return wire.APIKeyListResult{Configured: true, Keys: []wire.APIKey{
+		{ID: "k1", Name: "测试", Prefix: "sk-abcd1234", CreatedAt: "2026-11-16T00:00:00Z"},
+	}}, nil
+}
+
+func (f *fakePlatform) APIKeyCreate(_ context.Context, in wire.APIKeyCreateArgs) (wire.APIKeyCreateResult, error) {
+	return wire.APIKeyCreateResult{ID: "k2", Name: in.Name, Prefix: "sk-newkey12",
+		CreatedAt: "2026-11-16T00:00:00Z", Key: "sk-newkey123456"}, nil
+}
+
+func (f *fakePlatform) APIKeyRevoke(context.Context, wire.APIKeyRevokeArgs) (wire.APIKeyRevokeResult, error) {
+	return wire.APIKeyRevokeResult{}, nil
+}
 func (f *fakePlatform) Status(context.Context) (wire.AccountStatus, error) {
 	f.statusCalls++
 	return wire.AccountStatus{Configured: true, ServerURL: "http://x", LoggedIn: true, Tenant: "t1"}, nil

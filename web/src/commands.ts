@@ -1,4 +1,4 @@
-﻿// protocol 2 的命令表（docs/01 - 设计文档/06 - 应用协议契约.md 10.4）。线上类型全部来自 wire.gen.ts（由 Go 生成，不手写）；
+// protocol 2 的命令表（docs/01 - 设计文档/06 - 应用协议契约.md 10.4）。线上类型全部来自 wire.gen.ts（由 Go 生成，不手写）；
 // 这里只把命令名对到参数与结果类型。COMMANDS 由 Go 测试 transport/bind/bind_test.go（TestProtocolCommands）
 // 校验与 appapi.ConnCommands() 一致。
 
@@ -42,6 +42,9 @@ export const COMMANDS = [
   "platform.login",
   "platform.logout",
   "platform.entitlements",
+  "platform.apikey.list",
+  "platform.apikey.create",
+  "platform.apikey.revoke",
   "artifact.get",
   "artifact.put",
   "trace.explain",
@@ -88,6 +91,9 @@ export interface CommandMap {
   "platform.login": [W.AccountLoginArgs, W.AccountLoginResult];
   "platform.logout": [W.Empty, W.AccountStatus];
   "platform.entitlements": [W.Empty, W.AccountEntitlements];
+  "platform.apikey.list": [W.Empty, W.APIKeyListResult];
+  "platform.apikey.create": [W.APIKeyCreateArgs, W.APIKeyCreateResult];
+  "platform.apikey.revoke": [W.APIKeyRevokeArgs, W.APIKeyRevokeResult];
   "artifact.get": [W.ArtifactGetArgs, W.ArtifactGetResult];
   "artifact.put": [W.ArtifactPutArgs, W.ArtifactPutResult];
   "trace.explain": [W.TraceArgs, W.TraceResult];

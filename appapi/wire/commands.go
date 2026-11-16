@@ -568,3 +568,52 @@ type AccountEntitlements struct {
 	Offline  int              `json:"offline_grace,omitempty"`
 	Version  int64            `json:"version,omitempty"`
 }
+
+// APIKeyListResult platform.apikey.list 的结果。
+type APIKeyListResult struct {
+	Configured bool     `json:"configured"`
+	Keys       []APIKey `json:"keys"`
+}
+
+// APIKey 一把 API 密钥的元数据（**不含明文与哈希**）。
+type APIKey struct {
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	Prefix     string `json:"prefix"`
+	CreatedAt  string `json:"created_at"`
+	LastUsedAt string `json:"last_used_at,omitempty"`
+	ExpiresAt  string `json:"expires_at,omitempty"`
+	Revoked    bool   `json:"revoked"`
+}
+
+// APIKeyCreateArgs platform.apikey.create 的参数。
+type APIKeyCreateArgs struct {
+	Name string `json:"name"`
+	// ExpiresIn 秒；0 = 永久。
+	ExpiresIn int64 `json:"expires_in,omitempty"`
+}
+
+// APIKeyCreateResult platform.apikey.create 的结果。
+//
+// **Key 只在这个响应里出现一次**，之后只能看到 Prefix。
+//
+// 字段与 APIKey 平铺（不用嵌入）：TS 生成器会把嵌入变成嵌套对象，
+// 而实际 JSON 是展平的，前端拿不到 prefix。
+type APIKeyCreateResult struct {
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	Prefix     string `json:"prefix"`
+	CreatedAt  string `json:"created_at"`
+	LastUsedAt string `json:"last_used_at,omitempty"`
+	ExpiresAt  string `json:"expires_at,omitempty"`
+	Revoked    bool   `json:"revoked"`
+	Key        string `json:"key"`
+}
+
+// APIKeyRevokeArgs platform.apikey.revoke 的参数。
+type APIKeyRevokeArgs struct {
+	ID string `json:"id"`
+}
+
+// APIKeyRevokeResult platform.apikey.revoke 的结果（空）。
+type APIKeyRevokeResult struct{}

@@ -108,12 +108,15 @@ var commands = map[string]handler{
 	"workspace.files":     bind((*App).WorkspaceFiles),
 	"models.list":         bind((*App).ModelsList),
 	// 平台账号（可选能力；应用没接平台时返回 Configured=false，不报错）
-	"platform.status":       bind((*App).PlatformStatus),
-	"platform.login":        bind((*App).PlatformLogin),
-	"platform.logout":       bind((*App).PlatformLogout),
-	"platform.entitlements": bind((*App).PlatformEntitlements),
-	"workspace.list":        bind((*App).WorkspaceList),
-	"workspace.open":        bind((*App).WorkspaceOpen),
+	"platform.status":        bind((*App).PlatformStatus),
+	"platform.login":         bind((*App).PlatformLogin),
+	"platform.logout":        bind((*App).PlatformLogout),
+	"platform.entitlements":  bind((*App).PlatformEntitlements),
+	"platform.apikey.list":   bind((*App).PlatformAPIKeyList),
+	"platform.apikey.create": bind((*App).PlatformAPIKeyCreate),
+	"platform.apikey.revoke": bind((*App).PlatformAPIKeyRevoke),
+	"workspace.list":         bind((*App).WorkspaceList),
+	"workspace.open":         bind((*App).WorkspaceOpen),
 }
 
 // Commands protocol 2 支持的命令名（排序后）。
@@ -232,6 +235,12 @@ func (v *App) capabilities() []string {
 	}
 	if o.Workspaces != nil {
 		out = append(out, "workspaces")
+	}
+	// **platform 能力**（2026-11-16 补）：此前漏了这条，导致 `client.can("platform")`
+	// 恒为 false——所有依赖它的界面（账号页、API 密钥页）都显示「未接入平台」，
+	// 即使应用注入了 Platform 实现。
+	if o.Platform != nil {
+		out = append(out, "platform")
 	}
 	if o.Followups != nil {
 		out = append(out, "followups")

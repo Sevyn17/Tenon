@@ -803,6 +803,44 @@ export interface AccountEntitlements {
   version?: number;
 }
 
+export interface APIKey {
+  id: string;
+  name: string;
+  prefix: string;
+  created_at: string;
+  last_used_at?: string;
+  expires_at?: string;
+  revoked: boolean;
+}
+
+export interface APIKeyListResult {
+  configured: boolean;
+  keys: APIKey[];
+}
+
+export interface APIKeyCreateArgs {
+  name: string;
+  expires_in?: number;
+}
+
+export interface APIKeyCreateResult {
+  id: string;
+  name: string;
+  prefix: string;
+  created_at: string;
+  last_used_at?: string;
+  expires_at?: string;
+  revoked: boolean;
+  key: string;
+}
+
+export interface APIKeyRevokeArgs {
+  id: string;
+}
+
+export interface APIKeyRevokeResult {
+}
+
 export interface Empty {
 }
 

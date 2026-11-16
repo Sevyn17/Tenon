@@ -27,6 +27,16 @@ type Platform interface {
 	Logout(ctx context.Context) (wire.AccountStatus, error)
 	// Entitlements 取权益摘要（离线时应用可返回缓存并置 Cached）。
 	Entitlements(ctx context.Context) (wire.AccountEntitlements, error)
+
+	// APIKeyList 列出当前账号的 API 密钥（不含明文）。
+	//
+	// **为什么在框架接口里**：任何接平台的产品都需要「用户能生成凭据给脚本用」。
+	// 这是平台能力的通用形态，不依赖具体平台。
+	APIKeyList(ctx context.Context) (wire.APIKeyListResult, error)
+	// APIKeyCreate 签发一把新密钥（明文只返回一次）。
+	APIKeyCreate(ctx context.Context, in wire.APIKeyCreateArgs) (wire.APIKeyCreateResult, error)
+	// APIKeyRevoke 撤销一把密钥（幂等）。
+	APIKeyRevoke(ctx context.Context, in wire.APIKeyRevokeArgs) (wire.APIKeyRevokeResult, error)
 }
 
 // PlatformStatus 返回账号状态。
@@ -67,4 +77,28 @@ func (v *App) PlatformEntitlements(ctx context.Context, _ wire.Empty) (wire.Acco
 		return wire.AccountEntitlements{Configured: false}, nil
 	}
 	return v.o.Platform.Entitlements(ctx)
+}
+
+// PlatformAPIKeyList 列出 API 密钥。
+func (v *App) PlatformAPIKeyList(ctx context.Context, _ wire.Empty) (wire.APIKeyListResult, error) {
+	if v.o.Platform == nil {
+		return wire.APIKeyListResult{Configured: false}, nil
+	}
+	return v.o.Platform.APIKeyList(ctx)
+}
+
+// PlatformAPIKeyCreate 签发 API 密钥。
+func (v *App) PlatformAPIKeyCreate(ctx context.Context, in wire.APIKeyCreateArgs) (wire.APIKeyCreateResult, error) {
+	if v.o.Platform == nil {
+		return wire.APIKeyCreateResult{}, Errorf(CodeUnsupported, "这个应用没有接入平台账号")
+	}
+	return v.o.Platform.APIKeyCreate(ctx, in)
+}
+
+// PlatformAPIKeyRevoke 撤销 API 密钥。
+func (v *App) PlatformAPIKeyRevoke(ctx context.Context, in wire.APIKeyRevokeArgs) (wire.APIKeyRevokeResult, error) {
+	if v.o.Platform == nil {
+		return wire.APIKeyRevokeResult{}, Errorf(CodeUnsupported, "这个应用没有接入平台账号")
+	}
+	return v.o.Platform.APIKeyRevoke(ctx, in)
 }
