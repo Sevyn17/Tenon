@@ -50,6 +50,13 @@ type Platform interface {
 	// BYOKSetDefault 设为默认。
 	BYOKSetDefault(ctx context.Context, in wire.BYOKSetDefaultArgs) (wire.BYOKSetDefaultResult, error)
 
+	// PasswordRegister 用邮箱 + 密码注册（并自动登录）。
+	//
+	// **与设备码登录并存**：设备码适合首次（没有账号），密码适合日常。
+	PasswordRegister(ctx context.Context, in wire.PasswordAuthArgs) (wire.AccountStatus, error)
+	// PasswordLogin 用邮箱 + 密码登录。
+	PasswordLogin(ctx context.Context, in wire.PasswordAuthArgs) (wire.AccountStatus, error)
+
 	// AdminModels 拉平台侧的模型目录（**只读**，需要 operator 令牌）。
 	//
 	// **为什么在框架接口里**：任何「有运营后台的产品」都需要「看平台侧配了什么」。
@@ -161,4 +168,20 @@ func (v *App) PlatformAdminModels(ctx context.Context, _ wire.Empty) (wire.Admin
 		return wire.AdminModelsResult{}, Errorf(CodeUnsupported, "这个应用没有接入模型目录")
 	}
 	return v.o.Platform.AdminModels(ctx)
+}
+
+// PlatformPasswordRegister 邮箱 + 密码注册。
+func (v *App) PlatformPasswordRegister(ctx context.Context, in wire.PasswordAuthArgs) (wire.AccountStatus, error) {
+	if v.o.Platform == nil {
+		return wire.AccountStatus{}, Errorf(CodeUnsupported, "这个应用没有接入平台账号")
+	}
+	return v.o.Platform.PasswordRegister(ctx, in)
+}
+
+// PlatformPasswordLogin 邮箱 + 密码登录。
+func (v *App) PlatformPasswordLogin(ctx context.Context, in wire.PasswordAuthArgs) (wire.AccountStatus, error) {
+	if v.o.Platform == nil {
+		return wire.AccountStatus{}, Errorf(CodeUnsupported, "这个应用没有接入平台账号")
+	}
+	return v.o.Platform.PasswordLogin(ctx, in)
 }

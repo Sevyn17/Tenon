@@ -923,6 +923,12 @@ export interface AdminModelsResult {
   read_only: boolean;
 }
 
+export interface PasswordAuthArgs {
+  email: string;
+  password: string;
+  name?: string;
+}
+
 export interface Empty {
 }
 

@@ -103,6 +103,15 @@ func (f *fakePlatform) AdminModels(context.Context) (wire.AdminModelsResult, err
 		ReadOnly: true,
 	}, nil
 }
+
+// PasswordAuth（2026-11-16 扩展 Platform 接口后补的 mock）。
+func (f *fakePlatform) PasswordRegister(_ context.Context, in wire.PasswordAuthArgs) (wire.AccountStatus, error) {
+	return wire.AccountStatus{Configured: true, ServerURL: "http://x", LoggedIn: true, Tenant: "t-new"}, nil
+}
+
+func (f *fakePlatform) PasswordLogin(_ context.Context, in wire.PasswordAuthArgs) (wire.AccountStatus, error) {
+	return wire.AccountStatus{Configured: true, ServerURL: "http://x", LoggedIn: true, Tenant: "t1"}, nil
+}
 func (f *fakePlatform) Status(context.Context) (wire.AccountStatus, error) {
 	f.statusCalls++
 	return wire.AccountStatus{Configured: true, ServerURL: "http://x", LoggedIn: true, Tenant: "t1"}, nil

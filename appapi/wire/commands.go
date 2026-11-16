@@ -713,3 +713,11 @@ type AdminModelsResult struct {
 	RateCards []AdminRateCard      `json:"rate_cards"`
 	ReadOnly  bool                 `json:"read_only"`
 }
+
+// PasswordAuthArgs platform.passwordRegister / platform.passwordLogin 的参数。
+type PasswordAuthArgs struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+	// Name 只在注册时用（可选）。
+	Name string `json:"name,omitempty"`
+}
