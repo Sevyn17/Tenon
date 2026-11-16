@@ -437,6 +437,7 @@ github.com/Sevyn17/tenon/appapi/wire: const OutcomeExpired untyped string
 github.com/Sevyn17/tenon/appapi/wire: const OutcomeVoided untyped string
 github.com/Sevyn17/tenon/appapi/wire: type PackageInfo struct{Name string; Version string; Description string; Scope string; Source string; Contents string; UI []UISlot}
 github.com/Sevyn17/tenon/appapi/wire: type PackagesListResult struct{Packages []PackageInfo}
+github.com/Sevyn17/tenon/appapi/wire: type PasswordAuthArgs struct{Email string; Password string; Name string}
 github.com/Sevyn17/tenon/appapi/wire: type Part struct{Kind string; Text string; Media *MediaRef; Data any; Schema string}
 github.com/Sevyn17/tenon/appapi/wire: type PluginInfo struct{Name string; On bool; Default bool; Source string; Effects []string; Schema []ConfigField; Config map[string]any; Mandatory bool; Pending *PluginPending}
 github.com/Sevyn17/tenon/appapi/wire: type PluginPending struct{On bool; Config map[string]any}
