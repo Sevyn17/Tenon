@@ -137,6 +137,10 @@ func (cx *Registrar) Plugin() string { return cx.plugin }
 // Config 已解码的本插件配置（Meta.Config 的同类型指针）；无配置为 nil。
 func (cx *Registrar) Config() any { return cx.config }
 
+// ConfigSource 本插件某个配置键的值从哪来："profile" = 写过（profile、插件包或应用的覆盖），
+// "default" = 用的 default 标签，"" = 零值。插件据此区分「用户显式写了缺省值」和「没写」。
+func (cx *Registrar) ConfigSource(key string) string { return cx.asm.sources[cx.plugin][key] }
+
 // AgentConfig 登记本组件的使用配置原型（06 6.2）：零值结构体指针，字段用 toml 标签。
 // 装配结束后由框架按定义里的 [use.<组件>] 与租户/用户层算出每个会话的值（06 6.3）。
 func (cx *Registrar) AgentConfig(proto any) error {

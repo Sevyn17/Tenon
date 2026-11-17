@@ -100,16 +100,34 @@ func (c *Catalog) Resolve(alias string) (Plan, error) {
 	if _, ok := c.models[alias]; ok {
 		return Plan{{Model: alias}}, nil
 	}
-	var hit []string
-	for k, m := range c.models {
-		if m.v.Name == alias || strings.HasSuffix(k, "/"+alias) {
-			hit = append(hit, k)
-		}
-	}
-	if len(hit) == 1 {
-		return Plan{{Model: hit[0]}}, nil
+	if k, unique := c.bare(alias); unique {
+		return Plan{{Model: k}}, nil
 	}
 	return nil, ErrUnknownAlias{alias}
+}
+
+// bare 裸模型名 → 目录键。命中多个时取层级最低的（内置目录胜过插件、用户层同名的模型）：裸名指大家熟知的
+// 那个模型，插件或用户加的同名模型要写全 provider/model（客户端改进 M3：BYOK、平台网关常有与内置同名的模型，
+// 否则 deepseek-chat 这类缺省名一配 BYOK 就解析不了，或被同名的网关模型悄悄抢走）。
+// unique = 最低层只有一个命中；否则 k 是最低层里键最小的（Lookup 用，结果确定），Resolve 仍按未知处理。
+// 调用方持读锁。
+func (c *Catalog) bare(name string) (k string, unique bool) {
+	low, n := -1, 0
+	for key, m := range c.models {
+		if m.v.Name != name && !strings.HasSuffix(key, "/"+name) {
+			continue
+		}
+		switch {
+		case low < 0 || m.layer < low:
+			low, k, n = m.layer, key, 1
+		case m.layer == low:
+			n++
+			if key < k {
+				k = key
+			}
+		}
+	}
+	return k, n == 1
 }
 
 // Lookup 计划项 → 模型 + 提供方。
@@ -118,11 +136,8 @@ func (c *Catalog) Lookup(ref string) (Model, Provider, error) {
 	defer c.mu.RUnlock()
 	key := ref
 	if _, ok := c.models[key]; !ok {
-		for k, m := range c.models {
-			if m.v.Name == ref || strings.HasSuffix(k, "/"+ref) {
-				key = k
-				break
-			}
+		if k, _ := c.bare(ref); k != "" {
+			key = k
 		}
 	}
 	m, ok := c.models[key]
@@ -171,6 +186,7 @@ type Entry struct {
 	Alias         bool
 	Provider      string // 别名：计划第一项的提供方
 	Name          string // 厂商模型名
+	Label         string // 给人看的名字（Model.Label；别名取计划第一项的）；空 = 界面用 ID
 	ContextWindow int
 	Images        bool
 	Reasoning     bool
@@ -181,7 +197,7 @@ func (c *Catalog) Entries() []Entry {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	entry := func(id string, m Model, alias bool) Entry {
-		e := Entry{ID: id, Alias: alias, Provider: m.Provider, Name: m.Name, ContextWindow: m.ContextWindow}
+		e := Entry{ID: id, Alias: alias, Provider: m.Provider, Name: m.Name, Label: m.Label, ContextWindow: m.ContextWindow}
 		if e.Name == "" {
 			if _, n, ok := strings.Cut(id, "/"); ok && !alias {
 				e.Name = n
@@ -207,6 +223,14 @@ func (c *Catalog) Entries() []Entry {
 	sort.Slice(al, func(i, j int) bool { return al[i].ID < al[j].ID })
 	sort.Slice(ms, func(i, j int) bool { return ms[i].ID < ms[j].ID })
 	return append(al, ms...)
+}
+
+// Provider 按名取提供方（不存在返回零值与 false）。
+func (c *Catalog) Provider(name string) (Provider, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	p, ok := c.providers[name]
+	return p.v, ok
 }
 
 // ProviderKey 提供方的凭证引用（不存在返回空串与 false）。

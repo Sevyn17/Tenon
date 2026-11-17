@@ -124,6 +124,7 @@ var commands = map[string]handler{
 	"platform.passwordLogin":    bind((*App).PlatformPasswordLogin),
 	"workspace.list":            bind((*App).WorkspaceList),
 	"workspace.open":            bind((*App).WorkspaceOpen),
+	"workspace.reload":          bind((*App).WorkspaceReload),
 }
 
 // Commands protocol 2 支持的命令名（排序后）。
@@ -242,6 +243,10 @@ func (v *App) capabilities() []string {
 	}
 	if o.Workspaces != nil {
 		out = append(out, "workspaces")
+		// reload（客户端改进 M3）：工作区管理器能在当前目录上重建运行时（workspace.reload）。CLI 没有管理器，不报。
+		if _, ok := o.Workspaces.(Reloader); ok {
+			out = append(out, "reload")
+		}
 	}
 	// **platform 能力**（2026-11-16 补）：此前漏了这条，导致 `client.can("platform")`
 	// 恒为 false——所有依赖它的界面（账号页、API 密钥页）都显示「未接入平台」，
@@ -1203,21 +1208,84 @@ func (v *App) WorkspaceOpen(ctx context.Context, in wire.WorkspaceOpenArgs) (wir
 
 // runningSessions 正在跑回合的会话数（含子会话）。
 func (v *App) runningSessions(ctx context.Context) (int, error) {
-	n := 0
+	ids, err := v.runningIDs(ctx)
+	return len(ids), err
+}
+
+// runningIDs 正在跑回合的会话 id（含子会话）。
+func (v *App) runningIDs(ctx context.Context) ([]string, error) {
+	var out []string
 	for before := int64(0); ; {
 		rows, err := v.o.DB.ListSessionsIn(ctx, v.o.Host.Workspace, before, 200, false)
 		if err != nil {
-			return 0, err
+			return nil, err
 		}
 		for _, r := range rows {
 			if wireRun(r.RunState) == wire.RunRunning {
-				n++
+				out = append(out, r.ID)
 			}
 		}
 		if len(rows) < 200 {
-			return n, nil
+			return out, nil
 		}
 		before = rows[len(rows)-1].UpdatedAt
+	}
+}
+
+// reloadCancelWait workspace.reload {force} 取消回合后最多等多久让它们停下（等不到也照样重建：回合中断，
+// 下次打开时按恢复机制处理）。测试调小。
+var reloadCancelWait = 5 * time.Second
+
+// WorkspaceReload 在当前目录上重建运行时（客户端改进 M3：改 BYOK、默认模型、登录退出、插件开关后生效，不用重启进程）。
+// 有回合在跑时返回 not_idle（details.sessions 列出会话）；force 时先取消这些回合再重建。新配置起不来、回到了原来的
+// 配置时返回 invalid，details.reverted = true（运行时照常可用）。成功后旧连接随后断开，客户端重连并重新 hello。
+func (v *App) WorkspaceReload(ctx context.Context, in wire.WorkspaceReloadArgs) (wire.WorkspaceReloadResult, error) {
+	rl, ok := v.o.Workspaces.(Reloader)
+	if v.o.Workspaces == nil || !ok {
+		return wire.WorkspaceReloadResult{}, Errorf(wire.CodeUnsupported, "这个应用不支持重建运行时（命令行：退出后重新运行）")
+	}
+	ids, err := v.runningIDs(ctx)
+	if err != nil {
+		return wire.WorkspaceReloadResult{}, err
+	}
+	if len(ids) > 0 {
+		if !in.Force {
+			e := Errorf(wire.CodeNotIdle, "还有 %d 个会话正在运行：重建会中断它们（带 force 先取消再重建）", len(ids))
+			e.Details = map[string]any{"running": len(ids), "sessions": ids}
+			return wire.WorkspaceReloadResult{}, e
+		}
+		v.cancelAll(ctx, ids)
+	}
+	ws, err := rl.Reload(ctx)
+	if err != nil {
+		var rv *ReloadReverted
+		if errors.As(err, &rv) {
+			e := Errorf(wire.CodeInvalid, "%s", rv.Error())
+			e.Details = map[string]any{"reverted": true}
+			return wire.WorkspaceReloadResult{}, e
+		}
+		return wire.WorkspaceReloadResult{}, Errorf(wire.CodeInternal, "重建运行时失败：%v", err)
+	}
+	return wire.WorkspaceReloadResult{Workspace: ws}, nil
+}
+
+// cancelAll 取消这些会话的回合，最多等 reloadCancelWait 让它们都停下。
+func (v *App) cancelAll(ctx context.Context, ids []string) {
+	for _, id := range ids {
+		if hd, ok := v.o.Host.Get(id); ok {
+			go func() { _ = hd.Do(host.Command{Kind: host.Cancel}) }() // 投递不阻塞：回合可能正等着人确认
+		}
+	}
+	deadline := time.Now().Add(reloadCancelWait)
+	for time.Now().Before(deadline) {
+		if n, err := v.runningSessions(ctx); err != nil || n == 0 {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(50 * time.Millisecond):
+		}
 	}
 }
 

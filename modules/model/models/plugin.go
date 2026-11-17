@@ -1,4 +1,12 @@
 // Package models 模型插件 models（标准模块）：模型目录 + modelhub 服务。协议适配器由 adapter-* 插件向 Hub 登记。
+//
+// 缺省模型怎么定（客户端改进 M3，配置T3）：
+//   - 没有组件填 slot:model_sources（框架自己的装配都是这样）：和以前完全一样，Setup 里定下 cfg.Model
+//     （缺省 deepseek-chat），解析不了装配失败。
+//   - 填了：插槽给的插件层目录（如 BYOK）在 Setup 里合入目录；缺省模型挪到 Start 再定——这时所有组件都
+//     Setup 完了，别的组件（如平台网关）注册的模型也在目录里。顺序：配置里写了 model / base_url → 用它；
+//     没写 → 插槽的 DefaultModel；再空 → deepseek-chat。配置写的模型解析不了时不让装配失败，回落到后两项并
+//     在 Models.Notice 里说明（桌面端起不来比用错模型更糟）。
 package models
 
 import (
@@ -13,6 +21,9 @@ import (
 	"github.com/Sevyn17/tenon/runtime/modelhub"
 )
 
+// DefaultModel 内置缺省模型（Config.Model 的 default 标签与它一致）。
+const DefaultModel = "deepseek-chat"
+
 // Config models 插件配置。
 type Config struct {
 	Model   string `cfg:"model" default:"deepseek-chat" title:"模型或别名"`
@@ -25,18 +36,27 @@ type Config struct {
 	Discover bool   `cfg:"discover_ollama" title:"发现本地 Ollama 模型" widget:"switch"`
 }
 
-type modelsPlugin struct{}
-
-func init() { component.Register("models", func() component.Component { return modelsPlugin{} }) }
-
-func (modelsPlugin) Meta() component.Meta {
-	return component.Meta{Name: "models", Version: "0.1.0", Default: true, Effects: []string{component.EffectNetwork}, Config: &Config{},
-		Requires: []string{assemble.SlotSecrets}, Provides: []string{assemble.ServiceModelhub}}
+// modelsPlugin 每次装配一个新实例（注册表的工厂函数）：Setup 记下的状态只给本次装配的 Start 用。
+type modelsPlugin struct {
+	src      assemble.ModelSources // 填了 slot:model_sources 时非空
+	models   *assemble.Models
+	explicit string // 配置里写明的模型（含 cli/ 前缀）；"" = 没写
 }
 
-func (modelsPlugin) Setup(cx *component.Registrar) error {
+func init() { component.Register("models", func() component.Component { return &modelsPlugin{} }) }
+
+func (*modelsPlugin) Meta() component.Meta {
+	return component.Meta{Name: "models", Version: "0.1.0", Default: true, Effects: []string{component.EffectNetwork}, Config: &Config{},
+		Requires: []string{assemble.SlotSecrets, component.Optional + assemble.SlotModelSources}, Provides: []string{assemble.ServiceModelhub}}
+}
+
+func (p *modelsPlugin) Setup(cx *component.Registrar) error {
 	cfg := cx.Config().(*Config)
 	sec, err := component.Use[assemble.Secrets](cx, assemble.SlotSecrets)
+	if err != nil {
+		return err
+	}
+	src, hasSrc, err := component.UseOptional[assemble.ModelSources](cx, assemble.SlotModelSources)
 	if err != nil {
 		return err
 	}
@@ -47,6 +67,11 @@ func (modelsPlugin) Setup(cx *component.Registrar) error {
 	}
 	if err := cat.Add(modelhub.LayerBuiltin, "builtin", bf); err != nil {
 		return err
+	}
+	if hasSrc { // 插件层：低于本地发现与用户 models.toml，用户仍可整条覆盖
+		if err := cat.Add(modelhub.LayerPlugin, "model_sources", src.Catalog()); err != nil {
+			return err
+		}
 	}
 	if cfg.Discover {
 		if f, err := DiscoverOllama(context.Background(), nil, "http://127.0.0.1:11434"); err == nil {
@@ -67,6 +92,7 @@ func (modelsPlugin) Setup(cx *component.Registrar) error {
 		}
 	}
 	model := cfg.Model
+	explicit := cx.ConfigSource("model") == "profile"
 	if cfg.BaseURL != "" {
 		if strings.TrimSpace(cfg.APIKey) == "" {
 			cfg.APIKey = "env:" + appid.EnvName("API_KEY")
@@ -87,11 +113,64 @@ func (modelsPlugin) Setup(cx *component.Registrar) error {
 			return err
 		}
 		model = "cli/" + model
+		explicit = true // 给了端点就是指定了模型（cli/<model>）
 	}
-	if _, err := cat.Resolve(model); err != nil {
-		return err
+	origin := assemble.OriginBuiltin
+	if explicit {
+		origin = assemble.OriginConfig
 	}
-	return cx.Provide("modelhub", &assemble.Models{Hub: modelhub.New(cat, sec.Resolve, nil), Model: model, Secrets: sec})
+	hub := modelhub.New(cat, sec.Resolve, nil)
+	if !hasSrc { // 没有模型来源插槽：与以前一样当场定下，解析不了装配失败
+		if _, err := cat.Resolve(model); err != nil {
+			return err
+		}
+		return cx.Provide("modelhub", &assemble.Models{Hub: hub, Model: model, Secrets: sec, Origin: origin})
+	}
+	// 有插槽：先给出暂定值（Setup 期就读 Model 的组件拿到配置值；compact-basic 在自己的 Start 里按定下的值重算），
+	// 缺省模型到 Start 再定。
+	p.src, p.explicit = src, ""
+	if explicit {
+		p.explicit = model
+	}
+	p.models = &assemble.Models{Hub: hub, Model: model, Secrets: sec, Origin: origin}
+	return cx.Provide("modelhub", p.models)
 }
 
-func (modelsPlugin) Start(*component.Scope) error { return nil }
+// Start 有模型来源插槽时定下缺省模型（见包注释）；没有插槽时什么也不做。
+func (p *modelsPlugin) Start(*component.Scope) error {
+	if p.src == nil || p.models == nil {
+		return nil
+	}
+	return p.decide()
+}
+
+// decide 按「配置 > 插槽自动 > 内置」定缺省模型。只在内置模型也解析不了时报错。
+func (p *modelsPlugin) decide() error {
+	m := p.models
+	cat := m.Hub.Catalog()
+	m.Notice, m.OriginRef = "", ""
+	if p.explicit != "" {
+		if _, err := cat.Resolve(p.explicit); err == nil {
+			m.Model, m.Origin = p.explicit, assemble.OriginConfig
+			return nil
+		}
+	}
+	auto, why := p.src.DefaultModel(cat)
+	if auto != "" {
+		if _, err := cat.Resolve(auto); err != nil {
+			auto = ""
+		}
+	}
+	if auto != "" {
+		m.Model, m.Origin, m.OriginRef = auto, assemble.OriginAuto, why
+	} else {
+		if _, err := cat.Resolve(DefaultModel); err != nil {
+			return err
+		}
+		m.Model, m.Origin = DefaultModel, assemble.OriginBuiltin
+	}
+	if p.explicit != "" {
+		m.Notice = fmt.Sprintf("配置的缺省模型 %s 在目录里找不到（对应的配置可能已删除），这次改用 %s", p.explicit, m.Model)
+	}
+	return nil
+}

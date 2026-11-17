@@ -89,6 +89,7 @@ github.com/Sevyn17/tenon: method (Registrar) AgentConfig(proto any) error
 github.com/Sevyn17/tenon: method (Registrar) Collection(name string, spec github.com/Sevyn17/tenon/runtime/store.CollectionSpec) (github.com/Sevyn17/tenon/runtime/store.Collection, error)
 github.com/Sevyn17/tenon: method (Registrar) CollectionMigration(m github.com/Sevyn17/tenon/runtime/component.CollectionMigration) error
 github.com/Sevyn17/tenon: method (Registrar) Config() any
+github.com/Sevyn17/tenon: method (Registrar) ConfigSource(key string) string
 github.com/Sevyn17/tenon: method (Registrar) FillSlot(name string, impl any) error
 github.com/Sevyn17/tenon: method (Registrar) Mailer() *github.com/Sevyn17/tenon/runtime/component.Mailer
 github.com/Sevyn17/tenon: method (Registrar) Matcher(name string, m github.com/Sevyn17/tenon/runtime/component.Matcher) error
@@ -286,6 +287,7 @@ github.com/Sevyn17/tenon/apphost: method (WorkspaceManager) Close()
 github.com/Sevyn17/tenon/apphost: method (WorkspaceManager) Current() *Workspace
 github.com/Sevyn17/tenon/apphost: method (WorkspaceManager) List() []github.com/Sevyn17/tenon/appapi/wire.WorkspaceInfo
 github.com/Sevyn17/tenon/apphost: method (WorkspaceManager) Open(_ context.Context, path string) (github.com/Sevyn17/tenon/appapi/wire.WorkspaceInfo, error)
+github.com/Sevyn17/tenon/apphost: method (WorkspaceManager) Reload(_ context.Context) (github.com/Sevyn17/tenon/appapi/wire.WorkspaceInfo, error)
 github.com/Sevyn17/tenon/apphost: type WorkspaceOptions struct{Flags Flags; SleepAfter time.Duration; Upload bool; OnSwitch func(api *github.com/Sevyn17/tenon/appapi.App); RecentPath string; Platform github.com/Sevyn17/tenon/appapi.Platform}
 github.com/Sevyn17/tenon/appapi/wire: type APIKey struct{ID string; Name string; Prefix string; CreatedAt string; LastUsedAt string; ExpiresAt string; Revoked bool}
 github.com/Sevyn17/tenon/appapi/wire: type APIKeyCreateArgs struct{Name string; ExpiresIn int64}
@@ -346,6 +348,7 @@ github.com/Sevyn17/tenon/appapi/wire: func DeclActionKinds() []string
 github.com/Sevyn17/tenon/appapi/wire: type DeclNode struct{Type string; Children []DeclNode; Gap int; Align string; Text string; Tone string; Size string; Bold bool; Code string; Lang string; Diff string; Items []DeclNode; Ordered bool; Columns []string; Rows [][]any; Value any; Label string; Action *DeclAction; Variant string; Schema map[string]any; Submit string}
 github.com/Sevyn17/tenon/appapi/wire: func DeclNodeTypes() []string
 github.com/Sevyn17/tenon/appapi/wire: func Durable(kind string) bool
+github.com/Sevyn17/tenon/appapi/wire: type EffectiveModel struct{Model string; Provider string; Protocol string; BaseURL string; Name string; Label string; CredKind string; CredLabel string; Origin string; OriginRef string; Available bool; Reason string; Notice string}
 github.com/Sevyn17/tenon/appapi/wire: type Empty struct{}
 github.com/Sevyn17/tenon/appapi/wire: type EntriesArgs struct{Session string; From *int; To *int; Tail int}
 github.com/Sevyn17/tenon/appapi/wire: type EntriesResult struct{Entries []Entry; Base int; Len int}
@@ -427,8 +430,8 @@ github.com/Sevyn17/tenon/appapi/wire: type ModeSetArgs struct{Session string; Mo
 github.com/Sevyn17/tenon/appapi/wire: type ModeSetResult struct{State Mode; Committed bool}
 github.com/Sevyn17/tenon/appapi/wire: type ModeShowArgs struct{Session string; Mode string}
 github.com/Sevyn17/tenon/appapi/wire: type ModeShowResult struct{Mode string; Items []ModeItem}
-github.com/Sevyn17/tenon/appapi/wire: type ModelInfo struct{ID string; Alias bool; Provider string; Name string; ContextWindow int; Images bool; Reasoning bool; Efforts []string; Available bool; Reason string}
-github.com/Sevyn17/tenon/appapi/wire: type ModelsListResult struct{Models []ModelInfo; Default string}
+github.com/Sevyn17/tenon/appapi/wire: type ModelInfo struct{ID string; Alias bool; Provider string; Name string; Label string; ContextWindow int; Images bool; Reasoning bool; Efforts []string; Available bool; Reason string}
+github.com/Sevyn17/tenon/appapi/wire: type ModelsListResult struct{Models []ModelInfo; Default string; Effective *EffectiveModel}
 github.com/Sevyn17/tenon/appapi/wire: type Notice struct{Level string; Source string; Text string}
 github.com/Sevyn17/tenon/appapi/wire: const OutcomeAnswered untyped string
 github.com/Sevyn17/tenon/appapi/wire: const OutcomeApproved untyped string
@@ -505,3 +508,5 @@ github.com/Sevyn17/tenon/appapi/wire: type WorkspaceInfo struct{Path string; Nam
 github.com/Sevyn17/tenon/appapi/wire: type WorkspaceListResult struct{Items []WorkspaceInfo}
 github.com/Sevyn17/tenon/appapi/wire: type WorkspaceOpenArgs struct{Path string}
 github.com/Sevyn17/tenon/appapi/wire: type WorkspaceOpenResult struct{Workspace WorkspaceInfo}
+github.com/Sevyn17/tenon/appapi/wire: type WorkspaceReloadArgs struct{Force bool}
+github.com/Sevyn17/tenon/appapi/wire: type WorkspaceReloadResult struct{Workspace WorkspaceInfo}

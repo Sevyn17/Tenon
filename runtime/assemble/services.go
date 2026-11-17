@@ -18,6 +18,9 @@ import (
 // 其余插槽（存储四个、模型目录、Auth、Coordinator）没有消费方，已删（2026-11-04 审查 P1-50）。
 const SlotSecrets = ext.SlotSecrets
 
+// SlotModelSources 模型来源插槽（models 组件可选消费，没有缺省实现）：见 ModelSources。
+const SlotModelSources = ext.SlotModelSources
+
 // 内核约定的服务键。
 const (
 	ServiceDB        = ext.ServiceDB        // DBHandle（产品的存储插件）
@@ -36,11 +39,45 @@ type DBHandle interface {
 }
 
 // Models modelhub 服务：Hub + 默认模型（别名）。协议适配器插件在 Setup 里向 Hub 登记。
+//
+// Model 通常在 models 插件的 Setup 里定下；填了 slot:model_sources 时改到 models 的 Start 才定（那时所有组件
+// 都 Setup 完了，网关等插件登记的模型也在目录里）。要用缺省模型的组件在自己的 Start 或运行期读，不要在 Setup 里抓住它。
 type Models struct {
 	Hub   *modelhub.Hub
 	Model string
 	// Secrets 凭证解析（可空）：界面列模型时据此标出哪些提供方的凭证不可用。
 	Secrets Secrets
+	// Origin 缺省模型由哪项设置决定（models.list 的 effective 用），取 Origin* 常量；"" = 应用直接给的（WithModels 等）。
+	Origin string
+	// OriginRef 补充说明：auto 时是模型来源给的理由（如「自动：已登录平台」）；config 时由应用宿主细分后填（文件路径、变量名）。
+	OriginRef string
+	// Notice 回落提示：显式指定的缺省模型解析不了、改用了别的时写明原因；空 = 没有回落。
+	Notice string
+}
+
+// Models.Origin 的取值。
+const (
+	OriginConfig  = "config"  // models 插件配置写了 model 或 base_url（profile、命令行参数或环境变量）
+	OriginAuto    = "auto"    // 没写，由 slot:model_sources 决定
+	OriginBuiltin = "builtin" // 都没有，用内置缺省
+)
+
+// ModelSources 产品的模型来源（slot:model_sources）：插件层目录 + 用户没指定缺省模型时用谁。
+// models 插件可选消费；不填时 models 的行为与没有这个插槽时一样。
+type ModelSources interface {
+	// Catalog 并入目录插件层（modelhub.LayerPlugin）的声明，如用户自己配的多套端点。models 在 Setup 里合入。
+	Catalog() modelhub.CatalogFile
+	// DefaultModel 用户没指定缺省模型时用谁；cat 是各组件都登记过之后的目录。返回 "" = 用内置缺省。
+	// why 是给界面看的理由（如「自动：已登录平台」）。
+	DefaultModel(cat *modelhub.Catalog) (model, why string)
+}
+
+// CredentialDescriber Secrets 的可选扩展：说明一个提供方的凭证从哪来（models.list 的 effective 与可用性用）。
+// 不实现、或 ok = false 时按缺省规则：key 以 env: 开头是环境变量，空 key 是不需要凭证，其余按 Resolve 的结果。
+type CredentialDescriber interface {
+	// DescribeCredential 按提供方的协议与 key 引用说明凭证：kind 如 env / byok / platform / none，label 给人看；
+	// problem 非空 = 凭证现在不可用（原因）。
+	DescribeCredential(protocol, key string) (kind, label, problem string, ok bool)
 }
 
 // Redactable 可装脱敏函数的服务（如压缩器：摘要落库前脱敏）。

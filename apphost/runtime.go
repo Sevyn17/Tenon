@@ -92,6 +92,7 @@ type Runtime struct {
 	BaseProfile string
 
 	readyErrs []error // ready 点位的错误（BuildApp 时跑，Built.Ready 交出）
+	loaded    *loaded // 这次读到的信任与 profile（WorkspaceManager.Reload 回落用）
 }
 
 // StartOptions Start 的参数。
@@ -124,21 +125,46 @@ type AppOptions struct {
 
 // Start 读信任与 profile，用 SDK 按 profile 装配（tenon.WithProfile）并启动组件（打开存储）。
 // 失败时已建的资源全部回收。
-func Start(o StartOptions) (*Runtime, error) {
+func Start(o StartOptions) (*Runtime, error) { return start(o, nil) }
+
+// loaded 已经读好的信任与 profile（workspace.reload 新配置起不来时，用上一次成功的这份再开一次）。
+type loaded struct {
+	trusted bool
+	why     string
+	p       *component.Profile
+	ps      []*pkgs.Package
+	notes   []string
+}
+
+// start 见 Start；pre 非空时不重读信任与 profile，直接用它（插件 Setup 读的外部文件照常重读）。
+func start(o StartOptions, pre *loaded) (*Runtime, error) {
 	root, err := filepath.Abs(o.Flags.Workdir)
 	if err != nil {
 		return nil, err
 	}
-	trusted, why, err := ResolveTrust(o.Flags.TrustProject || o.Flags.ProjectHooks, root, o.AskTrust)
-	if err != nil {
-		return nil, err
-	}
-	p, ps, notes, err := LoadAll(o.Flags.BaseProfile, o.Flags.Profile, root, trusted)
-	if err != nil {
-		return nil, fmt.Errorf("读 profile: %w", err)
+	var (
+		trusted bool
+		why     string
+		p       *component.Profile
+		ps      []*pkgs.Package
+		notes   []string
+	)
+	if pre != nil {
+		trusted, why, p, ps = pre.trusted, pre.why, pre.p, pre.ps
+		notes = append([]string(nil), pre.notes...)
+	} else {
+		trusted, why, err = ResolveTrust(o.Flags.TrustProject || o.Flags.ProjectHooks, root, o.AskTrust)
+		if err != nil {
+			return nil, err
+		}
+		p, ps, notes, err = LoadAll(o.Flags.BaseProfile, o.Flags.Profile, root, trusted)
+		if err != nil {
+			return nil, fmt.Errorf("读 profile: %w", err)
+		}
 	}
 	r := &Runtime{Profile: p, Root: root, UI: o.UI, Trusted: trusted, TrustWhy: why, Notes: notes, Packages: ps,
-		ExtraProfile: o.Flags.Profile, BaseProfile: o.Flags.BaseProfile}
+		ExtraProfile: o.Flags.Profile, BaseProfile: o.Flags.BaseProfile,
+		loaded: &loaded{trusted: trusted, why: why, p: p, ps: ps, notes: append([]string(nil), notes...)}}
 	modesWD := o.App.ModesWorkdir
 	if modesWD == "" {
 		modesWD = root
@@ -191,6 +217,12 @@ func Start(o StartOptions) (*Runtime, error) {
 	if r.Rt.Store == nil { // WithStore 不在这条路上：存储一定来自组件
 		r.Close()
 		return nil, fmt.Errorf("装配: 没有提供 %s 的存储组件", assemble.ServiceDB)
+	}
+	if m := in.Models; m != nil { // 缺省模型由哪项设置决定（models.list 的 effective）；回落提示进横幅
+		refineOrigin(m, o.Flags, ps, root, trusted)
+		if m.Notice != "" {
+			r.Notes = append(r.Notes, m.Notice)
+		}
 	}
 	r.Notes = append(r.Notes, r.importLegacy(context.Background())...) // 旧版项目里的会话库并入用户级库
 	// H5（03 - 约束清单第 19 行）：开启会改写模型所见内容的组件时明示。

@@ -136,7 +136,9 @@ type Model struct {
 	ContextWindow int          `toml:"context_window"`
 	MaxOutput     int          `toml:"max_output"`
 	Caps          Capabilities `toml:"caps"`
-	source        string
+	// Label 界面显示名（如「DeepSeek 日常 · deepseek-chat」）；空 = 界面显示 id。
+	Label  string `toml:"label"`
+	source string
 }
 
 // Provider 提供方（声明式）。

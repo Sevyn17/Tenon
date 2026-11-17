@@ -23,10 +23,11 @@ type Service struct {
 	api  *appapi.App
 	emit func(name string, data any) // 发给前端；测试里替换
 
-	mu     sync.Mutex
-	conn   *appapi.Conn
-	cancel context.CancelFunc
-	done   chan struct{}
+	mu      sync.Mutex
+	conn    *appapi.Conn
+	connFor *appapi.App // conn 是在哪个 App 上建的
+	cancel  context.CancelFunc
+	done    chan struct{}
 }
 
 // NewService 用应用接口层构造服务。
@@ -34,15 +35,24 @@ func NewService(api *appapi.App, emit func(name string, data any)) *Service {
 	return &Service{api: api, emit: emit}
 }
 
-// SwapAPI 换上新的应用接口层（切工作区后调用）：关掉旧连接，事件转发在新连接上重启；前端随后重新 hello。
+// SwapAPI 换上新的应用接口层（切工作区、workspace.reload 后调用）：关掉旧连接，事件转发在新连接上重启；前端随后重新 hello。
+//
+// 换 api 与丢弃旧连接在同一把锁里做（D-11）：原先先 StopEvents、解锁、再设 s.api，中间进来的 Call 会用旧的、
+// 已关闭的 App 新建连接并存下，之后一直连在旧运行时上，只能重启进程。
 func (s *Service) SwapAPI(api *appapi.App) {
 	s.mu.Lock()
 	running := s.cancel != nil
-	s.mu.Unlock()
-	s.StopEvents()
-	s.mu.Lock()
+	cancel, done, c := s.cancel, s.done, s.conn
 	s.api = api
+	s.cancel, s.done, s.conn, s.connFor = nil, nil, nil, nil
 	s.mu.Unlock()
+	if cancel != nil {
+		cancel()
+		<-done
+	}
+	if c != nil {
+		c.Close()
+	}
 	if running {
 		s.StartEvents()
 	}
@@ -59,8 +69,16 @@ func (s *Service) API() *appapi.App {
 func (s *Service) connection() *appapi.Conn {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.conn == nil {
-		s.conn = s.api.NewConn(context.Background(), appapi.LocalPrincipal)
+	return s.connLocked()
+}
+
+// connLocked 见 connection；调用方持有 s.mu。连接不是在当前 App 上建的（刚换过）就丢掉重建。
+func (s *Service) connLocked() *appapi.Conn {
+	if s.conn == nil || s.connFor != s.api {
+		if old := s.conn; old != nil {
+			go old.Close()
+		}
+		s.conn, s.connFor = s.api.NewConn(context.Background(), appapi.LocalPrincipal), s.api
 	}
 	return s.conn
 }
@@ -94,12 +112,12 @@ func encodeErr(e *appapi.Error) error {
 // StartEvents 把连接的出站事件转发给前端，直到 StopEvents。背压在 Conn 里处理（合并、丢弃、断开订阅并发
 // session.lagged，前端据此重新订阅）。
 func (s *Service) StartEvents() {
-	c := s.connection()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.cancel != nil {
 		return
 	}
+	c := s.connLocked() // 同一把锁里取连接：中间换了 App 的话转发不会挂在旧连接上
 	ctx, cancel := context.WithCancel(context.Background())
 	s.cancel, s.done = cancel, make(chan struct{})
 	go func(done chan struct{}) {
@@ -120,7 +138,7 @@ func (s *Service) StartEvents() {
 func (s *Service) StopEvents() {
 	s.mu.Lock()
 	cancel, done, c := s.cancel, s.done, s.conn
-	s.cancel, s.done, s.conn = nil, nil, nil
+	s.cancel, s.done, s.conn, s.connFor = nil, nil, nil, nil
 	s.mu.Unlock()
 	if cancel != nil {
 		cancel()

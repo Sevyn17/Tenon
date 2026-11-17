@@ -28,7 +28,7 @@ func TestBeforeCompactPointWithoutWire(t *testing.T) {
 	hub := modelhub.New(modelhub.NewCatalog(), func(string) (string, error) { return "", nil }, nil)
 	asm, err := component.Assemble(component.Spec{
 		Plugins:   []component.Entry{{Name: "compact-basic"}, {Name: "zz-guard"}},
-		Instances: map[string]component.Component{"compact-basic": compactPlugin{}, "zz-guard": guardComp{}},
+		Instances: map[string]component.Component{"compact-basic": &compactPlugin{}, "zz-guard": guardComp{}},
 		Inject:    map[string]any{assemble.ServiceModelhub: &assemble.Models{Hub: hub, Model: "m"}},
 		Defaults:  assemble.SlotDefaults(),
 	})

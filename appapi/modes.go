@@ -92,6 +92,22 @@ type Workspaces interface {
 	Open(ctx context.Context, path string) (wire.WorkspaceInfo, error)
 }
 
+// Reloader Workspaces 的可选扩展（workspace.reload，客户端改进 M3）：在当前目录上重建运行时，重读 profile、
+// 插件包和插件读的外部配置（BYOK、登录令牌等）。和 Open 一样先关旧的再开新的，换上后调用方断开旧连接。
+// 新配置起不来时回到上一次成功的配置，返回 *ReloadReverted；回也回不去时返回别的错误，这时没有当前工作区。
+// 实现了它，hello 才报 reload 能力（CLI 没有工作区管理器，不报）。
+type Reloader interface {
+	Reload(ctx context.Context) (wire.WorkspaceInfo, error)
+}
+
+// ReloadReverted 重建失败、已回到原来的配置（运行时照常可用）。Err 是新配置的错误。
+type ReloadReverted struct{ Err error }
+
+func (e *ReloadReverted) Error() string {
+	return "新配置没能生效，已回到原来的配置：" + e.Err.Error()
+}
+func (e *ReloadReverted) Unwrap() error { return e.Err }
+
 // Followups 按一个回合的输入与回答生成建议追问（模型侧调用）；model 是会话的模型。
 type Followups func(ctx context.Context, model, input, answer string) ([]string, error)
 

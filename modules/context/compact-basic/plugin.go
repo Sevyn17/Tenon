@@ -22,43 +22,33 @@ type Config struct {
 // SetRedact 装脱敏函数（runtime.Redactable）。
 func (c *Compactor) SetRedact(f func(string) string) { c.Redact = f }
 
-type compactPlugin struct{}
-
-func init() {
-	component.Register("compact-basic", func() component.Component { return compactPlugin{} })
+// compactPlugin 每次装配一个新实例：Setup 记下压缩器与模型服务，Start 时缺省模型若已变（models 填了
+// slot:model_sources 时缺省模型到 Start 才定），重新绑定摘要模型与窗口。
+type compactPlugin struct {
+	c      *Compactor
+	m      *assemble.Models
+	model  string // 配置的摘要模型；"" = 跟会话缺省模型
+	seenAt string // Setup 时看到的缺省模型
 }
 
-func (compactPlugin) Meta() component.Meta {
+func init() {
+	component.Register("compact-basic", func() component.Component { return &compactPlugin{} })
+}
+
+func (*compactPlugin) Meta() component.Meta {
 	return component.Meta{Name: "compact-basic", Version: "0.1.0", Default: true, Effects: []string{component.EffectRewriteResult}, Config: &Config{},
 		Requires: []string{assemble.ServiceModelhub}, Provides: []string{assemble.ServiceCompactor}}
 }
 
-func (compactPlugin) Setup(cx *component.Registrar) error {
+func (p *compactPlugin) Setup(cx *component.Registrar) error {
 	cfg := cx.Config().(*Config)
 	m, err := component.Use[*assemble.Models](cx, assemble.ServiceModelhub)
 	if err != nil {
 		return err
 	}
-	alias := cfg.Model
-	if alias == "" {
-		alias = m.Model
-	}
-	c := &Compactor{Auto: cfg.Auto, Headroom: cfg.Headroom, KeepRatio: cfg.KeepRatio,
-		Model: alias, Summarize: HubSummarizer(m.Hub, alias)}
-	// 窗口取会话模型计划内最小窗口（plugin-manager §5.2）；摘要模型窗口更小时取更小者。
-	cat := m.Hub.Catalog()
-	for _, a := range []string{m.Model, alias} {
-		p, err := cat.Resolve(a)
-		if err != nil {
-			continue
-		}
-		if w := cat.MinWindow(p); w > 0 && (c.Window == 0 || w < c.Window) {
-			c.Window = w
-			if md, _, err := cat.Lookup(p[0].Model); err == nil {
-				c.MaxOutput = md.MaxOutput
-			}
-		}
-	}
+	c := &Compactor{Auto: cfg.Auto, Headroom: cfg.Headroom, KeepRatio: cfg.KeepRatio}
+	p.c, p.m, p.model, p.seenAt = c, m, cfg.Model, m.Model
+	bind(c, m, cfg.Model)
 	items := cx.PointItems(PointBeforeCompact)
 	c.befores = func() []BeforeCompact {
 		var out []BeforeCompact
@@ -72,4 +62,36 @@ func (compactPlugin) Setup(cx *component.Registrar) error {
 	return cx.Provide("compactor", c)
 }
 
-func (compactPlugin) Start(*component.Scope) error { return nil }
+// Start 缺省模型在 Setup 之后才定（models 的 Start 先于本组件）时，按定下来的模型重新绑定。
+// 没变时什么也不做（框架自己的装配都是这样，行为与以前一样）。
+func (p *compactPlugin) Start(*component.Scope) error {
+	if p.c != nil && p.m != nil && p.m.Model != p.seenAt {
+		p.c.Window, p.c.MaxOutput = 0, 0
+		bind(p.c, p.m, p.model)
+		p.seenAt = p.m.Model
+	}
+	return nil
+}
+
+// bind 摘要模型（配置的，空 = 会话缺省模型）与窗口：窗口取会话模型计划内最小窗口（plugin-manager §5.2）；
+// 摘要模型窗口更小时取更小者。
+func bind(c *Compactor, m *assemble.Models, model string) {
+	alias := model
+	if alias == "" {
+		alias = m.Model
+	}
+	c.Model, c.Summarize = alias, HubSummarizer(m.Hub, alias)
+	cat := m.Hub.Catalog()
+	for _, a := range []string{m.Model, alias} {
+		p, err := cat.Resolve(a)
+		if err != nil {
+			continue
+		}
+		if w := cat.MinWindow(p); w > 0 && (c.Window == 0 || w < c.Window) {
+			c.Window = w
+			if md, _, err := cat.Lookup(p[0].Model); err == nil {
+				c.MaxOutput = md.MaxOutput
+			}
+		}
+	}
+}

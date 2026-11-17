@@ -61,6 +61,9 @@ const (
 // 插槽。
 const (
 	SlotSecrets = "slot:secrets" // assemble.Secrets；缺省 EnvSecrets
+	// SlotModelSources 产品的模型来源（assemble.ModelSources）：插件层目录 + 用户没指定模型时用谁。没有缺省实现，
+	// 不填时 models 插件的行为与没有这个插槽时完全一样（客户端改进 M3，配置T3）。
+	SlotModelSources = "slot:model_sources"
 )
 
 // 会话级点位（assemble.Collect 读取）。

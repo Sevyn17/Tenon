@@ -88,12 +88,15 @@ func (m *WorkspaceManager) Close() {
 }
 
 // start 在 dir 上装配并接线一套运行时，跑 ready 点位，把装配提示发成 notice。
-func (m *WorkspaceManager) start(dir string) (*Workspace, error) {
+func (m *WorkspaceManager) start(dir string) (*Workspace, error) { return m.startWith(dir, nil) }
+
+// startWith 见 start；pre 非空时用已经读好的信任与 profile（Reload 回落用）。
+func (m *WorkspaceManager) startWith(dir string, pre *loaded) (*Workspace, error) {
 	f := m.o.Flags
 	f.Workdir = dir
 	// 网页端、桌面端都没有终端可问：无信任记录的项目按不受信（同启动时）；界面走协议（UI 为 nil）。
-	rt, err := Start(StartOptions{Flags: f, SleepAfter: m.o.SleepAfter,
-		App: AppOptions{MaxSteps: f.MaxSteps, Upload: m.o.Upload, Workspaces: m, Platform: m.o.Platform}})
+	rt, err := start(StartOptions{Flags: f, SleepAfter: m.o.SleepAfter,
+		App: AppOptions{MaxSteps: f.MaxSteps, Upload: m.o.Upload, Workspaces: m, Platform: m.o.Platform}}, pre)
 	if err != nil {
 		return nil, err
 	}
@@ -145,6 +148,36 @@ func (m *WorkspaceManager) Open(_ context.Context, path string) (wire.WorkspaceI
 	}
 	m.swap(ws, ws.Runtime.Root)
 	m.remember(ws.Runtime.Root)
+	return m.info(ws.Runtime.Root, ws.Runtime.Trusted, true), nil
+}
+
+// Reload 在当前目录上重建运行时（appapi.Reloader，workspace.reload）：重读信任、各层 profile、插件包，插件 Setup
+// 读的外部配置（BYOK、登录令牌、平台目录）也随之重读。和 Open 一样先关旧的再开新的（会话库同时只能有一套运行时在写），
+// 换上后通知传输层，客户端重连后重新 hello。
+// 新配置起不来时用上一次成功读到的信任与 profile 再开一次，返回 *appapi.ReloadReverted（运行时照常可用）；
+// 这也起不来就没有当前工作区，返回错误（只能重启进程）。有回合在跑时由调用方（appapi）先拦下或先取消。
+func (m *WorkspaceManager) Reload(_ context.Context) (wire.WorkspaceInfo, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.cur == nil {
+		return wire.WorkspaceInfo{}, ErrNoWorkspace
+	}
+	root, prev := m.curRoot, m.cur.Runtime.loaded
+	m.swap(nil, "")
+	ws, err := m.start(root)
+	if err != nil {
+		if prev == nil {
+			return wire.WorkspaceInfo{}, err
+		}
+		back, err2 := m.startWith(root, prev)
+		if err2 != nil {
+			return wire.WorkspaceInfo{}, fmt.Errorf("%v；回到原来的配置也失败：%v", err, err2)
+		}
+		back.Built.API.Notice("", "重建运行时失败，已回到原来的配置："+err.Error())
+		m.swap(back, back.Runtime.Root)
+		return wire.WorkspaceInfo{}, &appapi.ReloadReverted{Err: err}
+	}
+	m.swap(ws, ws.Runtime.Root)
 	return m.info(ws.Runtime.Root, ws.Runtime.Trusted, true), nil
 }
 

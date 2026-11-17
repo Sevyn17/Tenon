@@ -539,6 +539,7 @@ export interface ModelInfo {
   alias?: boolean;
   provider: string;
   name?: string;
+  label?: string;
   context_window?: number;
   images?: boolean;
   reasoning?: boolean;
@@ -550,6 +551,23 @@ export interface ModelInfo {
 export interface ModelsListResult {
   models: ModelInfo[];
   default: string;
+  effective?: EffectiveModel;
+}
+
+export interface EffectiveModel {
+  model: string;
+  provider?: string;
+  protocol?: string;
+  base_url?: string;
+  name?: string;
+  label?: string;
+  cred_kind: string;
+  cred_label?: string;
+  origin?: string;
+  origin_ref?: string;
+  available: boolean;
+  reason?: string;
+  notice?: string;
 }
 
 export interface WorkspaceInfo {
@@ -570,6 +588,14 @@ export interface WorkspaceOpenArgs {
 }
 
 export interface WorkspaceOpenResult {
+  workspace: WorkspaceInfo;
+}
+
+export interface WorkspaceReloadArgs {
+  force?: boolean;
+}
+
+export interface WorkspaceReloadResult {
   workspace: WorkspaceInfo;
 }
 

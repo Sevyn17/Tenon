@@ -37,6 +37,7 @@ export const COMMANDS = [
   "workspace.files",
   "workspace.list",
   "workspace.open",
+  "workspace.reload",
   "models.list",
   "platform.status",
   "platform.login",
@@ -93,6 +94,7 @@ export interface CommandMap {
   "workspace.files": [W.FilesArgs, W.FilesResult];
   "workspace.list": [W.Empty, W.WorkspaceListResult];
   "workspace.open": [W.WorkspaceOpenArgs, W.WorkspaceOpenResult];
+  "workspace.reload": [W.WorkspaceReloadArgs, W.WorkspaceReloadResult];
   "models.list": [W.Empty, W.ModelsListResult];
   "platform.status": [W.Empty, W.AccountStatus];
   "platform.login": [W.AccountLoginArgs, W.AccountLoginResult];
