@@ -279,9 +279,11 @@ func ResolveTrust(force bool, root string, ask func(key string) bool) (bool, str
 
 // projectDenied 受信项目也不能设的键（端点 / 凭据 / 存储位置）。
 // store-sqlite 是产品侧存储插件的名字（框架不再自带，见 20 篇），dir 决定库文件位置。
+// gateway-adapter 是产品侧的平台网关插件：server_url 能把用户的平台令牌带到别处，token 是凭据。
 var projectDenied = map[string][]string{
-	"models":       {"base_url", "catalog"},
-	"store-sqlite": {"dir"},
+	"models":          {"base_url", "catalog"},
+	"store-sqlite":    {"dir"},
+	"gateway-adapter": {"server_url", "token"},
 }
 
 // LoadProfiles 同 LoadAll，不要插件包列表。
