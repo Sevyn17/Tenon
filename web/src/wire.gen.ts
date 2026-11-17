@@ -797,6 +797,7 @@ export interface PackagesListResult {
 export interface AccountStatus {
   configured: boolean;
   server_url?: string;
+  server_source?: string;
   logged_in?: boolean;
   tenant?: string;
   subject?: string;
@@ -887,6 +888,7 @@ export interface BYOKListResult {
 }
 
 export interface BYOKSaveArgs {
+  id?: string;
   name: string;
   protocol: string;
   base_url: string;
@@ -910,6 +912,38 @@ export interface BYOKSetDefaultArgs {
 }
 
 export interface BYOKSetDefaultResult {
+}
+
+export interface BYOKTestArgs {
+  id?: string;
+  protocol?: string;
+  base_url?: string;
+  model?: string;
+  api_key?: string;
+}
+
+export interface BYOKTestResult {
+  ok: boolean;
+  latency_ms?: number;
+  method?: string;
+  model_found?: boolean;
+  models?: string[];
+  error_kind?: string;
+  status?: number;
+  message: string;
+}
+
+export interface PlatformConfigureArgs {
+  server_url: string;
+  test?: boolean;
+  dry_run?: boolean;
+}
+
+export interface PlatformConfigureResult {
+  saved: boolean;
+  logged_out?: boolean;
+  test?: BYOKTestResult;
+  status: AccountStatus;
 }
 
 export interface AdminModelProvider {

@@ -64,6 +64,29 @@ type Platform interface {
 	AdminModels(ctx context.Context) (wire.AdminModelsResult, error)
 }
 
+// —— Platform 的可选扩展（客户端改进 M3）——
+//
+// 为什么是可选接口而不是往 Platform 里加方法：加方法会让所有既有实现（含测试替身）编译不过；
+// 这与 Reloader 之于 Workspaces 是同一个模式。实现了才在 hello.capabilities 里报对应能力，界面据此显示入口。
+
+// BYOKTester 测一套 BYOK 配置能不能连通（platform.byok.test，能力 byok_test）。
+// 连不通不是错误：返回 OK=false 的结果；只有内部故障（读不了配置文件等）才返回 error。
+// 实现方保证结果、错误、日志里都没有明文 Key。
+type BYOKTester interface {
+	BYOKTest(ctx context.Context, in wire.BYOKTestArgs) (wire.BYOKTestResult, error)
+}
+
+// BYOKEditor 按 id 编辑已有配置（platform.byok.save 带 id，能力 byok_edit）：APIKey 留空表示不改，
+// 名称只和其他配置比重名。没实现时带 id 的保存返回 unsupported（不悄悄当成新增，免得多出一套）。
+type BYOKEditor interface {
+	BYOKUpdate(ctx context.Context, in wire.BYOKSaveArgs) (wire.BYOKSaveResult, error)
+}
+
+// PlatformConfigurer 保存平台 server 地址（platform.configure，能力 platform_configure）。
+type PlatformConfigurer interface {
+	Configure(ctx context.Context, in wire.PlatformConfigureArgs) (wire.PlatformConfigureResult, error)
+}
+
 // PlatformStatus 返回账号状态。
 func (v *App) PlatformStatus(ctx context.Context, _ wire.Empty) (wire.AccountStatus, error) {
 	if v.o.Platform == nil {
@@ -143,7 +166,32 @@ func (v *App) PlatformBYOKSave(ctx context.Context, in wire.BYOKSaveArgs) (wire.
 	if v.o.Platform == nil {
 		return wire.BYOKSaveResult{}, Errorf(CodeUnsupported, "这个应用没有接入模型配置")
 	}
+	if in.ID != "" {
+		ed, ok := v.o.Platform.(BYOKEditor)
+		if !ok {
+			return wire.BYOKSaveResult{}, Errorf(CodeUnsupported, "这个应用不支持按 id 编辑模型配置")
+		}
+		return ed.BYOKUpdate(ctx, in)
+	}
 	return v.o.Platform.BYOKSave(ctx, in)
+}
+
+// PlatformBYOKTest 测一套 BYOK 配置能不能连通（客户端改进 M3 配置T6）。
+func (v *App) PlatformBYOKTest(ctx context.Context, in wire.BYOKTestArgs) (wire.BYOKTestResult, error) {
+	t, ok := v.o.Platform.(BYOKTester)
+	if v.o.Platform == nil || !ok {
+		return wire.BYOKTestResult{}, Errorf(CodeUnsupported, "这个应用不支持测试模型连接")
+	}
+	return t.BYOKTest(ctx, in)
+}
+
+// PlatformConfigure 保存平台 server 地址（客户端改进 M3 配置T8）。
+func (v *App) PlatformConfigure(ctx context.Context, in wire.PlatformConfigureArgs) (wire.PlatformConfigureResult, error) {
+	c, ok := v.o.Platform.(PlatformConfigurer)
+	if v.o.Platform == nil || !ok {
+		return wire.PlatformConfigureResult{}, Errorf(CodeUnsupported, "这个应用不支持在界面上设置平台地址")
+	}
+	return c.Configure(ctx, in)
 }
 
 // PlatformBYOKRemove 删除 BYOK 配置。

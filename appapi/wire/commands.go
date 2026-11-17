@@ -558,9 +558,12 @@ type PackagesListResult struct {
 type AccountStatus struct {
 	Configured bool   `json:"configured"`
 	ServerURL  string `json:"server_url,omitempty"`
-	LoggedIn   bool   `json:"logged_in,omitempty"`
-	Tenant     string `json:"tenant,omitempty"`
-	Subject    string `json:"subject,omitempty"`
+	// ServerSource server 地址从哪来（客户端改进 M3，配置T8）：env（环境变量，界面只读）/ file（应用保存的设置）/
+	// none（没配）。旧服务端不填。
+	ServerSource string `json:"server_source,omitempty"`
+	LoggedIn     bool   `json:"logged_in,omitempty"`
+	Tenant       string `json:"tenant,omitempty"`
+	Subject      string `json:"subject,omitempty"`
 	// Product / Channel / Version 客户端自报的标识（登录时带给平台）。
 	Product string `json:"product,omitempty"`
 	Channel string `json:"channel,omitempty"`
@@ -682,11 +685,68 @@ type BYOKListResult struct {
 //
 // **APIKey 只在写入时传**：读回来的是 MaskedKey。
 type BYOKSaveArgs struct {
+	// ID 非空时按 id 编辑已有配置（能力 byok_edit，客户端改进 M3 配置T6）：APIKey 留空表示不改，名称只和其他配置比重名。
+	// 空 = 旧语义（新增；同名同地址同模型视为更新）。
+	ID       string `json:"id,omitempty"`
 	Name     string `json:"name"`
 	Protocol string `json:"protocol"`
 	BaseURL  string `json:"base_url"`
 	Model    string `json:"model"`
 	APIKey   string `json:"api_key"`
+}
+
+// BYOKTestArgs platform.byok.test 的参数（能力 byok_test）：测一套配置能不能连通。
+//
+// 带 ID 时以已保存的那套为底，其余非空字段覆盖（可测改了一半的草稿）；APIKey 留空用已存的 Key。
+// 不带 ID 时测表单里的值（没保存的新配置）。请求由后端发：浏览器有 CORS 限制，Key 也不该回到前端。
+type BYOKTestArgs struct {
+	ID       string `json:"id,omitempty"`
+	Protocol string `json:"protocol,omitempty"`
+	BaseURL  string `json:"base_url,omitempty"`
+	Model    string `json:"model,omitempty"`
+	APIKey   string `json:"api_key,omitempty"`
+}
+
+// BYOKTestResult platform.byok.test 的结果。连不通不是命令错误：OK=false，ErrorKind 分类，Message 是给人看的说明
+// （**不含明文 Key**）。
+type BYOKTestResult struct {
+	OK bool `json:"ok"`
+	// LatencyMS 最后一次请求的耗时（毫秒）。
+	LatencyMS int64 `json:"latency_ms,omitempty"`
+	// Method 怎么测的：models（列模型）/ request（列模型不支持，发了一次 1 token 的最小请求，会消耗极少量额度）。
+	Method string `json:"method,omitempty"`
+	// ModelFound 列模型成功时：配置的模型在不在列表里。没列到模型（或走了最小请求）时不填。
+	ModelFound *bool `json:"model_found,omitempty"`
+	// Models 厂商返回的模型 id（最多 50 个）。
+	Models []string `json:"models,omitempty"`
+	// ErrorKind 失败分类：invalid（参数不全或格式不对）/ auth（401、403：密钥被拒）/ not_found（404：地址或模型不存在）/
+	// network（连不上）/ timeout / tls / rate_limit（429）/ server（5xx）/ other。
+	ErrorKind string `json:"error_kind,omitempty"`
+	// Status 厂商回的 HTTP 状态码（有的话）。
+	Status  int    `json:"status,omitempty"`
+	Message string `json:"message"`
+}
+
+// PlatformConfigureArgs platform.configure 的参数（能力 platform_configure，客户端改进 M3 配置T8）：保存平台 server 地址。
+//
+// ServerURL 空 = 清除保存的地址。DryRun 只测连通、不保存（界面上的「测试连接」）；Test 先测、测不通就不保存。
+// 环境变量（MORTISE_SERVER_URL 一类）设了地址时应用拒绝保存：环境变量优先，存了也不生效。
+type PlatformConfigureArgs struct {
+	ServerURL string `json:"server_url"`
+	Test      bool   `json:"test,omitempty"`
+	DryRun    bool   `json:"dry_run,omitempty"`
+}
+
+// PlatformConfigureResult platform.configure 的结果。
+type PlatformConfigureResult struct {
+	// Saved 地址已写入（DryRun 或测试不通时 false）。
+	Saved bool `json:"saved"`
+	// LoggedOut 地址变了、清掉了旧地址的登录令牌（令牌属于旧 server，不能带去新地址）。
+	LoggedOut bool `json:"logged_out,omitempty"`
+	// Test 测了的话：连通结果（同 platform.byok.test 的分类）。
+	Test *BYOKTestResult `json:"test,omitempty"`
+	// Status 保存后的账号状态（server_url、server_source、登录态）。
+	Status AccountStatus `json:"status"`
 }
 
 // BYOKSaveResult platform.byok.save 的结果。

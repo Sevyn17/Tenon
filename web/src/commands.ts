@@ -50,6 +50,8 @@ export const COMMANDS = [
   "platform.byok.save",
   "platform.byok.remove",
   "platform.byok.setDefault",
+  "platform.byok.test",
+  "platform.configure",
   "platform.adminModels",
   "platform.passwordRegister",
   "platform.passwordLogin",
@@ -107,6 +109,8 @@ export interface CommandMap {
   "platform.byok.save": [W.BYOKSaveArgs, W.BYOKSaveResult];
   "platform.byok.remove": [W.BYOKRemoveArgs, W.BYOKRemoveResult];
   "platform.byok.setDefault": [W.BYOKSetDefaultArgs, W.BYOKSetDefaultResult];
+  "platform.byok.test": [W.BYOKTestArgs, W.BYOKTestResult];
+  "platform.configure": [W.PlatformConfigureArgs, W.PlatformConfigureResult];
   "platform.adminModels": [W.Empty, W.AdminModelsResult];
   "platform.passwordRegister": [W.PasswordAuthArgs, W.AccountStatus];
   "platform.passwordLogin": [W.PasswordAuthArgs, W.AccountStatus];

@@ -298,7 +298,7 @@ github.com/Sevyn17/tenon/appapi/wire: type APIKeyRevokeResult struct{}
 github.com/Sevyn17/tenon/appapi/wire: type AccountEntitlements struct{Configured bool; Cached bool; Features map[string]bool; Limits map[string]int64; Aliases []string; TTL int; Offline int; Version int64}
 github.com/Sevyn17/tenon/appapi/wire: type AccountLoginArgs struct{Step string; DeviceCode string}
 github.com/Sevyn17/tenon/appapi/wire: type AccountLoginResult struct{Done bool; UserCode string; VerificationURI string; ExpiresIn int; Interval int; DeviceCode string; Pending bool; Status *AccountStatus}
-github.com/Sevyn17/tenon/appapi/wire: type AccountStatus struct{Configured bool; ServerURL string; LoggedIn bool; Tenant string; Subject string; Product string; Channel string; Version string}
+github.com/Sevyn17/tenon/appapi/wire: type AccountStatus struct{Configured bool; ServerURL string; ServerSource string; LoggedIn bool; Tenant string; Subject string; Product string; Channel string; Version string}
 github.com/Sevyn17/tenon/appapi/wire: type AdminAlias struct{Alias string; Kind string; PlanID string; Visible bool; StepCount int}
 github.com/Sevyn17/tenon/appapi/wire: type AdminModel struct{ID string; ProviderKey string; VendorModel string; Kind string}
 github.com/Sevyn17/tenon/appapi/wire: type AdminModelProvider struct{ID string; Key string; Name string; Protocol string; BaseURL string; Status string; KeyCount int}
@@ -313,10 +313,12 @@ github.com/Sevyn17/tenon/appapi/wire: type BYOKListResult struct{Profiles []BYOK
 github.com/Sevyn17/tenon/appapi/wire: type BYOKProfile struct{ID string; Name string; Protocol string; BaseURL string; Model string; MaskedKey string; CreatedAt string; IsDefault bool}
 github.com/Sevyn17/tenon/appapi/wire: type BYOKRemoveArgs struct{ID string}
 github.com/Sevyn17/tenon/appapi/wire: type BYOKRemoveResult struct{}
-github.com/Sevyn17/tenon/appapi/wire: type BYOKSaveArgs struct{Name string; Protocol string; BaseURL string; Model string; APIKey string}
+github.com/Sevyn17/tenon/appapi/wire: type BYOKSaveArgs struct{ID string; Name string; Protocol string; BaseURL string; Model string; APIKey string}
 github.com/Sevyn17/tenon/appapi/wire: type BYOKSaveResult struct{Profile BYOKProfile}
 github.com/Sevyn17/tenon/appapi/wire: type BYOKSetDefaultArgs struct{ID string}
 github.com/Sevyn17/tenon/appapi/wire: type BYOKSetDefaultResult struct{}
+github.com/Sevyn17/tenon/appapi/wire: type BYOKTestArgs struct{ID string; Protocol string; BaseURL string; Model string; APIKey string}
+github.com/Sevyn17/tenon/appapi/wire: type BYOKTestResult struct{OK bool; LatencyMS int64; Method string; ModelFound *bool; Models []string; ErrorKind string; Status int; Message string}
 github.com/Sevyn17/tenon/appapi/wire: type Choice struct{Text string; Options []ChoiceOption; Multiple bool; Min int; Max int}
 github.com/Sevyn17/tenon/appapi/wire: type ChoiceOption struct{ID string; Label string; Description string}
 github.com/Sevyn17/tenon/appapi/wire: const CodeBadRequest untyped string
@@ -442,6 +444,8 @@ github.com/Sevyn17/tenon/appapi/wire: type PackageInfo struct{Name string; Versi
 github.com/Sevyn17/tenon/appapi/wire: type PackagesListResult struct{Packages []PackageInfo}
 github.com/Sevyn17/tenon/appapi/wire: type Part struct{Kind string; Text string; Media *MediaRef; Data any; Schema string}
 github.com/Sevyn17/tenon/appapi/wire: type PasswordAuthArgs struct{Email string; Password string; Name string}
+github.com/Sevyn17/tenon/appapi/wire: type PlatformConfigureArgs struct{ServerURL string; Test bool; DryRun bool}
+github.com/Sevyn17/tenon/appapi/wire: type PlatformConfigureResult struct{Saved bool; LoggedOut bool; Test *BYOKTestResult; Status AccountStatus}
 github.com/Sevyn17/tenon/appapi/wire: type PluginInfo struct{Name string; On bool; Default bool; Source string; Effects []string; Schema []ConfigField; Config map[string]any; Mandatory bool; Pending *PluginPending}
 github.com/Sevyn17/tenon/appapi/wire: type PluginPending struct{On bool; Config map[string]any}
 github.com/Sevyn17/tenon/appapi/wire: type PluginsListResult struct{Plugins []PluginInfo; Scopes []ProfileScope; Denied map[string][]string}

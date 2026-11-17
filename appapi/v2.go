@@ -119,6 +119,8 @@ var commands = map[string]handler{
 	"platform.byok.save":        bind((*App).PlatformBYOKSave),
 	"platform.byok.remove":      bind((*App).PlatformBYOKRemove),
 	"platform.byok.setDefault":  bind((*App).PlatformBYOKSetDefault),
+	"platform.byok.test":        bind((*App).PlatformBYOKTest),
+	"platform.configure":        bind((*App).PlatformConfigure),
 	"platform.adminModels":      bind((*App).PlatformAdminModels),
 	"platform.passwordRegister": bind((*App).PlatformPasswordRegister),
 	"platform.passwordLogin":    bind((*App).PlatformPasswordLogin),
@@ -253,6 +255,16 @@ func (v *App) capabilities() []string {
 	// 即使应用注入了 Platform 实现。
 	if o.Platform != nil {
 		out = append(out, "platform")
+		// 客户端改进 M3（配置T6、T8）：平台实现了可选扩展才报，界面按能力显示「测试连接」「编辑」「设置地址」。
+		if _, ok := o.Platform.(BYOKTester); ok {
+			out = append(out, "byok_test")
+		}
+		if _, ok := o.Platform.(BYOKEditor); ok {
+			out = append(out, "byok_edit")
+		}
+		if _, ok := o.Platform.(PlatformConfigurer); ok {
+			out = append(out, "platform_configure")
+		}
 	}
 	if o.Followups != nil {
 		out = append(out, "followups")
