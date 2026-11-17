@@ -649,6 +649,7 @@ func inboxSet(ids []string) map[string]bool {
 func (a *actor) turn(ctx context.Context, resumed bool, f func(context.Context) (session.EndReason, error)) (session.EndReason, error) {
 	// 先登记取消函数再排并发槽位：排队期间到达的 Cancel 要能取消这一轮（02 2.4）。
 	a.steered = nil
+	a.turnOpen = false // 上一轮（如 restart 重跑失败）留下的标记不带进这一轮
 	tctx, cancel := context.WithCancel(ctx)
 	a.mu.Lock()
 	a.cancel, a.inTurn = cancel, true
@@ -679,6 +680,7 @@ func (a *actor) turn(ctx context.Context, resumed bool, f func(context.Context) 
 	defer func() { a.ag.TurnSpanID = "" }()
 	// turn / inputs 供 protocol 2 的 turn.started：回合号与吃进的输入的 client_id。
 	a.h.publish(a.id, "turn_start", map[string]any{"turn": a.ag.Core.TurnNumber(), "inputs": a.turnInputs})
+	a.turnOpen = true
 	a.turnInputs = nil
 	a.ag.SetCaps(a.turnCaps) // 本轮授权范围（信封 caps 交集，T3）
 	defer a.ag.SetCaps(nil)
@@ -695,10 +697,8 @@ func (a *actor) turn(ctx context.Context, resumed bool, f func(context.Context) 
 	if a.h.Hooks.AfterTurn != nil {
 		a.h.Hooks.AfterTurn(a.id, end)
 	}
-	// turn / end_kind / code / message 供 protocol 2 的结构化 turn.ended（G7）。
-	a.h.publish(a.id, "turn_end", map[string]any{"reason": end.String(), "turn": a.lastTurn(),
-		"end_kind": int(end.Kind), "code": end.Code, "message": end.Message})
-	if err := a.ag.Commit(ctx); err != nil { // span 与 after_turn 的修改落库
+	a.publishTurnEnd(end)
+	if err := a.ag.Commit(ctx); err != nil { // span 与 after_turn 的修改落库（中间件改写的 last_end 也在这里落库）
 		return end, err
 	}
 	// 预算记账（08 8.4）：本回合用量记到本轮 budget_ref 账上；超限则挂起。提交之后记，读得到本回合条目。
@@ -720,11 +720,23 @@ func turnErr(end session.EndReason) error {
 	if end.Kind != session.EndFailed {
 		return nil
 	}
+	// 码与说明分开存（N-5），错误文本里两者都带上，与 modelhub.Failure.Error() 同一格式。
 	msg := end.Message
-	if msg == "" {
+	switch {
+	case msg == "":
 		msg = end.String()
+	case end.Code != "":
+		msg = end.Code + ": " + msg
 	}
 	return fmt.Errorf("回合失败：%s", msg)
+}
+
+// publishTurnEnd 发 turn_end（protocol 2 的结构化 turn.ended，G7）：turn / end_kind / code / message。
+// 回合只发一次：发过后 turnOpen 清零，turnFailed 不再补发。
+func (a *actor) publishTurnEnd(end session.EndReason) {
+	a.turnOpen = false
+	a.h.publish(a.id, "turn_end", map[string]any{"reason": end.String(), "turn": a.lastTurn(),
+		"end_kind": int(end.Kind), "code": end.Code, "message": end.Message})
 }
 
 // turnFailed 处理一轮运行的失败（02 2.2 的所属树策略）。返回 true 表示 actor 应退出，
@@ -744,11 +756,18 @@ func (a *actor) turnWithMiddleware(ctx context.Context, resumed bool, f func(con
 		return f(ctx)
 	}
 	// kernel：真正跑这一轮。结果填进 Resp.End 交给中间件（可改写）。
+	// 内核给的结束原因已由 drive 记成 last_end；中间件改写了（或没调内核）就在下面覆盖一次。
+	var (
+		ran       bool
+		kernelEnd session.EndReason
+	)
 	kernel := func(ctx context.Context, req component.TurnReq) (component.TurnResp, error) {
+		ran = true
 		end, err := f(ctx)
 		if err != nil {
 			return component.TurnResp{}, err
 		}
+		kernelEnd = end
 		raw, merr := json.Marshal(end)
 		if merr != nil {
 			return component.TurnResp{}, merr
@@ -767,16 +786,32 @@ func (a *actor) turnWithMiddleware(ctx context.Context, resumed bool, f func(con
 			return end, fmt.Errorf("host: Turn 中间件返回的 End 不合法：%w", uerr)
 		}
 	}
+	// Kind 为 0 不是合法的结束种类（中间件没给 End），不覆盖内核记下的 last_end。
+	if end.Kind != 0 && (!ran || end != kernelEnd) {
+		a.ag.SetLastEnd(a.lastTurn(), end)
+	}
 	return end, nil
 }
 
 func (a *actor) turnFailed(ctx context.Context, err error) bool {
 	a.h.publish(a.id, "turn.failed", map[string]any{"error": err.Error()})
+	// 回合已开、还没发 turn_end：drive 直接返回了 error，回合没有正常收尾。记 last_end（码与说明分开），
+	// 提交后补发 turn_end——否则客户端只看到 state_changed: idle，没有任何原因（客户端改进 M2 / C-1）。
+	// 已经发过 turn_end 的（turnErr 转来的 Failed、turn_end 之后的提交失败）不重复记、不重复发。
+	open := a.turnOpen
+	end := agent.ErrorReason(err, agent.CodeTurnFailed)
 	// 失败的一轮不留在等待态：先收尾成 Idle（未完成的工具按 Abort 语义处理）。
 	if a.ag.Core.Status() != session.StatusIdle {
-		_, _ = a.ag.Core.Abort(session.FailedReason("TURN_FAILED"))
+		_, _ = a.ag.Core.Abort(end)
 	}
-	if cerr := a.ag.CommitRun(ctx, "idle"); cerr != nil {
+	if open {
+		a.ag.SetLastEnd(a.lastTurn(), end)
+	}
+	cerr := a.ag.CommitRun(ctx, "idle")
+	if open {
+		a.publishTurnEnd(end) // 提交之后发：收到 turn.ended 再读快照，last_end 已经在库里
+	}
+	if cerr != nil {
 		a.exitErr = cerr
 		return true
 	}
@@ -1131,10 +1166,4 @@ func markCommitted(c Command, err error) error {
 }
 
 // lastTurn 最后一条条目所属的回合号（回合结束时就是刚结束的回合）。
-func (a *actor) lastTurn() uint32 {
-	es := a.ag.Core.Snapshot().Entries
-	if len(es) == 0 {
-		return 0
-	}
-	return es[len(es)-1].Turn
-}
+func (a *actor) lastTurn() uint32 { return a.ag.LastTurn() }

@@ -255,6 +255,9 @@ func (v *App) capabilities() []string {
 	if o.Upload && o.Artifacts != nil {
 		out = append(out, "upload")
 	}
+	// last_end（客户端改进 M2）：快照与 session.state_changed 带 last_end、turn.ended 带 at、
+	// 失败时 code 只放错误码。总是有；旧服务端没有这条，客户端据此退回原逻辑。
+	out = append(out, "last_end")
 	return out
 }
 
@@ -702,10 +705,14 @@ func (v *App) snapshot(ctx context.Context, id string) (wire.SessionSnapshot, er
 			modeHdr = tl.Snapshot.Header
 		}
 	}
+	var lastEnd *wire.TurnEnded
+	if h.Status == session.StatusIdle { // 运行中不给：上一回合的结束原因已经过期
+		lastEnd = WireLastEnd(l.LastEnd)
+	}
 	return wire.SessionSnapshot{ID: id, Parent: l.Meta.ParentID, Origin: l.Meta.Origin, Title: l.Meta.Title, Pinned: pinnedOf(l.Meta.Meta),
 		RunState: WireRunState(h.Status), Mode: v.committedMode(id, modeHdr), Settings: settingsOf(h),
 		Log: wire.LogPos{Base: h.CompactionBase, Len: h.LogLen}, Interactions: v.openInteractions(ctx, id), Cursor: l.Cursor,
-		Live: v.live(id, h)}, nil
+		Live: v.live(id, h), LastEnd: lastEnd}, nil
 }
 
 // live 进行中回合当前步的流式状态（读内存、不承诺与 cursor 一致，10.2.2 规则 7）；空闲时不给。

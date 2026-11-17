@@ -1,6 +1,9 @@
 // 未结束的交互（protocol 2，docs/01 - 设计文档/06 - 应用协议契约.md 10.6）：工具确认、模块提问等"智能体在等人回答"。
-// 来源：interactions.list（跨会话，当前身份能回答的）+ 订阅会话上的 interaction.opened / resolved 事件。
-// 子会话的交互也写在根会话的事件序列里，所以只订阅根会话就能看到整棵树等人的地方。
+// 来源：interactions.list（跨会话，当前身份能回答的）+ 会话快照的 interactions（absorb）+ 订阅会话上的
+// interaction.opened / resolved 事件。子会话的交互也写在根会话的事件序列里，所以只订阅根会话就能看到整棵树等人的地方。
+//
+// 为什么要读快照：订阅从快照的 cursor 往后回放，cursor 之前打开的交互只在快照里。首页第一条消息就触发审批时，
+// interaction.opened 早于订阅，只靠事件会漏掉（docs/50 M2）。
 
 import type { Connection } from "./transport";
 import { clientID } from "./transport";
@@ -28,6 +31,11 @@ export interface InteractionsStore extends ReadStore<InteractionsView> {
   respond(id: string, response: Response): Promise<string>;
   /** 某会话（含它的子会话）的未结束交互。 */
   forSession(session: string): Interaction[];
+  /**
+   * 收进某会话快照里的未结束交互（快照含以它为根的子会话）。快照是那一刻已提交的全集：
+   * 本会话树里不在快照中的视为已结束，移出 open；之后的变化由订阅从快照 cursor 回放补上。
+   */
+  absorb(session: string, items: Interaction[]): void;
   close(): void;
 }
 
@@ -90,10 +98,28 @@ export function createInteractionsStore(conn: Connection): InteractionsStore {
       }
     },
     forSession(session) {
-      return store.get().open.filter((x) => x.session === session || x.session.startsWith(session + "/"));
+      return store.get().open.filter((x) => inTree(x.session, session));
+    },
+    absorb(session, items) {
+      store.update((v) => {
+        const done = new Set(v.resolved.map((r) => r.id));
+        const keep = v.open.filter((x) => !inTree(x.session, session));
+        const fresh = items.filter((x) => !done.has(x.id));
+        const next = sortOpened([...keep, ...fresh]);
+        if (next.length === v.open.length && next.every((x, i) => x === v.open[i] || sameInteraction(x, v.open[i]))) return v;
+        return { ...v, open: next };
+      });
     },
     close: off,
   };
+}
+
+function inTree(s: string, root: string): boolean {
+  return s === root || s.startsWith(root + "/");
+}
+
+function sameInteraction(a: Interaction, b: Interaction): boolean {
+  return a.id === b.id && a.session === b.session && a.opened_at === b.opened_at;
 }
 
 function sortOpened(xs: Interaction[]): Interaction[] {

@@ -68,6 +68,7 @@ type sess struct {
 	status    string // active / deleted
 	preview   string
 	updatedAt int64
+	lastEnd   *store.LastEnd // 最近一个回合的结束原因（与 sqlite 的 sessions.last_end 同语义）；只整体替换，不原地改
 
 	// 写租约（02 2.2）：holder 为空 = 无主；epoch 每抢一次加一。
 	leaseHolder string
@@ -346,6 +347,18 @@ func (s *Store) Commit(ctx context.Context, cp store.Checkpoint) error {
 			}
 		}
 		sort.Ints(idxs)
+		// 回退截到了 last_end 所在回合（或更早）就清空（store.RewindClears，与 sqlite 同规则）。
+		if len(idxs) > 0 {
+			minTurn := entryTurn(x.entries[idxs[0]].body)
+			for _, idx := range idxs[1:] {
+				if t := entryTurn(x.entries[idx].body); t < minTurn {
+					minTurn = t
+				}
+			}
+			if store.RewindClears(x.lastEnd, minTurn, true) {
+				x.lastEnd = nil
+			}
+		}
 		for _, idx := range idxs {
 			e := x.entries[idx]
 			x.archive = append(x.archive, archived{idx: idx, body: e.body, seq: e.seq, truncatedAt: now, rewindSeq: seq})
@@ -427,10 +440,32 @@ func (s *Store) Commit(ctx context.Context, cp store.Checkpoint) error {
 	if cp.Preview != "" {
 		x.preview = cp.Preview
 	}
+	if cp.LastEnd != nil {
+		le := *cp.LastEnd
+		x.lastEnd = &le
+	}
 	x.updatedAt = now
 	s.mu.Unlock()
 	s.notify(evs)
 	return nil
+}
+
+// entryTurn 条目正文里的回合号（sqlite 有 turn 列，这里从正文取）；解析失败按 0（视为最早，回退时偏向清空）。
+func entryTurn(body []byte) uint32 {
+	var e struct {
+		Turn uint32 `json:"turn"`
+	}
+	_ = json.Unmarshal(body, &e)
+	return e.Turn
+}
+
+// copyLastEnd 返回一份拷贝（调用方拿到的值改了也不影响存储）。
+func copyLastEnd(le *store.LastEnd) *store.LastEnd {
+	if le == nil {
+		return nil
+	}
+	c := *le
+	return &c
 }
 
 // putSpan span_id 全局唯一（与 sqlite 主键一致）：已存在只更新 End / Status / Attrs。
@@ -484,7 +519,7 @@ func (s *Store) Load(ctx context.Context, id string, base *int) (*store.Loaded, 
 	m := x.meta
 	m.Meta, m.UseConfig = objOr(m.Meta), objOr(m.UseConfig)
 	return &store.Loaded{Meta: m, RunState: x.runState, Snapshot: session.Snapshot{Header: hdr, Base: from, Entries: entries},
-		Cursor: int64(x.nextSeq - 1)}, nil
+		Cursor: int64(x.nextSeq - 1), LastEnd: copyLastEnd(x.lastEnd)}, nil
 }
 
 func objOr(b json.RawMessage) json.RawMessage {
@@ -662,7 +697,8 @@ func (s *Store) ListSessionsIn(ctx context.Context, workspace string, before int
 
 func (x *sess) info() store.SessionInfo {
 	i := store.SessionInfo{ID: x.meta.ID, Title: x.meta.Title, Preview: x.preview, RunState: x.runState,
-		Origin: x.meta.Origin, ParentID: x.meta.ParentID, Workspace: x.meta.Workspace, UpdatedAt: x.updatedAt}
+		Origin: x.meta.Origin, ParentID: x.meta.ParentID, Workspace: x.meta.Workspace, UpdatedAt: x.updatedAt,
+		LastEnd: copyLastEnd(x.lastEnd)}
 	if m := x.meta.Meta; len(m) > 0 && string(m) != "{}" {
 		i.Meta = cloneRaw(m)
 	}

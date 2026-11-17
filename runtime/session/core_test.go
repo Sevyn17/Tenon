@@ -351,8 +351,8 @@ func TestT8_EmptyReply(t *testing.T) {
 	if err != nil {
 		t.Fatalf("T8: %v", err)
 	}
-	if n2.Kind != NeedDone || n2.Done.Reason.Code != "empty response" {
-		t.Fatalf("T8 应 Failed(empty response): %+v", n2)
+	if n2.Kind != NeedDone || n2.Done.Reason.Code != "EMPTY_RESPONSE" || n2.Done.Reason.Message == "" {
+		t.Fatalf("T8 应 Failed(EMPTY_RESPONSE)，码与说明分开: %+v", n2)
 	}
 	if len(n2.Done.Unconsumed) != 1 {
 		t.Fatalf("T8 待处理插话应交还: %+v", n2.Done)

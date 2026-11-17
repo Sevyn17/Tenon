@@ -143,6 +143,9 @@ export function applySnapshot(s: SessionState, snap: SessionSnapshot, now = Date
       startedAt: now,
     })),
     turn: snap.run_state === "running" ? (s.turn ?? { turn: live?.turn ?? 0, inputs: [], startedAt: now }) : null,
+    // last_end（能力 last_end）：服务端只在 idle 时给。运行中清掉；idle 且快照没给时保留已有的
+    // （旧服务端没有这个字段；新服务端没给时多半是回退清掉了，靠回合号比对 turnEnd 不再显示）。
+    lastEnd: snap.run_state === "running" ? null : (snap.last_end ?? s.lastEnd),
   };
 }
 
@@ -186,13 +189,21 @@ export function reduce(s: SessionState, ev: Envelope, now = Date.now()): Session
     }
     case "log.rewound": {
       const to = (ev.data as LogRewound).to;
-      return { ...s, entries: s.entries.filter((e) => e.idx < to), len: to, base: Math.min(s.base, to) };
+      const entries = s.entries.filter((e) => e.idx < to);
+      // 结束原因所在的回合被截掉了：不再挂着（服务端回退时也清空 last_end）
+      const cut = s.entries.find((e) => e.idx >= to);
+      const lastEnd = s.lastEnd && cut && cut.turn <= s.lastEnd.turn ? null : s.lastEnd;
+      return { ...s, entries, len: to, base: Math.min(s.base, to), lastEnd };
     }
     case "log.compacted":
       return { ...s, base: (ev.data as LogCompacted).upto };
     case "session.state_changed": {
-      const running = (ev.data as StateChanged).run_state === "running";
-      return { ...s, runState: running ? "running" : "idle", turn: running ? s.turn : null };
+      const d = ev.data as StateChanged;
+      const running = d.run_state === "running";
+      // 回合结束那次检查点写的 state_changed 带 last_end（持久事件，晚到的订阅回放也能拿到）；
+      // 变为 running 清空；idle 但没带（预算挂起后恢复之类）保留原值。
+      const lastEnd = running ? null : (d.last_end ?? s.lastEnd);
+      return { ...s, runState: running ? "running" : "idle", turn: running ? s.turn : null, lastEnd };
     }
     case "session.settings_changed": {
       const st = (ev.data as SettingsChanged).settings;
@@ -268,6 +279,14 @@ export function reduce(s: SessionState, ev: Envelope, now = Date.now()): Session
     }
   }
   return s;
+}
+
+/**
+ * 某回合的结束原因（回合尾巴的异常状态用）：只有 lastEnd 的回合号等于它时才给，避免把上一回合 /
+ * 已回退掉的回合的错误挂到别的回合上。
+ */
+export function turnEnd(s: Pick<SessionState, "lastEnd">, turn: number): TurnEnded | null {
+  return s.lastEnd && s.lastEnd.turn === turn ? s.lastEnd : null;
 }
 
 // ---- 派生：按回合分组（界面渲染与回合尾巴用） ----

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applySnapshot, groupTurns, initialState, mergeEntries, reduce, type SessionState } from "./session-reducer";
+import { applySnapshot, groupTurns, initialState, mergeEntries, reduce, turnEnd, type SessionState } from "./session-reducer";
 import type { Entry, Envelope, SessionSnapshot } from "./wire.gen";
 
 const ev = (kind: string, data: unknown, cursor?: number): Envelope => ({ v: 2, session: "s", kind, at: 0, cursor, data });
@@ -136,5 +136,56 @@ describe("session reducer", () => {
     expect(st.tools[0].live).toBe("a\nb");
     st = run(st, ev("tool.ended", { call_id: "c1", status: "ok", preview: "done" }));
     expect(st.tools[0].live).toBeUndefined();
+  });
+});
+
+describe("last_end（回合结束原因持久化，docs/50 M2 协议T3）", () => {
+  const failed = (turn: number, code = "AUTH") => ({ turn, kind: "failed", code, message: "401" });
+
+  it("快照先到：idle 快照带 last_end → lastEnd，按回合号给尾巴", () => {
+    const s = applySnapshot(mergeEntries(initialState("s"), [entry(0, 1, "user")]), snap({ last_end: failed(1) }));
+    expect(s.lastEnd).toMatchObject({ turn: 1, kind: "failed", code: "AUTH" });
+    expect(turnEnd(s, 1)?.code).toBe("AUTH");
+    expect(turnEnd(s, 2)).toBeNull(); // 回合号不匹配不显示
+  });
+
+  it("快照先到，之后的回合：turn.started 清空，state_changed（idle + last_end）记下新回合的", () => {
+    let s = applySnapshot(initialState("s"), snap({ last_end: failed(1) }));
+    s = run(s, ev("turn.started", { turn: 2, inputs: [] }));
+    expect(s.lastEnd).toBeNull();
+    s = run(s, ev("session.state_changed", { run_state: "idle", last_end: failed(2, "RATE_LIMIT") }, 9));
+    expect([s.runState, s.lastEnd?.turn, s.lastEnd?.code]).toEqual(["idle", 2, "RATE_LIMIT"]);
+  });
+
+  it("事件先到：turn.ended 已记下，随后的旧服务端快照（没有 last_end）不清掉它", () => {
+    let s = run(initialState("s"), ev("turn.ended", failed(3)));
+    s = applySnapshot(s, snap());
+    expect(s.lastEnd?.turn).toBe(3);
+    // 新服务端快照带 last_end：以快照为准
+    s = applySnapshot(s, snap({ last_end: { turn: 3, kind: "done" } }));
+    expect(s.lastEnd?.kind).toBe("done");
+  });
+
+  it("没有 last_end（旧服务端）：快照与 state_changed 都不动 lastEnd，退回只靠 turn.ended", () => {
+    let s = applySnapshot(initialState("s"), snap());
+    expect(s.lastEnd).toBeNull();
+    s = run(s, ev("session.state_changed", { run_state: "idle" }, 6));
+    expect(s.lastEnd).toBeNull();
+    s = run(s, ev("turn.ended", failed(1)), ev("session.state_changed", { run_state: "idle" }, 7));
+    expect(s.lastEnd?.turn).toBe(1); // idle 但没带 last_end：保留
+  });
+
+  it("运行中：running 的快照与 state_changed 都清空 lastEnd", () => {
+    const s0 = run(initialState("s"), ev("turn.ended", failed(1)));
+    expect(applySnapshot(s0, snap({ run_state: "running", last_end: failed(1) })).lastEnd).toBeNull();
+    expect(run(s0, ev("session.state_changed", { run_state: "running" }, 6)).lastEnd).toBeNull();
+  });
+
+  it("log.rewound 截掉结束原因所在的回合：lastEnd 清空；截在它之后：保留", () => {
+    const base = mergeEntries(initialState("s"), [entry(0, 1, "user"), entry(1, 1), entry(2, 2, "user")]);
+    const s = run(base, ev("turn.ended", failed(2)));
+    expect(run(s, ev("log.rewound", { to: 2, voided_interactions: [] })).lastEnd).toBeNull();
+    const s1 = run(base, ev("turn.ended", failed(1)));
+    expect(run(s1, ev("log.rewound", { to: 2, voided_interactions: [] })).lastEnd?.turn).toBe(1);
   });
 });

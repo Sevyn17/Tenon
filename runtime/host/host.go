@@ -586,6 +586,9 @@ type actor struct {
 	steered map[string]bool
 	// turnInputs 即将开始的回合吃进的输入（inbox item id），turn_start 发出后清空。只在 actor 协程里读写。
 	turnInputs []string
+	// turnOpen 已发 turn_start、还没发 turn_end（publishTurnEnd）。turnFailed 据此决定要不要补发 turn_end
+	// 并记 last_end：drive 直接返回 error 时回合没有正常收尾（客户端改进 M2）。只在 actor 协程里读写。
+	turnOpen bool
 	// mailDirty 自上次在需求边界读信箱后，是否有新信件落进本会话信箱（审查 P1-36：原先每次调模型前都查一次信箱，
 	// 绝大多数步没有新信）。经本宿主写信箱的路径（投递、Send / Note、交还插话）都会置位；打开时置位以读到积压。
 	mailDirty atomic.Bool

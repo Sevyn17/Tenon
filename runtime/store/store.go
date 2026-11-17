@@ -307,6 +307,28 @@ type Checkpoint struct {
 	// Events 本次检查点附带的其他持久事件（档位、设置、运行状态变化等，06 10.2.1）：排在条目事件之后，各占一个游标。
 	// 条目追加与回退的事件由存储自己生成，不用放在这里。
 	Events []Event
+	// LastEnd 非空：更新会话的「最近一个回合怎么结束的」，与 RunState 同一事务；空 = 不变。
+	// 回退（TruncateFrom）截掉的条目里有回合号 <= 已存 LastEnd.Turn 的，存储先把它清空，
+	// 再应用本字段——回退后快照不会还挂着已经截掉的回合的结束原因。
+	LastEnd *LastEnd
+}
+
+// LastEnd 会话最近一个回合的结束原因（客户端改进 M2 / C-1）：进持久状态，晚到的订阅、刷新、重连都能补回失败原因。
+// End.Message 由写入方截到 LastEndMessageMax 字节以内（agent.SetLastEnd 负责），存储原样保存。
+type LastEnd struct {
+	Turn uint32            `json:"turn"`
+	End  session.EndReason `json:"end"`
+	At   int64             `json:"at"` // 回合结束时间，毫秒
+}
+
+// LastEndMessageMax LastEnd.End.Message 的上限（字节）：错误信息可能带厂商返回的整段正文，进会话行前截断。
+const LastEndMessageMax = 500
+
+// RewindClears 回退时是否清空已存的 last：截掉的条目里最小回合号是 minTurn（found=false = 没截到任何条目）。
+// 截到了 last 所在回合或更早的回合就清空；只截了更晚回合的条目（last 所在回合还完整）则保留。
+// 两个存储实现共用这条规则。
+func RewindClears(last *LastEnd, minTurn uint32, found bool) bool {
+	return last != nil && found && minTurn <= last.Turn
 }
 
 // Loaded 读取结果。
@@ -316,6 +338,8 @@ type Loaded struct {
 	Snapshot session.Snapshot
 	// Cursor 读取时会话事件序列的最新游标（与头部同一次读取，protocol 2 快照的 cursor，06 10.2.2 规则 4）。
 	Cursor int64
+	// LastEnd 最近一个回合的结束原因；nil = 没有记录（旧会话、还没跑完过回合、或已被回退清掉）。
+	LastEnd *LastEnd
 }
 
 // Cleaner 插件清理回调（OnSessionDelete 点位的实现）。
@@ -432,6 +456,8 @@ type SessionInfo struct {
 	UpdatedAt int64  `json:"updated_at"`
 	// Meta 应用写入的业务键（JSON 对象）。
 	Meta json.RawMessage `json:"meta,omitempty"`
+	// LastEnd 最近一个回合的结束原因（同 Loaded.LastEnd）；nil = 没有记录。
+	LastEnd *LastEnd `json:"last_end,omitempty"`
 }
 
 // MergeMeta 把 set 合并进业务键 JSON 对象（值为 nil 删除该键），返回新对象。原对象不合法时按空对象处理。

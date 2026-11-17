@@ -5,6 +5,7 @@
 // 游标过期（cursor_expired）时整个重新加载。
 //
 // 发送：每条输入带 client_id（幂等键）；失败的留在 outbox 里可重发，成功后等 turn.started.inputs / 条目的 client_ids 收掉。
+// 已打开、订阅还在建立时，send 先等订阅建好再发（否则很快结束的回合，其 turn.ended 等事件会在订阅前发完）。
 
 import type { Connection } from "./transport";
 import { clientID } from "./transport";
@@ -48,11 +49,19 @@ export interface SessionStore extends ReadStore<SessionView> {
   cancel(): Promise<void>;
 }
 
-export function createSessionStore(conn: Connection, id: string): SessionStore {
+export interface SessionStoreOptions {
+  /** 每次取到快照时调用（交互 store 用它补上快照里的 interactions：订阅前就打开的交互不会漏掉）。 */
+  onSnapshot?: (snap: SessionSnapshot) => void;
+}
+
+export function createSessionStore(conn: Connection, id: string, hooks: SessionStoreOptions = {}): SessionStore {
   const store = createStore<SessionView>({ ...initialState(id), outbox: [], loadingOlder: false });
   let gen = 0; // 加载代次：重新加载或关闭后，旧请求的结果丢弃
   let off: (() => void) | null = null;
   let refs = 0;
+  // 正在进行的加载（快照 → 尾部 → 订阅）。send 先等它：订阅建立之前发出的输入，回合很快结束时
+  // turn.ended、interaction.opened 会在订阅前发完，本端就收不到（docs/50 M2，协议T3）。
+  let loading: Promise<void> | null = null;
 
   const patch = (f: (v: SessionView) => SessionView) => store.update(f);
   const setState = (f: (s: SessionState) => SessionState) =>
@@ -98,26 +107,34 @@ export function createSessionStore(conn: Connection, id: string): SessionStore {
     });
   };
 
-  const load = async (create: boolean) => {
+  const load = (create: boolean): Promise<void> => {
     const g = ++gen;
-    setState((s) => ({ ...s, status: "loading", error: undefined }));
-    try {
-      let snap: SessionSnapshot;
+    const p = (async () => {
+      setState((s) => ({ ...s, status: "loading", error: undefined }));
       try {
-        snap = await conn.call("session.get", { session: id });
+        let snap: SessionSnapshot;
+        try {
+          snap = await conn.call("session.get", { session: id });
+        } catch (e) {
+          if (!(create && e instanceof ApiError && e.code === "not_found")) throw e;
+          snap = await conn.call("session.create", { session: id });
+        }
+        if (g !== gen) return;
+        hooks.onSnapshot?.(snap);
+        const page = await conn.call("session.entries", { session: id, tail: PAGE });
+        if (g !== gen) return;
+        setState((s) => ({ ...mergeEntries(applySnapshot({ ...s, entries: [] }, snap), page.entries ?? [], page.base, page.len), status: "ready" }));
+        await subscribe(snap.cursor, g);
       } catch (e) {
-        if (!(create && e instanceof ApiError && e.code === "not_found")) throw e;
-        snap = await conn.call("session.create", { session: id });
+        if (g !== gen) return;
+        setState((s) => ({ ...s, status: "error", error: e instanceof Error ? e.message : String(e) }));
       }
-      if (g !== gen) return;
-      const page = await conn.call("session.entries", { session: id, tail: PAGE });
-      if (g !== gen) return;
-      setState((s) => ({ ...mergeEntries(applySnapshot({ ...s, entries: [] }, snap), page.entries ?? [], page.base, page.len), status: "ready" }));
-      await subscribe(snap.cursor, g);
-    } catch (e) {
-      if (g !== gen) return;
-      setState((s) => ({ ...s, status: "error", error: e instanceof Error ? e.message : String(e) }));
-    }
+    })();
+    loading = p;
+    void p.finally(() => {
+      if (loading === p) loading = null;
+    });
+    return p;
   };
 
   const deliver = async (o: Outgoing) => {
@@ -191,6 +208,8 @@ export function createSessionStore(conn: Connection, id: string): SessionStore {
       if (!t && !content?.length) return;
       const o: Outgoing = { client_id: clientID(), text: t, content, state: "sending", steer: store.get().runState === "running" && !content?.length };
       patch((v) => ({ ...v, outbox: [...v.outbox, o] }));
+      // 已有人打开本会话、订阅还没建好：等它建好再发（加载失败也照发，失败原因由加载自己报）。
+      if (refs > 0 && loading) await loading;
       await deliver(o);
     },
     async retry(cid) {

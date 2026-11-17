@@ -91,9 +91,12 @@ type LogCompacted struct {
 	EntryIdx int `json:"entry_idx"`
 }
 
-// StateChanged 会话运行状态变化（idle / waiting_model / waiting_tools）。
+// StateChanged 会话运行状态变化（idle / running）。
 type StateChanged struct {
 	RunState string `json:"run_state"`
+	// LastEnd 本次变化记下的回合结束原因（hello 能力 last_end）：只在回合结束、run_state 为 idle 时给；
+	// 没给 = 结束原因没变（变为 running、恢复挂起等），客户端保留原值。
+	LastEnd *TurnEnded `json:"last_end,omitempty"`
 }
 
 // ModeChanged 会话权限档位切换。
@@ -137,12 +140,16 @@ type TurnStarted struct {
 	Inputs []string `json:"inputs"`
 }
 
-// TurnEnded Kind: done / cancelled / max_steps / denied / failed（G7：不再是拼好的字符串）。
+// TurnEnded Kind: done / cancelled / max_steps / failed（G7：不再是拼好的字符串）。
+// failed 时 Code 只放稳定错误码（如 MISSING_CREDENTIAL、TURN_FAILED），Message 放说明（N-5）；
+// 旧服务端可能把两者拼在 Code 里（"CODE: 说明"），客户端两种都要认。
 type TurnEnded struct {
 	Turn    uint32 `json:"turn"`
 	Kind    string `json:"kind"`
 	Code    string `json:"code,omitempty"`
 	Message string `json:"message,omitempty"`
+	// At 回合结束时间（毫秒）；旧服务端不给。
+	At int64 `json:"at,omitempty"`
 }
 
 // TurnRejected 一个回合在开始前被拒（守卫或预算）。

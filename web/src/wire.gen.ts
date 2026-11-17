@@ -202,6 +202,7 @@ export interface SessionSnapshot {
   interactions: Interaction[];
   live?: Live;
   cursor: number;
+  last_end?: TurnEnded;
 }
 
 export interface SessionInfo {
@@ -263,6 +264,7 @@ export interface LogCompacted {
 
 export interface StateChanged {
   run_state: string;
+  last_end?: TurnEnded;
 }
 
 export interface SettingsChanged {
@@ -300,6 +302,7 @@ export interface TurnEnded {
   kind: string;
   code?: string;
   message?: string;
+  at?: number;
 }
 
 export interface TurnRejected {

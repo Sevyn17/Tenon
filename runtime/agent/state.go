@@ -185,6 +185,7 @@ type commitBuf struct {
 	outbox    []store.OutboxItem // 外发信封（08 9.6：外发与检查点同事务）
 	consume   []string           // 删除的 inbox 项（session-host H7：core.Input 成功后同事务删除）
 	events    []store.Event      // 宿主附加的持久事件（会话关闭、分叉等，06 10.5 表一），排在状态事件之后
+	lastEnd   *store.LastEnd     // 待写的回合结束原因（SetLastEnd）：随下一次检查点写进会话行与 run_state 事件
 
 	// 已提交的会话状态（protocol 2，06 10.2.2 规则 2）：检查点按它与新头部比较，变了就随检查点写持久事件。
 	known     bool
@@ -198,7 +199,7 @@ type commitBuf struct {
 // reset 提交成功后清空缓冲。
 func (b *commitBuf) reset(logLen int) {
 	b.committed = logLen
-	b.spans, b.outbox, b.consume, b.events = nil, nil, nil, nil
+	b.spans, b.outbox, b.consume, b.events, b.lastEnd = nil, nil, nil, nil, nil
 }
 
 // remember 记下已提交的运行状态、设置与 Ext（打开会话与每次提交后调用）。
@@ -207,13 +208,19 @@ func (b *commitBuf) remember(run string, h session.Header) {
 }
 
 // stateEvents 新头部相对已提交状态的变化 → 持久事件（运行状态、设置、Ext 各项）。
+// 有待写的回合结束原因时一定写一条 run_state（运行状态没变也写），数据带 last_end：
+// 它是持久事件，从旧游标回放的订阅者也能拿到失败原因（客户端改进 M2）。
 func (b *commitBuf) stateEvents(run string, h session.Header) []store.Event {
 	if !b.known {
 		return nil
 	}
 	var out []store.Event
-	if run != b.run {
-		d, _ := json.Marshal(map[string]any{"run_state": run})
+	if run != b.run || b.lastEnd != nil {
+		ev := map[string]any{"run_state": run}
+		if b.lastEnd != nil {
+			ev["last_end"] = b.lastEnd
+		}
+		d, _ := json.Marshal(ev)
 		out = append(out, store.Event{Kind: store.EventRunState, Data: d})
 	}
 	if ms, md, rs := maxStepsOf(h), modelOf(h), reasoningOf(h); ms != b.maxSteps || md != b.model || rs != b.reasoning {

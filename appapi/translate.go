@@ -14,6 +14,7 @@ import (
 
 	"github.com/Sevyn17/tenon/appapi/wire"
 	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/store"
 )
 
 // MaxWireText 线上工具结果文本的上限（06 10.12 Q6）；超出截断并给 output_ref。
@@ -202,6 +203,33 @@ func WireTurnEnded(turn uint32, end session.EndReason) wire.TurnEnded {
 		out.Kind = "failed"
 	}
 	return out
+}
+
+// WireLastEnd 存储里的回合结束原因（store.LastEnd）→ 线上 TurnEnded（带 at）；nil 给 nil。
+func WireLastEnd(le *store.LastEnd) *wire.TurnEnded {
+	if le == nil {
+		return nil
+	}
+	out := WireTurnEnded(le.Turn, le.End)
+	out.At = le.At
+	return &out
+}
+
+// lastEndOf 从 run_state 持久事件的数据里取 last_end（agent 在回合结束的检查点里写，
+// 见 runtime/agent 的 stateEvents）；没有或不合法给 nil。
+func lastEndOf(v any) *store.LastEnd {
+	if v == nil {
+		return nil
+	}
+	b, err := json.Marshal(v)
+	if err != nil {
+		return nil
+	}
+	var le store.LastEnd
+	if json.Unmarshal(b, &le) != nil {
+		return nil
+	}
+	return &le
 }
 
 func stringList(v any) []string {

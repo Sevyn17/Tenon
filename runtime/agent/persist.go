@@ -159,6 +159,7 @@ func (a *Agent) checkpoint(ctx context.Context, run string, rec *reqlog.Record) 
 	}
 	hub, hubN := a.tools.snapshot()
 	cp.Spans = append(append([]store.Span(nil), a.buf.spans...), hub...)
+	cp.LastEnd = a.buf.lastEnd                   // 回合结束原因与 run_state 同一事务（提交失败时留在缓冲里，下次重试）
 	cp.Events = a.buf.stateEvents(run, s.Header) // 运行状态、设置、Ext 变化随检查点写持久事件（06 10.2.2 规则 2）
 	cp.Events = append(cp.Events, a.buf.events...)
 	if err := a.Store.Commit(ctx, cp); err != nil {

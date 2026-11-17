@@ -30,6 +30,7 @@ func Run(t *testing.T, open func(t *testing.T) store.Store) {
 		{"RoundTripAndRestore", testRoundTrip},
 		{"ConditionalWrite", testConditionalWrite},
 		{"TruncateArchivesAndSyncSeq", testTruncate},
+		{"LastEndRoundTripAndRewind", testLastEnd},
 		{"ReplayListAndNotify", testReplayAndList},
 		{"Definitions", testDefinitions},
 		{"InboxIdempotentAcrossConsume", testInbox},
@@ -311,6 +312,91 @@ func testTruncate(t *testing.T, db store.Store) {
 	if k := exportKinds(t, &buf); k["archived"] != 1 || k["entry"] != 2 {
 		t.Fatalf("导出 %v", k)
 	}
+}
+
+// testLastEnd 回合结束原因（客户端改进 M2）：新会话为空；Commit 带 LastEnd 写入，Load 与列表读回；
+// 不带 LastEnd 的提交不改它；回退只截更晚回合时保留，截到它所在回合时清空；
+// 同一检查点既回退又带新值时以新值为准。
+func testLastEnd(t *testing.T, db store.Store) {
+	ctx := context.Background()
+	c := newCore()
+	create(t, db, store.SessionMeta{ID: "le"}, c)
+	if l, err := db.Load(ctx, "le", nil); err != nil || l.LastEnd != nil {
+		t.Fatalf("新会话 LastEnd 应为空：%+v %v", l, err)
+	}
+	turn := func(text string) uint32 {
+		t.Helper()
+		n, err := c.Input(txt(text), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := c.ModelDone(n.Model.RequestID, n.ID, session.AssistantItem{Content: txt("re:" + text)}, session.StopReason{V: "stop"}); err != nil {
+			t.Fatal(err)
+		}
+		es := c.Snapshot().Entries
+		return es[len(es)-1].Turn
+	}
+	check := func(why string, want *store.LastEnd) {
+		t.Helper()
+		l, err := db.Load(ctx, "le", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !sameLastEnd(l.LastEnd, want) {
+			t.Fatalf("%s：Load 的 LastEnd = %+v，期望 %+v", why, l.LastEnd, want)
+		}
+		ls, err := db.ListSessions(ctx, 0, 50, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, s := range ls {
+			if s.ID == "le" && !sameLastEnd(s.LastEnd, want) {
+				t.Fatalf("%s：列表的 LastEnd = %+v，期望 %+v", why, s.LastEnd, want)
+			}
+		}
+	}
+
+	t1 := turn("一")
+	failed := store.LastEnd{Turn: t1, At: 123, End: session.EndReason{Kind: session.EndFailed,
+		Code: "MISSING_CREDENTIAL", Message: "提供方 deepseek 凭证 env:DEEPSEEK_API_KEY 不可用"}}
+	n := commitAll(t, db, "le", c, 0, func(cp *store.Checkpoint) { cp.RunState = "idle"; cp.LastEnd = &failed })
+	check("写入后", &failed)
+
+	turn("二")
+	n = commitAll(t, db, "le", c, n, nil)
+	check("不带 LastEnd 的提交不改它", &failed)
+
+	rewind := func(to int, le *store.LastEnd) {
+		t.Helper()
+		if err := c.Rewind(to); err != nil {
+			t.Fatalf("Rewind(%d): %v", to, err)
+		}
+		s := c.Snapshot()
+		if err := db.Commit(ctx, store.Checkpoint{SessionID: "le", ExpectLogLen: n, TruncateFrom: &to, AppendFrom: to,
+			Header: s.Header, RunState: "idle", LastEnd: le}); err != nil {
+			t.Fatalf("回退提交: %v", err)
+		}
+		n = s.Header.LogLen
+	}
+	rewind(2, nil) // 第 2 回合起点：只截第 2 回合
+	check("只截更晚的回合", &failed)
+	rewind(0, nil) // 截到第 1 回合
+	check("截到所在回合", nil)
+
+	t3 := turn("三")
+	done := store.LastEnd{Turn: t3, At: 456, End: session.DoneReason()}
+	n = commitAll(t, db, "le", c, n, func(cp *store.Checkpoint) { cp.RunState = "idle"; cp.LastEnd = &done })
+	check("回退后再写", &done)
+	later := store.LastEnd{Turn: 9, At: 789, End: session.CancelledReason()}
+	rewind(0, &later)
+	check("同一检查点回退又写新值", &later)
+}
+
+func sameLastEnd(a, b *store.LastEnd) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
 }
 
 func testReplayAndList(t *testing.T, db store.Store) {

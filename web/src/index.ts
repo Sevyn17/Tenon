@@ -95,7 +95,7 @@ export function createClient(opts: ClientOptions = {}): Client {
     session(id) {
       let s = opened.get(id);
       if (!s) {
-        s = createSessionStore(conn, id);
+        s = createSessionStore(conn, id, { onSnapshot: (snap) => interactions.absorb(id, snap.interactions ?? []) });
         opened.set(id, s);
       }
       return s;

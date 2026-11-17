@@ -730,7 +730,8 @@ func (c *Core) ModelDone(requestID string, needID uint64, reply AssistantItem, s
 
 	if empty { // T8：空回复不写条目；待处理插话原样交还
 		unconsumed := append([]PendingInput(nil), c.hdr.PendingInputs...)
-		return c.endTurn(FailedReason("empty response"), unconsumed), nil
+		// 稳定码与 modelhub.CodeEmptyResponse 一致（session 不能 import modelhub）；原先是小写的 "empty response"。
+		return c.endTurn(EndReason{Kind: EndFailed, Code: "EMPTY_RESPONSE", Message: "模型返回了空回复"}, unconsumed), nil
 	}
 
 	// 追加 Assistant 条目（调用即使被改向也原样记录，R14 由 Cancelled 结果闭合）。

@@ -470,14 +470,14 @@ github.com/Sevyn17/tenon/appapi/wire: type SessionArgs struct{Session string}
 github.com/Sevyn17/tenon/appapi/wire: type SessionClosed struct{Reason string}
 github.com/Sevyn17/tenon/appapi/wire: type SessionForked struct{From string; Upto int}
 github.com/Sevyn17/tenon/appapi/wire: type SessionInfo struct{ID string; Title string; Preview string; RunState string; Origin string; Parent string; UpdatedAt int64; Pinned bool; Workspace string}
-github.com/Sevyn17/tenon/appapi/wire: type SessionSnapshot struct{ID string; Parent string; Origin string; Title string; Pinned bool; RunState string; Mode *Mode; Settings Settings; Log LogPos; Interactions []Interaction; Live *Live; Cursor int64}
+github.com/Sevyn17/tenon/appapi/wire: type SessionSnapshot struct{ID string; Parent string; Origin string; Title string; Pinned bool; RunState string; Mode *Mode; Settings Settings; Log LogPos; Interactions []Interaction; Live *Live; Cursor int64; LastEnd *TurnEnded}
 github.com/Sevyn17/tenon/appapi/wire: type SessionUpdated struct{Title string; Pinned bool}
 github.com/Sevyn17/tenon/appapi/wire: type SessionsChanged struct{ID string; RunState string; Title string; UpdatedAt int64; Pinned bool; Deleted bool}
 github.com/Sevyn17/tenon/appapi/wire: type Settings struct{MaxSteps uint32; Model string; Reasoning string}
 github.com/Sevyn17/tenon/appapi/wire: type SettingsArgs struct{Session string; MaxSteps *uint32; Model *string; Reasoning *string}
 github.com/Sevyn17/tenon/appapi/wire: type SettingsChanged struct{Settings Settings}
 github.com/Sevyn17/tenon/appapi/wire: type SettingsResult struct{Settings Settings; Committed bool}
-github.com/Sevyn17/tenon/appapi/wire: type StateChanged struct{RunState string}
+github.com/Sevyn17/tenon/appapi/wire: type StateChanged struct{RunState string; LastEnd *TurnEnded}
 github.com/Sevyn17/tenon/appapi/wire: type Stats struct{Attempts int; Reported int; Missing int; Errors int; Input uint64; Output uint64; CacheRead uint64; CacheWrite uint64; HitRate float64; ToolCalls int; Compacts int; LastRequest string; Composition encoding/json.RawMessage}
 github.com/Sevyn17/tenon/appapi/wire: type SteerArgs struct{Session string; Text string; ClientID string}
 github.com/Sevyn17/tenon/appapi/wire: type StreamRef struct{StreamID string}
@@ -490,7 +490,7 @@ github.com/Sevyn17/tenon/appapi/wire: type ToolRunning struct{CallID string; Arg
 github.com/Sevyn17/tenon/appapi/wire: type ToolStarted struct{CallID string; Name string; EntryID string}
 github.com/Sevyn17/tenon/appapi/wire: type TraceArgs struct{Trace string}
 github.com/Sevyn17/tenon/appapi/wire: type TraceResult struct{Text string}
-github.com/Sevyn17/tenon/appapi/wire: type TurnEnded struct{Turn uint32; Kind string; Code string; Message string}
+github.com/Sevyn17/tenon/appapi/wire: type TurnEnded struct{Turn uint32; Kind string; Code string; Message string; At int64}
 github.com/Sevyn17/tenon/appapi/wire: type TurnRejected struct{Inputs []string; Reason string}
 github.com/Sevyn17/tenon/appapi/wire: type TurnStarted struct{Turn uint32; Inputs []string}
 github.com/Sevyn17/tenon/appapi/wire: func TypeScript() string

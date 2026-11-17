@@ -244,6 +244,9 @@ type SessionSnapshot struct {
 	Interactions []Interaction `json:"interactions"`
 	Live         *Live         `json:"live,omitempty"`
 	Cursor       int64         `json:"cursor"`
+	// LastEnd 最近一个回合的结束原因（hello 能力 last_end）：只在 idle 时给；没有记录（旧会话、
+	// 还没跑完过回合、已被回退清掉）时不给。
+	LastEnd *TurnEnded `json:"last_end,omitempty"`
 }
 
 // 推理强度（Settings.reasoning / ModelInfo.efforts）：三档通用取值，各适配器自己映射

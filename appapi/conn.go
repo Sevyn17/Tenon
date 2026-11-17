@@ -320,7 +320,9 @@ func (c *Conn) translate(e bus.Envelope) []wire.Envelope {
 			wire.LogRewound{To: intOf(m["to"]), VoidedInteractions: []string{}})}
 	case store.EventRunState:
 		s, _ := m["run_state"].(string)
-		return []wire.Envelope{c.envelope(e.Session, wire.EvStateChanged, e.Seq, 0, wire.StateChanged{RunState: wireRun(s)})}
+		// 回合结束的检查点带 last_end（持久事件，从旧游标回放也拿得到失败原因）；其余运行状态变化不带。
+		return []wire.Envelope{c.envelope(e.Session, wire.EvStateChanged, e.Seq, 0,
+			wire.StateChanged{RunState: wireRun(s), LastEnd: WireLastEnd(lastEndOf(m["last_end"]))})}
 	case store.EventSettings:
 		model, _ := m["model"].(string)
 		reasoning, _ := m["reasoning"].(string)
@@ -366,7 +368,9 @@ func (c *Conn) translate(e bus.Envelope) []wire.Envelope {
 		end.Code, _ = m["code"].(string)
 		end.Message, _ = m["message"].(string)
 		turn := uint32(intOf(m["turn"]))
-		return []wire.Envelope{c.envelope(e.Session, wire.EvTurnEnded, 0, turn, WireTurnEnded(turn, end))}
+		te := WireTurnEnded(turn, end)
+		te.At = e.At // 总线发布时间（毫秒）
+		return []wire.Envelope{c.envelope(e.Session, wire.EvTurnEnded, 0, turn, te)}
 	case EventTurnDenied:
 		reason, _ := m["reason"].(string)
 		return []wire.Envelope{c.envelope(e.Session, wire.EvTurnRejected, 0, 0,

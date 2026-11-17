@@ -147,6 +147,8 @@ func (a *Agent) drive(ctx context.Context, need *session.Need) (session.EndReaso
 		case session.NeedDone:
 			a.unconsumed = append(a.unconsumed, need.Done.Unconsumed...)
 			a.endStep("ok")
+			// 结束原因与 run_state=idle 落进同一事务（客户端改进 M2）：晚到的订阅、刷新都能补回。
+			a.SetLastEnd(a.LastTurn(), need.Done.Reason)
 			if err := a.point(ctx, "turn_end", "idle", nil); err != nil {
 				return session.EndReason{}, err
 			}
@@ -389,7 +391,8 @@ func (a *Agent) sendModel(ctx context.Context, need *session.Need, req session.R
 		n, e := a.Core.ModelInterrupted(id, nid, reply, session.CancelledReason())
 		return n, e
 	default:
-		n, e := a.Core.ModelFailed(id, nid, session.FailedReason(err.Error()))
+		// N-5：码与人话分开（原先 FailedReason(err.Error()) 把「CODE: 说明」整串塞进 Code）。
+		n, e := a.Core.ModelFailed(id, nid, ErrorReason(err, ""))
 		return n, e
 	}
 }
