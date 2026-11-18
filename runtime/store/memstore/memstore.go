@@ -519,7 +519,7 @@ func (s *Store) Load(ctx context.Context, id string, base *int) (*store.Loaded, 
 	m := x.meta
 	m.Meta, m.UseConfig = objOr(m.Meta), objOr(m.UseConfig)
 	return &store.Loaded{Meta: m, RunState: x.runState, Snapshot: session.Snapshot{Header: hdr, Base: from, Entries: entries},
-		Cursor: int64(x.nextSeq - 1), LastEnd: copyLastEnd(x.lastEnd)}, nil
+		Cursor: int64(x.nextSeq - 1), LastEnd: copyLastEnd(x.lastEnd), Preview: x.preview}, nil
 }
 
 func objOr(b json.RawMessage) json.RawMessage {
@@ -677,18 +677,44 @@ func (s *Store) ListUnassigned(ctx context.Context, before int64, limit int, top
 }
 
 // listSessions ListSessionsIn / ListUnassigned 共用：unassigned 时只要 workspace 为空的，否则 workspace 非空才过滤。
+// 这两个旧方法不看归档（与升级前一致），归档筛选只在 QuerySessions 里。
 func (s *Store) listSessions(workspace string, unassigned bool, before int64, limit int, topOnly bool) ([]store.SessionInfo, error) {
+	return s.query(store.SessionQuery{Workspace: workspace, Unassigned: unassigned, Before: before, Limit: limit, TopOnly: topOnly},
+		store.ArchivedInclude)
+}
+
+// QuerySessions 按条件列会话（store.SessionQueryStore，客户端改进 M7 协议T12）。语义与 sqlite 一致。
+func (s *Store) QuerySessions(ctx context.Context, q store.SessionQuery) ([]store.SessionInfo, error) {
+	return s.query(q, q.Archived)
+}
+
+// query 列会话；archived 单独传，旧方法固定 ArchivedInclude。
+func (s *Store) query(q store.SessionQuery, archived store.ArchivedFilter) ([]store.SessionInfo, error) {
 	if err := s.lock(); err != nil {
 		return nil, err
 	}
 	defer s.mu.Unlock()
+	limit := q.Limit
 	if limit <= 0 || limit > 500 {
 		limit = 50
 	}
 	var out []store.SessionInfo
 	for _, x := range s.sessions {
-		if x.status == "deleted" || (before > 0 && x.updatedAt >= before) || (topOnly && x.meta.ParentID != "") ||
-			(workspace != "" && x.meta.Workspace != workspace) || (unassigned && x.meta.Workspace != "") {
+		if x.status == "deleted" || (q.Before > 0 && x.updatedAt >= q.Before) || (q.TopOnly && x.meta.ParentID != "") ||
+			(q.Parent != "" && x.meta.ParentID != q.Parent) {
+			continue
+		}
+		if q.Unassigned {
+			if x.meta.Workspace != "" {
+				continue
+			}
+		} else if q.Workspace != "" && x.meta.Workspace != q.Workspace {
+			continue
+		}
+		if a := store.ArchivedOf(x.meta.Meta); (archived == store.ArchivedExclude && a) || (archived == store.ArchivedOnly && !a) {
+			continue
+		}
+		if q.Text != "" && !x.matches(q.Text) {
 			continue
 		}
 		out = append(out, x.info())
@@ -713,6 +739,23 @@ func (x *sess) info() store.SessionInfo {
 		i.Meta = cloneRaw(m)
 	}
 	return i
+}
+
+// matches 文本搜索：标题或任一条（未回退的）user 条目正文包含 text（store.SearchText 规则，与 sqlite 的 summary 一致）。
+func (x *sess) matches(text string) bool {
+	if store.ContainsFold(x.meta.Title, text) {
+		return true
+	}
+	for _, en := range x.entries {
+		var e session.Entry
+		if json.Unmarshal(en.body, &e) != nil || e.Item.Kind != session.KindUser || e.Item.User == nil {
+			continue
+		}
+		if store.ContainsFold(store.SearchText(e.Item.User.Content), text) {
+			return true
+		}
+	}
+	return false
 }
 
 // UpdateSessionMeta 改标题与业务键，同时写 meta 事件（与 sqlite 同语义）。

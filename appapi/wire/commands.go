@@ -52,6 +52,9 @@ type HelloResult struct {
 	Workdir      string    `json:"workdir"`
 	Trusted      bool      `json:"trusted"`
 	MaxOutput    int       `json:"max_output"` // tool_result 线上截断阈值（字节）
+	// Workspace 当前工作区的键（与 SessionInfo.workspace 同一个值，客户端改进 M7）：缺省列表只列这个工作区的会话。
+	// 空 = 宿主不按工作区分（CLI 等），列表不过滤。
+	Workspace string `json:"workspace,omitempty"`
 }
 
 // SessionArgs 只带一个会话 id 的命令参数（session.get / stats / delete 等）。
@@ -71,7 +74,24 @@ type ListArgs struct {
 	// Unassigned 只列没有工作区的会话（记工作区之前建的旧会话；左栏「未归属」分组，客户端改进 M6 决定 10）。
 	// 优先于 all_workspaces。服务端报能力 sessions_unassigned 才支持；不支持时返回 unsupported。
 	Unassigned bool `json:"unassigned,omitempty"`
+	// 以下三项要服务端报能力 sessions.query（客户端改进 M7）；不支持的服务端返回 unsupported（旧服务端会静默忽略，
+	// 所以先查能力再用）。
+	//
+	// Query 非空：只列标题或任一条用户消息（前 200 字）包含它的会话，不区分 ASCII 大小写，% _ \ 按字面匹配。
+	// 工作区、all、archived 照常生效；不能和 pinned 同用。
+	Query string `json:"query,omitempty"`
+	// Parent 非空：只列这个会话的直接子会话（不看工作区与 all：子会话跟随父会话的工作区）。不能和 pinned、unassigned 同用。
+	Parent string `json:"parent,omitempty"`
+	// Archived 已归档的会话：""（缺省）= 排除，"only" = 只要已归档的，"include" = 都要。
+	// 缺省列表、置顶列表都排除已归档的。
+	Archived string `json:"archived,omitempty"`
 }
+
+// sessions.list 的 archived 取值。
+const (
+	ArchivedOnly    = "only"
+	ArchivedInclude = "include"
+)
 
 // FollowupsArgs session.followups：某回合（缺省最后一个结束的回合）之后的建议追问。
 type FollowupsArgs struct {
@@ -112,6 +132,10 @@ type UpdateArgs struct {
 	Session string  `json:"session"`
 	Title   *string `json:"title,omitempty"`
 	Pinned  *bool   `json:"pinned,omitempty"`
+	// Archived 归档（true）或恢复（false），要能力 sessions.query（客户端改进 M7）。归档同时取消置顶；
+	// archived:true 与 pinned:true 同给返回 invalid；给已归档的会话置顶返回 conflict（reason archived），
+	// 同一次请求带 archived:false 先恢复则可以。往已归档的会话 session.send 会自动恢复。
+	Archived *bool `json:"archived,omitempty"`
 }
 
 // ListResult sessions.list 的结果：一页会话与下一页游标。

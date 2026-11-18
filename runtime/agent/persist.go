@@ -153,6 +153,8 @@ func (a *Agent) checkpoint(ctx context.Context, run string, rec *reqlog.Record) 
 		}
 		cp.Request = sr
 	}
+	// 会话行预览（客户端改进 M7 协议T9）：按内存窗口现算，回退后窗口已截断，自然得到新值；算不出（空串）存储保留原值。
+	cp.Preview = store.Preview(s.Entries)
 	cp.ConsumeInbox = a.buf.consume
 	if len(a.buf.outbox) > 0 {
 		cp.Outbox = append([]store.OutboxItem(nil), a.buf.outbox...)

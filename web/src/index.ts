@@ -3,7 +3,7 @@
 
 import { autoTransport, connect, type Connection, type Transport } from "./transport";
 import { createSessionStore, type SessionStore } from "./session";
-import { createSessionsStore, type SessionsStore } from "./sessions";
+import { CAP_CHANGED_FULL, CAP_QUERY, createSessionsStore, workspaceOf, type SessionsStore } from "./sessions";
 import { createInteractionsStore, type InteractionsStore } from "./interactions";
 import { createStore, type ReadStore } from "./store";
 import { ApiError } from "./commands";
@@ -74,8 +74,15 @@ function uploadFile(url: string, session: string, file: File, onProgress?: (p: n
 export function createClient(opts: ClientOptions = {}): Client {
   const conn = connect(opts.transport ?? autoTransport());
   const hello = createStore<HelloResult | null>(null);
+  const has = (cap: string) => hello.get()?.capabilities.includes(cap) ?? false;
   // 未归属分组（Mortise 客户端改进 M6 决定 10）：服务端报 sessions_unassigned 才查；每次查第一页时按当前握手判断。
-  const sessions = createSessionsStore(conn, 50, { unassigned: () => hello.get()?.capabilities.includes("sessions_unassigned") ?? false });
+  // M7：sessions.changed 带全套字段时按工作区插入未知会话；搜索、归档、子会话走 sessions.query。
+  const sessions = createSessionsStore(conn, 50, {
+    unassigned: () => has("sessions_unassigned"),
+    full: () => has(CAP_CHANGED_FULL),
+    workspace: () => workspaceOf(hello.get()),
+    query: () => has(CAP_QUERY),
+  });
   const interactions = createInteractionsStore(conn);
   const opened = new Map<string, SessionStore>();
   return {
@@ -89,7 +96,7 @@ export function createClient(opts: ClientOptions = {}): Client {
       void interactions.refresh();
       return r;
     },
-    can: (cap) => hello.get()?.capabilities.includes(cap) ?? false,
+    can: has,
     upload: (session, file, onProgress) => uploadFile(opts.uploadURL ?? UPLOAD_PATH, session, file, onProgress),
     sessions,
     interactions,

@@ -61,6 +61,8 @@ func Run(t *testing.T, open func(t *testing.T) store.Store) {
 		{"Interactions", testInteractions},
 		{"SessionMetaUpdate", testSessionMetaUpdate},
 		{"Workspace", testWorkspace},
+		{"Preview", testPreview},
+		{"SessionQuery", testSessionQuery},
 		{"CollectionRoundTrip", testCollectionRoundTrip},
 		{"CollectionConflict", testCollectionConflict},
 		{"CollectionQueryPage", testCollectionQueryPage},

@@ -348,6 +348,8 @@ type Loaded struct {
 	Cursor int64
 	// LastEnd 最近一个回合的结束原因；nil = 没有记录（旧会话、还没跑完过回合、或已被回退清掉）。
 	LastEnd *LastEnd
+	// Preview 会话行的预览（同 SessionInfo.Preview，客户端改进 M7）：sessions.changed 用它带上预览。
+	Preview string
 }
 
 // Cleaner 插件清理回调（OnSessionDelete 点位的实现）。

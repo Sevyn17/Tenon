@@ -217,8 +217,13 @@ func (v *App) Hello(_ context.Context, in wire.HelloArgs) (wire.HelloResult, err
 		return wire.HelloResult{}, Errorf(wire.CodeUnsupported, "协议区间 [%d, %d] 不含服务端支持的 %d", lo, hi, wire.Protocol)
 	}
 	o := v.o
+	ws := "" // 当前工作区的键（客户端改进 M7）：与 SessionInfo.workspace 同值，客户端据此判断 sessions.changed 的行属不属于缺省列表
+	if o.Host != nil {
+		ws = o.Host.Workspace
+	}
 	return wire.HelloResult{Protocol: wire.Protocol, Server: appid.Name(), Principal: LocalPrincipal,
-		Capabilities: v.capabilities(), Model: o.Model, Workdir: o.Workdir, Trusted: o.Trusted, MaxOutput: MaxWireText}, nil
+		Capabilities: v.capabilities(), Model: o.Model, Workdir: o.Workdir, Trusted: o.Trusted, MaxOutput: MaxWireText,
+		Workspace: ws}, nil
 }
 
 // capabilities 按装配了哪些部件列出可选功能，界面据此决定显示哪些入口。
@@ -280,6 +285,16 @@ func (v *App) capabilities() []string {
 	if _, ok := o.DB.(store.UnassignedLister); ok && o.Host != nil && o.Host.Workspace != "" {
 		out = append(out, "sessions_unassigned")
 	}
+	// sessions.query（客户端改进 M7 协议T13）：sessions.list {query, parent, archived} 与 session.update {archived}。
+	// 存储实现了 SessionQueryStore（按条件列）和 SessionMetaStore（写归档标记）才报。
+	if _, ok := o.DB.(store.SessionQueryStore); ok {
+		if _, ok := o.DB.(store.SessionMetaStore); ok {
+			out = append(out, "sessions.query")
+		}
+	}
+	// sessions.changed.full（客户端改进 M7 协议T10）：每条非 deleted 的 sessions.changed 都带齐 preview、parent、origin、
+	// workspace、archived、last_end 的当前值（空值不发 = 空）。总是有；旧服务端没有，客户端不能把「没给」当成空。
+	out = append(out, "sessions.changed.full")
 	return out
 }
 
@@ -292,6 +307,25 @@ func (v *App) SessionsList(ctx context.Context, in wire.ListArgs) (wire.ListResu
 	ws := v.o.Host.Workspace // 缺省只列当前工作区的会话
 	if in.AllWorkspaces {
 		ws = ""
+	}
+	// query / parent / archived（客户端改进 M7 协议T13）：要存储实现 SessionQueryStore（能力 sessions.query）。
+	archived, err := archivedFilter(in.Archived)
+	if err != nil {
+		return wire.ListResult{}, err
+	}
+	query := strings.TrimSpace(in.Query)
+	if len(query) > MaxQuery {
+		return wire.ListResult{}, invalid("query 超过 %d 字节", MaxQuery)
+	}
+	qs, canQuery := v.o.DB.(store.SessionQueryStore)
+	if (query != "" || in.Parent != "" || in.Archived != "") && !canQuery {
+		return wire.ListResult{}, Errorf(wire.CodeUnsupported, "存储不支持搜索、按父会话列或按归档筛选")
+	}
+	if in.Pinned && (query != "" || in.Parent != "") {
+		return wire.ListResult{}, invalid("pinned 不能和 query、parent 同用")
+	}
+	if in.Parent != "" && in.Unassigned {
+		return wire.ListResult{}, invalid("parent 不能和 unassigned 同用")
 	}
 	// unassigned：只列没有工作区的会话（客户端改进 M6 决定 10，左栏「未归属」分组）。
 	var ul store.UnassignedLister
@@ -318,17 +352,24 @@ func (v *App) SessionsList(ctx context.Context, in wire.ListArgs) (wire.ListResu
 		}
 		out := wire.ListResult{Items: []wire.SessionInfo{}}
 		for _, s := range items {
-			if (in.All || s.ParentID == "") && inWS(s) {
+			if (in.All || s.ParentID == "") && inWS(s) && keepArchived(archived, s.Meta) {
 				out.Items = append(out.Items, wireInfo(s))
 			}
 		}
 		return out, nil
 	}
 	var items []store.SessionInfo
-	var err error
-	if in.Unassigned {
+	switch {
+	case canQuery:
+		q := store.SessionQuery{Workspace: ws, Unassigned: in.Unassigned, Before: in.Cursor, Limit: limit, TopOnly: !in.All,
+			Parent: in.Parent, Text: query, Archived: archived}
+		if in.Parent != "" { // 子会话跟随父会话的工作区，按 parent 列时不再按工作区、顶层过滤
+			q.Workspace, q.TopOnly = "", false
+		}
+		items, err = qs.QuerySessions(ctx, q)
+	case in.Unassigned:
 		items, err = ul.ListUnassigned(ctx, in.Cursor, limit, !in.All)
-	} else {
+	default:
 		items, err = v.o.DB.ListSessionsIn(ctx, ws, in.Cursor, limit, !in.All)
 	}
 	if err != nil {
@@ -356,7 +397,44 @@ func pinnedOf(meta json.RawMessage) bool {
 
 func wireInfo(s store.SessionInfo) wire.SessionInfo {
 	return wire.SessionInfo{ID: s.ID, Title: s.Title, Preview: s.Preview, RunState: wireRun(s.RunState),
-		Origin: s.Origin, Parent: s.ParentID, UpdatedAt: s.UpdatedAt, Pinned: pinnedOf(s.Meta), Workspace: s.Workspace}
+		Origin: s.Origin, Parent: s.ParentID, UpdatedAt: s.UpdatedAt, Pinned: pinnedOf(s.Meta), Workspace: s.Workspace,
+		Archived: store.ArchivedOf(s.Meta), LastEnd: WireLastEnd(s.LastEnd)}
+}
+
+// MaxQuery sessions.list {query} 的上限（字节）。用户消息只比较前 200 字，再长也搜不到。
+const MaxQuery = 1000
+
+// archivedFilter sessions.list {archived} → 存储的筛选；不认识的取值返回 invalid。
+func archivedFilter(s string) (store.ArchivedFilter, error) {
+	switch s {
+	case "":
+		return store.ArchivedExclude, nil
+	case wire.ArchivedOnly:
+		return store.ArchivedOnly, nil
+	case wire.ArchivedInclude:
+		return store.ArchivedInclude, nil
+	}
+	return 0, invalid("archived 只能是空、%q 或 %q", wire.ArchivedOnly, wire.ArchivedInclude)
+}
+
+// keepArchived 按筛选决定要不要这一行（置顶列表在这里筛，它不走 QuerySessions）。
+func keepArchived(f store.ArchivedFilter, meta json.RawMessage) bool {
+	a := store.ArchivedOf(meta)
+	return f == store.ArchivedInclude || (f == store.ArchivedOnly) == a
+}
+
+// unarchive 往已归档的会话发消息时自动恢复（spike 第 4 节待拍板的推荐）。在输入已投递之后做：投递失败不改归档状态；
+// 恢复失败不影响已投递的输入（会话留在已归档里，用户可以手动恢复）。
+func (v *App) unarchive(ctx context.Context, id string) {
+	ms, ok := v.o.DB.(store.SessionMetaStore)
+	if !ok {
+		return
+	}
+	l, err := host.LoadHead(ctx, v.o.DB, id)
+	if err != nil || !store.ArchivedOf(l.Meta.Meta) {
+		return
+	}
+	_ = ms.UpdateSessionMeta(ctx, id, nil, map[string]any{store.MetaArchived: nil})
 }
 
 // MaxTitle 会话标题上限（字节）。
@@ -390,6 +468,30 @@ func (v *App) Update(ctx context.Context, in wire.UpdateArgs) (wire.SessionSnaps
 			set[metaPinned] = true
 		} else {
 			set[metaPinned] = nil
+		}
+	}
+	// 归档（客户端改进 M7 协议T13）：要能力 sessions.query（存储能把已归档的从缺省列表里排除，才允许归档）。
+	if in.Archived != nil {
+		if _, ok := v.o.DB.(store.SessionQueryStore); !ok {
+			return wire.SessionSnapshot{}, Errorf(wire.CodeUnsupported, "存储不支持归档")
+		}
+		if *in.Archived {
+			if in.Pinned != nil && *in.Pinned {
+				return wire.SessionSnapshot{}, invalid("archived:true 不能和 pinned:true 同用")
+			}
+			set[store.MetaArchived] = true
+			set[metaPinned] = nil // 归档同时取消置顶（spike 第 4 节待拍板的推荐）
+		} else {
+			set[store.MetaArchived] = nil
+		}
+	} else if in.Pinned != nil && *in.Pinned {
+		// 给已归档的会话置顶：置顶列表排除已归档的，置了也看不到；要先恢复（同一请求带 archived:false 即可）。
+		l, err := host.LoadHead(ctx, v.o.DB, in.Session)
+		if err != nil {
+			return wire.SessionSnapshot{}, err
+		}
+		if store.ArchivedOf(l.Meta.Meta) {
+			return wire.SessionSnapshot{}, conflict("archived", "会话已归档，先恢复再置顶")
 		}
 	}
 	if title == nil && len(set) == 0 {
@@ -752,7 +854,7 @@ func (v *App) snapshot(ctx context.Context, id string) (wire.SessionSnapshot, er
 		lastEnd = WireLastEnd(l.LastEnd)
 	}
 	return wire.SessionSnapshot{ID: id, Parent: l.Meta.ParentID, Origin: l.Meta.Origin, Title: l.Meta.Title, Pinned: pinnedOf(l.Meta.Meta),
-		RunState: WireRunState(h.Status), Mode: v.committedMode(id, modeHdr), Settings: settingsOf(h),
+		Archived: store.ArchivedOf(l.Meta.Meta), RunState: WireRunState(h.Status), Mode: v.committedMode(id, modeHdr), Settings: settingsOf(h),
 		Log: wire.LogPos{Base: h.CompactionBase, Len: h.LogLen}, Interactions: v.openInteractions(ctx, id), Cursor: l.Cursor,
 		Live: v.live(id, h), LastEnd: lastEnd}, nil
 }
@@ -872,6 +974,7 @@ func (v *App) Send(ctx context.Context, in wire.SendArgs) (wire.SendResult, erro
 	if err := hd.Do(host.Command{Kind: host.Send, ItemID: in.ClientID, Content: content}); err != nil {
 		return wire.SendResult{}, err
 	}
+	v.unarchive(ctx, in.Session) // 往已归档的会话发消息自动恢复（客户端改进 M7）
 	v.autoTitle(ctx, in.Session, content)
 	return wire.SendResult{ClientID: in.ClientID, Queued: queued}, nil
 }

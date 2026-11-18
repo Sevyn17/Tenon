@@ -126,10 +126,11 @@ type SessionForked struct {
 	Upto int    `json:"upto"`
 }
 
-// SessionUpdated session.update 落库（标题、置顶）。
+// SessionUpdated session.update 落库（标题、置顶、归档）。
 type SessionUpdated struct {
-	Title  string `json:"title"`
-	Pinned bool   `json:"pinned"`
+	Title    string `json:"title"`
+	Pinned   bool   `json:"pinned"`
+	Archived bool   `json:"archived,omitempty"` // 客户端改进 M7
 }
 
 // —— 易失事件载荷 ——
@@ -224,11 +225,22 @@ type CursorRef struct {
 }
 
 // SessionsChanged 列表里一行的变化。deleted 为真时这一行已删除，其余字段无意义。
+// updated_at 为 0（改标题、置顶、归档）时客户端保留原值。
+//
+// 下面几项是客户端改进 M7 加的：服务端报能力 sessions.changed.full 时每条非 deleted 的变化都带齐当前值，
+// 缺省就是空 / false / 没有（last_end 不给 = 没有记录或已被回退清掉），客户端据此插入列表里还没有的会话；
+// 没有这项能力的旧服务端不带，客户端不能把「没给」当成空。
 type SessionsChanged struct {
-	ID        string `json:"id"`
-	RunState  string `json:"run_state"`
-	Title     string `json:"title"`
-	UpdatedAt int64  `json:"updated_at"`
-	Pinned    bool   `json:"pinned"`
-	Deleted   bool   `json:"deleted,omitempty"`
+	ID        string     `json:"id"`
+	RunState  string     `json:"run_state"`
+	Title     string     `json:"title"`
+	UpdatedAt int64      `json:"updated_at"`
+	Pinned    bool       `json:"pinned"`
+	Deleted   bool       `json:"deleted,omitempty"`
+	Preview   string     `json:"preview,omitempty"`
+	Parent    string     `json:"parent,omitempty"`
+	Origin    string     `json:"origin,omitempty"`
+	Workspace string     `json:"workspace,omitempty"`
+	Archived  bool       `json:"archived,omitempty"`
+	LastEnd   *TurnEnded `json:"last_end,omitempty"` // 同 SessionInfo.last_end：运行中也给（上一回合的）
 }

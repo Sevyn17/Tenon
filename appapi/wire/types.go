@@ -240,7 +240,8 @@ type SessionSnapshot struct {
 	Origin       string        `json:"origin"`
 	Title        string        `json:"title"`
 	Pinned       bool          `json:"pinned,omitempty"`
-	RunState     string        `json:"run_state"` // idle / running
+	Archived     bool          `json:"archived,omitempty"` // 已归档（客户端改进 M7）
+	RunState     string        `json:"run_state"`          // idle / running
 	Mode         *Mode         `json:"mode,omitempty"`
 	Settings     Settings      `json:"settings"`
 	Log          LogPos        `json:"log"`
@@ -291,6 +292,11 @@ type SessionInfo struct {
 	Pinned    bool   `json:"pinned,omitempty"`
 	// Workspace 所属工作区的键（sessions.list {all_workspaces} 时用来分组）；空 = 不属于任何工作区。
 	Workspace string `json:"workspace,omitempty"`
+	// Archived 已归档（session.update {archived}，客户端改进 M7）。
+	Archived bool `json:"archived,omitempty"`
+	// LastEnd 最近一个回合的结束原因（客户端改进 M7，未读与通知用 last_end.at / kind）。与快照不同，
+	// 运行中也给（是上一回合的）；没有记录（旧会话、还没跑完过回合、已被回退清掉）时不给。
+	LastEnd *TurnEnded `json:"last_end,omitempty"`
 }
 
 // Principal 连接身份（10.8）。

@@ -196,6 +196,7 @@ export interface SessionSnapshot {
   origin: string;
   title: string;
   pinned?: boolean;
+  archived?: boolean;
   run_state: string;
   mode?: Mode;
   settings: Settings;
@@ -216,6 +217,8 @@ export interface SessionInfo {
   updated_at: number;
   pinned?: boolean;
   workspace?: string;
+  archived?: boolean;
+  last_end?: TurnEnded;
 }
 
 export interface Principal {
@@ -291,6 +294,7 @@ export interface SessionForked {
 export interface SessionUpdated {
   title: string;
   pinned: boolean;
+  archived?: boolean;
 }
 
 export interface TurnStarted {
@@ -373,6 +377,12 @@ export interface SessionsChanged {
   updated_at: number;
   pinned: boolean;
   deleted?: boolean;
+  preview?: string;
+  parent?: string;
+  origin?: string;
+  workspace?: string;
+  archived?: boolean;
+  last_end?: TurnEnded;
 }
 
 export interface ProtocolRange {
@@ -394,6 +404,7 @@ export interface HelloResult {
   workdir: string;
   trusted: boolean;
   max_output: number;
+  workspace?: string;
 }
 
 export interface SessionArgs {
@@ -407,6 +418,9 @@ export interface ListArgs {
   pinned?: boolean;
   all_workspaces?: boolean;
   unassigned?: boolean;
+  query?: string;
+  parent?: string;
+  archived?: string;
 }
 
 export interface ListResult {
@@ -418,6 +432,7 @@ export interface UpdateArgs {
   session: string;
   title?: string;
   pinned?: boolean;
+  archived?: boolean;
 }
 
 export interface FeedbackArgs {

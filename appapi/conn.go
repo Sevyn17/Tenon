@@ -389,7 +389,8 @@ func (c *Conn) translate(e bus.Envelope) []wire.Envelope {
 	case store.EventMeta:
 		title, _ := m["title"].(string)
 		meta, _ := json.Marshal(m["meta"])
-		return []wire.Envelope{c.envelope(e.Session, wire.EvSessionUpdated, e.Seq, 0, wire.SessionUpdated{Title: title, Pinned: pinnedOf(meta)})}
+		return []wire.Envelope{c.envelope(e.Session, wire.EvSessionUpdated, e.Seq, 0,
+			wire.SessionUpdated{Title: title, Pinned: pinnedOf(meta), Archived: store.ArchivedOf(meta)})}
 	case store.EventExt:
 		if md := c.modeOf(e.Session, m); md != nil {
 			return []wire.Envelope{c.envelope(e.Session, wire.EvModeChanged, e.Seq, 0, *md)}
@@ -450,8 +451,12 @@ func (c *Conn) watchSessions(sub *bus.Sub) {
 			if err != nil {
 				continue
 			}
+			// 带齐列表一行要的字段（客户端改进 M7 协议T10，能力 sessions.changed.full）：客户端拿到列表里还没有的 id
+			// 能据 parent / workspace / archived 判断该不该插入，不用再查一次列表。
 			row = wire.SessionsChanged{ID: e.Session, RunState: wireRun(l.RunState), Title: l.Meta.Title,
-				Pinned: pinnedOf(l.Meta.Meta), UpdatedAt: e.At}
+				Pinned: pinnedOf(l.Meta.Meta), UpdatedAt: e.At, Preview: l.Preview, Parent: l.Meta.ParentID,
+				Origin: l.Meta.Origin, Workspace: l.Meta.Workspace, Archived: store.ArchivedOf(l.Meta.Meta),
+				LastEnd: WireLastEnd(l.LastEnd)}
 			if e.Kind == store.EventRunState {
 				s, _ := dataMap(e.Data)["run_state"].(string)
 				row.RunState = wireRun(s)
