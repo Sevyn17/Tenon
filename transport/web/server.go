@@ -321,6 +321,8 @@ func (s *Server) handleConn(ws *websocket.Conn) {
 	// protocol 2（06 10.8、10.9）：每个连接一个 appapi.Conn，身份由本服务的令牌鉴权得出（单机固定 local / operator）；
 	// 事件只推这个连接订阅了的会话。
 	ac := s.API().NewConn(ctx, appapi.LocalPrincipal)
+	// reconnect_event（客户端改进 M5）：SwapAPI 会关掉这条连接，前端 wsTransport 重连后发 local.reconnected。
+	ac.AddCapabilities(appapi.CapReconnectEvent)
 	defer ac.Close()
 	var wg sync.WaitGroup
 	wg.Add(2)

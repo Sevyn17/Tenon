@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -290,6 +291,10 @@ func TestHelloRoundtrip(t *testing.T) {
 	if err := json.Unmarshal(m["result"], &res); err != nil || res.Protocol != wire.Protocol || res.Server != appapi.Server ||
 		res.Principal != appapi.LocalPrincipal {
 		t.Fatalf("hello 结果：%s %v", m["result"], err)
+	}
+	// 客户端改进 M5：网页端换运行时后会断开 WebSocket，前端重连时发 local.reconnected，所以报 reconnect_event。
+	if !slices.Contains(res.Capabilities, appapi.CapReconnectEvent) {
+		t.Fatalf("网页端 hello 应报 %s：%v", appapi.CapReconnectEvent, res.Capabilities)
 	}
 	m = c.call(2, "hello", map[string]any{"client": "test", "protocol": map[string]int{"min": 1, "max": 1}})
 	var e wire.Error

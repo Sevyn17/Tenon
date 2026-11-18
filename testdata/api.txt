@@ -211,6 +211,7 @@ github.com/Sevyn17/tenon/transport/web: const WriteTimeout time.Duration
 github.com/Sevyn17/tenon/transport/web: func WriteTokenFile(path string, url string) (func(), error)
 github.com/Sevyn17/tenon/transport/bind: const EventName untyped string
 github.com/Sevyn17/tenon/transport/bind: func NewService(api *github.com/Sevyn17/tenon/appapi.App, emit func(name string, data any)) *Service
+github.com/Sevyn17/tenon/transport/bind: const ReconnectedEvent untyped string
 github.com/Sevyn17/tenon/transport/bind: type Service struct{}
 github.com/Sevyn17/tenon/transport/bind: method (Service) API() *github.com/Sevyn17/tenon/appapi.App
 github.com/Sevyn17/tenon/transport/bind: method (Service) Call(cmd string, args string) (string, error)
@@ -298,7 +299,7 @@ github.com/Sevyn17/tenon/appapi/wire: type APIKeyRevokeResult struct{}
 github.com/Sevyn17/tenon/appapi/wire: type AccountEntitlements struct{Configured bool; Cached bool; Features map[string]bool; Limits map[string]int64; Aliases []string; TTL int; Offline int; Version int64}
 github.com/Sevyn17/tenon/appapi/wire: type AccountLoginArgs struct{Step string; DeviceCode string}
 github.com/Sevyn17/tenon/appapi/wire: type AccountLoginResult struct{Done bool; UserCode string; VerificationURI string; ExpiresIn int; Interval int; DeviceCode string; Pending bool; Status *AccountStatus}
-github.com/Sevyn17/tenon/appapi/wire: type AccountStatus struct{Configured bool; ServerURL string; ServerSource string; LoggedIn bool; Tenant string; Subject string; Product string; Channel string; Version string}
+github.com/Sevyn17/tenon/appapi/wire: type AccountStatus struct{Configured bool; ServerURL string; ServerSource string; LoggedIn bool; Tenant string; Subject string; Product string; Channel string; Version string; Operator bool}
 github.com/Sevyn17/tenon/appapi/wire: type AdminAlias struct{Alias string; Kind string; PlanID string; Visible bool; StepCount int}
 github.com/Sevyn17/tenon/appapi/wire: type AdminModel struct{ID string; ProviderKey string; VendorModel string; Kind string}
 github.com/Sevyn17/tenon/appapi/wire: type AdminModelProvider struct{ID string; Key string; Name string; Protocol string; BaseURL string; Status string; KeyCount int}

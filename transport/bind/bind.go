@@ -18,6 +18,15 @@ import (
 // EventName 前端订阅的 Wails 事件名；数据为 wire.Envelope。
 const EventName = "tenon:event"
 
+// ReconnectedEvent SwapAPI 换上新 App 之后发的 Wails 事件（客户端改进 M5）；数据为空对象。
+// 旧连接上的订阅已全部作废，前端 transport 收到后按 WebSocket 重连的同一条路径通知上层
+// （状态 reconnecting → open，再发本地事件 local.reconnected），上层重新 hello、重新订阅。
+// 能力 reconnect_event（appapi.CapReconnectEvent）表示有这个通知。
+//
+// 用单独的事件名而不是在 EventName 里放一种 kind：EventName 只装协议事件（wire.Envelope，kind 是 06 10.5
+// 的公开事件表），这条是传输层的连接通知；混进去的话旧前端会把它当成未知事件交给订阅方。
+const ReconnectedEvent = "tenon:reconnected"
+
 // Service 桌面端绑定服务。方法签名保持简单（字符串进出），前端统一按 JSON 解析。
 type Service struct {
 	api  *appapi.App
@@ -56,6 +65,9 @@ func (s *Service) SwapAPI(api *appapi.App) {
 	if running {
 		s.StartEvents()
 	}
+	// 新连接、事件转发都就位之后再通知前端：前端随后的 hello、session.subscribe 落在新 App 上，
+	// 重新订阅的回放也经新连接的转发送达。没在转发事件时也发（前端没监听就没有效果）。
+	s.emit(ReconnectedEvent, struct{}{})
 }
 
 // API 当前的应用接口层。
@@ -79,6 +91,7 @@ func (s *Service) connLocked() *appapi.Conn {
 			go old.Close()
 		}
 		s.conn, s.connFor = s.api.NewConn(context.Background(), appapi.LocalPrincipal), s.api
+		s.conn.AddCapabilities(appapi.CapReconnectEvent) // SwapAPI 之后发 ReconnectedEvent
 	}
 	return s.conn
 }

@@ -805,6 +805,7 @@ export interface AccountStatus {
   product?: string;
   channel?: string;
   version?: string;
+  operator?: boolean;
 }
 
 export interface AccountLoginArgs {

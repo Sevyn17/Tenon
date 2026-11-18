@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"sync"
 	"time"
@@ -61,6 +62,25 @@ type Conn struct {
 	closed     bool
 	poll       time.Duration // 跨进程轮询间隔；0 = pollInterval
 	soft, hard int           // 背压阈值；0 = softQueue / hardQueue
+	caps       []string      // 传输层追加的能力（AddCapabilities），hello 时并进 capabilities
+}
+
+// CapReconnectEvent 能力 reconnect_event（客户端改进 M5）：这条连接所在的传输在换运行时之后
+// （workspace.reload、切工作区，宿主调 SwapAPI）保证通知前端，前端 transport 随后发本地事件 local.reconnected，
+// 上层据此重新 hello、重新订阅，不必整页刷新。网页端靠 WebSocket 断线重连做到，桌面端靠 bind 的
+// ReconnectedEvent。能力由传输层用 Conn.AddCapabilities 报，App 自己不报（CLI 等没有这个保证）。
+const CapReconnectEvent = "reconnect_event"
+
+// AddCapabilities 追加传输层的能力，hello 的 capabilities 里会带上（已有的不重复）。
+// 应在连接建好、第一次 hello 之前调用；之后调用只影响以后的 hello。
+func (c *Conn) AddCapabilities(caps ...string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, x := range caps {
+		if !slices.Contains(c.caps, x) {
+			c.caps = append(c.caps, x)
+		}
+	}
 }
 
 type subscription struct {
@@ -151,6 +171,18 @@ func (c *Conn) Call(ctx context.Context, cmd string, args json.RawMessage) (any,
 	out, err := c.a.Call(ctx, cmd, args)
 	if r, ok := out.(wire.HelloResult); ok && err == nil {
 		r.Principal = c.p
+		c.mu.Lock()
+		extra := slices.Clone(c.caps)
+		c.mu.Unlock()
+		if len(extra) > 0 {
+			caps := slices.Clone(r.Capabilities)
+			for _, x := range extra {
+				if !slices.Contains(caps, x) {
+					caps = append(caps, x)
+				}
+			}
+			r.Capabilities = caps
+		}
 		out = r
 	}
 	return out, err

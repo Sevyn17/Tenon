@@ -554,7 +554,7 @@ type PackagesListResult struct {
 // AccountStatus platform.status 的结果。
 //
 // Configured=false 表示这个应用没接平台（没配 server 地址），
-// 此时其余字段全空，界面应隐藏登录入口而不是报错。
+// 此时除 Operator 外其余字段全空，界面应隐藏登录入口而不是报错。
 type AccountStatus struct {
 	Configured bool   `json:"configured"`
 	ServerURL  string `json:"server_url,omitempty"`
@@ -568,6 +568,10 @@ type AccountStatus struct {
 	Product string `json:"product,omitempty"`
 	Channel string `json:"channel,omitempty"`
 	Version string `json:"version,omitempty"`
+	// Operator 本机配置了运营后台、能调运营接口（客户端改进 M5，配置T11）：界面据此显示运营专用页（如「模型服务」）。
+	// 与 server 地址无关，Configured=false 时也可能为 true。hello 的 principal.role 对本地连接恒为 operator，不能用来判断。
+	// 旧服务端不填。
+	Operator bool `json:"operator,omitempty"`
 }
 
 // AccountLoginArgs platform.login 的参数。

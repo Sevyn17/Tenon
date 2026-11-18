@@ -1,6 +1,7 @@
 // 传输层（protocol 2，docs/01 - 设计文档/06 - 应用协议契约.md 10.9）：对上只暴露 call(cmd, args) 与 onEvent(fn)，外加连接状态。
 // 两种实现：
 //   - Wails（桌面端）：绑定方法 main.Service.Call(cmd, argsJSON) + Wails 事件 "tenon:event"；不走网络端口。
+//     换运行时后后端另发 "tenon:reconnected"（能力 reconnect_event），本层转成与 WebSocket 重连相同的通知。
 //   - WebSocket（网页服务）：请求帧 {"id","cmd","args"}，应答帧 {"id","ok","result"|"error"}，事件帧 {"event": Envelope}。
 //
 // 事件只推连接订阅了的会话。WebSocket 断线重连后服务端的订阅全部丢失：传输层发本地事件 local.reconnected，
@@ -42,14 +43,25 @@ function local(kind: string): Envelope {
 
 // ---- Wails ----
 
-interface WailsRuntime {
+/** Wails 运行时里传输层用到的部分（测试可传假的）。 */
+export interface WailsRuntime {
   Call: { ByName(name: string, ...args: unknown[]): Promise<unknown> };
   Events: { On(name: string, cb: (ev: { data: unknown }) => void): () => void };
 }
 
-/** Wails 传输。运行时由 Wails 资源服务器在 /wails/runtime.js 提供；不打包、不引 npm 依赖。 */
-export function wailsTransport(runtimeURL = "/wails/runtime.js"): Transport {
-  const rt = import(/* @vite-ignore */ runtimeURL) as Promise<WailsRuntime>;
+/**
+ * 桌面端换了运行时（workspace.reload、切工作区，后端 bind.SwapAPI）之后发的 Wails 事件；与 Go 端 bind.ReconnectedEvent 同值。
+ * 旧连接上的订阅已作废。传输层收到后按 WebSocket 重连的同一条路径通知上层：状态 reconnecting → open，再发 local.reconnected。
+ * 后端在 hello 里报能力 reconnect_event 表示会发这个通知。
+ */
+export const WAILS_RECONNECTED_EVENT = "tenon:reconnected";
+
+/**
+ * Wails 传输。运行时由 Wails 资源服务器在 /wails/runtime.js 提供；不打包、不引 npm 依赖。
+ * 参数可以是运行时地址，也可以直接给运行时（测试用）。
+ */
+export function wailsTransport(runtime: string | Promise<WailsRuntime> = "/wails/runtime.js"): Transport {
+  const rt = typeof runtime === "string" ? (import(/* @vite-ignore */ runtime) as Promise<WailsRuntime>) : runtime;
   let off: (() => void) | null = null;
   return {
     async call(cmd, args) {
@@ -66,10 +78,21 @@ export function wailsTransport(runtimeURL = "/wails/runtime.js"): Transport {
       state("connecting");
       rt.then(
         (r) => {
-          off = r.Events.On(WAILS_EVENT, (ev) => {
+          const offEvent = r.Events.On(WAILS_EVENT, (ev) => {
             const d = ev?.data;
             if (d && typeof d === "object") emit(d as Envelope);
           });
+          // 与 wsTransport 断线重连同一条路径（onclose → reconnecting，onopen → open + local.reconnected）：
+          // 后端已在新连接上，没有订阅；订阅方从最后收到的游标重新订阅，外壳据此重新 hello。
+          const offReconnected = r.Events.On(WAILS_RECONNECTED_EVENT, () => {
+            state("reconnecting");
+            state("open");
+            emit(local(LOCAL_RECONNECTED));
+          });
+          off = () => {
+            offEvent();
+            offReconnected();
+          };
           state("open");
         },
         () => state("reconnecting"),
