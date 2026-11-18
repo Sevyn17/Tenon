@@ -234,9 +234,12 @@ type recentEntry struct {
 	At   int64  `json:"at"` // 毫秒
 }
 
-func (m *WorkspaceManager) recentPath() string {
-	if m.o.RecentPath != "" {
-		return m.o.RecentPath
+func (m *WorkspaceManager) recentPath() string { return recentFile(m.o.RecentPath) }
+
+// recentFile 最近列表文件：path 非空就用它，否则是用户级目录（Home）的 workspaces.json；取不到用户目录时为空。
+func recentFile(path string) string {
+	if path != "" {
+		return path
 	}
 	if h := Home(); h != "" {
 		return filepath.Join(h, "workspaces.json")
@@ -244,8 +247,20 @@ func (m *WorkspaceManager) recentPath() string {
 	return ""
 }
 
-func (m *WorkspaceManager) recent() []recentEntry {
-	p := m.recentPath()
+// RecentWorkspaces 最近打开的工作区目录，最近的在前（与 WorkspaceManager.List 同一份记录）。
+// path 同 WorkspaceOptions.RecentPath（空 = 用户级目录的 workspaces.json）。文件不存在或读不了时返回 nil；
+// 不检查目录是否还在，调用方自己判断（桌面端不带 -dir 启动时取第一个还在的目录）。
+func RecentWorkspaces(path string) []string {
+	var out []string
+	for _, r := range readRecent(recentFile(path)) {
+		out = append(out, r.Path)
+	}
+	return out
+}
+
+func (m *WorkspaceManager) recent() []recentEntry { return readRecent(m.recentPath()) }
+
+func readRecent(p string) []recentEntry {
 	if p == "" {
 		return nil
 	}

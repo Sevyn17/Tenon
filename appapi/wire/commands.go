@@ -68,6 +68,9 @@ type ListArgs struct {
 	Pinned bool `json:"pinned,omitempty"`
 	// AllWorkspaces 列所有工作区的会话；缺省只列当前工作区的（会话库是用户级的，多个工作区共用）。
 	AllWorkspaces bool `json:"all_workspaces,omitempty"`
+	// Unassigned 只列没有工作区的会话（记工作区之前建的旧会话；左栏「未归属」分组，客户端改进 M6 决定 10）。
+	// 优先于 all_workspaces。服务端报能力 sessions_unassigned 才支持；不支持时返回 unsupported。
+	Unassigned bool `json:"unassigned,omitempty"`
 }
 
 // FollowupsArgs session.followups：某回合（缺省最后一个结束的回合）之后的建议追问。

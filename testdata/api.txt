@@ -268,6 +268,7 @@ github.com/Sevyn17/tenon/apphost: method (Profiles) Edit(scope string, e github.
 github.com/Sevyn17/tenon/apphost: method (Profiles) Reload() (*github.com/Sevyn17/tenon/runtime/component.Profile, error)
 github.com/Sevyn17/tenon/apphost: method (Profiles) Scopes() []github.com/Sevyn17/tenon/appapi/wire.ProfileScope
 github.com/Sevyn17/tenon/apphost: func ProjectKey(root string) string
+github.com/Sevyn17/tenon/apphost: func RecentWorkspaces(path string) []string
 github.com/Sevyn17/tenon/apphost: func ResolveTrust(force bool, root string, ask func(key string) bool) (bool, string, error)
 github.com/Sevyn17/tenon/apphost: type Runtime struct{App *github.com/Sevyn17/tenon.App; Rt *Assembled; Profile *github.com/Sevyn17/tenon/runtime/component.Profile; Root string; Bus *github.com/Sevyn17/tenon/runtime/bus.Bus; Host *github.com/Sevyn17/tenon/runtime/host.Host; UI github.com/Sevyn17/tenon/runtime/assemble.UI; Trusted bool; TrustWhy string; Notes []string; Packages []*github.com/Sevyn17/tenon/runtime/pkgs.Package; ExtraProfile string; BaseProfile string}
 github.com/Sevyn17/tenon/apphost: method (Runtime) BuildApp() (*Built, error)
@@ -413,7 +414,7 @@ github.com/Sevyn17/tenon/appapi/wire: const KindContext untyped string
 github.com/Sevyn17/tenon/appapi/wire: const KindToolResult untyped string
 github.com/Sevyn17/tenon/appapi/wire: const KindUnknown untyped string
 github.com/Sevyn17/tenon/appapi/wire: const KindUser untyped string
-github.com/Sevyn17/tenon/appapi/wire: type ListArgs struct{Cursor int64; Limit int; All bool; Pinned bool; AllWorkspaces bool}
+github.com/Sevyn17/tenon/appapi/wire: type ListArgs struct{Cursor int64; Limit int; All bool; Pinned bool; AllWorkspaces bool; Unassigned bool}
 github.com/Sevyn17/tenon/appapi/wire: type ListResult struct{Items []SessionInfo; Next int64}
 github.com/Sevyn17/tenon/appapi/wire: type Live struct{Turn uint32; Streams []LiveStream; Tools []LiveTool}
 github.com/Sevyn17/tenon/appapi/wire: type LiveStream struct{StreamID string; EntryID string; Part string; Text string}

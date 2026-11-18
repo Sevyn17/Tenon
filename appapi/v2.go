@@ -275,6 +275,11 @@ func (v *App) capabilities() []string {
 	// last_end（客户端改进 M2）：快照与 session.state_changed 带 last_end、turn.ended 带 at、
 	// 失败时 code 只放错误码。总是有；旧服务端没有这条，客户端据此退回原逻辑。
 	out = append(out, "last_end")
+	// sessions_unassigned（客户端改进 M6 决定 10）：sessions.list {unassigned} 可用。宿主有工作区
+	// （缺省列表按工作区过滤，没有工作区的旧会话看不到）且存储实现了 UnassignedLister 才报。
+	if _, ok := o.DB.(store.UnassignedLister); ok && o.Host != nil && o.Host.Workspace != "" {
+		out = append(out, "sessions_unassigned")
+	}
 	return out
 }
 
@@ -288,6 +293,20 @@ func (v *App) SessionsList(ctx context.Context, in wire.ListArgs) (wire.ListResu
 	if in.AllWorkspaces {
 		ws = ""
 	}
+	// unassigned：只列没有工作区的会话（客户端改进 M6 决定 10，左栏「未归属」分组）。
+	var ul store.UnassignedLister
+	if in.Unassigned {
+		var ok bool
+		if ul, ok = v.o.DB.(store.UnassignedLister); !ok {
+			return wire.ListResult{}, Errorf(wire.CodeUnsupported, "存储不支持列没有工作区的会话")
+		}
+	}
+	inWS := func(s store.SessionInfo) bool {
+		if in.Unassigned {
+			return s.Workspace == ""
+		}
+		return ws == "" || s.Workspace == ws
+	}
 	if in.Pinned { // 置顶的会话：单独一页，不分页
 		ms, ok := v.o.DB.(store.SessionMetaStore)
 		if !ok {
@@ -299,13 +318,19 @@ func (v *App) SessionsList(ctx context.Context, in wire.ListArgs) (wire.ListResu
 		}
 		out := wire.ListResult{Items: []wire.SessionInfo{}}
 		for _, s := range items {
-			if (in.All || s.ParentID == "") && (ws == "" || s.Workspace == ws) {
+			if (in.All || s.ParentID == "") && inWS(s) {
 				out.Items = append(out.Items, wireInfo(s))
 			}
 		}
 		return out, nil
 	}
-	items, err := v.o.DB.ListSessionsIn(ctx, ws, in.Cursor, limit, !in.All)
+	var items []store.SessionInfo
+	var err error
+	if in.Unassigned {
+		items, err = ul.ListUnassigned(ctx, in.Cursor, limit, !in.All)
+	} else {
+		items, err = v.o.DB.ListSessionsIn(ctx, ws, in.Cursor, limit, !in.All)
+	}
 	if err != nil {
 		return wire.ListResult{}, err
 	}

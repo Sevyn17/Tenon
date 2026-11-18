@@ -336,11 +336,7 @@ func (h *Host) Create(ctx context.Context, id, def string, bizMeta json.RawMessa
 		return Handle{}, fmt.Errorf("%w: 会话 %s 已存在", store.ErrConflict, id)
 	}
 	hd, err := h.open(ctx, id, def, h.New, func(ag *agent.Agent, cfg *session.Config) error {
-		meta := store.SessionMeta{Origin: "new", Meta: bizMeta, Workspace: h.Workspace}
-		if ag.Def != nil {
-			meta.AgentID, meta.AgentHash = ag.Def.ID, ag.Def.Version
-		}
-		_, err := ag.OpenAs(ctx, cfg, meta)
+		_, err := ag.OpenAs(ctx, cfg, h.newMeta(ag, bizMeta))
 		return err
 	})
 	if err != nil {
@@ -351,6 +347,16 @@ func (h *Host) Create(ctx context.Context, id, def string, bizMeta json.RawMessa
 		return Handle{}, err
 	}
 	return hd, nil
+}
+
+// newMeta 新建顶层会话的会话行字段：origin = new、当前工作区、智能体定义的 id 与版本。
+// Create 与 Open 新建会话共用（客户端改进 M6 协议T5：CLI 走 Open 建的会话此前不记工作区）。
+func (h *Host) newMeta(ag *agent.Agent, bizMeta json.RawMessage) store.SessionMeta {
+	meta := store.SessionMeta{Origin: "new", Meta: bizMeta, Workspace: h.Workspace}
+	if ag.Def != nil {
+		meta.AgentID, meta.AgentHash = ag.Def.ID, ag.Def.Version
+	}
+	return meta
 }
 
 // head 只读会话行（元数据与头部），不读也不反序列化任何条目：base 取最大值（审查 P1-34 / P1-35）。
@@ -415,7 +421,8 @@ func (h *Host) open(ctx context.Context, id, def string, f Factory, pre func(*ag
 		if err := pre(ag, cfg); err != nil {
 			return Handle{}, err
 		}
-	} else if _, err := ag.Open(ctx, cfg); err != nil {
+	} else if _, err := ag.OpenAs(ctx, cfg, h.newMeta(ag, nil)); err != nil {
+		// OpenAs 只在会话不存在时用这些字段建会话行；已有会话照常恢复，字段不变。
 		return Handle{}, err
 	}
 	if !existed && pre == nil {

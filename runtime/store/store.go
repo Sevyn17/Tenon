@@ -249,6 +249,14 @@ type SessionMetaStore interface {
 	SessionsWithMeta(ctx context.Context, key string, limit int) ([]SessionInfo, error)
 }
 
+// UnassignedLister 可选：列没有工作区的会话（workspace 为空，多为记工作区之前建的旧会话）。
+// 客户端改进 M6 决定 10：左栏把它们归入「未归属」分组，不改写数据。ListSessionsIn 的空 workspace
+// 表示不过滤，表达不了「只要空的」，所以另开一个方法；不加进 Store，第三方存储不实现也照常工作。
+type UnassignedLister interface {
+	// ListUnassigned 同 ListSessionsIn，只列 workspace 为空的未删除会话（按更新时间倒序）。
+	ListUnassigned(ctx context.Context, before int64, limit int, topOnly bool) ([]SessionInfo, error)
+}
+
 // —— 共享类型 ——//
 
 // SessionMeta 会话行的非头部字段。

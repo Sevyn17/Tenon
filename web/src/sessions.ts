@@ -16,11 +16,26 @@ export interface SessionsView {
   loading: boolean;
   error?: string;
   all: boolean; // 含子会话
+  /**
+   * 没有工作区的会话（记工作区之前建的旧会话；左栏「未归属」分组，Mortise 客户端改进 M6 决定 10）。
+   * 服务端报能力 sessions_unassigned 才查（sessions.list {unassigned}）；否则为空或缺省。置顶的也在这里，
+   * 不进 pinned（置顶查询按工作区过滤）。不在 listed() 里：上下一个会话、命令面板只走当前工作区。
+   */
+  unassigned?: SessionInfo[];
+  /** 未归属的下一页游标；0 / 缺省 = 没有下一页。 */
+  unassignedNext?: number;
+}
+
+export interface SessionsStoreOptions {
+  /** 是否查未归属的会话（通常是 () => client.can("sessions_unassigned")；每次查第一页时判断）。 */
+  unassigned?: () => boolean;
 }
 
 export interface SessionsStore extends ReadStore<SessionsView> {
   refresh(): Promise<void>;
   more(): Promise<void>;
+  /** 未归属的下一页。 */
+  moreUnassigned(): Promise<void>;
   setAll(all: boolean): Promise<void>;
   /** 本地插入（新建、分叉后立即出现在列表里，不等下一次查询）。 */
   upsert(info: SessionInfo): void;
@@ -31,28 +46,51 @@ export interface SessionsStore extends ReadStore<SessionsView> {
   close(): void;
 }
 
-export function createSessionsStore(conn: Connection, limit = 50): SessionsStore {
+export function createSessionsStore(conn: Connection, limit = 50, opts: SessionsStoreOptions = {}): SessionsStore {
   const store = createStore<SessionsView>({ items: [], pinned: [], next: 0, loading: false, all: false });
   let gen = 0;
+  let moreGen = 0; // 未归属翻页的代次：重新查第一页后丢弃旧的翻页结果
 
   const page = async (cursor: number) => {
     const g = ++gen;
     store.update((v) => ({ ...v, loading: true, error: undefined }));
     try {
       const all = store.get().all;
-      const [r, p] = await Promise.all([
+      const withUn = cursor === 0 && !!opts.unassigned?.();
+      if (cursor === 0) moreGen++;
+      const [r, p, u] = await Promise.all([
         conn.call("sessions.list", { cursor, limit, all }),
         cursor === 0 ? conn.call("sessions.list", { pinned: true, limit: 200, all }) : Promise.resolve(null),
+        // 未归属查失败不影响主列表：保留上一次的结果。
+        withUn ? conn.call("sessions.list", { unassigned: true, limit, all }).catch(() => null) : Promise.resolve(null),
       ]);
       if (g !== gen) return;
       store.update((v) => {
         const pinned = p ? (p.items ?? []) : v.pinned;
         const items = cursor === 0 ? (r.items ?? []) : dedupe([...v.items, ...(r.items ?? [])]);
-        return { ...v, loading: false, next: r.next, pinned, items: items.filter((x) => !x.pinned) };
+        const next: SessionsView = { ...v, loading: false, next: r.next, pinned, items: items.filter((x) => !x.pinned) };
+        if (u) return { ...next, unassigned: u.items ?? [], unassignedNext: u.next };
+        if (cursor === 0 && !withUn && v.unassigned) return { ...next, unassigned: [], unassignedNext: 0 }; // 换到没有这项能力的服务端
+        return next;
       });
     } catch (e) {
       if (g !== gen) return;
       store.update((v) => ({ ...v, loading: false, error: e instanceof Error ? e.message : String(e) }));
+    }
+  };
+
+  let loadingUn = false;
+  const moreUnassigned = async () => {
+    const cursor = store.get().unassignedNext ?? 0;
+    if (cursor <= 0 || loadingUn) return;
+    loadingUn = true;
+    const g = moreGen;
+    try {
+      const r = await conn.call("sessions.list", { unassigned: true, cursor, limit, all: store.get().all });
+      if (g !== moreGen) return;
+      store.update((v) => ({ ...v, unassigned: dedupe([...(v.unassigned ?? []), ...(r.items ?? [])]), unassignedNext: r.next }));
+    } finally {
+      loadingUn = false;
     }
   };
 
@@ -73,19 +111,24 @@ export function createSessionsStore(conn: Connection, limit = 50): SessionsStore
       const n = store.get().next;
       if (n > 0 && !store.get().loading) await page(n);
     },
+    moreUnassigned,
     async setAll(all) {
       store.update((v) => ({ ...v, all }));
       await page(0);
     },
     upsert(info) {
-      store.update((v) => place({ ...v, items: v.items.filter((x) => x.id !== info.id), pinned: v.pinned.filter((x) => x.id !== info.id) }, info));
+      store.update((v) => {
+        // 已在未归属分组里的行（改名、置顶）留在原处；其余照旧进置顶区或按时间的列表。
+        if (v.unassigned?.some((x) => x.id === info.id)) return { ...v, unassigned: replaceIn(v.unassigned, info) };
+        return place({ ...v, items: v.items.filter((x) => x.id !== info.id), pinned: v.pinned.filter((x) => x.id !== info.id) }, info);
+      });
     },
     remove(id) {
       store.update((v) => dropTree(v, id));
     },
     find(id) {
       const v = store.get();
-      return v.pinned.find((x) => x.id === id) ?? v.items.find((x) => x.id === id);
+      return v.pinned.find((x) => x.id === id) ?? v.items.find((x) => x.id === id) ?? v.unassigned?.find((x) => x.id === id);
     },
     close: off,
   };
@@ -94,6 +137,12 @@ export function createSessionsStore(conn: Connection, limit = 50): SessionsStore
 /** sessions.changed 合进列表（纯函数，便于测试）。不在已加载页里的行：置顶了就补进置顶区，否则等下次查询。 */
 export function applyChanged(v: SessionsView, d: SessionsChanged): SessionsView {
   if (d.deleted) return dropTree(v, d.id);
+  // 未归属分组里的行：原地更新（置顶与否都留在这一组），不挪进按工作区的列表。
+  const un = v.unassigned?.find((x) => x.id === d.id);
+  if (un) {
+    const row: SessionInfo = { ...un, title: d.title, run_state: d.run_state, pinned: d.pinned || undefined, updated_at: d.updated_at || un.updated_at };
+    return { ...v, unassigned: replaceIn(v.unassigned!, row) };
+  }
   const old = v.pinned.find((x) => x.id === d.id) ?? v.items.find((x) => x.id === d.id);
   if (!old && !d.pinned) return v;
   const row: SessionInfo = {
@@ -114,10 +163,16 @@ function place(v: SessionsView, row: SessionInfo): SessionsView {
 /** 删掉一行及它的子会话（id 以 "<id>/" 开头）。 */
 function dropTree(v: SessionsView, id: string): SessionsView {
   const keep = (x: SessionInfo) => x.id !== id && !x.id.startsWith(id + "/");
-  return { ...v, items: v.items.filter(keep), pinned: v.pinned.filter(keep) };
+  const out = { ...v, items: v.items.filter(keep), pinned: v.pinned.filter(keep) };
+  return v.unassigned ? { ...out, unassigned: v.unassigned.filter(keep) } : out;
 }
 
-/** 左栏顺序：置顶在前，其余按更新时间。 */
+/** 换掉列表里同 id 的一行并按更新时间重排。 */
+function replaceIn(xs: SessionInfo[], row: SessionInfo): SessionInfo[] {
+  return sortByUpdated(xs.map((x) => (x.id === row.id ? row : x)));
+}
+
+/** 当前工作区的左栏顺序：置顶在前，其余按更新时间（不含未归属分组）。 */
 export function listed(v: SessionsView): SessionInfo[] {
   return [...v.pinned, ...v.items];
 }

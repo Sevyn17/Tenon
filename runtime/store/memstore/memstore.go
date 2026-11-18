@@ -668,6 +668,16 @@ func (s *Store) ListSessions(ctx context.Context, before int64, limit int, topOn
 
 // ListSessionsIn 同 ListSessions，只列属于 workspace 的会话（空 = 不过滤）。
 func (s *Store) ListSessionsIn(ctx context.Context, workspace string, before int64, limit int, topOnly bool) ([]store.SessionInfo, error) {
+	return s.listSessions(workspace, false, before, limit, topOnly)
+}
+
+// ListUnassigned 只列没有工作区的会话（store.UnassignedLister，客户端改进 M6 决定 10）。
+func (s *Store) ListUnassigned(ctx context.Context, before int64, limit int, topOnly bool) ([]store.SessionInfo, error) {
+	return s.listSessions("", true, before, limit, topOnly)
+}
+
+// listSessions ListSessionsIn / ListUnassigned 共用：unassigned 时只要 workspace 为空的，否则 workspace 非空才过滤。
+func (s *Store) listSessions(workspace string, unassigned bool, before int64, limit int, topOnly bool) ([]store.SessionInfo, error) {
 	if err := s.lock(); err != nil {
 		return nil, err
 	}
@@ -678,7 +688,7 @@ func (s *Store) ListSessionsIn(ctx context.Context, workspace string, before int
 	var out []store.SessionInfo
 	for _, x := range s.sessions {
 		if x.status == "deleted" || (before > 0 && x.updatedAt >= before) || (topOnly && x.meta.ParentID != "") ||
-			(workspace != "" && x.meta.Workspace != workspace) {
+			(workspace != "" && x.meta.Workspace != workspace) || (unassigned && x.meta.Workspace != "") {
 			continue
 		}
 		out = append(out, x.info())
@@ -767,7 +777,10 @@ func (s *Store) SessionsWithMeta(ctx context.Context, key string, limit int) ([]
 	return out, nil
 }
 
-var _ store.SessionMetaStore = (*Store)(nil)
+var (
+	_ store.SessionMetaStore = (*Store)(nil)
+	_ store.UnassignedLister = (*Store)(nil)
+)
 
 // SpansForTest 返回某会话已写入的 span（测试用：Span 只写不读，没有正式读接口）。
 func (s *Store) SpansForTest(sessionID string) []store.Span {

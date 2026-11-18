@@ -112,6 +112,32 @@ func testWorkspace(t *testing.T, db store.Store) {
 	if m := ids("", true); len(m) != 3 {
 		t.Fatalf("不过滤：%v", m)
 	}
+	// 可选的 UnassignedLister：只列没有工作区的（客户端改进 M6 决定 10，左栏「未归属」）。
+	ul, ok := db.(store.UnassignedLister)
+	if !ok {
+		return
+	}
+	create(t, db, store.SessionMeta{ID: "none/sub", ParentID: "none", Origin: "subagent"}, newCore())
+	un := func(top bool) map[string]bool {
+		ls, err := ul.ListUnassigned(ctx, 0, 50, top)
+		if err != nil {
+			t.Fatal(err)
+		}
+		m := map[string]bool{}
+		for _, x := range ls {
+			m[x.ID] = true
+		}
+		return m
+	}
+	if m := un(true); len(m) != 1 || !m["none"] {
+		t.Fatalf("未归属顶层应只有 none：%v", m)
+	}
+	if m := un(false); len(m) != 2 || !m["none"] || !m["none/sub"] {
+		t.Fatalf("未归属含子会话应是 none、none/sub：%v", m)
+	}
+	if ls, err := ul.ListUnassigned(ctx, 0, 1, false); err != nil || len(ls) != 1 {
+		t.Fatalf("limit 应生效：%v %v", ls, err)
+	}
 }
 
 // —— 辅助 ——//

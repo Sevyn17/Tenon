@@ -406,6 +406,7 @@ export interface ListArgs {
   all?: boolean;
   pinned?: boolean;
   all_workspaces?: boolean;
+  unassigned?: boolean;
 }
 
 export interface ListResult {

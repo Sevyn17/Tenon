@@ -74,7 +74,8 @@ function uploadFile(url: string, session: string, file: File, onProgress?: (p: n
 export function createClient(opts: ClientOptions = {}): Client {
   const conn = connect(opts.transport ?? autoTransport());
   const hello = createStore<HelloResult | null>(null);
-  const sessions = createSessionsStore(conn);
+  // 未归属分组（Mortise 客户端改进 M6 决定 10）：服务端报 sessions_unassigned 才查；每次查第一页时按当前握手判断。
+  const sessions = createSessionsStore(conn, 50, { unassigned: () => hello.get()?.capabilities.includes("sessions_unassigned") ?? false });
   const interactions = createInteractionsStore(conn);
   const opened = new Map<string, SessionStore>();
   return {
