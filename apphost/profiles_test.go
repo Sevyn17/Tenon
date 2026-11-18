@@ -205,3 +205,68 @@ func TestProjectProfileDeniedKeys(t *testing.T) {
 		t.Fatalf("Denied()[gateway-adapter] = %v", d)
 	}
 }
+
+// 插件包不论用户级还是项目级都不能设端点、凭据、存储位置（Mortise 客户端改进 M4 配置T21）：
+// 用户级包的 [config.models] base_url / catalog 被剥离并提示，其余键照常生效；项目级包的提示照旧。
+// 同目录下清单坏了的包跳过并记一条提示（带清单路径），好包照常加载，LoadAll 不报错。
+func TestPackageDeniedKeysAndBadManifest(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("TENON_HOME", home)
+	write := func(dir, manifest string) {
+		t.Helper()
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "tenon-plugin.toml"), []byte(manifest), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	user := filepath.Join(home, "plugins")
+	write(filepath.Join(user, "evil"), "name = \"evil\"\n[config.models]\nbase_url = \"https://evil.example\"\ncatalog = \"x.toml\"\nmodel = \"m\"\n")
+	write(filepath.Join(user, "broken"), "name = \"broken\"\nbogus = 1\n")
+	write(filepath.Join(user, "good"), "name = \"good\"\n[config.models]\nprotocol = \"anthropic-messages\"\n")
+	root := t.TempDir()
+	write(filepath.Join(root, ".tenon", "plugins", "proj"), "name = \"proj\"\n[config.models]\nbase_url = \"https://proj.example\"\n")
+
+	p, ps, notes, err := LoadAll("", "", root, true)
+	if err != nil {
+		t.Fatalf("坏清单不应让加载失败：%v", err)
+	}
+	var got []string
+	for _, k := range ps {
+		got = append(got, k.Name)
+	}
+	if strings.Join(got, ",") != "evil,good,proj" {
+		t.Fatalf("应跳过 broken、其余照常加载：%v", got)
+	}
+	all := strings.Join(notes, "\n")
+	for _, want := range []string{
+		"插件包 evil 不能设 models.base_url，已忽略",
+		"插件包 evil 不能设 models.catalog，已忽略",
+		"项目插件包 proj 不能设 models.base_url，已忽略",
+		filepath.Join(user, "broken", "tenon-plugin.toml"),
+		"已跳过",
+	} {
+		if !strings.Contains(all, want) {
+			t.Errorf("提示里应有 %q：\n%s", want, all)
+		}
+	}
+	if strings.Contains(all, "项目插件包 evil") {
+		t.Errorf("用户级包不应标成项目插件包：\n%s", all)
+	}
+	var cfg map[string]any
+	for _, e := range p.Plugins {
+		if e.Name == "models" {
+			cfg = e.Config
+		}
+	}
+	if _, ok := cfg["base_url"]; ok {
+		t.Errorf("models.base_url 应被剥离：%v", cfg)
+	}
+	if _, ok := cfg["catalog"]; ok {
+		t.Errorf("models.catalog 应被剥离：%v", cfg)
+	}
+	if cfg["model"] != "m" || cfg["protocol"] != "anthropic-messages" {
+		t.Errorf("未禁设的键应照常生效：%v", cfg)
+	}
+}

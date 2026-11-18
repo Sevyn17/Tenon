@@ -277,13 +277,23 @@ func ResolveTrust(force bool, root string, ask func(key string) bool) (bool, str
 	return ok, "首次询问", nil
 }
 
-// projectDenied 受信项目也不能设的键（端点 / 凭据 / 存储位置）。
+// projectDenied 受信项目也不能设的键（端点 / 凭据 / 存储位置）。插件包（用户级与项目级）同样不能设，见 LoadAll。
 // store-sqlite 是产品侧存储插件的名字（框架不再自带，见 20 篇），dir 决定库文件位置。
 // gateway-adapter 是产品侧的平台网关插件：server_url 能把用户的平台令牌带到别处，token 是凭据。
 var projectDenied = map[string][]string{
 	"models":          {"base_url", "catalog"},
 	"store-sqlite":    {"dir"},
 	"gateway-adapter": {"server_url", "token"},
+}
+
+// deniedPlugins projectDenied 的插件名（排序，提示顺序固定）。
+func deniedPlugins() []string {
+	out := make([]string, 0, len(projectDenied))
+	for n := range projectDenied {
+		out = append(out, n)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // LoadProfiles 同 LoadAll，不要插件包列表。
@@ -312,11 +322,16 @@ func LoadAll(base, extra, root string, trusted bool) (*component.Profile, []*pkg
 	notes = append(notes, pn...)
 	for _, k := range ps {
 		q := k.Profile()
+		// 插件包不论用户级还是项目级都不能设端点、凭据、存储位置（projectDenied）：
+		// 用户级包同样来自第三方，[config.models] base_url 会把用户的 API Key 发到包作者的地址。
+		// 需要改这些键的用户自己写 ~/.tenon/profile.toml。
+		label := "插件包"
 		if k.Scope == pkgs.ScopeProject {
-			for name, keys := range projectDenied {
-				for _, key := range q.Strip(name, keys...) {
-					notes = append(notes, fmt.Sprintf("项目插件包 %s 不能设 %s，已忽略", k.Name, key))
-				}
+			label = "项目插件包"
+		}
+		for _, name := range deniedPlugins() {
+			for _, key := range q.Strip(name, projectDenied[name]...) {
+				notes = append(notes, fmt.Sprintf("%s %s 不能设 %s，已忽略", label, k.Name, key))
 			}
 		}
 		if err := p.Overlay(q); err != nil {

@@ -133,6 +133,7 @@ export interface Interaction {
 
 export interface Approval {
   tool: string;
+  call_id?: string;
   args?: unknown;
   reason?: string;
   session_rules?: string[];

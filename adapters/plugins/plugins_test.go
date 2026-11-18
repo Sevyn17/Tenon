@@ -67,12 +67,32 @@ func TestLoadTrust(t *testing.T) {
 	}
 }
 
-func TestBadManifestStopsLoad(t *testing.T) {
-	home := t.TempDir()
-	dir := mk(t, filepath.Join(home, "plugins"), "bad", `name = 1`)
-	_, _, err := Load(home, t.TempDir(), true)
-	if err == nil || !strings.Contains(err.Error(), filepath.Join(dir, pkgs.ManifestName)) {
-		t.Fatalf("坏清单应报错并带文件名：%v", err)
+// 坏清单（解析失败、字段非法、名字与目录不符）只跳过那个包并记提示（带清单路径），其他包照常加载、Load 不报错。
+// 以前是整个 Load 失败、程序起不来（spike-config 第〇节第 5 条）。
+func TestBadManifestSkipped(t *testing.T) {
+	home, root := t.TempDir(), t.TempDir()
+	bad := mk(t, filepath.Join(home, "plugins"), "bad", `name = 1`)
+	unknown := mk(t, filepath.Join(home, "plugins"), "bogus", "name = \"bogus\"\nbogus = 1\n")
+	misnamed := mk(t, filepath.Join(home, "plugins"), "misnamed", `name = "other"`)
+	mk(t, filepath.Join(home, "plugins"), "good", `name = "good"`)
+	projBad := mk(t, filepath.Join(root, ".tenon", "plugins"), "pbad", `name = `)
+	mk(t, filepath.Join(root, ".tenon", "plugins"), "pgood", `name = "pgood"`)
+
+	ps, notes, err := Load(home, root, true)
+	if err != nil {
+		t.Fatalf("坏清单不应让 Load 失败：%v", err)
+	}
+	if got := strings.Join(names(ps), ","); got != "good,pgood" {
+		t.Fatalf("应只加载好包：%s", got)
+	}
+	all := strings.Join(notes, "\n")
+	for _, dir := range []string{bad, unknown, misnamed, projBad} {
+		if !strings.Contains(all, filepath.Join(dir, pkgs.ManifestName)) {
+			t.Errorf("提示应带坏清单路径 %s：\n%s", dir, all)
+		}
+	}
+	if !strings.Contains(all, "未知字段 bogus") || !strings.Contains(all, "已跳过") {
+		t.Errorf("提示应写明原因并说明已跳过：\n%s", all)
 	}
 }
 
@@ -110,15 +130,20 @@ view_file = "ui/view.json"
 			if err := os.WriteFile(filepath.Join(dir, "view.json"), []byte(c.view), 0o644); err != nil {
 				t.Fatal(err)
 			}
-			_, _, err := Load(home, t.TempDir(), true)
+			// 视图不合契约的包被跳过并记提示（不让 Load 失败），见 TestBadManifestSkipped。
+			ps, notes, err := Load(home, t.TempDir(), true)
+			if err != nil {
+				t.Fatalf("Load 不应报错：%v", err)
+			}
+			all := strings.Join(notes, "\n")
 			if c.wantErr == "" {
-				if err != nil {
-					t.Fatalf("应通过却被拒：%v", err)
+				if len(ps) != 1 {
+					t.Fatalf("应通过却被拒：%s", all)
 				}
 				return
 			}
-			if err == nil || !strings.Contains(err.Error(), c.wantErr) {
-				t.Fatalf("应报 %q，实际：%v", c.wantErr, err)
+			if len(ps) != 0 || !strings.Contains(all, c.wantErr) || !strings.Contains(all, "已跳过") {
+				t.Fatalf("应跳过并提示 %q，实际包 %v，提示：%s", c.wantErr, names(ps), all)
 			}
 		})
 	}

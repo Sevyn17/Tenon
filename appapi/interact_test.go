@@ -34,6 +34,20 @@ func TestInteractionRespondFlow(t *testing.T) {
 	if b, _ := json.Marshal(ev.Data); json.Valid(b) && containsStr(string(b), "corr") {
 		t.Fatalf("交互不应带 corr：%s", b)
 	}
+	// approval.call_id = 待确认的那次工具调用的 id，即先到的 assistant 条目里 tool_calls[].id（界面据此把确认挂到步骤上）。
+	var callID string
+	for _, e := range opened {
+		if ea, ok := e.Data.(wire.EntryAppended); ok && ea.Entry.Item.Kind == wire.KindAssistant {
+			for _, tc := range ea.Entry.Item.ToolCalls {
+				if tc.Name == "echo" {
+					callID = tc.ID
+				}
+			}
+		}
+	}
+	if callID == "" || it.Approval.CallID != callID {
+		t.Fatalf("approval.call_id 应等于工具调用的 id %q，实际 %q", callID, it.Approval.CallID)
+	}
 
 	snap, e := call2(t, app, "session.get", `{"session":"s"}`)
 	if e != nil {
@@ -41,6 +55,8 @@ func TestInteractionRespondFlow(t *testing.T) {
 	}
 	if s := snap.(wire.SessionSnapshot); len(s.Interactions) != 1 || s.Interactions[0].ID != it.ID {
 		t.Fatalf("快照应带未结束的交互：%+v", s.Interactions)
+	} else if ap := s.Interactions[0].Approval; ap == nil || ap.CallID != callID {
+		t.Fatalf("快照里的交互也应带 call_id %q：%+v", callID, ap)
 	}
 	list, e := call2(t, app, "interactions.list", `{}`)
 	if e != nil || len(list.(wire.InteractionsResult).Items) != 1 {

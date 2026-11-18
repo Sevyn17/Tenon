@@ -52,7 +52,8 @@ prompt = ["prompt.md"]
 `
 
 // Discover 列出 root 下每个带清单的子目录并解析（按目录名排序）。root 不存在返回空；
-// 没有清单的子目录跳过并记一条提示；清单有错直接返回错误。
+// 没有清单的子目录、清单解析失败或字段非法的包（含 [[ui]] 视图不合契约）都跳过并记一条提示，
+// 其余包照常返回；只有读不了 root 本身才返回错误。
 func Discover(root, scope string) ([]*pkgs.Package, []string, error) {
 	ents, err := os.ReadDir(root)
 	if errors.Is(err, os.ErrNotExist) {
@@ -73,21 +74,32 @@ func Discover(root, scope string) ([]*pkgs.Package, []string, error) {
 			notes = append(notes, fmt.Sprintf("跳过 %s：没有 %s", dir, pkgs.ManifestName))
 			continue
 		}
-		p, err := pkgs.Parse(dir, scope)
+		p, err := parseOne(dir, scope)
 		if err != nil {
-			return nil, nil, err
-		}
-		// 视图的节点形状在协议边界校验（契约定义在 appapi/wire/declarative.go）。
-		// pkgs 属 runtime/，不能 import appapi，所以只能在这里做——这里也是唯一
-		// 把包交给应用的入口，拦在这里等于拦在源头。
-		for _, u := range p.UISlots() {
-			if err := wire.ValidateView(u.View); err != nil {
-				return nil, nil, fmt.Errorf("插件包 %s 的 [[ui]] %s：%v", dir, u.ID, err)
-			}
+			// 一个包坏了不连累其他包和启动：跳过并提示原因（错误以「插件包 <清单路径>：」开头）。
+			notes = append(notes, fmt.Sprintf("%v，已跳过", err))
+			continue
 		}
 		out = append(out, p)
 	}
 	return out, notes, nil
+}
+
+// parseOne 解析并校验一个包目录：清单（pkgs.Parse）与 [[ui]] 视图。
+func parseOne(dir, scope string) (*pkgs.Package, error) {
+	p, err := pkgs.Parse(dir, scope)
+	if err != nil {
+		return nil, err
+	}
+	// 视图的节点形状在协议边界校验（契约定义在 appapi/wire/declarative.go）。
+	// pkgs 属 runtime/，不能 import appapi，所以只能在这里做——这里也是唯一
+	// 把包交给应用的入口，拦在这里等于拦在源头。
+	for _, u := range p.UISlots() {
+		if err := wire.ValidateView(u.View); err != nil {
+			return nil, fmt.Errorf("插件包 %s 的 [[ui]] %s：%v", p.File, u.ID, err)
+		}
+	}
+	return p, nil
 }
 
 // HasAny root 下是否有子目录（用于“项目带插件包”的信任判断与提示）。

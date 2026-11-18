@@ -149,7 +149,10 @@ type Interaction struct {
 
 // Approval 工具确认的内容。
 type Approval struct {
-	Tool         string          `json:"tool"`
+	Tool string `json:"tool"`
+	// CallID 待确认的那次工具调用的 id（= 条目 tool_calls[].id），界面据此把确认挂到对应步骤上。
+	// 升级前登记、还没回答的交互没有这个字段。
+	CallID       string          `json:"call_id,omitempty"`
 	Args         json.RawMessage `json:"args,omitempty"`
 	Reason       string          `json:"reason,omitempty"`
 	SessionRules []string        `json:"session_rules,omitempty"`

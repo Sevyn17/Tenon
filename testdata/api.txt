@@ -304,7 +304,7 @@ github.com/Sevyn17/tenon/appapi/wire: type AdminModel struct{ID string; Provider
 github.com/Sevyn17/tenon/appapi/wire: type AdminModelProvider struct{ID string; Key string; Name string; Protocol string; BaseURL string; Status string; KeyCount int}
 github.com/Sevyn17/tenon/appapi/wire: type AdminModelsResult struct{Providers []AdminModelProvider; Models []AdminModel; Aliases []AdminAlias; RateCards []AdminRateCard; ReadOnly bool}
 github.com/Sevyn17/tenon/appapi/wire: type AdminRateCard struct{ID string; Version int64; Status string; Rates string}
-github.com/Sevyn17/tenon/appapi/wire: type Approval struct{Tool string; Args encoding/json.RawMessage; Reason string; SessionRules []string; Blocked []string}
+github.com/Sevyn17/tenon/appapi/wire: type Approval struct{Tool string; CallID string; Args encoding/json.RawMessage; Reason string; SessionRules []string; Blocked []string}
 github.com/Sevyn17/tenon/appapi/wire: type ArtifactGetArgs struct{Session string; Ref string; Offset int; Length int}
 github.com/Sevyn17/tenon/appapi/wire: type ArtifactGetResult struct{MIME string; Size int; Text string; Base64 string}
 github.com/Sevyn17/tenon/appapi/wire: type ArtifactPutArgs struct{Session string; MIME string; Base64 string}
