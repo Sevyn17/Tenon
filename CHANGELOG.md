@@ -8,6 +8,71 @@
 
 ---
 
+## [v0.4.0] - 2026-11-18
+
+> 小版本：从 `v0.3.3` 起。`testdata/api.txt` 只增不删（新增 35 行符号，9 个既有结构体追加字段），
+> 无符号删除、无函数签名变化；但若干既有函数的行为变了（见「破坏性变更」），按 07 篇 7.4.1 动 minor。
+> 内容是平台账号接入与 Mortise 客户端改进（docs/50 M1–M6）的框架侧部分；应用协议仍是 protocol 2。
+
+### 破坏性变更
+
+> 公开面没有删除或改签名的符号。下面是下游升级后**可能察觉的变化**。
+
+- **9 个结构体追加了字段**：`apphost.AppOptions` / `WorkspaceOptions`（`Platform`）、`wire.Approval`（`CallID`）、
+  `wire.ListArgs`（`Unassigned`）、`wire.ModelInfo`（`Label`）、`wire.ModelsListResult`（`Effective`）、
+  `wire.SessionSnapshot` / `StateChanged`（`LastEnd`）、`wire.TurnEnded`（`At`）。
+  带字段名的字面量不受影响；不带字段名的会编译失败，其中 `Approval.CallID`、`ModelInfo.Label` 插在中间。
+- **`projectDenied` 加了 `gateway-adapter.server_url` / `token`，并对用户级插件包也生效**。
+  受信项目的 profile 不能再改平台网关地址或写令牌（读取时剥离并提示，项目层 `plugins.set` 拒绝）；
+  `~/.tenon/plugins/<名>` 里的端点、凭据、存储位置类配置同样被剥离。这些键能把用户的令牌或密钥带到第三方地址
+  （`d6ee0a1`；决策日志 2026-11-18 插件包安全前置）。
+- **`plugins.Discover` / `Load` 遇到坏清单改为跳过并提示，不再返回错误**。签名不变。
+  以前一个包的清单坏了整个程序起不来；靠返回错误发现坏包的调用方现在拿不到错误（决策日志 2026-11-18）。
+- **`Host.Open` 新建会话会记当前工作区与 origin**。签名不变。以前 CLI 建的会话工作区为空，
+  网页端、桌面端的缺省列表看不到，别的项目也能打开它（决策日志 2026-11-18）。
+- **`turn.ended` 的 `code` 只放错误码**。以前 `FailedReason(err.Error())` 把「CODE: 说明」整串塞进 `code`，
+  现在说明在 `message`；按整串匹配 `code` 的客户端要改（决策日志 2026-11-17）。
+
+### 新增
+
+- **平台账号 `appapi.Platform`**（14 个方法：设备码登录、API Key、BYOK 多套配置、邮箱密码注册与登录、
+  只读模型目录）及对应的 `platform.*` 命令与 wire 类型，经 `AppOptions.Platform` / `WorkspaceOptions.Platform`
+  注入。nil 表示不接平台，状态类命令返回 `Configured=false`，不报错
+  （`703cd52`、`c71cd5d`、`d23085b`、`e03e0a2`、`406de37`）。
+- **Platform 的可选扩展 `BYOKTester` / `BYOKEditor` / `PlatformConfigurer`**（能力 `byok_test` / `byok_edit` /
+  `platform_configure`）与 `AccountStatus.ServerSource`：测连接、按 id 编辑、保存 server 地址。
+  做成可选接口，既有实现不会编译失败（决策日志 2026-11-17）。
+- **`workspace.reload` 命令、`appapi.Reloader`、`apphost.WorkspaceManager.Reload`**（能力 `reload`）：
+  同目录重建运行时，新配置起不来时回落上次配置。改 BYOK、默认模型、登录状态不必重启进程（决策日志 2026-11-17）。
+- **模型来源插槽 `slot:model_sources` 与当前生效的模型**：`models.list` 返回 `effective`（模型、提供方、
+  凭据来源、由哪项设置决定）与 `ModelInfo.Label`；`Registrar.ConfigSource` 判断某项配置是否显式写了
+  （决策日志 2026-11-17）。
+- **回合结束原因持久化**：`StateChanged.LastEnd`、`SessionSnapshot.LastEnd`、`TurnEnded.At`，能力 `last_end`。
+  `turn.ended` 是易失事件，订阅晚于回合结束时失败原因会丢（决策日志 2026-11-17）。
+- **`wire.Approval.CallID`**：对应 `tool_calls[].id`，前端据此把审批挂到对应的工具调用上（决策日志 2026-11-18）。
+- **`AccountStatus.Operator` 与 `bind.ReconnectedEvent`**（能力 `reconnect_event`）：桌面端 `SwapAPI` 之后发
+  `tenon:reconnected`，前端走与 WebSocket 重连同一条路径，不用干等再整页刷新（决策日志 2026-11-18）。
+- **`sessions.list` 的 `unassigned`**（`wire.ListArgs.Unassigned`、可选接口 `store.UnassignedLister`，
+  能力 `sessions_unassigned`）：单独列出记工作区之前建的旧会话，不改写数据（决策日志 2026-11-18）。
+- **`apphost.RecentWorkspaces`**：桌面端不带 `-dir` 时可以打开上次的工作区，不用自己解析 `workspaces.json`
+  （决策日志 2026-11-18）。
+
+### 变更
+
+- **填了模型来源插槽时，缺省模型改在 models 的 `Start` 决定**（配置 > 插槽自动 > `deepseek-chat`）。
+  显式配置解析不了时回落并写 `Models.Notice`，不让装配失败。不填插槽时行为不变（决策日志 2026-11-17）。
+- **裸模型名命中多处时取层级最低的（最低层只有一个时）**。BYOK、网关常有与内置同名的模型：以前 `Resolve`
+  报未知、`Lookup` 按 map 顺序随便取一个，现在结果确定；原来能解析的不变（决策日志 2026-11-17）。
+
+### 修复
+
+- **`bind.Service.SwapAPI` 竞态（D-11）**：换 api 与丢弃旧连接放进同一把锁，连接记下建在哪个 App 上，
+  不是当前 App 就重建（决策日志 2026-11-17）。
+- **`drive` 直接出错时补发 `turn.ended`**。以前只发内部的 `turn.failed`，客户端只看到 `state_changed: idle`，
+  不知道回合为什么停了（决策日志 2026-11-17）。
+
+---
+
 ## [v0.3.3] - 2026-11-14
 
 > 补丁：**公开面不变**（`testdata/api.txt` 与 v0.3.2 无差异）。
@@ -48,6 +113,8 @@
   - `TestSupervisorStopTwice`：重复 `Stop` 幂等。
 
 ---
+
+## [v0.3.2] - 2026-11-14
 
 > 补丁：公开面**新增** 5 个符号（`wire.DeclNode` / `DeclAction` / `DeclNodeTypes` /
 > `DeclActionKinds` / `ValidateView`），无删除、无签名变更。修 `[[ui]]` 形状契约、
