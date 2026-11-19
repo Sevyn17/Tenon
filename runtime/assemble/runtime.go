@@ -196,6 +196,7 @@ func (b *Builder) Build(id, defName string, child bool) (*agent.Agent, *session.
 					req.CallID = cx.CallID
 					if cx.Tool != nil {
 						req.Risk = cx.Tool.Risk
+						req.Attrs = cx.Tool.Attrs
 					}
 				}
 				v, why := b.PointGuards(ctx, req)

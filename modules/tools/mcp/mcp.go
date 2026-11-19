@@ -377,6 +377,9 @@ func (c *Client) Tools(remote []RemoteTool) []*toolhub.Tool {
 			risk = toolhub.Read
 		}
 		attrs := map[string]any{"mcp_server": c.Server.Name, "mcp_tool": raw}
+		if risk != toolhub.Read {
+			attrs[toolhub.AttrMayWrite] = true // 进程外执行，可能改工作区任意文件（检查点扫描用）
+		}
 		if h := rt.Annotations.DestructiveHint; h != nil && *h && c.Server.Trust != TrustReadonly {
 			attrs[AttrDestructive] = true
 		}

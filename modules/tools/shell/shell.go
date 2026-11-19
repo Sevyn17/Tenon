@@ -163,7 +163,7 @@ func (s *Shell) Tools() []*toolhub.Tool {
 				Schema:      json.RawMessage(`{"type":"object","properties":{"command":{"type":"string"},"timeout":{"type":"integer","description":"超时秒数"},"background":{"type":"boolean","description":"后台运行，立即返回 job id"},"sandbox_permissions":{"type":"string","enum":["read-only","workspace-write","danger-full-access"],"description":"仅在命令被沙箱拒绝后使用：为本次调用申请更宽的沙箱，需要用户批准"}},"required":["command"]}`)},
 			Risk:    toolhub.Dangerous,
 			Timeout: ShellMaxTimeout + 10*time.Second,
-			Attrs:   map[string]any{toolhub.AttrPreview: "tail", toolhub.AttrSandboxed: true},
+			Attrs:   map[string]any{toolhub.AttrPreview: "tail", toolhub.AttrSandboxed: true, toolhub.AttrMayWrite: true},
 			Items:   []string{ItemExec},
 			Call:    s.callShell,
 		},

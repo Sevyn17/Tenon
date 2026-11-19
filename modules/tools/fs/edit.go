@@ -19,6 +19,7 @@ import (
 
 	"golang.org/x/text/unicode/norm"
 
+	"github.com/Sevyn17/tenon/modules/internal/wsfs"
 	"github.com/Sevyn17/tenon/runtime/session"
 	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
@@ -56,7 +57,7 @@ func Edit(root string, tr ...*Tracker) *toolhub.Tool {
 			Description: "精确编辑文件：按 old_text → new_text 替换，可一次多处（在原文件上匹配、全部成功才写入）。old_text 为空表示新建文件。修改已有文件优先用它，不要整文件重写。",
 			Schema:      json.RawMessage(editSchema)},
 		Risk:  toolhub.Write,
-		Attrs: map[string]any{toolhub.AttrWorkspace: true},
+		Attrs: map[string]any{toolhub.AttrWorkspace: true, toolhub.AttrWritePath: "path"},
 		Call: func(_ context.Context, cx *toolhub.Cx, raw json.RawMessage) (toolhub.Output, error) {
 			var a editArgs
 			if err := json.Unmarshal(raw, &a); err != nil {
@@ -290,33 +291,5 @@ func countLines(s string) int {
 	return strings.Count(strings.TrimSuffix(s, "\n"), "\n") + 1
 }
 
-// writeAtomic 同目录临时文件 + rename，保留原文件权限。
-func writeAtomic(p string, data []byte) error {
-	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
-		return err
-	}
-	mode := os.FileMode(0o644)
-	if st, err := os.Stat(p); err == nil {
-		mode = st.Mode().Perm()
-	}
-	f, err := os.CreateTemp(filepath.Dir(p), ".tenon-edit-*")
-	if err != nil {
-		return err
-	}
-	tmp := f.Name()
-	if _, err := f.Write(data); err != nil {
-		f.Close()
-		os.Remove(tmp)
-		return err
-	}
-	if err := f.Close(); err != nil {
-		os.Remove(tmp)
-		return err
-	}
-	_ = os.Chmod(tmp, mode)
-	if err := os.Rename(tmp, p); err != nil {
-		os.Remove(tmp)
-		return err
-	}
-	return nil
-}
+// writeAtomic 同目录临时文件 + rename，保留原文件权限（实现在 modules/internal/wsfs）。
+func writeAtomic(p string, data []byte) error { return wsfs.WriteAtomic(p, data) }

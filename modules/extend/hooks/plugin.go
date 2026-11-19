@@ -26,7 +26,9 @@ func init() { component.Register("hooks", func() component.Component { return &p
 
 func (*plug) Meta() component.Meta {
 	return component.Meta{Name: "hooks", Version: "0.1.0", Effects: []string{component.EffectExec, component.EffectRewriteResult}, Config: &PluginConfig{},
-		Requires: []string{assemble.ServiceWorkdir, assemble.ServiceUI, component.KeyLayers.Maybe(), toolhub.KeySandbox.Maybe(), "?" + pkgs.Service}}
+		Requires: []string{assemble.ServiceWorkdir, assemble.ServiceUI, component.KeyLayers.Maybe(), toolhub.KeySandbox.Maybe(), "?" + pkgs.Service},
+		// service:hooks 只用来排装配顺序：文件检查点可选依赖它，于是在 hooks 之后登记中间件、包在外层（docs/50 M9）。
+		Provides: []string{"service:hooks"}}
 }
 
 func (p *plug) Setup(cx *component.Registrar) error {
@@ -99,7 +101,7 @@ func (p *plug) Setup(cx *component.Registrar) error {
 		component.Wrap(cx, component.ToolCall, mw)
 	}
 	component.RegisterAt(cx, assemble.AfterTurn, "hooks", assemble.AfterTurnFunc(r.AfterTurn))
-	return nil
+	return cx.Provide("hooks", r)
 }
 
 // Start 关闭时等异步的 stop 钩子跑完（审查 P1-30）。

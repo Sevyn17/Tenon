@@ -26,6 +26,7 @@ import (
 	_ "github.com/Sevyn17/tenon/modules/security/permission"
 	_ "github.com/Sevyn17/tenon/modules/security/sandbox"
 	_ "github.com/Sevyn17/tenon/modules/tools/ask-user"
+	_ "github.com/Sevyn17/tenon/modules/tools/checkpoint"
 	_ "github.com/Sevyn17/tenon/modules/tools/codemode"
 	_ "github.com/Sevyn17/tenon/modules/tools/fs"
 	_ "github.com/Sevyn17/tenon/modules/tools/mcp"
@@ -50,6 +51,7 @@ var defaultComponents = []string{
 	"sandbox",
 	"ask-user",
 	"code-mode",
+	"checkpoint",
 	"fs",
 	"mcp",
 	"shell",

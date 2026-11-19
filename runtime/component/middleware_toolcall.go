@@ -31,6 +31,9 @@ type ToolCallReq struct {
 	Risk toolhub.Risk
 	// CallID 本次调用的 id。
 	CallID string
+	// Attrs 工具声明的属性（toolhub.Attr* 键，如 AttrWritePath、AttrMayWrite），只读：
+	// 中间件按属性判断，不必认工具名。nil = 工具没声明属性。
+	Attrs map[string]any
 	// Scope 本会话的作用域（04 4.3.1）：中间件要「每会话一份」的状态或历史回读时用它。
 	// nil = 没有作用域（如测试直接构造）；中间件须容忍 nil。
 	Scope SessionScope
@@ -69,7 +72,7 @@ func (a *Assembly) ToolCallTransforms() []toolhub.Transform {
 		out = append(out, toolhub.Transform{Name: "mw:" + reg.plugin,
 			Call: func(ctx context.Context, cx *toolhub.Cx, args json.RawMessage, next toolhub.Next) (toolhub.Output, error) {
 				req := ToolCallReq{Tool: toolName(cx), Args: args, SessionID: cx.SessionID, Risk: riskOf(cx),
-					CallID: cx.CallID, Scope: scopeOf(cx)}
+					CallID: cx.CallID, Attrs: attrsOf(cx), Scope: scopeOf(cx)}
 				// 走通用的洋葱链：把 next 包成「调下一层」。
 				out, err := reg.run(ctx, req, func(c context.Context, r any) (any, error) {
 					rr, _ := r.(ToolCallReq)
@@ -107,6 +110,14 @@ func riskOf(cx *toolhub.Cx) toolhub.Risk {
 		return toolhub.Read
 	}
 	return cx.Tool.Risk
+}
+
+// attrsOf 取本次调用工具声明的属性（没有则 nil）。
+func attrsOf(cx *toolhub.Cx) map[string]any {
+	if cx == nil || cx.Tool == nil {
+		return nil
+	}
+	return cx.Tool.Attrs
 }
 
 // scopeOf 取会话作用域（由 assemble 在构造 Hub 时通过 toolhub.Cx 关联；没有则 nil）。

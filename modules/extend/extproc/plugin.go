@@ -292,6 +292,8 @@ func (p *plug) toolOf(spec extproc.ToolSpec) *toolhub.Tool {
 	return &toolhub.Tool{
 		Spec: session.ToolSpec{Name: name, Description: spec.Description, Schema: spec.Schema},
 		Risk: toolhub.Write,
+		// 进程外执行，可能改工作区任意文件（检查点扫描用）。
+		Attrs: map[string]any{toolhub.AttrMayWrite: true},
 		Call: func(ctx context.Context, cx *toolhub.Cx, args json.RawMessage) (toolhub.Output, error) {
 			if p.conn == nil {
 				return toolhub.Failf("扩展进程不可用"), nil
