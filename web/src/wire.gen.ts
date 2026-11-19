@@ -756,6 +756,7 @@ export interface ChangeFile {
   binary?: boolean;
   sources?: string[];
   turns?: number[];
+  untracked?: boolean;
   rewound?: boolean;
   revertible: boolean;
   why?: string;
@@ -764,6 +765,7 @@ export interface ChangeFile {
 
 export interface ChangesResult {
   files: ChangeFile[];
+  scan_skipped?: string;
 }
 
 export interface ChangesDiffArgs {

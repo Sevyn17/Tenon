@@ -84,7 +84,7 @@ func netOf(cs []checkpoint.Change, scope string, turn int, live func(string) boo
 		if c.Source == checkpoint.SourceRevert || !in(c) {
 			continue
 		}
-		if c.Source == checkpoint.SourceFS && live != nil && !live(c.CallID) {
+		if c.ByCall() && live != nil && !live(c.CallID) {
 			dead = append(dead, c)
 			continue
 		}
@@ -154,8 +154,45 @@ func wireConflict(c checkpoint.Conflict) wire.ChangeConflict {
 	return wire.ChangeConflict{Path: c.Path, Reason: c.Kind, Message: c.Reason, By: c.Session, Forceable: c.Forceable}
 }
 
+// GitAvailable appapi.GitChanges：本机有 git 且工作区在仓库里（能力 changes.git）。
+func (a Changes) GitAvailable() bool { return a.E.GitAvailable() }
+
+// gitList changes.list {scope:"git"}：工作区相对 HEAD 的未提交改动，只读（Revertible 恒为 false）。
+func (a Changes) gitList(ctx context.Context) (wire.ChangesResult, error) {
+	fs, err := a.E.GitList(ctx)
+	if err != nil {
+		return wire.ChangesResult{}, err
+	}
+	out := wire.ChangesResult{Files: []wire.ChangeFile{}}
+	for _, f := range fs {
+		out.Files = append(out.Files, wire.ChangeFile{Path: f.Path, Status: f.Status, Added: f.Added, Removed: f.Removed,
+			Binary: f.Binary, Untracked: f.Untracked, Why: "git 范围只读"})
+	}
+	return out, nil
+}
+
+// gitDiff changes.diff {scope:"git"}：只接受当前未提交改动列表里的路径。
+func (a Changes) gitDiff(ctx context.Context, p string) (wire.ChangesDiffResult, error) {
+	d, err := a.E.GitDiff(ctx, path.Clean(strings.ReplaceAll(p, "\\", "/")))
+	switch {
+	case errors.Is(err, checkpoint.ErrNotInGit):
+		return wire.ChangesDiffResult{}, fmt.Errorf("%w: %v", store.ErrNotFound, err)
+	case errors.Is(err, checkpoint.ErrTooLarge):
+		return wire.ChangesDiffResult{Path: d.Path, Binary: d.Binary, NewSize: d.NewSize,
+			Unavailable: "文件太大，给不出 diff"}, nil
+	case err != nil:
+		return wire.ChangesDiffResult{}, err
+	}
+	out := wire.ChangesDiffResult{Path: d.Path, Binary: d.Binary, OldSize: d.OldSize, NewSize: d.NewSize}
+	out.Diff, out.Truncated = truncate(d.Unified)
+	return out, nil
+}
+
 // List changes.list。
 func (a Changes) List(ctx context.Context, in wire.ChangesArgs, live func(string) bool) (wire.ChangesResult, error) {
+	if in.Scope == wire.ChangeScopeGit {
+		return a.gitList(ctx)
+	}
 	scope, turn := scopeOf(in.Scope), 0
 	if in.Turn != nil {
 		turn = int(*in.Turn)
@@ -203,11 +240,15 @@ func (a Changes) List(ctx context.Context, in wire.ChangesArgs, live func(string
 		}
 		out.Files = append(out.Files, f)
 	}
+	out.ScanSkipped = a.E.ScanSkipped(in.Session)
 	return out, nil
 }
 
 // Diff changes.diff：只按本会话的记录找文件与内容。
 func (a Changes) Diff(ctx context.Context, in wire.ChangesDiffArgs, live func(string) bool) (wire.ChangesDiffResult, error) {
+	if in.Scope == wire.ChangeScopeGit {
+		return a.gitDiff(ctx, in.Path)
+	}
 	scope, turn := scopeOf(in.Scope), 0
 	if in.Turn != nil {
 		turn = int(*in.Turn)

@@ -46,7 +46,7 @@ type Change struct {
 	Turn    int    `json:"turn"`
 	CallID  string `json:"call_id"` // run_code 子调用为 "<父>#<n>"；drift 为 "turn-<n>/drift"；还原为 "revert/<seq>"
 	Tool    string `json:"tool"`
-	Source  string `json:"source"` // fs | drift | revert
+	Source  string `json:"source"` // fs | shell | drift | revert
 	Root    string `json:"root"`   // 工作目录（正斜杠）
 	Path    string `json:"path"`   // 相对 root，正斜杠，保留原大小写
 	PathKey string `json:"path_key"`
@@ -64,6 +64,12 @@ type Change struct {
 	Seq        string `json:"seq"` // 全局递增序号（定宽十进制，按字符串排序即时间顺序）
 }
 
+// ByCall 这条记录是否属于一个真实的工具调用（CallID 能在会话日志里找到）：fs 记录，以及调用前后扫描得到的
+// shell 记录。drift、回合末补扫（"turn-<n>/scan"）与 revert 记录不是，不经 Live 判断。
+func (c Change) ByCall() bool {
+	return c.Source == SourceFS || c.Source == SourceShell && !strings.HasPrefix(c.CallID, "turn-")
+}
+
 // Engine 检查点引擎：中间件、回合末对账、删会话清理、diff 与还原都在这里。
 // 进程内单例；并发安全。
 type Engine struct {
@@ -76,7 +82,16 @@ type Engine struct {
 	// Notify 会话配额满等提示（可空）。
 	Notify func(session, msg string)
 	Now    func() time.Time
+	// ScanMaxFiles may_write_files 调用前后扫描的文件数上限（0 = DefaultScanMaxFiles）；超过不扫，
+	// changes.list 用 ScanSkipped 标注。
+	ScanMaxFiles int
+	// NoGit 不调用 git（测试模拟没有 git 的机器）。
+	NoGit bool
 
+	gitOnce  sync.Once
+	git      gitInfo
+	snaps    map[string]*scanSnap // 会话 → 最近一次扫描
+	tooMany  map[string]bool      // 会话 → 因文件太多跳过过扫描
 	mu       sync.Mutex
 	lastSeq  int64
 	used     map[string]int64           // 会话 → 本进程内新存的内容字节数
@@ -209,6 +224,8 @@ type fileState struct {
 	data    []byte // nil = 太大没读进内存（只算了哈希）
 	binary  bool
 	special bool // 目录、符号链接或其他非普通文件
+	// unknown 内容未知、不能还原的原因（shell 改动且没有基线）；非空时 data 为 nil。
+	unknown string
 }
 
 // key 状态比对键：不存在为 ""。
@@ -274,6 +291,9 @@ func isBinary(b []byte) bool {
 func (e *Engine) keep(ctx context.Context, session string, s fileState) (bool, string) {
 	if !s.exists {
 		return false, ""
+	}
+	if s.unknown != "" {
+		return false, s.unknown
 	}
 	if s.data == nil {
 		return false, fmt.Sprintf("文件太大（%d 字节，上限 %d）", s.size, e.maxFile())
@@ -433,6 +453,8 @@ func (e *Engine) DeleteSession(ctx context.Context, session string) error {
 	delete(e.stored, session)
 	delete(e.warned, session)
 	delete(e.touched, session)
+	delete(e.snaps, session)
+	delete(e.tooMany, session)
 	e.mu.Unlock()
 	return nil
 }

@@ -26,6 +26,17 @@ type Changes interface {
 	Revert(ctx context.Context, r ChangeRevert) (ChangeReverted, error)
 }
 
+// GitChanges 可选：Changes 实现了它且 GitAvailable 为真时报能力 changes.git，changes.list / diff 接受 scope=git
+// （工作区相对 HEAD 的未提交改动，只读）。List / Diff 收到 scope=git 时按 git 范围处理。
+type GitChanges interface {
+	GitAvailable() bool
+}
+
+func (v *App) gitScope() bool {
+	g, ok := v.o.Changes.(GitChanges)
+	return ok && g.GitAvailable()
+}
+
 // ChangeRevert 一次还原请求。
 type ChangeRevert struct {
 	Session string
@@ -56,11 +67,13 @@ func (v *App) changes() (Changes, error) {
 	return v.o.Changes, nil
 }
 
-// checkScope 校验范围与回合号。
+// checkScope 校验范围与回合号（git 范围由调用方先处理）。
 func checkScope(scope string, turn *uint32) error {
 	switch scope {
 	case "", wire.ChangeScopeSession:
 		return nil
+	case wire.ChangeScopeGit:
+		return invalid("scope=git 只读，不能还原")
 	case wire.ChangeScopeTurn, wire.ChangeScopeFromTurn:
 		if turn == nil || *turn == 0 {
 			return invalid("scope=%s 须带 turn（≥ 1）", scope)
@@ -107,6 +120,21 @@ func (v *App) liveCalls(ctx context.Context, id string) (func(string) bool, erro
 	}, nil
 }
 
+// needGit git 范围的前置检查：会话存在（not_found），有 git 且工作区在仓库里（unsupported）。
+func (v *App) needGit(ctx context.Context, id string) error {
+	ok, err := v.o.DB.Exists(ctx, id)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return fmt.Errorf("%w: %s", host.ErrSessionNotFound, id)
+	}
+	if !v.gitScope() {
+		return Errorf(wire.CodeUnsupported, "没有 git 或工作区不在 git 仓库里")
+	}
+	return nil
+}
+
 // filesConflict 文件还原有冲突：conflict（details.reason=files，details.conflicts）。
 func filesConflict(cs []wire.ChangeConflict) *Error {
 	msg := "有文件不能直接还原"
@@ -134,6 +162,16 @@ func (v *App) ChangesList(ctx context.Context, in wire.ChangesArgs) (wire.Change
 	c, err := v.changes()
 	if err != nil {
 		return wire.ChangesResult{}, err
+	}
+	if in.Scope == wire.ChangeScopeGit {
+		if err := v.needGit(ctx, in.Session); err != nil {
+			return wire.ChangesResult{}, err
+		}
+		r, err := c.List(ctx, in, nil)
+		if r.Files == nil {
+			r.Files = []wire.ChangeFile{}
+		}
+		return r, err
 	}
 	if err := checkScope(in.Scope, in.Turn); err != nil {
 		return wire.ChangesResult{}, err
@@ -163,6 +201,12 @@ func (v *App) ChangesDiff(ctx context.Context, in wire.ChangesDiffArgs) (wire.Ch
 	}
 	if strings.TrimSpace(in.Path) == "" {
 		return wire.ChangesDiffResult{}, invalid("缺少 path")
+	}
+	if in.Scope == wire.ChangeScopeGit {
+		if err := v.needGit(ctx, in.Session); err != nil {
+			return wire.ChangesDiffResult{}, err
+		}
+		return c.Diff(ctx, in, nil)
 	}
 	if err := checkScope(in.Scope, in.Turn); err != nil {
 		return wire.ChangesDiffResult{}, err

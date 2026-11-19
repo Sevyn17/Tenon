@@ -220,6 +220,7 @@ github.com/Sevyn17/tenon/transport/bind: method (Service) StopEvents()
 github.com/Sevyn17/tenon/transport/bind: method (Service) SwapAPI(api *github.com/Sevyn17/tenon/appapi.App)
 github.com/Sevyn17/tenon/adapters: type Changes struct{E *github.com/Sevyn17/tenon/modules/tools/checkpoint.Engine}
 github.com/Sevyn17/tenon/adapters: method (Changes) Diff(ctx context.Context, in github.com/Sevyn17/tenon/appapi/wire.ChangesDiffArgs, live func(string) bool) (github.com/Sevyn17/tenon/appapi/wire.ChangesDiffResult, error)
+github.com/Sevyn17/tenon/adapters: method (Changes) GitAvailable() bool
 github.com/Sevyn17/tenon/adapters: method (Changes) List(ctx context.Context, in github.com/Sevyn17/tenon/appapi/wire.ChangesArgs, live func(string) bool) (github.com/Sevyn17/tenon/appapi/wire.ChangesResult, error)
 github.com/Sevyn17/tenon/adapters: method (Changes) Revert(ctx context.Context, r github.com/Sevyn17/tenon/appapi.ChangeRevert) (github.com/Sevyn17/tenon/appapi.ChangeReverted, error)
 github.com/Sevyn17/tenon/adapters: func Files(root string) github.com/Sevyn17/tenon/appapi.Files
@@ -330,14 +331,18 @@ github.com/Sevyn17/tenon/appapi/wire: type BYOKSetDefaultResult struct{}
 github.com/Sevyn17/tenon/appapi/wire: type BYOKTestArgs struct{ID string; Protocol string; BaseURL string; Model string; APIKey string}
 github.com/Sevyn17/tenon/appapi/wire: type BYOKTestResult struct{OK bool; LatencyMS int64; Method string; ModelFound *bool; Models []string; ErrorKind string; Status int; Message string}
 github.com/Sevyn17/tenon/appapi/wire: type ChangeConflict struct{Path string; Reason string; Message string; By string; Forceable bool}
-github.com/Sevyn17/tenon/appapi/wire: type ChangeFile struct{Path string; Status string; Added int; Removed int; Binary bool; Sources []string; Turns []uint32; Rewound bool; Revertible bool; Why string; Conflict string}
+github.com/Sevyn17/tenon/appapi/wire: type ChangeFile struct{Path string; Status string; Added int; Removed int; Binary bool; Sources []string; Turns []uint32; Untracked bool; Rewound bool; Revertible bool; Why string; Conflict string}
 github.com/Sevyn17/tenon/appapi/wire: const ChangeScopeFromTurn untyped string
+github.com/Sevyn17/tenon/appapi/wire: const ChangeScopeGit untyped string
 github.com/Sevyn17/tenon/appapi/wire: const ChangeScopeSession untyped string
 github.com/Sevyn17/tenon/appapi/wire: const ChangeScopeTurn untyped string
+github.com/Sevyn17/tenon/appapi/wire: const ChangeSourceDrift untyped string
+github.com/Sevyn17/tenon/appapi/wire: const ChangeSourceFS untyped string
+github.com/Sevyn17/tenon/appapi/wire: const ChangeSourceShell untyped string
 github.com/Sevyn17/tenon/appapi/wire: type ChangesArgs struct{Session string; Scope string; Turn *uint32}
 github.com/Sevyn17/tenon/appapi/wire: type ChangesDiffArgs struct{Session string; Path string; Scope string; Turn *uint32}
 github.com/Sevyn17/tenon/appapi/wire: type ChangesDiffResult struct{Path string; Diff string; Binary bool; OldSize int64; NewSize int64; Truncated bool; Unavailable string}
-github.com/Sevyn17/tenon/appapi/wire: type ChangesResult struct{Files []ChangeFile}
+github.com/Sevyn17/tenon/appapi/wire: type ChangesResult struct{Files []ChangeFile; ScanSkipped string}
 github.com/Sevyn17/tenon/appapi/wire: type ChangesRevertArgs struct{Session string; Paths []string; Scope string; Turn *uint32; DryRun bool; Force bool}
 github.com/Sevyn17/tenon/appapi/wire: type ChangesRevertResult struct{Reverted []string; Conflicts []ChangeConflict}
 github.com/Sevyn17/tenon/appapi/wire: type Choice struct{Text string; Options []ChoiceOption; Multiple bool; Min int; Max int}

@@ -35,6 +35,16 @@ const (
 	ChangeScopeSession  = "session"   // 本会话全部改动（缺省）
 	ChangeScopeTurn     = "turn"      // 只看 / 只撤第 turn 回合
 	ChangeScopeFromTurn = "from_turn" // 第 turn 回合及之后
+	// ChangeScopeGit 工作区相对 git HEAD 的未提交改动（含未跟踪文件，不限本会话）。只读：changes.revert 返回 invalid；
+	// 只在能力 changes.git 时可用（没有 git 或工作区不在仓库里时 list / diff 返回 unsupported）。
+	ChangeScopeGit = "git"
+)
+
+// 改动来源（ChangeFile.Sources）。
+const (
+	ChangeSourceFS    = "fs"    // write_file / edit
+	ChangeSourceShell = "shell" // shell / MCP / 扩展进程调用前后扫描发现，或回合末补扫发现的后台 job 改动
+	ChangeSourceDrift = "drift" // 工具调用之外的改动（格式化器、用户手改）
 )
 
 // —— 命令参数与结果（10.4）——
@@ -509,8 +519,10 @@ type ChangeFile struct {
 	Added   int      `json:"added"`  // 增加行数；二进制或内容没存下时为 0
 	Removed int      `json:"removed"`
 	Binary  bool     `json:"binary,omitempty"`
-	Sources []string `json:"sources,omitempty"` // fs | drift
-	Turns   []uint32 `json:"turns,omitempty"`
+	Sources []string `json:"sources,omitempty"` // ChangeSource*（fs | shell | drift）；git 范围为空
+	Turns   []uint32 `json:"turns,omitempty"`   // git 范围为空
+	// Untracked git 范围：未跟踪的新文件（status 为 added）。
+	Untracked bool `json:"untracked,omitempty"`
 	// Rewound 这个文件的改动所在回合都已被 rewind 截掉（只在 session 范围出现；不可还原）。
 	Rewound    bool   `json:"rewound,omitempty"`
 	Revertible bool   `json:"revertible"`
@@ -522,6 +534,9 @@ type ChangeFile struct {
 // ChangesResult changes.list 的结果。
 type ChangesResult struct {
 	Files []ChangeFile `json:"files"`
+	// ScanSkipped 非空 = 本会话有 shell / MCP / 扩展进程调用时工作区文件数超过 scan_max_files，没有扫描，
+	// 这些工具的改动不在列表里（值是给人看的说明）。git 范围不出现。
+	ScanSkipped string `json:"scan_skipped,omitempty"`
 }
 
 // ChangesDiffArgs changes.diff：一个文件在所选范围内的 unified diff。只按本会话记录里的内容算，

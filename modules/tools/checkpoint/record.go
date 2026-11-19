@@ -1,7 +1,7 @@
 package checkpoint
 
 // 记录：ToolCall 中间件（write_path 精确快照）、drift 补记、回合末对账。
-// may_write_files（shell / MCP / 扩展进程）的扫描与 git 基线是 T9，这一段不做。
+// may_write_files（shell / MCP / 扩展进程）的前后扫描与 git 基线见 scan.go。
 
 import (
 	"context"
@@ -59,11 +59,17 @@ func writePathOf(attrs map[string]any, args json.RawMessage) (string, bool) {
 func (e *Engine) Middleware() component.ToolCallMw {
 	return func(ctx context.Context, req component.ToolCallReq,
 		next func(context.Context, component.ToolCallReq) (component.ToolCallResp, error)) (component.ToolCallResp, error) {
+		if isJobTool(req.Tool) { // job_output / job_kill：后台 job 可能还在写，回合末补扫
+			e.markPending(req.SessionID, TurnOf(req.Scope))
+		}
 		if req.Risk == toolhub.Read {
 			return next(ctx, req)
 		}
 		p, ok := writePathOf(req.Attrs, req.Args)
 		if !ok {
+			if mayWrite(req.Attrs) {
+				return e.scanCall(ctx, req, next)
+			}
 			return next(ctx, req)
 		}
 		abs, err := wsfs.Resolve(e.Root, p)
@@ -95,6 +101,7 @@ func (e *Engine) Middleware() component.ToolCallMw {
 		_ = e.record(ctx, Change{Session: req.SessionID, Turn: turn, CallID: req.CallID, Tool: req.Tool,
 			Source: SourceFS, Path: rel, PathKey: key}, before, after)
 		e.touch(req.SessionID, key, rel)
+		e.noteWrite(req.SessionID, rel, key, abs)
 		return resp, err
 	}
 }
@@ -155,7 +162,9 @@ func (e *Engine) touch(session, key, rel string) {
 
 // AfterTurn 回合末对账（assemble.AfterTurn 点位）：对本回合碰过的文件重读一次，
 // 和最后一条记录不一致就补 drift（如后台钩子在调用返回后才改了文件）。
+// 本回合有 may_write_files 或 job_* 调用时先补扫一次（后台 job 在调用返回后写的文件，见 scan.go）。
 func (e *Engine) AfterTurn(id string, _ session.EndReason) {
+	e.rescan(context.Background(), id)
 	e.Reconcile(context.Background(), id, 0)
 }
 

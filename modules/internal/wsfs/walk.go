@@ -117,6 +117,10 @@ func matchSegs(ps, ns []string) bool {
 // 返回因 SkipDirs 跳过的 vendor / node_modules 目录（相对路径；.git 不报），调用方据此提示
 // （2026-11-04 审查 P2 工具体验：原先静默跳过，模型以为依赖里没有这段代码）。
 func WalkFiles(ctx context.Context, root, dir string, fn func(abs, rel string, info fs.FileInfo) bool) ([]string, error) {
+	return walkFiles(ctx, root, dir, nil, fn)
+}
+
+func walkFiles(ctx context.Context, root, dir string, extra map[string]bool, fn func(abs, rel string, info fs.FileInfo) bool) ([]string, error) {
 	var skipped []string
 	var rules []ignoreRule
 	// 加载 root 到 dir 沿途各级 .gitignore。
@@ -168,6 +172,9 @@ func WalkFiles(ctx context.Context, root, dir string, fn func(abs, rel string, i
 					}
 					continue
 				}
+				if extra[name] {
+					continue
+				}
 				if ignored(rules, r, true) {
 					continue
 				}
@@ -212,12 +219,17 @@ var ErrTooManyFiles = errors.New("工作区文件数超过上限")
 // Walk 遍历 root 下的普通文件（规则与 grep / glob 相同），返回 相对路径（正斜杠）→ mtime/size。
 // 不排序、不截断：文件数超过 max（>0 时生效）返回 ErrTooManyFiles 与 nil。
 func Walk(ctx context.Context, root string, max int) (map[string]FileStat, error) {
+	return WalkSkip(ctx, root, max, nil)
+}
+
+// WalkSkip 同 Walk，另外跳过名字在 skip 里的目录（任意层级，如检查点扫描跳过 .venv、dist）。
+func WalkSkip(ctx context.Context, root string, max int, skip map[string]bool) (map[string]FileStat, error) {
 	if abs, err := filepath.Abs(root); err == nil {
 		root = abs
 	}
 	out := map[string]FileStat{}
 	over := false
-	_, err := WalkFiles(ctx, root, root, func(_, rel string, info fs.FileInfo) bool {
+	_, err := walkFiles(ctx, root, root, skip, func(_, rel string, info fs.FileInfo) bool {
 		if max > 0 && len(out) >= max {
 			over = true
 			return false

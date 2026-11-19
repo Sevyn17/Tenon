@@ -9,7 +9,9 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -269,6 +271,149 @@ func TestRewindRestoreConflictTouchesNothing(t *testing.T) {
 	}
 	if got, _ := r.file("a.txt"); got != cpV1 || r.logLen(sid) >= n {
 		t.Fatalf("force 后：%q len=%d", got, r.logLen(sid))
+	}
+}
+
+// T9（spike 第二节 shell 用例）：真实 shell 工具改文件 → changes.list 里有（source shell）、diff 正确、
+// revert 后逐字节复原；shell 新建的文件还原 = 删除。非 git 工作区。
+func TestChangesShellEndToEnd(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("命令用 POSIX sh 写")
+	}
+	ctx := context.Background()
+	sh := func(c string) string { b, _ := json.Marshal(map[string]string{"command": c}); return string(b) }
+	dir := t.TempDir()
+	app := tenontest.New(t, tenon.WithWorkdir(dir),
+		tenon.WithAgent(tenon.Agent{Name: "w", Tools: []string{"write_file", "shell"}}),
+		tenon.WithConfig("permission", map[string]any{"force_mode": "full"}),
+		tenontest.Model(
+			tenontest.Reply("写").CallTool("write_file", wf("a.txt", cpV1)), tenontest.Reply("好"),
+			tenontest.Reply("跑").CallTool("shell", sh(`printf 'shell\r\nline\n' > a.txt && echo new > n.txt`)), tenontest.Reply("完")))
+	r := &cpRig{t: t, dir: dir, app: app}
+	sid := r.twoWrites(ctx)
+	if got, _ := r.file("a.txt"); got != "shell\r\nline\n" {
+		t.Fatalf("shell 应已改 a.txt：%q", got)
+	}
+	turn := uint32(2)
+	out, e := r.call("changes.list", map[string]any{"session": sid, "scope": "turn", "turn": turn})
+	if e != nil {
+		t.Fatal(e)
+	}
+	res := out.(wire.ChangesResult)
+	if len(res.Files) != 2 || res.ScanSkipped != "" {
+		t.Fatalf("list：%+v", res)
+	}
+	a, n := res.Files[0], res.Files[1]
+	if a.Path != "a.txt" || a.Status != "modified" || !slices.Equal(a.Sources, []string{wire.ChangeSourceShell}) || !a.Revertible ||
+		n.Path != "n.txt" || n.Status != "added" || !n.Revertible || n.Added != 1 {
+		t.Fatalf("list 文件：%+v", res.Files)
+	}
+	out, e = r.call("changes.diff", map[string]any{"session": sid, "path": "a.txt", "scope": "turn", "turn": turn})
+	d := out.(wire.ChangesDiffResult)
+	if e != nil || !strings.Contains(d.Diff, "-line2\r\n") || !strings.Contains(d.Diff, "+shell\r\n") || !strings.HasPrefix(d.Diff, "--- a/a.txt\n+++ b/a.txt\n") {
+		t.Fatalf("diff：%+v %v", d, e)
+	}
+	if _, e := r.call("changes.revert", map[string]any{"session": sid, "scope": "turn", "turn": turn}); e != nil {
+		t.Fatal(e)
+	}
+	if got, _ := r.file("a.txt"); got != cpV1 {
+		t.Fatalf("还原后应逐字节等于 write_file 写的内容：%q", got)
+	}
+	if _, ok := r.file("n.txt"); ok {
+		t.Fatal("shell 新建的 n.txt 还原后应删除")
+	}
+}
+
+// T10：git 范围（只读）。能力 changes.git；list 列出与 HEAD 的差异（不限本会话）；diff 用 git diff HEAD；
+// revert 这个范围返回 invalid。非仓库时不报能力、list 返回 unsupported。
+func TestChangesGitScope(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("没有 git")
+	}
+	ctx := context.Background()
+	r := newCPRig(t, tenontest.Reply("写").CallTool("write_file", wf("agent.txt", "a\n")), tenontest.Reply("好"))
+	g := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", append([]string{"-c", "user.name=t", "-c", "user.email=t@example.com",
+			"-c", "commit.gpgsign=false", "-c", "core.autocrlf=false"}, args...)...)
+		cmd.Dir = r.dir
+		cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL="+os.DevNull, "GIT_CONFIG_NOSYSTEM=1")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v %s", args, err, out)
+		}
+	}
+	write := func(rel, s string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(r.dir, rel), []byte(s), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	g("init", "-q")
+	write("tracked.txt", "old\n")
+	g("add", "-A")
+	g("commit", "-q", "-m", "init")
+	write("tracked.txt", "new\n") // 用户自己的未提交改动
+	write("用户 文件.txt", "u\n")     // 未跟踪
+	h, _ := r.call("hello", map[string]any{})
+	if !slices.Contains(h.(wire.HelloResult).Capabilities, "changes.git") {
+		t.Fatalf("仓库里应报 changes.git：%v", h.(wire.HelloResult).Capabilities)
+	}
+	s, _ := r.app.NewSession(ctx, "w", nil)
+	if _, err := s.Send(ctx, "x"); err != nil {
+		t.Fatal(err)
+	}
+	out, e := r.call("changes.list", map[string]any{"session": s.ID(), "scope": "git"})
+	if e != nil {
+		t.Fatal(e)
+	}
+	var got []string
+	for _, f := range out.(wire.ChangesResult).Files {
+		got = append(got, fmt.Sprintf("%s:%s:%d:%d:%v:%v", f.Path, f.Status, f.Added, f.Removed, f.Untracked, f.Revertible))
+	}
+	// .tenon（会话数据目录，若在工作区里）不应出现：git 范围就是 git status 的结果，测试目录没有 .gitignore，
+	// 所以只比对我们关心的三个文件。
+	want := map[string]bool{"agent.txt:added:1:0:true:false": true, "tracked.txt:modified:1:1:false:false": true,
+		"用户 文件.txt:added:1:0:true:false": true}
+	hit := 0
+	for _, x := range got {
+		if want[x] {
+			hit++
+		}
+	}
+	if hit != 3 {
+		t.Fatalf("git 列表：%v", got)
+	}
+	out, e = r.call("changes.diff", map[string]any{"session": s.ID(), "path": "tracked.txt", "scope": "git"})
+	if d := out.(wire.ChangesDiffResult); e != nil || !strings.Contains(d.Diff, "-old\n+new\n") || !strings.HasPrefix(d.Diff, "--- a/tracked.txt\n") {
+		t.Fatalf("git diff：%+v %v", out, e)
+	}
+	if _, e := r.call("changes.diff", map[string]any{"session": s.ID(), "path": "nope.txt", "scope": "git"}); e == nil || e.Code != wire.CodeNotFound {
+		t.Fatalf("不在列表里的路径应 not_found：%+v", e)
+	}
+	if _, e := r.call("changes.revert", map[string]any{"session": s.ID(), "scope": "git"}); e == nil || e.Code != wire.CodeInvalid {
+		t.Fatalf("git 范围不能还原：%+v", e)
+	}
+	if got, _ := r.file("tracked.txt"); got != "new\n" {
+		t.Fatalf("不应动用户的改动：%q", got)
+	}
+}
+
+// 非 git 工作区：不报 changes.git，scope=git 返回 unsupported。
+func TestChangesGitScopeUnavailable(t *testing.T) {
+	r := newCPRig(t, tenontest.Reply("好"))
+	if out, err := exec.Command("git", "-C", r.dir, "rev-parse", "--is-inside-work-tree").Output(); err == nil && strings.TrimSpace(string(out)) == "true" {
+		t.Skip("临时目录在某个 git 仓库里")
+	}
+	h, _ := r.call("hello", map[string]any{})
+	if slices.Contains(h.(wire.HelloResult).Capabilities, "changes.git") {
+		t.Fatal("非仓库不应报 changes.git")
+	}
+	s, _ := r.app.NewSession(context.Background(), "w", nil)
+	if _, err := s.Send(context.Background(), "x"); err != nil {
+		t.Fatal(err)
+	}
+	if _, e := r.call("changes.list", map[string]any{"session": s.ID(), "scope": "git"}); e == nil || e.Code != wire.CodeUnsupported {
+		t.Fatalf("应 unsupported：%+v", e)
 	}
 }
 

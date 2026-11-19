@@ -307,6 +307,10 @@ func (v *App) capabilities() []string {
 	if o.Changes != nil {
 		out = append(out, "changes")
 	}
+	// changes.git（M9 T10）：changes.list / diff 接受 scope=git（未提交改动，只读）。本机有 git 且工作区在仓库里才报。
+	if v.gitScope() {
+		out = append(out, "changes.git")
+	}
 	return out
 }
 

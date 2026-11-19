@@ -43,7 +43,7 @@ type RevertOptions struct {
 	// Paths 只还原这些文件（相对路径，按 PathKey 比对）；空 = 范围内全部。
 	Paths []string
 	// Live 报告一个工具调用 id 是否还在当前日志里（rewind 截掉的调用返回 false，其记录视为已回退、不参与还原）。
-	// nil = 全部有效。drift / revert 记录不经它判断。
+	// nil = 全部有效。只对 Change.ByCall 为真的记录生效（drift、回合末补扫、revert 记录不经它判断）。
 	Live func(callID string) bool
 	// Force 跳过可强制的冲突（前端二次确认后才设）。
 	Force bool
@@ -118,7 +118,7 @@ func (e *Engine) Revert(ctx context.Context, o RevertOptions) (RevertResult, err
 		if len(want) > 0 && !want[c.PathKey] {
 			continue
 		}
-		if c.Source == SourceFS && o.Live != nil && !o.Live(c.CallID) {
+		if c.ByCall() && o.Live != nil && !o.Live(c.CallID) {
 			continue // 已回退的回合
 		}
 		if byFile[c.PathKey] == nil {

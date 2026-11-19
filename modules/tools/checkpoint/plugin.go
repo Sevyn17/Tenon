@@ -23,6 +23,7 @@ const ServiceName = "service:checkpoint"
 type Config struct {
 	MaxFileBytes    int64 `cfg:"max_file_bytes" default:"2097152" title:"单文件上限（字节）" description:"超过只记哈希，不能还原"`
 	MaxSessionBytes int64 `cfg:"max_session_bytes" default:"268435456" title:"每会话上限（字节）" description:"本会话新存内容超过后只记哈希"`
+	ScanMaxFiles    int   `cfg:"scan_max_files" default:"20000" title:"shell 改动扫描上限（文件数）" description:"shell / MCP / 扩展进程调用前后扫描工作区；文件数超过时不扫，改动列表里注明未跟踪"`
 }
 
 // CollectionSpec 集合 checkpoint.changes 的结构。
@@ -59,7 +60,7 @@ func (p *plug) Setup(cx *component.Registrar) error {
 		return err
 	}
 	e := New(root, coll, func() toolhub.Artifacts { return dbh.Blobs() })
-	e.MaxFileBytes, e.MaxSessionBytes = cfg.MaxFileBytes, cfg.MaxSessionBytes
+	e.MaxFileBytes, e.MaxSessionBytes, e.ScanMaxFiles = cfg.MaxFileBytes, cfg.MaxSessionBytes, cfg.ScanMaxFiles
 	if ui, ok, err := component.UseOptional[assemble.UI](cx, assemble.ServiceUI); err != nil {
 		return err
 	} else if ok && ui != nil {
