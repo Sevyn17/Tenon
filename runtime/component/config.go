@@ -25,6 +25,9 @@ type Field struct {
 	Description string `json:"description,omitempty"`
 	Group       string `json:"group,omitempty"`
 	Widget      string `json:"widget,omitempty"`
+	// Elem slice / array / map 的元素 Kind（map 取值的 Kind，指针取指向的 Kind），其余类型为空（客户端改进 M10 T18）。
+	// 界面据此认出结构体数组、map 这类表单编辑不了的值，只读显示。
+	Elem string `json:"elem,omitempty"`
 }
 
 // SchemaOf 读配置结构体的 Schema；proto 为 nil 返回 nil。
@@ -42,9 +45,22 @@ func SchemaOf(proto any) []Field {
 		}
 		out = append(out, Field{Key: key, Type: f.Type.Kind().String(), Default: f.Tag.Get("default"),
 			Title: f.Tag.Get("title"), Description: f.Tag.Get("description"), Group: f.Tag.Get("group"),
-			Widget: f.Tag.Get("widget")})
+			Widget: f.Tag.Get("widget"), Elem: elemKind(f.Type)})
 	}
 	return out
+}
+
+// elemKind 容器类型的元素 Kind；不是 slice / array / map 返回空。
+func elemKind(t reflect.Type) string {
+	switch t.Kind() {
+	case reflect.Slice, reflect.Array, reflect.Map:
+		e := t.Elem()
+		if e.Kind() == reflect.Pointer {
+			e = e.Elem()
+		}
+		return e.Kind().String()
+	}
+	return ""
 }
 
 func structType(proto any) reflect.Type {

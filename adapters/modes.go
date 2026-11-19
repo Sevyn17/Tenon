@@ -31,10 +31,16 @@ func (m PermModes) List() []appapi.ModeInfo {
 	var out []appapi.ModeInfo
 	for _, d := range m.P.Registry().List() {
 		out = append(out, appapi.ModeInfo{ID: string(d.ID), Label: permission.Label(d, items), Short: permission.Short(d), Builtin: d.Builtin,
-			Project: d.Project, Widened: permission.Widened(d, items)})
+			Project: d.Project, Widened: permission.Widened(d, items), Description: d.Description})
 	}
 	return out
 }
+
+// DefaultMode 新会话的缺省档位（appapi.ModeDefaulter）：permissions.toml 的 mode 或强制档位，
+// 没确认过的放宽项目档位退回内置缺省档位。
+func (m PermModes) DefaultMode() string { return string(m.P.DefaultMode()) }
+
+var _ appapi.ModeDefaulter = PermModes{}
 
 func (m PermModes) approved(mode, widened string) bool {
 	return m.Approvals != nil && m.Approvals.Approved(mode, widened)

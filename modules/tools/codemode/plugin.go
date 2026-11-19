@@ -13,7 +13,7 @@ type plug struct{}
 func init() { component.Register("code-mode", func() component.Component { return &plug{} }) }
 
 func (*plug) Meta() component.Meta {
-	return component.Meta{Name: "code-mode", Version: "0.1.0", Effects: []string{component.EffectTools, component.EffectExec}}
+	return component.Meta{Name: "code-mode", Version: "0.1.0", Description: "代码模式：模型在 JS 沙盒里写一段程序，批量调用工具", Effects: []string{component.EffectTools, component.EffectExec}}
 }
 
 func (*plug) Setup(cx *component.Registrar) error {

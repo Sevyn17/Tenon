@@ -32,7 +32,7 @@ type plug struct {
 }
 
 func (*plug) Meta() component.Meta {
-	return component.Meta{Name: ServiceName, Version: "0.1.0",
+	return component.Meta{Name: ServiceName, Version: "0.1.0", Description: "模型判断匹配器：让模型判断一条记录是否符合订阅里的问题",
 		Requires: []string{"?" + assemble.ServiceModelhub, "?" + assemble.ServiceHost}}
 }
 

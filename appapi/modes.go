@@ -20,6 +20,14 @@ type ModeInfo struct {
 	Builtin bool     `json:"builtin"`
 	Project bool     `json:"project"`           // 来自项目 .tenon/modes
 	Widened []string `json:"widened,omitempty"` // 相对基础档位放宽的权限项
+	// Description 一句话说明（客户端改进 M10 T17）：内置档位的固定说明或档位文件的 description。
+	Description string `json:"description,omitempty"`
+}
+
+// ModeDefaulter Modes 的可选扩展（客户端改进 M10）：新会话的缺省档位 id，mode.list 的 default 取它。
+// 做成可选接口而不是加进 Modes，免得破坏已有实现；没实现时 mode.list 不给 default，客户端退回自己的假设。
+type ModeDefaulter interface {
+	DefaultMode() string
 }
 
 // ModeState 会话当前档位。

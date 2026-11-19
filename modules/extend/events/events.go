@@ -78,7 +78,7 @@ type plug struct {
 func init() { component.Register(ServiceName, func() component.Component { return &plug{} }) }
 
 func (*plug) Meta() component.Meta {
-	return component.Meta{Name: ServiceName, Version: "0.1.0", Effects: []string{component.EffectTools},
+	return component.Meta{Name: ServiceName, Version: "0.1.0", Description: "定时与外部事件：按定时任务或 webhook 唤醒指定的智能体", Effects: []string{component.EffectTools},
 		Requires: []string{assemble.ServiceHost}, Config: &Config{}}
 }
 

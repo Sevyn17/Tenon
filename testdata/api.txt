@@ -237,6 +237,7 @@ github.com/Sevyn17/tenon/adapters: method (ModelList) List() github.com/Sevyn17/
 github.com/Sevyn17/tenon/adapters: type Parts struct{Asm *github.com/Sevyn17/tenon/runtime/component.Assembly; Models *github.com/Sevyn17/tenon/runtime/assemble.Models; Blobs github.com/Sevyn17/tenon/runtime/toolhub.Artifacts; Workdir string; Approvals ModeApprovals}
 github.com/Sevyn17/tenon/adapters: type PermModes struct{P *github.com/Sevyn17/tenon/modules/security/permission.Sessions; Approvals ModeApprovals}
 github.com/Sevyn17/tenon/adapters: method (PermModes) AllowForSession(id string, tool string, args encoding/json.RawMessage) (added []string, all []string)
+github.com/Sevyn17/tenon/adapters: method (PermModes) DefaultMode() string
 github.com/Sevyn17/tenon/adapters: method (PermModes) ExtKeys() (mode string, rules string)
 github.com/Sevyn17/tenon/adapters: method (PermModes) Get(id string) github.com/Sevyn17/tenon/appapi.ModeState
 github.com/Sevyn17/tenon/adapters: method (PermModes) List() []github.com/Sevyn17/tenon/appapi.ModeInfo
@@ -363,7 +364,7 @@ github.com/Sevyn17/tenon/appapi/wire: const CodeUnauthorized untyped string
 github.com/Sevyn17/tenon/appapi/wire: const CodeUnsupported untyped string
 github.com/Sevyn17/tenon/appapi/wire: type CompactArgs struct{Session string; Upto *int; IfCursor *int64}
 github.com/Sevyn17/tenon/appapi/wire: type CompactResult struct{Summary string; Upto int; TokensBefore int; TokensAfter int}
-github.com/Sevyn17/tenon/appapi/wire: type ConfigField struct{Key string; Type string; Default string; Title string; Description string; Group string; Widget string}
+github.com/Sevyn17/tenon/appapi/wire: type ConfigField struct{Key string; Type string; Default string; Title string; Description string; Group string; Widget string; Elem string}
 github.com/Sevyn17/tenon/appapi/wire: type Confirm struct{Text string; Danger bool; Confirm string; Cancel string}
 github.com/Sevyn17/tenon/appapi/wire: const ConflictAnswered untyped string
 github.com/Sevyn17/tenon/appapi/wire: const ConflictExists untyped string
@@ -453,9 +454,9 @@ github.com/Sevyn17/tenon/appapi/wire: type MessageDelta struct{StreamID string; 
 github.com/Sevyn17/tenon/appapi/wire: type MessageStarted struct{StreamID string; EntryID string; Part string; Attempt int}
 github.com/Sevyn17/tenon/appapi/wire: type Mode struct{Mode string; Label string; Sandbox string}
 github.com/Sevyn17/tenon/appapi/wire: type ModeChanged = Mode struct{Mode string; Label string; Sandbox string}
-github.com/Sevyn17/tenon/appapi/wire: type ModeInfo struct{ID string; Label string; Short string; Builtin bool; Project bool; Widened []string}
+github.com/Sevyn17/tenon/appapi/wire: type ModeInfo struct{ID string; Label string; Short string; Builtin bool; Project bool; Widened []string; Description string}
 github.com/Sevyn17/tenon/appapi/wire: type ModeItem struct{Item string; Title string; Value string; Source string; Bounded bool}
-github.com/Sevyn17/tenon/appapi/wire: type ModeListResult struct{Modes []ModeInfo}
+github.com/Sevyn17/tenon/appapi/wire: type ModeListResult struct{Modes []ModeInfo; Default string}
 github.com/Sevyn17/tenon/appapi/wire: type ModeSetArgs struct{Session string; Mode string; Confirm bool}
 github.com/Sevyn17/tenon/appapi/wire: type ModeSetResult struct{State Mode; Committed bool}
 github.com/Sevyn17/tenon/appapi/wire: type ModeShowArgs struct{Session string; Mode string}
@@ -463,7 +464,11 @@ github.com/Sevyn17/tenon/appapi/wire: type ModeShowResult struct{Mode string; It
 github.com/Sevyn17/tenon/appapi/wire: type ModelInfo struct{ID string; Alias bool; Provider string; Name string; Label string; ContextWindow int; Images bool; Reasoning bool; Efforts []string; Available bool; Reason string}
 github.com/Sevyn17/tenon/appapi/wire: type ModelRetrying struct{Attempt int; Max int; WaitMs int64; Reason string}
 github.com/Sevyn17/tenon/appapi/wire: type ModelsListResult struct{Models []ModelInfo; Default string; Effective *EffectiveModel}
-github.com/Sevyn17/tenon/appapi/wire: type Notice struct{Level string; Source string; Text string}
+github.com/Sevyn17/tenon/appapi/wire: type Notice struct{Level string; Source string; Text string; Replay bool}
+github.com/Sevyn17/tenon/appapi/wire: const NoticeError untyped string
+github.com/Sevyn17/tenon/appapi/wire: const NoticeInfo untyped string
+github.com/Sevyn17/tenon/appapi/wire: const NoticeKeep untyped int
+github.com/Sevyn17/tenon/appapi/wire: const NoticeWarn untyped string
 github.com/Sevyn17/tenon/appapi/wire: const OutcomeAnswered untyped string
 github.com/Sevyn17/tenon/appapi/wire: const OutcomeApproved untyped string
 github.com/Sevyn17/tenon/appapi/wire: const OutcomeDenied untyped string
@@ -475,7 +480,7 @@ github.com/Sevyn17/tenon/appapi/wire: type Part struct{Kind string; Text string;
 github.com/Sevyn17/tenon/appapi/wire: type PasswordAuthArgs struct{Email string; Password string; Name string}
 github.com/Sevyn17/tenon/appapi/wire: type PlatformConfigureArgs struct{ServerURL string; Test bool; DryRun bool}
 github.com/Sevyn17/tenon/appapi/wire: type PlatformConfigureResult struct{Saved bool; LoggedOut bool; Test *BYOKTestResult; Status AccountStatus}
-github.com/Sevyn17/tenon/appapi/wire: type PluginInfo struct{Name string; On bool; Default bool; Source string; Effects []string; Schema []ConfigField; Config map[string]any; Mandatory bool; Pending *PluginPending}
+github.com/Sevyn17/tenon/appapi/wire: type PluginInfo struct{Name string; Version string; Description string; On bool; Default bool; Source string; Effects []string; Schema []ConfigField; Config map[string]any; Mandatory bool; Pending *PluginPending}
 github.com/Sevyn17/tenon/appapi/wire: type PluginPending struct{On bool; Config map[string]any}
 github.com/Sevyn17/tenon/appapi/wire: type PluginsListResult struct{Plugins []PluginInfo; Scopes []ProfileScope; Denied map[string][]string}
 github.com/Sevyn17/tenon/appapi/wire: type PluginsSetArgs struct{Name string; Enabled *bool; Config map[string]any; Scope string; IfRevision *string}

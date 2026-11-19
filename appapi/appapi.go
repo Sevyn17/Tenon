@@ -75,6 +75,7 @@ type App struct {
 	streams   sync.Map // 会话 id → *streamer
 	lives     sync.Map // 会话 id → *liveState（protocol 2 分段流式与快照 live，stream2.go）
 	followups followupCache
+	notices   *noticeLog // 最近的提示（客户端改进 M10 T19，notice.go）
 }
 
 // New 构造 App：把 DB 的提交事件接到总线（Follow 的实时部分）；包一层 Host.Hooks
@@ -90,9 +91,10 @@ func New(o Options) (*App, error) {
 	if o.Host.Bus == nil {
 		o.Host.Bus = o.Bus
 	}
-	a := &App{o: o}
+	a := &App{o: o, notices: &noticeLog{}}
 	if o.UI != nil {
 		o.UI.bindHost(o.Host)
+		a.notices = o.UI.log // 装配期插件的告警记在 UI 上：共用一份，hello 后才补发得到
 	}
 	o.DB.OnCommit(o.Bus.Publish)
 
@@ -100,7 +102,7 @@ func New(o Options) (*App, error) {
 	o.Host.Hooks.BeforeTurn = func(id string, in session.Content, untrusted bool) (session.Content, host.Decision, error) {
 		if o.Modes != nil { // 自定义档位文件有变化时重读并提示
 			if n := o.Modes.Notice(id); n != "" {
-				a.Notice(id, n)
+				a.NoticeFrom(id, modeNoticeLevel(n), "permission", n)
 			}
 		}
 		if before != nil {
@@ -131,10 +133,8 @@ func New(o Options) (*App, error) {
 	return a, nil
 }
 
-// Notice 发提示事件 notice{text}（档位变化、异步持久化失败等）。
-func (a *App) Notice(sessionID, text string) {
-	a.o.Bus.Publish(bus.Envelope{Session: sessionID, Kind: EventNotice, Data: map[string]any{"text": text}})
-}
+// Notice 发提示事件 notice{text, level: info}（装配提示等）；要带级别与来源用 NoticeFrom（notice.go）。
+func (a *App) Notice(sessionID, text string) { a.NoticeFrom(sessionID, "", "", text) }
 
 // Events 易失订阅（流式正文、回合状态、确认请求、提示等，也含持久事件的实时副本）。ctx 结束自动注销。
 func (a *App) Events(ctx context.Context, f bus.Filter) *bus.Sub { return a.o.Bus.Subscribe(ctx, f) }

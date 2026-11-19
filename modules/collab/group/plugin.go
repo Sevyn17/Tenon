@@ -58,7 +58,7 @@ type plug struct {
 func init() { component.Register(ServiceName, func() component.Component { return &plug{} }) }
 
 func (*plug) Meta() component.Meta {
-	return component.Meta{Name: ServiceName, Version: "0.1.0",
+	return component.Meta{Name: ServiceName, Version: "0.1.0", Description: "多人小组：群里 @ 机器人，消息分发给各成员机器人的会话",
 		Requires: []string{assemble.ServiceHost, assemble.ServiceDB, assemble.ServiceUI},
 		Config:   &Config{}}
 }

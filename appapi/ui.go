@@ -11,6 +11,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/Sevyn17/tenon/appapi/wire"
 	"github.com/Sevyn17/tenon/runtime/assemble"
 	"github.com/Sevyn17/tenon/runtime/bus"
 	"github.com/Sevyn17/tenon/runtime/host"
@@ -20,25 +21,26 @@ import (
 // UI 事件化界面。零值不可用，用 NewUI 构造。
 type UI struct {
 	b       *bus.Bus
+	log     *noticeLog // 最近的提示（客户端改进 M10 T19）：App 与它共用，装配期的告警也补发得到
 	mu      sync.Mutex
 	pending map[string]chan string
 	host    *host.Host // App.New 设置：会话里的提问登记成 question 交互；nil = 只用进程内等待
 }
 
 // NewUI 构造发到总线 b 的界面。
-func NewUI(b *bus.Bus) *UI { return &UI{b: b, pending: map[string]chan string{}} }
+func NewUI(b *bus.Bus) *UI { return &UI{b: b, log: &noticeLog{}, pending: map[string]chan string{}} }
 
-// Print 插件输出 → notice。
+// Print 插件输出 → notice（level info）。
 func (u *UI) Print(text string) { u.PrintIn("", text) }
 
 // PrintIn 带会话的输出（assemble.SessionUI）：事件带 session，界面按会话路由。
 func (u *UI) PrintIn(sessionID, text string) {
-	u.b.Publish(bus.Envelope{Session: sessionID, Kind: EventNotice, Data: map[string]any{"text": text}})
+	u.log.publish(u.b, sessionID, wire.NoticeInfo, "", text)
 }
 
-// Warn 插件告警 → notice（带来源前缀）。
+// Warn 插件告警 → notice（level warn，source 是来源；正文仍带「[来源] 」前缀，不认 source 的旧客户端照样看得出）。
 func (u *UI) Warn(source, msg string) {
-	u.b.Publish(bus.Envelope{Kind: EventNotice, Data: map[string]any{"text": "[" + source + "] " + msg}})
+	u.log.publish(u.b, "", wire.NoticeWarn, source, "["+source+"] "+msg)
 }
 
 // Ask 发 ask 事件并等回答（ctx 结束返回 ctx.Err()）。

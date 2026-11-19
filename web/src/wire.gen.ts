@@ -35,6 +35,9 @@ export type ConflictReason = (typeof ConflictReasons)[number];
 export const ChangeScopes = ["session", "turn", "from_turn"] as const;
 export type ChangeScope = (typeof ChangeScopes)[number];
 
+export const NoticeLevels = ["info", "warn", "error"] as const;
+export type NoticeLevel = (typeof NoticeLevels)[number];
+
 export interface Entry {
   id: string;
   idx: number;
@@ -374,6 +377,7 @@ export interface Notice {
   level: string;
   source?: string;
   text: string;
+  replay?: boolean;
 }
 
 export interface CursorRef {
@@ -659,10 +663,12 @@ export interface ModeInfo {
   builtin: boolean;
   project: boolean;
   widened?: string[];
+  description?: string;
 }
 
 export interface ModeListResult {
   modes: ModeInfo[];
+  default?: string;
 }
 
 export interface ModeSetArgs {
@@ -815,10 +821,13 @@ export interface ConfigField {
   description?: string;
   group?: string;
   widget?: string;
+  elem?: string;
 }
 
 export interface PluginInfo {
   name: string;
+  version?: string;
+  description?: string;
   on: boolean;
   default: boolean;
   source: string;

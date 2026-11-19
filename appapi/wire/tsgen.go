@@ -60,6 +60,7 @@ var tsConsts = []struct {
 		CodeUnsupported, CodeInternal}},
 	{"ConflictReasons", []string{ConflictExists, ConflictAnswered, ConflictStale, ConflictLeased, ConflictFiles}},
 	{"ChangeScopes", []string{ChangeScopeSession, ChangeScopeTurn, ChangeScopeFromTurn}},
+	{"NoticeLevels", []string{NoticeInfo, NoticeWarn, NoticeError}},
 }
 
 var rawType = reflect.TypeOf(json.RawMessage(nil))

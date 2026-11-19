@@ -27,7 +27,7 @@ type plug struct{}
 func init() { component.Register(ServiceName, func() component.Component { return &plug{} }) }
 
 func (*plug) Meta() component.Meta {
-	return component.Meta{Name: ServiceName, Version: "0.1.0", Default: true}
+	return component.Meta{Name: ServiceName, Version: "0.1.0", Description: "预算配置：让智能体定义写每日 token 上限", Default: true}
 }
 
 func (*plug) Setup(cx *component.Registrar) error {

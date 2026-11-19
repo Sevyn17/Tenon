@@ -225,11 +225,27 @@ type ToolEnded struct {
 }
 
 // Notice 一条提示（易失）。
+//
+// 服务端报能力 notices 时（客户端改进 M10 T19）：notice 走连接级推送，不用订阅会话就能收到；envelope 的 session
+// 是相关会话（空 = 全局提示，如启动错误、插件告警）。hello 之后补发这条连接建立之前的最近 NoticeKeep 条，
+// 补发的带 replay=true、at 是原来的时间（可能先于 hello 的响应到达）。同一连接只在第一次 hello 后补发。
 type Notice struct {
-	Level  string `json:"level"` // info / warn
-	Source string `json:"source,omitempty"`
+	Level  string `json:"level"`            // NoticeInfo / NoticeWarn / NoticeError
+	Source string `json:"source,omitempty"` // 来源：插件名或 permission、settings、ready、startup、workspace；空 = 没写
 	Text   string `json:"text"`
+	// Replay 这条是 hello 之后补发的旧提示（不是刚发生的）。
+	Replay bool `json:"replay,omitempty"`
 }
+
+// 提示级别（Notice.Level）。
+const (
+	NoticeInfo  = "info"
+	NoticeWarn  = "warn"
+	NoticeError = "error"
+)
+
+// NoticeKeep 服务端保留、hello 后补发的最近提示条数。
+const NoticeKeep = 20
 
 // CursorRef 一个游标位置。
 type CursorRef struct {

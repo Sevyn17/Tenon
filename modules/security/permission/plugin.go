@@ -42,7 +42,7 @@ type plug struct{}
 func init() { component.Register("permission", func() component.Component { return &plug{} }) }
 
 func (*plug) Meta() component.Meta {
-	return component.Meta{Name: "permission", Version: "0.1.0", Default: true, Config: &PluginConfig{},
+	return component.Meta{Name: "permission", Version: "0.1.0", Description: "权限档位：按档位和规则决定工具调用直接执行、询问还是拒绝", Default: true, Config: &PluginConfig{},
 		Requires: []string{assemble.ServiceDB, assemble.ServiceWorkdir, "?" + assemble.ServiceTrust, component.KeyLayers.Maybe()}, Provides: []string{Service}}
 }
 

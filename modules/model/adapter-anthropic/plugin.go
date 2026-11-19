@@ -14,7 +14,7 @@ func init() {
 }
 
 func (adapterPlugin) Meta() component.Meta {
-	return component.Meta{Name: "adapter-anthropic", Version: "0.1.0", Default: true, Effects: []string{component.EffectNetwork},
+	return component.Meta{Name: "adapter-anthropic", Version: "0.1.0", Description: "接入使用 Anthropic Messages 协议的模型", Default: true, Effects: []string{component.EffectNetwork},
 		Requires: []string{assemble.ServiceModelhub}}
 }
 

@@ -46,7 +46,7 @@ type modelsPlugin struct {
 func init() { component.Register("models", func() component.Component { return &modelsPlugin{} }) }
 
 func (*modelsPlugin) Meta() component.Meta {
-	return component.Meta{Name: "models", Version: "0.1.0", Default: true, Effects: []string{component.EffectNetwork}, Config: &Config{},
+	return component.Meta{Name: "models", Version: "0.1.0", Description: "模型目录：决定用哪个模型，把请求交给对应的协议适配器", Default: true, Effects: []string{component.EffectNetwork}, Config: &Config{},
 		Requires: []string{assemble.SlotSecrets, component.Optional + assemble.SlotModelSources}, Provides: []string{assemble.ServiceModelhub}}
 }
 

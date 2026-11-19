@@ -130,7 +130,7 @@ func (v *App) allowForSession(sessionID string, ap *wire.Approval) {
 	}
 	go func() {
 		if err := hd.Do(host.Command{Kind: host.SetExt, Key: key, Value: all}); err != nil {
-			v.Notice(sessionID, fmt.Sprintf("[会话规则未能保存：%v]", err))
+			v.NoticeFrom(sessionID, wire.NoticeError, "permission", fmt.Sprintf("[会话规则未能保存：%v]", err))
 		}
 	}()
 }

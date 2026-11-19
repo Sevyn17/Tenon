@@ -16,7 +16,7 @@ type plug struct{}
 func init() { component.Register("instructions", func() component.Component { return &plug{} }) }
 
 func (*plug) Meta() component.Meta {
-	return component.Meta{Name: "instructions", Version: "0.1.0", Default: true, Effects: []string{component.EffectSystemPrompt, component.EffectRewriteResult}, Requires: []string{assemble.ServiceWorkdir, "?" + assemble.ServiceTrust}}
+	return component.Meta{Name: "instructions", Version: "0.1.0", Description: "项目说明：读取项目里的 AGENTS.md，加进系统提示词", Default: true, Effects: []string{component.EffectSystemPrompt, component.EffectRewriteResult}, Requires: []string{assemble.ServiceWorkdir, "?" + assemble.ServiceTrust}}
 }
 
 func get(sc *assemble.SessionCx, root string, trusted bool) *Instructions {

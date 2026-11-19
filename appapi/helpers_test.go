@@ -50,7 +50,10 @@ func askGate() toolhub.Gate {
 		}}
 }
 
-func newApp(t *testing.T) *App {
+func newApp(t *testing.T) *App { t.Helper(); return newAppOpts(t, nil) }
+
+// newAppOpts 同 newApp，构造 App 之前用 opt 改 Options（如注入 Modes：BeforeTurn 包装在 New 里读它）。
+func newAppOpts(t *testing.T, opt func(*Options)) *App {
 	t.Helper()
 	db := memstore.New()
 	b := bus.New(0)
@@ -73,7 +76,11 @@ func newApp(t *testing.T) *App {
 		cfg := &session.Config{Model: "m", Tools: hub.Exposed(hub.SpecsFor(nil)), Policy: session.DefaultPolicy()}
 		return a, cfg, nil
 	}
-	app, err := New(Options{Host: h, Bus: b, DB: db, Model: "m", Workdir: "w"})
+	o := Options{Host: h, Bus: b, DB: db, Model: "m", Workdir: "w"}
+	if opt != nil {
+		opt(&o)
+	}
+	app, err := New(o)
 	if err != nil {
 		t.Fatal(err)
 	}

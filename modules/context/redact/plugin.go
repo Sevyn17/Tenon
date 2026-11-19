@@ -12,7 +12,7 @@ type plug struct{}
 func init() { component.Register("redact", func() component.Component { return &plug{} }) }
 
 func (*plug) Meta() component.Meta {
-	return component.Meta{Name: "redact", Version: "0.1.0", Effects: []string{component.EffectRewriteResult}, Requires: []string{"?" + assemble.ServiceCompactor}}
+	return component.Meta{Name: "redact", Version: "0.1.0", Description: "脱敏：把工具输出里的密钥换成占位符，再交给模型和日志", Effects: []string{component.EffectRewriteResult}, Requires: []string{"?" + assemble.ServiceCompactor}}
 }
 
 func (*plug) Setup(cx *component.Registrar) error {

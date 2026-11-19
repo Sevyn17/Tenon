@@ -105,11 +105,12 @@ func (m *WorkspaceManager) startWith(dir string, pre *loaded) (*Workspace, error
 		rt.Close()
 		return nil, err
 	}
+	// 这时还没有连接：提示记在 App 上，客户端连上、hello 之后补发（客户端改进 M10 T19，能力 notices）。
 	for _, e := range built.Ready(context.Background()) {
-		built.API.Notice("", "ready: "+e.Error())
+		built.API.NoticeFrom("", wire.NoticeError, "ready", "ready: "+e.Error())
 	}
 	for _, n := range rt.Notes {
-		built.API.Notice("", n)
+		built.API.NoticeFrom("", wire.NoticeInfo, "startup", n)
 	}
 	return &Workspace{Runtime: rt, Built: built}, nil
 }
@@ -173,7 +174,7 @@ func (m *WorkspaceManager) Reload(_ context.Context) (wire.WorkspaceInfo, error)
 		if err2 != nil {
 			return wire.WorkspaceInfo{}, fmt.Errorf("%v；回到原来的配置也失败：%v", err, err2)
 		}
-		back.Built.API.Notice("", "重建运行时失败，已回到原来的配置："+err.Error())
+		back.Built.API.NoticeFrom("", wire.NoticeWarn, "workspace", "重建运行时失败，已回到原来的配置："+err.Error())
 		m.swap(back, back.Runtime.Root)
 		return wire.WorkspaceInfo{}, &appapi.ReloadReverted{Err: err}
 	}

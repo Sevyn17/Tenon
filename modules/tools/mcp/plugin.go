@@ -31,7 +31,7 @@ type plug struct {
 func init() { component.Register("mcp", func() component.Component { return &plug{} }) }
 
 func (*plug) Meta() component.Meta {
-	return component.Meta{Name: "mcp", Version: "0.1.0", Effects: []string{component.EffectTools, component.EffectExec, component.EffectNetwork}, Config: &PluginConfig{},
+	return component.Meta{Name: "mcp", Version: "0.1.0", Description: "连接外部 MCP 服务，把它们提供的工具交给模型使用", Effects: []string{component.EffectTools, component.EffectExec, component.EffectNetwork}, Config: &PluginConfig{},
 		Requires: []string{assemble.ServiceUI, component.KeyLayers.Maybe(), toolhub.KeySandbox.Maybe(), toolhub.KeySandboxPolicy.Maybe(), "?" + pkgs.Service}}
 }
 

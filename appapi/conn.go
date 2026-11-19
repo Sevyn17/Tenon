@@ -64,6 +64,10 @@ type Conn struct {
 	poll       time.Duration // 跨进程轮询间隔；0 = pollInterval
 	soft, hard int           // 背压阈值；0 = softQueue / hardQueue
 	caps       []string      // 传输层追加的能力（AddCapabilities），hello 时并进 capabilities
+	// 提示（客户端改进 M10 T19）：noticeFloor 是建连接时的提示编号分界，不超过它的在第一次 hello 后补发
+	// （总线上收到的副本丢掉），超过的实时推送；noticeReplayed 表示已补发过。
+	noticeFloor    int64
+	noticeReplayed bool
 }
 
 // CapReconnectEvent 能力 reconnect_event（客户端改进 M5）：这条连接所在的传输在换运行时之后
@@ -95,6 +99,10 @@ func (a *App) NewConn(ctx context.Context, p wire.Principal) *Conn {
 		wake: make(chan struct{}, 1), space: make(chan struct{})}
 	// 连接级订阅在返回前挂上：连接建好之后的变化一条不漏（原先在协程里订阅，刚建连接时的事件可能丢）。
 	go c.watchSessions(a.o.Bus.Subscribe(cctx, bus.Filter{Kinds: []string{store.EventRunState, store.EventMeta, EventDeleted}}))
+	// 连接级 notice（能力 notices）：先挂订阅再取分界，分界之前的从记录补发、之后的走实时，不重不漏（notice.go）。
+	ns := a.o.Bus.Subscribe(cctx, bus.Filter{Kinds: []string{EventNotice}})
+	c.noticeFloor = a.notices.last()
+	go c.watchNotices(ns)
 	context.AfterFunc(cctx, c.Close)
 	return c
 }
@@ -174,7 +182,12 @@ func (c *Conn) Call(ctx context.Context, cmd string, args json.RawMessage) (any,
 		r.Principal = c.p
 		c.mu.Lock()
 		extra := slices.Clone(c.caps)
+		replay := !c.noticeReplayed
+		c.noticeReplayed = true
 		c.mu.Unlock()
+		if replay { // 第一次 hello：补发连接建立之前的最近提示（事件帧可能先于 hello 的响应到达）
+			c.replayNotices()
+		}
 		if len(extra) > 0 {
 			caps := slices.Clone(r.Capabilities)
 			for _, x := range extra {
@@ -310,6 +323,7 @@ func (c *Conn) run(ctx context.Context, id string, live *bus.Sub, replay []bus.E
 				} else if !catchUp() {
 					return
 				}
+			case e.Kind == EventNotice: // notice 走连接级推送（watchNotices），这里不再推，免得订阅了的会话收两遍
 			default: // 易失事件，或 children 下子会话的事件（游标属于子会话自己的序列）
 				c.push(ctx, c.translate(e))
 			}
@@ -411,9 +425,37 @@ func (c *Conn) translate(e bus.Envelope) []wire.Envelope {
 			wire.TurnRejected{Inputs: stringList(m["inputs"]), Reason: reason})}
 	case EventNotice:
 		text, _ := m["text"].(string)
-		return []wire.Envelope{c.envelope(e.Session, wire.EvNotice, 0, 0, wire.Notice{Level: "info", Text: text})}
+		level, _ := m["level"].(string)
+		source, _ := m["source"].(string)
+		if level == "" {
+			level = wire.NoticeInfo
+		}
+		return []wire.Envelope{c.envelope(e.Session, wire.EvNotice, 0, 0, wire.Notice{Level: level, Source: source, Text: text})}
 	}
 	return nil
+}
+
+// watchNotices 连接级 notice（客户端改进 M10 T19）：任一会话的和全局的提示都推；编号不超过分界的由 hello 后补发，这里丢掉。
+func (c *Conn) watchNotices(sub *bus.Sub) {
+	for e := range sub.C() {
+		if seq := int64(intOf(dataMap(e.Data)[noticeSeqKey])); seq > 0 && seq <= c.noticeFloor {
+			continue
+		}
+		c.push(c.ctx, c.translate(e))
+	}
+}
+
+// replayNotices 补发连接建立之前的最近提示（replay=true，at 是原来的时间）。
+func (c *Conn) replayNotices() {
+	var evs []wire.Envelope
+	for _, r := range c.a.notices.upto(c.noticeFloor) {
+		n := r.n
+		n.Replay = true
+		ev := c.envelope(r.session, wire.EvNotice, 0, 0, n)
+		ev.At = r.at
+		evs = append(evs, ev)
+	}
+	c.push(c.ctx, evs)
 }
 
 // modeOf Ext 事件是档位键时给出档位（标签从档位表取；沙箱级别只有当前档位才知道）。

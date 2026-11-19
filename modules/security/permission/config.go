@@ -226,6 +226,9 @@ func (s *Sessions) defaultMode() Mode {
 	return m
 }
 
+// DefaultMode 新会话的缺省档位（mode.list 的 default，客户端改进 M10）：同 defaultMode，调用方不持锁。
+func (s *Sessions) DefaultMode() Mode { return s.defaultMode() }
+
 // ProjectWidened 项目档位放宽了什么（应用确认放宽、记 trust.toml 时也用它，两边清单才一致）：按权限项比对（Widened），再加上继承根比内置缺省档位宽的情况
 // （权限项注册表要到第一个会话装配时才有，这时只能从继承根看出「base = full」这类放宽）。
 func ProjectWidened(d *ModeDef, items []toolhub.Item) []string {

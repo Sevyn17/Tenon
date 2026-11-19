@@ -303,6 +303,8 @@ func (v *App) capabilities() []string {
 	out = append(out, "entries.turn")
 	// model_retrying（客户端改进 M8）：模型每次退避重试前发易失事件 model.retrying。
 	out = append(out, "model_retrying")
+	// notices（客户端改进 M10 T19）：notice 连接级送达、带 level / source，第一次 hello 后补发最近 20 条。总是有。
+	out = append(out, CapNotices)
 	// changes（客户端改进 M9）：changes.list / diff / revert 与 session.rewind {restore_files, force}。装了 checkpoint 才报。
 	if o.Changes != nil {
 		out = append(out, "changes")
@@ -1555,7 +1557,7 @@ func (v *App) apply(id string, hd host.Handle, c host.Command) (bool, error) {
 	case <-time.After(applyWait):
 		go func() {
 			if err := <-done; err != nil {
-				v.Notice(id, fmt.Sprintf("[设置未能保存：%v]", err))
+				v.NoticeFrom(id, wire.NoticeError, "settings", fmt.Sprintf("[设置未能保存：%v]", err))
 			}
 		}()
 		return false, nil
@@ -1576,7 +1578,17 @@ func (v *App) ModeList(_ context.Context, _ wire.Empty) (wire.ModeListResult, er
 	}
 	out := wire.ModeListResult{Modes: []wire.ModeInfo{}}
 	for _, d := range m.List() {
-		out.Modes = append(out.Modes, wire.ModeInfo{ID: d.ID, Label: d.Label, Short: d.Short, Builtin: d.Builtin, Project: d.Project, Widened: d.Widened})
+		out.Modes = append(out.Modes, wire.ModeInfo{ID: d.ID, Label: d.Label, Short: d.Short, Builtin: d.Builtin, Project: d.Project, Widened: d.Widened,
+			Description: d.Description})
+	}
+	// default（客户端改进 M10）：只给 modes 里有的 id，客户端可以直接拿它去 modes 里找标签。
+	if dm, ok := m.(ModeDefaulter); ok {
+		id := dm.DefaultMode()
+		for _, d := range out.Modes {
+			if d.ID == id {
+				out.Default = id
+			}
+		}
 	}
 	return out, nil
 }
@@ -1758,9 +1770,10 @@ func (v *App) pluginInfo(st component.State, cur, next *component.Profile) wire.
 		Effects: append([]string{}, st.Effects...), Schema: []wire.ConfigField{}, Config: configOf(cur, st.Name),
 		Mandatory: slices.Contains(cur.Mandatory, st.Name)}
 	if m, ok := component.MetaOf(st.Name); ok {
+		wp.Version, wp.Description = m.Version, m.Description // 客户端改进 M10 T17
 		for _, f := range component.SchemaOf(m.Config) {
 			wp.Schema = append(wp.Schema, wire.ConfigField{Key: f.Key, Type: f.Type, Default: f.Default, Title: f.Title,
-				Description: f.Description, Group: f.Group, Widget: f.Widget})
+				Description: f.Description, Group: f.Group, Widget: f.Widget, Elem: f.Elem})
 		}
 	}
 	if next != nil {

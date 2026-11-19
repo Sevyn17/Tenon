@@ -404,11 +404,18 @@ type ModeInfo struct {
 	Builtin bool     `json:"builtin"`
 	Project bool     `json:"project"`
 	Widened []string `json:"widened,omitempty"`
+	// Description 一句话说明（客户端改进 M10 T17）：内置档位是固定的中文说明，自定义档位取档位文件的 description；
+	// 空 = 没写说明。
+	Description string `json:"description,omitempty"`
 }
 
 // ModeListResult mode.list 的结果：可用档位清单。
 type ModeListResult struct {
 	Modes []ModeInfo `json:"modes"`
+	// Default 新会话的缺省档位 id（客户端改进 M10）：permissions.toml 的 mode（或启动参数强制的档位）；
+	// 它若是没确认过的放宽项目档位，这里给的是实际退回的内置档位。总是 modes 里的一项。
+	// 空 = 服务端不知道（旧服务端，或档位实现没提供），客户端退回自己的假设。
+	Default string `json:"default,omitempty"`
 }
 
 // ModeSetArgs mode.set：写一个档位的定义。
@@ -596,16 +603,24 @@ type ConfigField struct {
 	Description string `json:"description,omitempty"`
 	Group       string `json:"group,omitempty"`
 	Widget      string `json:"widget,omitempty"`
+	// Elem slice / array / map 的元素 Kind（map 是值的 Kind），如 string、struct、map（客户端改进 M10 T18）；
+	// 其余类型为空。客户端遇到 type=slice 且 elem 不是标量（struct、map、slice、interface），或 type=map 时，
+	// 只读显示当前值、不要把它放进 plugins.set 的 config（表单还不会编辑这类值，写回会把它写坏）。
+	Elem string `json:"elem,omitempty"`
 }
 
 // PluginInfo 一个已装配组件的状态与配置。
 type PluginInfo struct {
-	Name    string        `json:"name"`
-	On      bool          `json:"on"`
-	Default bool          `json:"default"`
-	Source  string        `json:"source"`
-	Effects []string      `json:"effects"`
-	Schema  []ConfigField `json:"schema"`
+	Name string `json:"name"`
+	// Version 组件版本（component.Meta.Version，客户端改进 M10 T17）；空 = 组件没写。
+	Version string `json:"version,omitempty"`
+	// Description 一句话说明（component.Meta.Description）；空 = 组件没写（如外部进程插件、应用自带的组件）。
+	Description string        `json:"description,omitempty"`
+	On          bool          `json:"on"`
+	Default     bool          `json:"default"`
+	Source      string        `json:"source"`
+	Effects     []string      `json:"effects"`
+	Schema      []ConfigField `json:"schema"`
 	// Config 当前进程生效的配置值（profile 合并后，未写的键不出现）。
 	Config map[string]any `json:"config"`
 	// Mandatory 强制插件：不能停用。
