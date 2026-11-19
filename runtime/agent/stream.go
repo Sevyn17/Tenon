@@ -28,6 +28,7 @@ const (
 	StreamReset     = "reset"     // 模型重试：本步已发的片段作废，Attempt 加一
 	StreamEnd       = "end"       // 本步模型调用结束（成败都发）
 	StreamProgress  = "progress"  // 工具执行中的输出：CallID，Text（最新的一段，替换显示）
+	StreamRetrying  = "retrying"  // 调度器即将退避重试（客户端改进 M8）：Retry
 )
 
 // StreamEvent 一条流式事件。
@@ -40,6 +41,8 @@ type StreamEvent struct {
 	CallID  string
 	Name    string
 	Args    string
+	// Retry 只在 StreamRetrying 时有：即将进行的第几次尝试、最多几次、等待多久、上次失败原因。
+	Retry *modelhub.RetryNotice
 }
 
 // SinkModel 可选：带推理增量与工具调用片段的调用（modelhub.Session 实现），优先于 RequestModel。
@@ -107,6 +110,11 @@ func (s *stepStream) reset() {
 }
 
 func (s *stepStream) end() { s.send(StreamEvent{Kind: StreamEnd}) }
+
+// retrying 调度器即将退避重试：不改 attempt（流到一半的重试由随后的 reset 加一）。
+func (s *stepStream) retrying(n modelhub.RetryNotice) {
+	s.send(StreamEvent{Kind: StreamRetrying, Retry: &n})
+}
 
 // assign 把预分配的调用 id 写回回复：流内序号升序即回复里调用的顺序（三个适配器都按块 / 项序号组装调用）。
 // 数量对不上（适配器没发片段或发得不全）时不写，调用 id 照常由内核分配。

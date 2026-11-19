@@ -46,6 +46,7 @@ const (
 	EvSynced           = "session.synced"
 	EvLagged           = "session.lagged"
 	EvSessionsChanged  = "sessions.changed"
+	EvModelRetrying    = "model.retrying" // 能力 model_retrying（客户端改进 M8）
 )
 
 // Durable 事件是否持久（带 cursor、写事件表）。
@@ -66,7 +67,7 @@ func Public(kind string) bool {
 	switch kind {
 	case EvTurnStarted, EvTurnEnded, EvTurnRejected, EvMessageStarted, EvMessageDelta, EvMessageEnded,
 		EvMessageDiscarded, EvToolStarted, EvToolArgsDelta, EvToolRunning, EvToolProgress, EvToolEnded,
-		EvNotice, EvSynced, EvLagged, EvSessionsChanged:
+		EvNotice, EvSynced, EvLagged, EvSessionsChanged, EvModelRetrying:
 		return true
 	}
 	return false
@@ -165,6 +166,17 @@ type MessageStarted struct {
 	EntryID  string `json:"entry_id"`
 	Part     string `json:"part"`
 	Attempt  int    `json:"attempt"`
+}
+
+// ModelRetrying 模型调用失败、调度器即将等待后重试（能力 model_retrying，客户端改进 M8）。每次等待之前发一个。
+// Attempt 是即将进行的第几次尝试（从 2 起；换到降级模型后从 2 重新算），Max 是该模型最多尝试次数，
+// WaitMs 是重试前的等待（毫秒），Reason 是上一次失败的简短说明（「错误码: 说明」，最多 200 字）。
+// 流到一半失败时，重试开始后照旧有 message.discarded 与 attempt 加一的 message.started。
+type ModelRetrying struct {
+	Attempt int    `json:"attempt"`
+	Max     int    `json:"max"`
+	WaitMs  int64  `json:"wait_ms"`
+	Reason  string `json:"reason"`
 }
 
 // MessageDelta 助手消息的正文增量。

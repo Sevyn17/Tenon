@@ -356,7 +356,7 @@ github.com/Sevyn17/tenon/appapi/wire: func DeclNodeTypes() []string
 github.com/Sevyn17/tenon/appapi/wire: func Durable(kind string) bool
 github.com/Sevyn17/tenon/appapi/wire: type EffectiveModel struct{Model string; Provider string; Protocol string; BaseURL string; Name string; Label string; CredKind string; CredLabel string; Origin string; OriginRef string; Available bool; Reason string; Notice string}
 github.com/Sevyn17/tenon/appapi/wire: type Empty struct{}
-github.com/Sevyn17/tenon/appapi/wire: type EntriesArgs struct{Session string; From *int; To *int; Tail int}
+github.com/Sevyn17/tenon/appapi/wire: type EntriesArgs struct{Session string; From *int; To *int; Tail int; Turn *uint32}
 github.com/Sevyn17/tenon/appapi/wire: type EntriesResult struct{Entries []Entry; Base int; Len int}
 github.com/Sevyn17/tenon/appapi/wire: type Entry struct{ID string; Idx int; Turn uint32; At int64; Source string; ClientIDs []string; Item Item}
 github.com/Sevyn17/tenon/appapi/wire: type EntryAppended struct{Entry Entry}
@@ -373,6 +373,7 @@ github.com/Sevyn17/tenon/appapi/wire: const EvMessageDiscarded untyped string
 github.com/Sevyn17/tenon/appapi/wire: const EvMessageEnded untyped string
 github.com/Sevyn17/tenon/appapi/wire: const EvMessageStarted untyped string
 github.com/Sevyn17/tenon/appapi/wire: const EvModeChanged untyped string
+github.com/Sevyn17/tenon/appapi/wire: const EvModelRetrying untyped string
 github.com/Sevyn17/tenon/appapi/wire: const EvNotice untyped string
 github.com/Sevyn17/tenon/appapi/wire: const EvSessionClosed untyped string
 github.com/Sevyn17/tenon/appapi/wire: const EvSessionForked untyped string
@@ -397,7 +398,7 @@ github.com/Sevyn17/tenon/appapi/wire: type FilesArgs struct{Query string; Limit 
 github.com/Sevyn17/tenon/appapi/wire: type FilesResult struct{Files []FileInfo; Truncated bool}
 github.com/Sevyn17/tenon/appapi/wire: type FollowupsArgs struct{Session string; Turn uint32}
 github.com/Sevyn17/tenon/appapi/wire: type FollowupsResult struct{Turn uint32; Items []string}
-github.com/Sevyn17/tenon/appapi/wire: type ForkArgs struct{Session string; To string; Upto *int; Origin string; IfCursor *int64; ClientID string}
+github.com/Sevyn17/tenon/appapi/wire: type ForkArgs struct{Session string; To string; Upto *int; UptoTurn *uint32; Origin string; IfCursor *int64; ClientID string}
 github.com/Sevyn17/tenon/appapi/wire: type Form struct{Text string; Submit string}
 github.com/Sevyn17/tenon/appapi/wire: type HelloArgs struct{Client string; Protocol ProtocolRange}
 github.com/Sevyn17/tenon/appapi/wire: type HelloResult struct{Protocol int; Server string; Principal Principal; Capabilities []string; Model string; Workdir string; Trusted bool; MaxOutput int; Workspace string}
@@ -437,6 +438,7 @@ github.com/Sevyn17/tenon/appapi/wire: type ModeSetResult struct{State Mode; Comm
 github.com/Sevyn17/tenon/appapi/wire: type ModeShowArgs struct{Session string; Mode string}
 github.com/Sevyn17/tenon/appapi/wire: type ModeShowResult struct{Mode string; Items []ModeItem}
 github.com/Sevyn17/tenon/appapi/wire: type ModelInfo struct{ID string; Alias bool; Provider string; Name string; Label string; ContextWindow int; Images bool; Reasoning bool; Efforts []string; Available bool; Reason string}
+github.com/Sevyn17/tenon/appapi/wire: type ModelRetrying struct{Attempt int; Max int; WaitMs int64; Reason string}
 github.com/Sevyn17/tenon/appapi/wire: type ModelsListResult struct{Models []ModelInfo; Default string; Effective *EffectiveModel}
 github.com/Sevyn17/tenon/appapi/wire: type Notice struct{Level string; Source string; Text string}
 github.com/Sevyn17/tenon/appapi/wire: const OutcomeAnswered untyped string

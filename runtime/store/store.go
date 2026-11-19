@@ -100,6 +100,14 @@ type SessionStore interface {
 	Export(ctx context.Context, sessionID string, w io.Writer) error
 }
 
+// TurnRangeStore 可选：按回合号定位条目区间（客户端改进 M8 协议T15，session.entries {turn} 与 session.fork {upto_turn}）。
+// 与 SessionQueryStore 一样不加进 Store：没实现的存储由 appapi 扫 Entries 兜底，结果相同，只是慢。
+type TurnRangeStore interface {
+	// TurnRange 回合 turn 的条目在完整日志里的下标区间 [from, to)。日志里没有这个回合（或会话不存在）时 ok = false。
+	// 回合的条目是连续的（内核按回合追加，回退截掉的是尾部），所以区间里只有这个回合的条目。
+	TurnRange(ctx context.Context, id string, turn uint32) (from, to int, ok bool, err error)
+}
+
 // InboxStore 会话输入队列（session-host D2 / D6）。
 type InboxStore interface {
 	// Admit 准入；true = 新写入，false = 同 id 已存在（含已消费）。

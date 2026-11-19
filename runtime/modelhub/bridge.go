@@ -24,6 +24,7 @@ type Sink struct {
 	Reasoning func(string)
 	Tool      func(ToolDelta)
 	Reset     func()
+	Retry     func(RetryNotice) // 调度器即将退避重试（客户端改进 M8）
 }
 
 // StreamRequest 发起一次会话调用，增量文本经 onText 送出；Reset 时 onReset 被调用（界面撤掉已显示的半截）。
@@ -45,6 +46,10 @@ func (s *Session) StreamSink(ctx context.Context, requestID string, req session.
 		case ev.Reset:
 			if sk.Reset != nil {
 				sk.Reset()
+			}
+		case ev.Retry != nil:
+			if sk.Retry != nil {
+				sk.Retry(*ev.Retry)
 			}
 		case ev.Done != nil:
 			done = ev.Done

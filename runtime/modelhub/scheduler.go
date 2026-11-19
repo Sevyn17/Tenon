@@ -250,6 +250,8 @@ func (h *Hub) runStep(ctx context.Context, r *Request, si int, step PlanStep, ou
 			}
 			wait = f.RetryAfter
 		}
+		// 每次等待之前预告（客户端改进 M8）：连接被拒时退避可达十几秒，期间界面否则收不到任何事件。
+		out <- Event{Retry: &RetryNotice{Attempt: at + 2, Max: retries + 1, Wait: wait, Reason: retryReason(f)}}
 		if err := h.sleep(ctx, wait); err != nil {
 			return &Failure{Code: CodeAborted, Message: "退避时取消", Partial: f.Partial}
 		}
@@ -357,6 +359,15 @@ func (h *Hub) record(key string, ok bool) {
 func backoff(d time.Duration) time.Duration {
 	j := 1 + (rand.Float64()*0.2 - 0.1) // ±10% 抖动
 	return time.Duration(float64(d) * j)
+}
+
+// retryReason 失败的简短说明（code: message），最多 200 个字符。
+func retryReason(f *Failure) string {
+	s := f.Error()
+	if r := []rune(s); len(r) > 200 {
+		s = string(r[:200]) + "…"
+	}
+	return s
 }
 
 func sleepCtx(ctx context.Context, d time.Duration) error {

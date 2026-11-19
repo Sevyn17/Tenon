@@ -344,7 +344,7 @@ func (a *Agent) sendModel(ctx context.Context, need *session.Need, req session.R
 					}
 					ss.reasoning(d)
 				},
-				Tool: ss.tool, Reset: onReset})
+				Tool: ss.tool, Reset: onReset, Retry: ss.retrying})
 		}
 		if rm, ok := a.Model.(RequestModel); ok { // 带 need id（R3）与 Reset
 			return rm.StreamRequest(ctx, need.Model.RequestID, *r, onText, onReset)

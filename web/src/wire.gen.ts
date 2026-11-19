@@ -23,7 +23,7 @@ export type Outcome = (typeof Outcomes)[number];
 export const DurableEvents = ["entry.appended", "log.rewound", "log.compacted", "session.state_changed", "session.mode_changed", "session.settings_changed", "interaction.opened", "interaction.resolved", "session.closed", "session.forked", "session.updated"] as const;
 export type DurableEvent = (typeof DurableEvents)[number];
 
-export const VolatileEvents = ["turn.started", "turn.ended", "turn.rejected", "message.started", "message.delta", "message.ended", "message.discarded", "tool.started", "tool.args_delta", "tool.running", "tool.progress", "tool.ended", "notice", "session.synced", "session.lagged", "sessions.changed"] as const;
+export const VolatileEvents = ["turn.started", "turn.ended", "turn.rejected", "message.started", "message.delta", "message.ended", "message.discarded", "tool.started", "tool.args_delta", "tool.running", "tool.progress", "tool.ended", "notice", "session.synced", "session.lagged", "sessions.changed", "model.retrying"] as const;
 export type VolatileEvent = (typeof VolatileEvents)[number];
 
 export const ErrorCodes = ["bad_request", "invalid", "not_found", "closed", "not_idle", "busy", "conflict", "denied", "need_confirm", "cursor_expired", "unauthorized", "forbidden", "unsupported", "internal"] as const;
@@ -322,6 +322,13 @@ export interface MessageStarted {
   attempt: number;
 }
 
+export interface ModelRetrying {
+  attempt: number;
+  max: number;
+  wait_ms: number;
+  reason: string;
+}
+
 export interface MessageDelta {
   stream_id: string;
   text: string;
@@ -481,6 +488,7 @@ export interface EntriesArgs {
   from?: number;
   to?: number;
   tail?: number;
+  turn?: number;
 }
 
 export interface EntriesResult {
@@ -534,6 +542,7 @@ export interface ForkArgs {
   session: string;
   to?: string;
   upto?: number;
+  upto_turn?: number;
   origin?: string;
   if_cursor?: number;
   client_id?: string;

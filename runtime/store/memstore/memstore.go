@@ -561,6 +561,32 @@ func (s *Store) Entries(ctx context.Context, id string, from, to int) ([]*sessio
 	return x.read(from, to)
 }
 
+// TurnRange 回合 turn 的条目区间（store.TurnRangeStore，客户端改进 M8 协议T15）：扫描条目，语义与 sqlite 一致。
+func (s *Store) TurnRange(ctx context.Context, id string, turn uint32) (int, int, bool, error) {
+	if err := s.lock(); err != nil {
+		return 0, 0, false, err
+	}
+	defer s.mu.Unlock()
+	x := s.live(id)
+	if x == nil {
+		return 0, 0, false, nil
+	}
+	from, to, ok := 0, 0, false
+	for idx, e := range x.entries {
+		if entryTurn(e.body) != turn {
+			continue
+		}
+		if !ok || idx < from {
+			from = idx
+		}
+		if !ok || idx+1 > to {
+			to = idx + 1
+		}
+		ok = true
+	}
+	return from, to, ok, nil
+}
+
 // Exists 报告会话是否存在（未删除）。
 func (s *Store) Exists(ctx context.Context, id string) (bool, error) {
 	if err := s.lock(); err != nil {

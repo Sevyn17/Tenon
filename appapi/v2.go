@@ -295,6 +295,11 @@ func (v *App) capabilities() []string {
 	// sessions.changed.full（客户端改进 M7 协议T10）：每条非 deleted 的 sessions.changed 都带齐 preview、parent、origin、
 	// workspace、archived、last_end 的当前值（空值不发 = 空）。总是有；旧服务端没有，客户端不能把「没给」当成空。
 	out = append(out, "sessions.changed.full")
+	// entries.turn（客户端改进 M8 协议T15）：session.entries {turn} 与 session.fork {upto_turn}。总是有
+	// （存储没实现 TurnRangeStore 时扫条目兜底）；旧服务端会忽略这两个参数，客户端没有这条能力时必须停用相关动作。
+	out = append(out, "entries.turn")
+	// model_retrying（客户端改进 M8）：模型每次退避重试前发易失事件 model.retrying。
+	out = append(out, "model_retrying")
 	return out
 }
 
@@ -912,6 +917,19 @@ func (v *App) Entries(ctx context.Context, in wire.EntriesArgs) (wire.EntriesRes
 	}
 	h := l.Snapshot.Header
 	from, to := h.CompactionBase, h.LogLen
+	if in.Turn != nil { // 客户端改进 M8 协议T15：只取这个回合
+		if in.From != nil || in.To != nil || in.Tail > 0 {
+			return wire.EntriesResult{}, invalid("turn 与 from / to / tail 互斥")
+		}
+		lo, hi, ok, err := v.turnRange(ctx, in.Session, *in.Turn)
+		if err != nil {
+			return wire.EntriesResult{}, err
+		}
+		if !ok {
+			return wire.EntriesResult{}, invalid("回合 %d 不存在", *in.Turn)
+		}
+		from, to = lo, hi
+	}
 	if in.From != nil {
 		from = *in.From
 	}
@@ -1218,7 +1236,17 @@ func (v *App) Fork(ctx context.Context, in wire.ForkArgs) (wire.SessionSnapshot,
 	}
 	upto := -1
 	if in.Upto != nil {
+		if in.UptoTurn != nil {
+			return wire.SessionSnapshot{}, invalid("upto 与 upto_turn 互斥")
+		}
 		upto = *in.Upto
+	}
+	if in.UptoTurn != nil { // 客户端改进 M8 协议T15：分叉到第 N 回合起点（不含第 N 回合）
+		u, err := v.uptoTurn(ctx, in.Session, *in.UptoTurn)
+		if err != nil {
+			return wire.SessionSnapshot{}, err
+		}
+		upto = u
 	}
 	if _, err := v.o.Host.ForkIf(ctx, in.Session, to, upto, in.Origin, in.IfCursor); err != nil {
 		if !errors.Is(err, store.ErrConflict) {
@@ -1232,6 +1260,62 @@ func (v *App) Fork(ctx context.Context, in wire.ForkArgs) (wire.SessionSnapshot,
 		return wire.SessionSnapshot{}, conflict(wire.ConflictExists, "会话 %s 已存在", to)
 	}
 	return v.snapshot(ctx, to)
+}
+
+// turnRange 回合 turn 的条目区间 [from, to)：存储实现了 store.TurnRangeStore 就走它（sqlite 按索引查），
+// 否则扫全部条目兜底。没有这个回合时 ok = false。
+func (v *App) turnRange(ctx context.Context, id string, turn uint32) (int, int, bool, error) {
+	if tr, ok := v.o.DB.(store.TurnRangeStore); ok {
+		return tr.TurnRange(ctx, id, turn)
+	}
+	es, err := v.o.DB.Entries(ctx, id, 0, -1)
+	if err != nil {
+		return 0, 0, false, err
+	}
+	from, to, ok := 0, 0, false
+	for i, e := range es {
+		if e.Turn != turn {
+			continue
+		}
+		if !ok {
+			from = i
+		}
+		to, ok = i+1, true
+	}
+	return from, to, ok, nil
+}
+
+// uptoTurn fork {upto_turn: n} 换算成 upto：第 n 回合首条条目的下标；n = 最后一回合 + 1 时为 -1（整个会话）。
+// n < 1、n > 最后一回合 + 1 或日志里没有第 n 回合返回 invalid。
+func (v *App) uptoTurn(ctx context.Context, id string, n uint32) (int, error) {
+	l, err := host.LoadHead(ctx, v.o.DB, id)
+	if err != nil {
+		return 0, err
+	}
+	var last uint32
+	if ln := l.Snapshot.Header.LogLen; ln > 0 {
+		es, err := v.o.DB.Entries(ctx, id, ln-1, ln)
+		if err != nil {
+			return 0, err
+		}
+		if len(es) > 0 {
+			last = es[0].Turn
+		}
+	}
+	if n < 1 || n > last+1 {
+		return 0, invalid("upto_turn=%d 超出范围 [1, %d]", n, last+1)
+	}
+	if n == last+1 {
+		return -1, nil
+	}
+	from, _, ok, err := v.turnRange(ctx, id, n)
+	if err != nil {
+		return 0, err
+	}
+	if !ok {
+		return 0, invalid("回合 %d 不存在", n)
+	}
+	return from, nil
 }
 
 // —— 查询与设置 ——

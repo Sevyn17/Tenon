@@ -62,10 +62,21 @@ type Event struct {
 	ReasoningDelta string
 	// Tool 工具调用的流式片段（protocol 2 tool.started / tool.args_delta）：同一调用的片段 Index 相同。
 	// 只用于展示；完整调用仍以 Done.Reply.ToolCalls 为准。
-	Tool   *ToolDelta
-	Reset  bool // StreamReset：之前的增量作废（重试 / 换项前发出）
+	Tool  *ToolDelta
+	Reset bool // StreamReset：之前的增量作废（重试 / 换项前发出）
+	// Retry 调度器即将退避等待、然后重试（客户端改进 M8）：每次等待之前发一个，只用于展示。
+	Retry  *RetryNotice
 	Done   *Done
 	Failed *Failure
+}
+
+// RetryNotice 一次退避重试的预告。Attempt 是即将进行的第几次尝试（从 2 起，按计划项计；换到降级项后从头算），
+// Max 是本项最多尝试次数，Wait 是重试前的等待，Reason 是上一次失败的简短说明。
+type RetryNotice struct {
+	Attempt int
+	Max     int
+	Wait    time.Duration
+	Reason  string
 }
 
 // ToolDelta 一个工具调用的流式片段。Index 是调用在本次回复流里的位置（适配器原样给出的块 / 项序号，

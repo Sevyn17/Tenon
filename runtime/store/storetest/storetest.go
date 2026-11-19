@@ -63,6 +63,7 @@ func Run(t *testing.T, open func(t *testing.T) store.Store) {
 		{"Workspace", testWorkspace},
 		{"Preview", testPreview},
 		{"SessionQuery", testSessionQuery},
+		{"TurnRange", testTurnRange},
 		{"CollectionRoundTrip", testCollectionRoundTrip},
 		{"CollectionConflict", testCollectionConflict},
 		{"CollectionQueryPage", testCollectionQueryPage},

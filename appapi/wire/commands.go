@@ -164,6 +164,9 @@ type EntriesArgs struct {
 	From    *int   `json:"from,omitempty"`
 	To      *int   `json:"to,omitempty"`
 	Tail    int    `json:"tail,omitempty"`
+	// Turn 只取这个回合的全部条目（要能力 entries.turn，客户端改进 M8）；与 from / to / tail 互斥。
+	// 回合不存在返回 invalid。
+	Turn *uint32 `json:"turn,omitempty"`
 }
 
 // EntriesResult session.entries 的结果：条目数组与它们在完整日志里的位置。
@@ -223,12 +226,16 @@ type CompactResult struct {
 
 // ForkArgs session.fork：把当前会话分叉成新的子会话。
 type ForkArgs struct {
-	Session  string `json:"session"`
-	To       string `json:"to,omitempty"`
-	Upto     *int   `json:"upto,omitempty"`
-	Origin   string `json:"origin,omitempty"` // fork / side
-	IfCursor *int64 `json:"if_cursor,omitempty"`
-	ClientID string `json:"client_id,omitempty"`
+	Session string `json:"session"`
+	To      string `json:"to,omitempty"`
+	Upto    *int   `json:"upto,omitempty"`
+	// UptoTurn 分叉到第 N 回合起点（不含第 N 回合），等价于 upto = 第 N 回合首条条目的下标；
+	// N = 最后一回合 + 1 时分叉整个会话。要能力 entries.turn（客户端改进 M8）；与 upto 互斥；
+	// N < 1 或 N > 最后一回合 + 1 返回 invalid。
+	UptoTurn *uint32 `json:"upto_turn,omitempty"`
+	Origin   string  `json:"origin,omitempty"` // fork / side
+	IfCursor *int64  `json:"if_cursor,omitempty"`
+	ClientID string  `json:"client_id,omitempty"`
 }
 
 // SettingsArgs session.settings：读会话设置。

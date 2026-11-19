@@ -146,6 +146,14 @@ func (l *liveState) onStream(ev agent.StreamEvent) {
 		}
 		l.clearLocked()
 		l.attempt = ev.Attempt
+	case agent.StreamRetrying: // 客户端改进 M8：退避等待之前预告，前端显示「第 n 次重试」
+		if ev.Retry == nil {
+			return
+		}
+		l.flushLocked()
+		r := ev.Retry
+		l.publishLocked(wire.EvModelRetrying, wire.ModelRetrying{Attempt: r.Attempt, Max: r.Max,
+			WaitMs: r.Wait.Milliseconds(), Reason: r.Reason})
 	case agent.StreamProgress:
 		if l.tools[ev.CallID] == nil { // 工具已结束（结果先到）或不认识：丢掉
 			return
