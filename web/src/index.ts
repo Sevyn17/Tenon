@@ -5,6 +5,7 @@ import { autoTransport, connect, type Connection, type Transport } from "./trans
 import { createSessionStore, type SessionStore } from "./session";
 import { CAP_CHANGED_FULL, CAP_QUERY, createSessionsStore, workspaceOf, type SessionsStore } from "./sessions";
 import { createInteractionsStore, type InteractionsStore } from "./interactions";
+import { createNoticeFeed, type NoticeFeed } from "./notices";
 import { createStore, type ReadStore } from "./store";
 import { ApiError } from "./commands";
 import { PROTOCOL, type HelloResult } from "./wire.gen";
@@ -16,6 +17,7 @@ export * from "./session-reducer";
 export * from "./session";
 export * from "./sessions";
 export * from "./interactions";
+export * from "./notices";
 export type * from "./wire.gen";
 export { PROTOCOL } from "./wire.gen";
 
@@ -41,6 +43,11 @@ export interface Client {
   upload(session: string, file: File, onProgress?: (p: number) => void): Promise<string>;
   sessions: SessionsStore;
   interactions: InteractionsStore;
+  /**
+   * 连接级 notice（能力 notices）：不需要订阅会话，全局的 session 为空；hello 后的补发带 replay。
+   * 创建客户端时就开始收（补发可能先于 hello 应答），没有监听方时先存最近 20 条。
+   */
+  notices: NoticeFeed;
   /** 取得（或建）某会话的 store；同一 id 返回同一实例。 */
   session(id: string): SessionStore;
   close(): void;
@@ -84,6 +91,7 @@ export function createClient(opts: ClientOptions = {}): Client {
     query: () => has(CAP_QUERY),
   });
   const interactions = createInteractionsStore(conn);
+  const notices = createNoticeFeed(conn);
   const opened = new Map<string, SessionStore>();
   return {
     conn,
@@ -100,6 +108,7 @@ export function createClient(opts: ClientOptions = {}): Client {
     upload: (session, file, onProgress) => uploadFile(opts.uploadURL ?? UPLOAD_PATH, session, file, onProgress),
     sessions,
     interactions,
+    notices,
     session(id) {
       let s = opened.get(id);
       if (!s) {
@@ -112,6 +121,7 @@ export function createClient(opts: ClientOptions = {}): Client {
       for (const s of opened.values()) s.close();
       sessions.close();
       interactions.close();
+      notices.close();
       conn.close();
     },
   };
