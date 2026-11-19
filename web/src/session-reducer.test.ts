@@ -66,6 +66,28 @@ describe("session reducer", () => {
     expect(s.streams.map((x) => [x.stream_id, x.attempt])).toEqual([["b", 2]]);
   });
 
+  it("model.retrying 记到 retry；message.started 后清掉", () => {
+    let s = run(
+      initialState("s"),
+      ev("turn.started", { turn: 1, inputs: ["c1"] }),
+      ev("model.retrying", { attempt: 2, max: 3, wait_ms: 1500, reason: "HTTP 500" }),
+    );
+    expect(s.retry).toEqual({ attempt: 2, max: 3, wait_ms: 1500, reason: "HTTP 500", at: 1000 });
+    s = run(s, ev("model.retrying", { attempt: 3, max: 3, wait_ms: 3000, reason: "HTTP 502" }));
+    expect(s.retry?.attempt).toBe(3);
+    s = run(s, ev("message.started", { stream_id: "a", entry_id: "e1", part: "text", attempt: 3 }));
+    expect(s.retry).toBeNull();
+  });
+
+  it("model.retrying：回合结束 / 被拒 / 变 idle 时清掉；快照不带", () => {
+    const r = ev("model.retrying", { attempt: 2, max: 2, wait_ms: 10, reason: "x" });
+    expect(run(initialState("s"), r, ev("turn.ended", { turn: 1, kind: "error" })).retry).toBeNull();
+    expect(run(initialState("s"), r, ev("turn.rejected", { reason: "busy" })).retry).toBeNull();
+    expect(run(initialState("s"), r, ev("session.state_changed", { run_state: "idle" })).retry).toBeNull();
+    expect(run(initialState("s"), r, ev("session.state_changed", { run_state: "running" })).retry?.attempt).toBe(2);
+    expect(applySnapshot(run(initialState("s"), r), snap({ run_state: "running" })).retry).toBeNull();
+  });
+
   it("工具按 call_id 合成，tool_result 条目落库后移除", () => {
     let s = run(
       initialState("s"),

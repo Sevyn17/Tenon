@@ -6,6 +6,7 @@
 //   - 流式：message.started 建流（带 entry_id、attempt），delta 追加，discarded 丢掉；entry.appended 到达时删掉
 //     entry_id 等于条目 id 的流，以条目为准。
 //   - 工具：tool.started / args_delta / running / ended 按 call_id 合成；对应的 tool_result 条目落库后删掉。
+//   - model.retrying：记到 retry（第几次、共几次、等多久、原因）；message.started / 回合结束时清掉。
 //   - turn.ended / turn.rejected：清掉本回合残留的流与工具。
 
 import type {
@@ -18,6 +19,7 @@ import type {
   MessageDelta,
   MessageStarted,
   Mode,
+  ModelRetrying,
   SessionSnapshot,
   SettingsChanged,
   StateChanged,
@@ -39,6 +41,19 @@ export interface StreamState {
   attempt: number;
   text: string;
   startedAt: number;
+}
+
+/**
+ * 模型正在退避重试（易失事件 model.retrying，能力 model_retrying）。attempt 是即将开始的那次（从 2 起），
+ * at 是收到事件的时刻（配合 wait_ms 算倒计时）。挂在会话上而不是流上：重试前旧流已 discarded，
+ * 连接被拒时根本没有流。下一条 message.started、回合结束 / 被拒、变为 idle、新快照时清掉。
+ */
+export interface RetryState {
+  attempt: number;
+  max: number;
+  wait_ms: number;
+  reason: string;
+  at: number;
 }
 
 export type ToolPhase = "args" | "running" | "ended";
@@ -87,6 +102,8 @@ export interface SessionState {
   entries: Entry[];
   streams: StreamState[];
   tools: ToolState[];
+  /** 正在退避重试（见 RetryState）；null = 没在重试。 */
+  retry: RetryState | null;
   turn: TurnInfo | null; // 进行中的回合
   lastEnd: TurnEnded | null; // 最近一次回合结束（尾巴的异常状态行用）
   rejected: TurnRejected | null;
@@ -110,6 +127,7 @@ export function initialState(id: string): SessionState {
     entries: [],
     streams: [],
     tools: [],
+    retry: null,
     turn: null,
     lastEnd: null,
     rejected: null,
@@ -142,6 +160,7 @@ export function applySnapshot(s: SessionState, snap: SessionSnapshot, now = Date
       phase: t.args === undefined ? "args" : "running",
       startedAt: now,
     })),
+    retry: null, // 易失状态，快照不带
     turn: snap.run_state === "running" ? (s.turn ?? { turn: live?.turn ?? 0, inputs: [], startedAt: now }) : null,
     // last_end（能力 last_end）：服务端只在 idle 时给。运行中清掉；idle 且快照没给时保留已有的
     // （旧服务端没有这个字段；新服务端没给时多半是回退清掉了，靠回合号比对 turnEnd 不再显示）。
@@ -203,7 +222,7 @@ export function reduce(s: SessionState, ev: Envelope, now = Date.now()): Session
       // 回合结束那次检查点写的 state_changed 带 last_end（持久事件，晚到的订阅回放也能拿到）；
       // 变为 running 清空；idle 但没带（预算挂起后恢复之类）保留原值。
       const lastEnd = running ? null : (d.last_end ?? s.lastEnd);
-      return { ...s, runState: running ? "running" : "idle", turn: running ? s.turn : null, lastEnd };
+      return { ...s, runState: running ? "running" : "idle", turn: running ? s.turn : null, lastEnd, retry: running ? s.retry : null };
     }
     case "session.settings_changed": {
       const st = (ev.data as SettingsChanged).settings;
@@ -222,13 +241,18 @@ export function reduce(s: SessionState, ev: Envelope, now = Date.now()): Session
       return { ...s, runState: "running", turn: { turn: d.turn, inputs: d.inputs ?? [], startedAt: now }, lastEnd: null, rejected: null };
     }
     case "turn.ended":
-      return { ...s, runState: "idle", turn: null, streams: [], tools: [], lastEnd: ev.data as TurnEnded };
+      return { ...s, runState: "idle", turn: null, streams: [], tools: [], retry: null, lastEnd: ev.data as TurnEnded };
     case "turn.rejected":
-      return { ...s, runState: "idle", turn: null, streams: [], tools: [], rejected: ev.data as TurnRejected };
+      return { ...s, runState: "idle", turn: null, streams: [], tools: [], retry: null, rejected: ev.data as TurnRejected };
+    case "model.retrying": {
+      const d = ev.data as ModelRetrying;
+      return { ...s, retry: { attempt: d.attempt, max: d.max, wait_ms: d.wait_ms, reason: d.reason ?? "", at: now } };
+    }
     case "message.started": {
       const d = ev.data as MessageStarted;
       return {
         ...s,
+        retry: null,
         streams: [...s.streams.filter((x) => x.stream_id !== d.stream_id), { ...d, text: "", startedAt: now }],
       };
     }
