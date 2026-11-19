@@ -106,6 +106,9 @@ var commands = map[string]handler{
 	"packages.list":       bind((*App).PackagesList),
 	"plugins.set":         bind((*App).PluginsSet),
 	"workspace.files":     bind((*App).WorkspaceFiles),
+	"changes.list":        bind((*App).ChangesList),
+	"changes.diff":        bind((*App).ChangesDiff),
+	"changes.revert":      bind((*App).ChangesRevert),
 	"models.list":         bind((*App).ModelsList),
 	// 平台账号（可选能力；应用没接平台时返回 Configured=false，不报错）
 	"platform.status":           bind((*App).PlatformStatus),
@@ -300,6 +303,10 @@ func (v *App) capabilities() []string {
 	out = append(out, "entries.turn")
 	// model_retrying（客户端改进 M8）：模型每次退避重试前发易失事件 model.retrying。
 	out = append(out, "model_retrying")
+	// changes（客户端改进 M9）：changes.list / diff / revert 与 session.rewind {restore_files, force}。装了 checkpoint 才报。
+	if o.Changes != nil {
+		out = append(out, "changes")
+	}
 	return out
 }
 
@@ -1131,9 +1138,15 @@ func (v *App) Rewind(ctx context.Context, in wire.RewindArgs) (wire.RewindResult
 	if in.ToTurn == 0 {
 		return wire.RewindResult{}, invalid("to_turn 须 ≥ 1")
 	}
+	if in.RestoreFiles && v.o.Changes == nil {
+		return wire.RewindResult{}, Errorf(wire.CodeUnsupported, "未装文件检查点插件（checkpoint），不能同时还原文件")
+	}
 	hd, err := v.idleHandle(ctx, in.Session)
 	if err != nil {
 		return wire.RewindResult{}, err
+	}
+	if in.RestoreFiles {
+		return v.rewindRestore(ctx, hd, in)
 	}
 	var to int
 	if err := hd.Do(host.Command{Kind: host.Rewind, ToTurn: in.ToTurn, IfCursor: in.IfCursor, RewoundTo: &to}); err != nil {

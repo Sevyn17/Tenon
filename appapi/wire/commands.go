@@ -26,6 +26,15 @@ const (
 	ConflictAnswered = "answered"
 	ConflictStale    = "stale"
 	ConflictLeased   = "leased"
+	// ConflictFiles 文件还原有冲突（changes.revert、session.rewind {restore_files}）：details.conflicts 是 []ChangeConflict。
+	ConflictFiles = "files"
+)
+
+// 改动范围（changes.*，客户端改进 M9）。
+const (
+	ChangeScopeSession  = "session"   // 本会话全部改动（缺省）
+	ChangeScopeTurn     = "turn"      // 只看 / 只撤第 turn 回合
+	ChangeScopeFromTurn = "from_turn" // 第 turn 回合及之后
 )
 
 // —— 命令参数与结果（10.4）——
@@ -202,11 +211,19 @@ type RewindArgs struct {
 	Session  string `json:"session"`
 	ToTurn   uint32 `json:"to_turn"`
 	IfCursor *int64 `json:"if_cursor,omitempty"`
+	// RestoreFiles 同时把第 to_turn 回合及之后改过的文件还原（能力 changes；没有时返回 unsupported）。
+	// 先演练：有冲突（未 force 时任何冲突，force 时不可强制的冲突）→ conflict（details.reason=files，
+	// details.conflicts），日志和文件都不动。截断失败时把文件写回还原前的内容。
+	RestoreFiles bool `json:"restore_files,omitempty"`
+	// Force 跳过可强制的冲突（界面二次确认后才设）。只在 restore_files 时有意义。
+	Force bool `json:"force,omitempty"`
 }
 
 // RewindResult session.rewind 的结果：截断后的日志长度与游标。
 type RewindResult struct {
 	To int `json:"to"`
+	// Files restore_files 时还原了的文件（相对工作目录，正斜杠）。
+	Files []string `json:"files,omitempty"`
 }
 
 // CompactArgs session.compact：手动触发一次上下文压缩。
@@ -476,6 +493,83 @@ type FileInfo struct {
 type FilesResult struct {
 	Files     []FileInfo `json:"files"`
 	Truncated bool       `json:"truncated"` // 工作区文件太多，只看了前一部分
+}
+
+// ChangesArgs changes.list：一个会话经工具改过的文件（客户端改进 M9，能力 changes）。
+type ChangesArgs struct {
+	Session string  `json:"session"`
+	Scope   string  `json:"scope,omitempty"` // ChangeScope*；空 = session
+	Turn    *uint32 `json:"turn,omitempty"`  // scope 为 turn / from_turn 时必填（≥ 1）
+}
+
+// ChangeFile 一个文件在所选范围内的净改动。
+type ChangeFile struct {
+	Path    string   `json:"path"`   // 相对工作目录，正斜杠
+	Status  string   `json:"status"` // added | modified | deleted
+	Added   int      `json:"added"`  // 增加行数；二进制或内容没存下时为 0
+	Removed int      `json:"removed"`
+	Binary  bool     `json:"binary,omitempty"`
+	Sources []string `json:"sources,omitempty"` // fs | drift
+	Turns   []uint32 `json:"turns,omitempty"`
+	// Rewound 这个文件的改动所在回合都已被 rewind 截掉（只在 session 范围出现；不可还原）。
+	Rewound    bool   `json:"rewound,omitempty"`
+	Revertible bool   `json:"revertible"`
+	Why        string `json:"why,omitempty"` // 不可还原的原因
+	// Conflict 预检：还原时会遇到的可强制冲突种类（ChangeConflict.Reason），空 = 可直接还原。
+	Conflict string `json:"conflict,omitempty"`
+}
+
+// ChangesResult changes.list 的结果。
+type ChangesResult struct {
+	Files []ChangeFile `json:"files"`
+}
+
+// ChangesDiffArgs changes.diff：一个文件在所选范围内的 unified diff。只按本会话记录里的内容算，
+// path 只用作查找键（本会话没改过这个文件 → not_found）。
+type ChangesDiffArgs struct {
+	Session string  `json:"session"`
+	Path    string  `json:"path"`
+	Scope   string  `json:"scope,omitempty"`
+	Turn    *uint32 `json:"turn,omitempty"`
+}
+
+// ChangesDiffResult changes.diff 的结果。
+type ChangesDiffResult struct {
+	Path      string `json:"path"`
+	Diff      string `json:"diff"` // 带 ---/+++/@@ 头的 unified diff（a/、b/ 前缀，新建为 /dev/null）；二进制为空
+	Binary    bool   `json:"binary,omitempty"`
+	OldSize   int64  `json:"old_size"`
+	NewSize   int64  `json:"new_size"`
+	Truncated bool   `json:"truncated,omitempty"` // 超过 5000 行或 512 KiB，只给了前一部分
+	// Unavailable 某一侧内容没存下（太大、配额满），给不出 diff 的原因。
+	Unavailable string `json:"unavailable,omitempty"`
+}
+
+// ChangesRevertArgs changes.revert：把本会话改过的文件还原到范围起点。只还原本会话记录里有的文件。
+type ChangesRevertArgs struct {
+	Session string   `json:"session"`
+	Paths   []string `json:"paths,omitempty"` // 空 = 范围内全部；只用作查找键
+	Scope   string   `json:"scope,omitempty"`
+	Turn    *uint32  `json:"turn,omitempty"`
+	DryRun  bool     `json:"dry_run,omitempty"` // 只演练：返回计划与冲突，不写
+	Force   bool     `json:"force,omitempty"`   // 跳过可强制的冲突（界面二次确认后才设）
+}
+
+// ChangeConflict 一个不能直接还原的文件。
+type ChangeConflict struct {
+	Path string `json:"path"`
+	// Reason modified（外部改过）| other_session | drift | later_turn | unsaved | unrevertible | other_root | unsafe | lost
+	Reason    string `json:"reason"`
+	Message   string `json:"message"`      // 给人看的原因
+	By        string `json:"by,omitempty"` // other_session 时改过它的会话
+	Forceable bool   `json:"forceable"`    // force 能否跳过
+}
+
+// ChangesRevertResult changes.revert 的结果。有冲突且没 force 时不写任何文件，返回 conflict
+// （details.reason=files，details.conflicts）；dry_run 时冲突放在结果里，不报错。
+type ChangesRevertResult struct {
+	Reverted  []string         `json:"reverted"` // 还原了（dry_run：将要还原）的文件
+	Conflicts []ChangeConflict `json:"conflicts,omitempty"`
 }
 
 // ConfigField 插件配置项的 Schema（plugins.list）。

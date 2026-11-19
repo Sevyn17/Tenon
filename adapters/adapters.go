@@ -14,6 +14,7 @@ import (
 	"github.com/Sevyn17/tenon/appapi"
 	"github.com/Sevyn17/tenon/appapi/wire"
 	"github.com/Sevyn17/tenon/modules/security/permission"
+	"github.com/Sevyn17/tenon/modules/tools/checkpoint"
 	"github.com/Sevyn17/tenon/modules/tools/fs"
 	"github.com/Sevyn17/tenon/runtime/assemble"
 	"github.com/Sevyn17/tenon/runtime/component"
@@ -69,6 +70,13 @@ func Fill(o *appapi.Options, p Parts) (*permission.Sessions, error) {
 		if v, ok := p.Asm.Value(assemble.ServiceCompactor); ok {
 			if c, ok := v.(appapi.Compactor); ok {
 				o.Compactor = c
+			}
+		}
+	}
+	if o.Changes == nil { // 文件检查点（客户端改进 M9）：changes.* 与 session.rewind {restore_files}
+		if v, ok := p.Asm.Value(checkpoint.ServiceName); ok {
+			if e, ok := v.(*checkpoint.Engine); ok && e != nil {
+				o.Changes = Changes{E: e}
 			}
 		}
 	}

@@ -44,6 +44,7 @@ var viewerCommands = map[string]bool{
 	"hello": true, "sessions.list": true, "session.get": true, "session.entries": true, "session.stats": true,
 	"session.subscribe": true, "session.unsubscribe": true, "mode.list": true, "mode.get": true, "mode.show": true,
 	"artifact.get": true, "trace.explain": true, "interactions.list": true, "plugins.list": true, "packages.list": true, "workspace.files": true, "workspace.list": true, "models.list": true, "feedback.list": true, "session.followups": true,
+	"changes.list": true, "changes.diff": true, // changes.revert 写文件，只给 operator
 }
 
 // Conn 一个客户端连接。方法并发安全；用完调用 Close。

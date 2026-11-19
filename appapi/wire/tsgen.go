@@ -28,7 +28,9 @@ var tsTypes = []any{
 	RewindResult{}, CompactArgs{}, CompactResult{}, ForkArgs{}, SettingsArgs{}, SettingsResult{}, ModelInfo{}, ModelsListResult{}, EffectiveModel{}, WorkspaceInfo{}, WorkspaceListResult{}, WorkspaceOpenArgs{}, WorkspaceOpenResult{}, WorkspaceReloadArgs{}, WorkspaceReloadResult{}, Response{},
 	RespondArgs{}, RespondResult{}, InteractionsResult{}, ModeInfo{}, ModeListResult{}, ModeSetArgs{},
 	ModeSetResult{}, ModeShowArgs{}, ModeItem{}, ModeShowResult{}, ArtifactGetArgs{}, ArtifactGetResult{},
-	ArtifactPutArgs{}, ArtifactPutResult{}, TraceArgs{}, TraceResult{}, FilesArgs{}, FileInfo{}, FilesResult{}, ConfigField{}, PluginInfo{},
+	ArtifactPutArgs{}, ArtifactPutResult{}, TraceArgs{}, TraceResult{}, FilesArgs{}, FileInfo{}, FilesResult{},
+	ChangesArgs{}, ChangeFile{}, ChangesResult{}, ChangesDiffArgs{}, ChangesDiffResult{}, ChangesRevertArgs{}, ChangeConflict{}, ChangesRevertResult{},
+	ConfigField{}, PluginInfo{},
 	PluginPending{}, ProfileScope{}, PluginsListResult{}, PluginsSetArgs{}, PluginsSetResult{}, PackageInfo{}, UISlot{}, UIData{}, PackagesListResult{}, AccountStatus{}, AccountLoginArgs{}, AccountLoginResult{}, AccountEntitlements{},
 	APIKey{}, APIKeyListResult{}, APIKeyCreateArgs{}, APIKeyCreateResult{}, APIKeyRevokeArgs{}, APIKeyRevokeResult{},
 	BYOKProfile{}, BYOKListResult{}, BYOKSaveArgs{}, BYOKSaveResult{}, BYOKRemoveArgs{}, BYOKRemoveResult{}, BYOKSetDefaultArgs{}, BYOKSetDefaultResult{},
@@ -56,7 +58,8 @@ var tsConsts = []struct {
 	{"ErrorCodes", []string{CodeBadRequest, CodeInvalid, CodeNotFound, CodeClosed, CodeNotIdle, CodeBusy,
 		CodeConflict, CodeDenied, CodeNeedConfirm, CodeCursorExpired, CodeUnauthorized, CodeForbidden,
 		CodeUnsupported, CodeInternal}},
-	{"ConflictReasons", []string{ConflictExists, ConflictAnswered, ConflictStale, ConflictLeased}},
+	{"ConflictReasons", []string{ConflictExists, ConflictAnswered, ConflictStale, ConflictLeased, ConflictFiles}},
+	{"ChangeScopes", []string{ChangeScopeSession, ChangeScopeTurn, ChangeScopeFromTurn}},
 }
 
 var rawType = reflect.TypeOf(json.RawMessage(nil))

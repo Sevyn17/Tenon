@@ -29,8 +29,11 @@ export type VolatileEvent = (typeof VolatileEvents)[number];
 export const ErrorCodes = ["bad_request", "invalid", "not_found", "closed", "not_idle", "busy", "conflict", "denied", "need_confirm", "cursor_expired", "unauthorized", "forbidden", "unsupported", "internal"] as const;
 export type ErrorCode = (typeof ErrorCodes)[number];
 
-export const ConflictReasons = ["exists", "answered", "stale", "leased"] as const;
+export const ConflictReasons = ["exists", "answered", "stale", "leased", "files"] as const;
 export type ConflictReason = (typeof ConflictReasons)[number];
+
+export const ChangeScopes = ["session", "turn", "from_turn"] as const;
+export type ChangeScope = (typeof ChangeScopes)[number];
 
 export interface Entry {
   id: string;
@@ -519,10 +522,13 @@ export interface RewindArgs {
   session: string;
   to_turn: number;
   if_cursor?: number;
+  restore_files?: boolean;
+  force?: boolean;
 }
 
 export interface RewindResult {
   to: number;
+  files?: string[];
 }
 
 export interface CompactArgs {
@@ -734,6 +740,69 @@ export interface FileInfo {
 export interface FilesResult {
   files: FileInfo[];
   truncated: boolean;
+}
+
+export interface ChangesArgs {
+  session: string;
+  scope?: string;
+  turn?: number;
+}
+
+export interface ChangeFile {
+  path: string;
+  status: string;
+  added: number;
+  removed: number;
+  binary?: boolean;
+  sources?: string[];
+  turns?: number[];
+  rewound?: boolean;
+  revertible: boolean;
+  why?: string;
+  conflict?: string;
+}
+
+export interface ChangesResult {
+  files: ChangeFile[];
+}
+
+export interface ChangesDiffArgs {
+  session: string;
+  path: string;
+  scope?: string;
+  turn?: number;
+}
+
+export interface ChangesDiffResult {
+  path: string;
+  diff: string;
+  binary?: boolean;
+  old_size: number;
+  new_size: number;
+  truncated?: boolean;
+  unavailable?: string;
+}
+
+export interface ChangesRevertArgs {
+  session: string;
+  paths?: string[];
+  scope?: string;
+  turn?: number;
+  dry_run?: boolean;
+  force?: boolean;
+}
+
+export interface ChangeConflict {
+  path: string;
+  reason: string;
+  message: string;
+  by?: string;
+  forceable: boolean;
+}
+
+export interface ChangesRevertResult {
+  reverted: string[];
+  conflicts?: ChangeConflict[];
 }
 
 export interface ConfigField {

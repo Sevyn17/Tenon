@@ -35,6 +35,9 @@ export const COMMANDS = [
   "plugins.set",
   "packages.list",
   "workspace.files",
+  "changes.list",
+  "changes.diff",
+  "changes.revert",
   "workspace.list",
   "workspace.open",
   "workspace.reload",
@@ -94,6 +97,9 @@ export interface CommandMap {
   "plugins.set": [W.PluginsSetArgs, W.PluginsSetResult];
   "packages.list": [W.Empty, W.PackagesListResult];
   "workspace.files": [W.FilesArgs, W.FilesResult];
+  "changes.list": [W.ChangesArgs, W.ChangesResult];
+  "changes.diff": [W.ChangesDiffArgs, W.ChangesDiffResult];
+  "changes.revert": [W.ChangesRevertArgs, W.ChangesRevertResult];
   "workspace.list": [W.Empty, W.WorkspaceListResult];
   "workspace.open": [W.WorkspaceOpenArgs, W.WorkspaceOpenResult];
   "workspace.reload": [W.WorkspaceReloadArgs, W.WorkspaceReloadResult];
