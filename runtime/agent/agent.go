@@ -241,6 +241,7 @@ func (a *Agent) callModel(ctx context.Context, need *session.Need) (*session.Nee
 				return nil, err
 			}
 		}
+		req = a.planTools(req) // Plan 模式收窄工具（docs/50 5.2）；恢复时原样重发记录的请求，不再过滤
 	}
 	return a.sendModel(ctx, need, req, view, false)
 }
@@ -378,7 +379,7 @@ func (a *Agent) sendModel(ctx context.Context, need *session.Need, req session.R
 	// 上下文超限：强制压缩一次后重发（DSH maxOverflowRetries=1）。
 	if err != nil && ctx.Err() == nil && !retried && a.Compactor != nil && modelhub.IsCode(err, modelhub.CodeContextOverflow) {
 		if r2, v2, e := a.buildRequest(ctx, true); e == nil && v2 != nil {
-			return a.sendModel(ctx, need, r2, v2, true) // 重发的那一步发 reset，本步不发 end
+			return a.sendModel(ctx, need, a.planTools(r2), v2, true) // 重发的那一步发 reset，本步不发 end
 		}
 	}
 	ss.end()

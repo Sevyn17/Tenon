@@ -19,6 +19,7 @@ export const COMMANDS = [
   "session.entries",
   "session.send",
   "session.steer",
+  "session.unqueue",
   "session.cancel",
   "session.rewind",
   "session.compact",
@@ -94,6 +95,7 @@ export interface CommandMap {
   "session.entries": [W.EntriesArgs, W.EntriesResult];
   "session.send": [W.SendArgs, W.SendResult];
   "session.steer": [W.SteerArgs, W.Empty];
+  "session.unqueue": [W.UnqueueArgs, W.UnqueueResult];
   "session.cancel": [W.SessionArgs, W.Empty];
   "session.rewind": [W.RewindArgs, W.RewindResult];
   "session.compact": [W.CompactArgs, W.CompactResult];

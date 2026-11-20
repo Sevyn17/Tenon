@@ -14,8 +14,14 @@ export type ReasoningEffort = (typeof ReasoningEfforts)[number];
 export const Roles = ["viewer", "operator"] as const;
 export type Role = (typeof Roles)[number];
 
-export const InteractionKinds = ["approval", "question", "choice", "form", "confirm"] as const;
+export const InteractionKinds = ["approval", "question", "choice", "form", "confirm", "plan"] as const;
 export type InteractionKind = (typeof InteractionKinds)[number];
+
+export const WorkModes = ["execute", "plan"] as const;
+export type WorkMode = (typeof WorkModes)[number];
+
+export const PlanChoices = ["approve", "revise", "continue"] as const;
+export type PlanChoice = (typeof PlanChoices)[number];
 
 export const Outcomes = ["approved", "denied", "answered", "expired", "voided"] as const;
 export type Outcome = (typeof Outcomes)[number];
@@ -23,7 +29,7 @@ export type Outcome = (typeof Outcomes)[number];
 export const DurableEvents = ["entry.appended", "log.rewound", "log.compacted", "session.state_changed", "session.mode_changed", "session.settings_changed", "interaction.opened", "interaction.resolved", "session.closed", "session.forked", "session.updated"] as const;
 export type DurableEvent = (typeof DurableEvents)[number];
 
-export const VolatileEvents = ["turn.started", "turn.ended", "turn.rejected", "message.started", "message.delta", "message.ended", "message.discarded", "tool.started", "tool.args_delta", "tool.running", "tool.progress", "tool.ended", "notice", "session.synced", "session.lagged", "sessions.changed", "model.retrying"] as const;
+export const VolatileEvents = ["turn.started", "turn.ended", "turn.rejected", "message.started", "message.delta", "message.ended", "message.discarded", "tool.started", "tool.args_delta", "tool.running", "tool.progress", "tool.ended", "notice", "session.synced", "session.lagged", "sessions.changed", "model.retrying", "queue.changed"] as const;
 export type VolatileEvent = (typeof VolatileEvents)[number];
 
 export const ErrorCodes = ["bad_request", "invalid", "not_found", "closed", "not_idle", "busy", "conflict", "denied", "need_confirm", "cursor_expired", "unauthorized", "forbidden", "unsupported", "internal"] as const;
@@ -138,6 +144,7 @@ export interface Settings {
   max_steps: number;
   model?: string;
   reasoning?: string;
+  work_mode?: string;
 }
 
 export interface Interaction {
@@ -151,6 +158,7 @@ export interface Interaction {
   choice?: Choice;
   form?: Form;
   confirm?: Confirm;
+  plan?: PlanPrompt;
   schema?: unknown;
   blocking?: boolean;
   responders: string[];
@@ -198,6 +206,16 @@ export interface Confirm {
   cancel?: string;
 }
 
+export interface PlanPrompt {
+  plan: string;
+  steps?: string[];
+}
+
+export interface PlanAnswer {
+  choice: string;
+  feedback?: string;
+}
+
 export interface Live {
   turn: number;
   streams: LiveStream[];
@@ -232,6 +250,7 @@ export interface SessionSnapshot {
   live?: Live;
   cursor: number;
   last_end?: TurnEnded;
+  queued?: QueuedInput[];
 }
 
 export interface SessionInfo {
@@ -530,6 +549,7 @@ export interface SendArgs {
   content?: Part[];
   text?: string;
   client_id: string;
+  queue?: boolean;
 }
 
 export interface SendResult {
@@ -549,6 +569,25 @@ export interface RewindArgs {
   if_cursor?: number;
   restore_files?: boolean;
   force?: boolean;
+}
+
+export interface QueuedInput {
+  id: string;
+  content: Part[];
+  at: number;
+}
+
+export interface QueueChanged {
+  queued: QueuedInput[];
+}
+
+export interface UnqueueArgs {
+  session: string;
+  id: string;
+}
+
+export interface UnqueueResult {
+  removed: boolean;
 }
 
 export interface RewindResult {
@@ -584,6 +623,7 @@ export interface SettingsArgs {
   max_steps?: number;
   model?: string;
   reasoning?: string;
+  work_mode?: string;
 }
 
 export interface SettingsResult {

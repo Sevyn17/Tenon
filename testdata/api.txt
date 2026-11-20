@@ -419,6 +419,7 @@ github.com/Sevyn17/tenon/appapi/wire: const EvMessageStarted untyped string
 github.com/Sevyn17/tenon/appapi/wire: const EvModeChanged untyped string
 github.com/Sevyn17/tenon/appapi/wire: const EvModelRetrying untyped string
 github.com/Sevyn17/tenon/appapi/wire: const EvNotice untyped string
+github.com/Sevyn17/tenon/appapi/wire: const EvQueueChanged untyped string
 github.com/Sevyn17/tenon/appapi/wire: const EvSessionClosed untyped string
 github.com/Sevyn17/tenon/appapi/wire: const EvSessionForked untyped string
 github.com/Sevyn17/tenon/appapi/wire: const EvSessionUpdated untyped string
@@ -446,11 +447,12 @@ github.com/Sevyn17/tenon/appapi/wire: type ForkArgs struct{Session string; To st
 github.com/Sevyn17/tenon/appapi/wire: type Form struct{Text string; Submit string}
 github.com/Sevyn17/tenon/appapi/wire: type HelloArgs struct{Client string; Protocol ProtocolRange}
 github.com/Sevyn17/tenon/appapi/wire: type HelloResult struct{Protocol int; Server string; Principal Principal; Capabilities []string; Model string; Workdir string; Trusted bool; MaxOutput int; Workspace string}
-github.com/Sevyn17/tenon/appapi/wire: type Interaction struct{ID string; Session string; Turn uint32; Kind string; Title string; Approval *Approval; Question *Question; Choice *Choice; Form *Form; Confirm *Confirm; Schema encoding/json.RawMessage; Blocking *bool; Responders []string; Deadline int64; OpenedAt int64}
+github.com/Sevyn17/tenon/appapi/wire: type Interaction struct{ID string; Session string; Turn uint32; Kind string; Title string; Approval *Approval; Question *Question; Choice *Choice; Form *Form; Confirm *Confirm; Plan *PlanPrompt; Schema encoding/json.RawMessage; Blocking *bool; Responders []string; Deadline int64; OpenedAt int64}
 github.com/Sevyn17/tenon/appapi/wire: const InteractionApproval untyped string
 github.com/Sevyn17/tenon/appapi/wire: const InteractionChoice untyped string
 github.com/Sevyn17/tenon/appapi/wire: const InteractionConfirm untyped string
 github.com/Sevyn17/tenon/appapi/wire: const InteractionForm untyped string
+github.com/Sevyn17/tenon/appapi/wire: const InteractionPlan untyped string
 github.com/Sevyn17/tenon/appapi/wire: const InteractionQuestion untyped string
 github.com/Sevyn17/tenon/appapi/wire: type InteractionResolved struct{ID string; Session string; Outcome string; By string}
 github.com/Sevyn17/tenon/appapi/wire: type InteractionsResult struct{Items []Interaction}
@@ -524,6 +526,12 @@ github.com/Sevyn17/tenon/appapi/wire: type PackagesRemoveArgs struct{Name string
 github.com/Sevyn17/tenon/appapi/wire: type PackagesSetEnabledArgs struct{Name string; Enabled bool; Force bool}
 github.com/Sevyn17/tenon/appapi/wire: type Part struct{Kind string; Text string; Media *MediaRef; Data any; Schema string}
 github.com/Sevyn17/tenon/appapi/wire: type PasswordAuthArgs struct{Email string; Password string; Name string}
+github.com/Sevyn17/tenon/appapi/wire: type PlanAnswer struct{Choice string; Feedback string}
+github.com/Sevyn17/tenon/appapi/wire: const PlanApprove untyped string
+github.com/Sevyn17/tenon/appapi/wire: var PlanChoices []string
+github.com/Sevyn17/tenon/appapi/wire: const PlanContinue untyped string
+github.com/Sevyn17/tenon/appapi/wire: type PlanPrompt struct{Plan string; Steps []string}
+github.com/Sevyn17/tenon/appapi/wire: const PlanRevise untyped string
 github.com/Sevyn17/tenon/appapi/wire: type PlatformConfigureArgs struct{ServerURL string; Test bool; DryRun bool}
 github.com/Sevyn17/tenon/appapi/wire: type PlatformConfigureResult struct{Saved bool; LoggedOut bool; Test *BYOKTestResult; Status AccountStatus}
 github.com/Sevyn17/tenon/appapi/wire: type PluginInfo struct{Name string; Version string; Description string; On bool; Default bool; Source string; Effects []string; Schema []ConfigField; Config map[string]any; Mandatory bool; Pending *PluginPending; Risks []string}
@@ -537,6 +545,8 @@ github.com/Sevyn17/tenon/appapi/wire: const Protocol untyped int
 github.com/Sevyn17/tenon/appapi/wire: type ProtocolRange struct{Min int; Max int}
 github.com/Sevyn17/tenon/appapi/wire: func Public(kind string) bool
 github.com/Sevyn17/tenon/appapi/wire: type Question struct{Text string; Options []string}
+github.com/Sevyn17/tenon/appapi/wire: type QueueChanged struct{Queued []QueuedInput}
+github.com/Sevyn17/tenon/appapi/wire: type QueuedInput struct{ID string; Content []Part; At int64}
 github.com/Sevyn17/tenon/appapi/wire: type Reasoning struct{Text string}
 github.com/Sevyn17/tenon/appapi/wire: var ReasoningEfforts []string
 github.com/Sevyn17/tenon/appapi/wire: const ReasoningHigh untyped string
@@ -557,17 +567,17 @@ github.com/Sevyn17/tenon/appapi/wire: const RoleOperator untyped string
 github.com/Sevyn17/tenon/appapi/wire: const RoleViewer untyped string
 github.com/Sevyn17/tenon/appapi/wire: const RunIdle untyped string
 github.com/Sevyn17/tenon/appapi/wire: const RunRunning untyped string
-github.com/Sevyn17/tenon/appapi/wire: type SendArgs struct{Session string; Content []Part; Text string; ClientID string}
+github.com/Sevyn17/tenon/appapi/wire: type SendArgs struct{Session string; Content []Part; Text string; ClientID string; Queue bool}
 github.com/Sevyn17/tenon/appapi/wire: type SendResult struct{ClientID string; Queued bool}
 github.com/Sevyn17/tenon/appapi/wire: type SessionArgs struct{Session string}
 github.com/Sevyn17/tenon/appapi/wire: type SessionClosed struct{Reason string}
 github.com/Sevyn17/tenon/appapi/wire: type SessionForked struct{From string; Upto int}
 github.com/Sevyn17/tenon/appapi/wire: type SessionInfo struct{ID string; Title string; Preview string; RunState string; Origin string; Parent string; UpdatedAt int64; Pinned bool; Workspace string; Archived bool; LastEnd *TurnEnded}
-github.com/Sevyn17/tenon/appapi/wire: type SessionSnapshot struct{ID string; Parent string; Origin string; Title string; Pinned bool; Archived bool; RunState string; Mode *Mode; Settings Settings; Log LogPos; Interactions []Interaction; Live *Live; Cursor int64; LastEnd *TurnEnded}
+github.com/Sevyn17/tenon/appapi/wire: type SessionSnapshot struct{ID string; Parent string; Origin string; Title string; Pinned bool; Archived bool; RunState string; Mode *Mode; Settings Settings; Log LogPos; Interactions []Interaction; Live *Live; Cursor int64; LastEnd *TurnEnded; Queued []QueuedInput}
 github.com/Sevyn17/tenon/appapi/wire: type SessionUpdated struct{Title string; Pinned bool; Archived bool}
 github.com/Sevyn17/tenon/appapi/wire: type SessionsChanged struct{ID string; RunState string; Title string; UpdatedAt int64; Pinned bool; Deleted bool; Preview string; Parent string; Origin string; Workspace string; Archived bool; LastEnd *TurnEnded}
-github.com/Sevyn17/tenon/appapi/wire: type Settings struct{MaxSteps uint32; Model string; Reasoning string}
-github.com/Sevyn17/tenon/appapi/wire: type SettingsArgs struct{Session string; MaxSteps *uint32; Model *string; Reasoning *string}
+github.com/Sevyn17/tenon/appapi/wire: type Settings struct{MaxSteps uint32; Model string; Reasoning string; WorkMode string}
+github.com/Sevyn17/tenon/appapi/wire: type SettingsArgs struct{Session string; MaxSteps *uint32; Model *string; Reasoning *string; WorkMode *string}
 github.com/Sevyn17/tenon/appapi/wire: type SettingsChanged struct{Settings Settings}
 github.com/Sevyn17/tenon/appapi/wire: type SettingsResult struct{Settings Settings; Committed bool}
 github.com/Sevyn17/tenon/appapi/wire: type SkillInfo struct{Name string; Description string; Source string; Path string; ModelInvocable bool; Enabled bool; DisabledScope string; DisabledReason string}
@@ -605,6 +615,8 @@ github.com/Sevyn17/tenon/appapi/wire: type TurnStarted struct{Turn uint32; Input
 github.com/Sevyn17/tenon/appapi/wire: func TypeScript() string
 github.com/Sevyn17/tenon/appapi/wire: type UIData struct{Cmd string; Args map[string]any}
 github.com/Sevyn17/tenon/appapi/wire: type UISlot struct{ID string; Slot string; Title string; Order int; Requires string; View encoding/json.RawMessage; Data *UIData}
+github.com/Sevyn17/tenon/appapi/wire: type UnqueueArgs struct{Session string; ID string}
+github.com/Sevyn17/tenon/appapi/wire: type UnqueueResult struct{Removed bool}
 github.com/Sevyn17/tenon/appapi/wire: type UpdateArgs struct{Session string; Title *string; Pinned *bool; Archived *bool}
 github.com/Sevyn17/tenon/appapi/wire: type Usage struct{Input uint64; Output uint64; CacheRead uint64; CacheWrite uint64; Source string}
 github.com/Sevyn17/tenon/appapi/wire: func ValidReasoning(s string) bool
@@ -614,6 +626,8 @@ github.com/Sevyn17/tenon/appapi/wire: const VersionNewer untyped string
 github.com/Sevyn17/tenon/appapi/wire: const VersionOlder untyped string
 github.com/Sevyn17/tenon/appapi/wire: const VersionSame untyped string
 github.com/Sevyn17/tenon/appapi/wire: const VersionUnknown untyped string
+github.com/Sevyn17/tenon/appapi/wire: const WorkModeExecute untyped string
+github.com/Sevyn17/tenon/appapi/wire: const WorkModePlan untyped string
 github.com/Sevyn17/tenon/appapi/wire: type WorkspaceInfo struct{Path string; Name string; Trusted bool; Current bool; OpenedAt int64; Missing bool}
 github.com/Sevyn17/tenon/appapi/wire: type WorkspaceListResult struct{Items []WorkspaceInfo}
 github.com/Sevyn17/tenon/appapi/wire: type WorkspaceOpenArgs struct{Path string}

@@ -91,6 +91,9 @@ type Command struct {
 	// 回合 trace 置空（原行为）。只有「延续某个任务」的调用方传它（子智能体、工作组成员），
 	// 普通 Send 不传，行为不变。
 	Trace string
+	// Queue Send：排队（客户端改进 M12 协议T20）。回合进行中到达时不插进当前回合，回合结束后单独开回合；
+	// 空闲时与普通 Send 相同。信箱项 kind 记为 queued，重启不丢。
+	Queue bool
 	done  chan error
 }
 
@@ -582,6 +585,8 @@ type actor struct {
 	processing map[string]bool
 	// turnQueued 是回合开始时就已在信箱里的项：它们属于本回合或更早，不中途插入，留给下一回合（13 13.3 分轮）。
 	turnQueued map[string]bool
+	// claimed 已被 drainInbox 认领、正要开回合的排队项（M12 协议T20，queue.go）：之后的 Unqueue 失败。受 mu 保护。
+	claimed map[string]bool
 	// turnCaps 是本轮的工具授权范围（信封 caps 交集）：turn 开始时设给 agent，结束时清空。
 	turnCaps []string
 	// turnBudgetRef 是本轮的预算账（信封 budget_ref，取本批主触发者）：turn 开始时设，结束时按本回合

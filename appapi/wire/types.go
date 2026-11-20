@@ -124,6 +124,8 @@ type Settings struct {
 	Model    string `json:"model,omitempty"` // 模型别名或 provider/model
 	// Reasoning 推理强度（ReasoningEfforts 之一）；空 = 厂商缺省。只对声明了推理能力的模型下发。
 	Reasoning string `json:"reasoning,omitempty"`
+	// WorkMode 工作方式（客户端改进 M12，能力 work_mode）：execute（缺省）/ plan。空 = execute。
+	WorkMode string `json:"work_mode,omitempty"`
 }
 
 // Interaction 一次等人回答（10.6）。
@@ -138,6 +140,8 @@ type Interaction struct {
 	Choice   *Choice   `json:"choice,omitempty"`
 	Form     *Form     `json:"form,omitempty"`
 	Confirm  *Confirm  `json:"confirm,omitempty"`
+	// Plan 计划卡（kind=plan，客户端改进 M12，能力 work_mode）：exit_plan 提交的计划，回答见 PlanPrompt。
+	Plan *PlanPrompt `json:"plan,omitempty"`
 	// Schema 回答（response.value）须满足的 JSON Schema；form 必有，插件自定义 kind 可给。
 	Schema json.RawMessage `json:"schema,omitempty"`
 	// Blocking 智能体是否停下来等（true：接管输入框；false：内联在消息流里，不挡输入）。缺省 true。
@@ -196,6 +200,31 @@ type Confirm struct {
 	Cancel  string `json:"cancel,omitempty"`
 }
 
+// PlanPrompt 计划卡（kind=plan）：exit_plan 提交的计划。回答 response.value = PlanAnswer 的 JSON。
+type PlanPrompt struct {
+	Plan  string   `json:"plan"`            // 计划正文（Markdown）
+	Steps []string `json:"steps,omitempty"` // 可逐项执行的步骤（批准后转成 todo）
+}
+
+// PlanAnswer 计划卡的回答（response.value）。choice 取 PlanChoices 之一；revise 时 feedback 是修改意见。
+type PlanAnswer struct {
+	Choice   string `json:"choice"`
+	Feedback string `json:"feedback,omitempty"`
+}
+
+// 工作方式（Settings.work_mode）与计划卡的选择（PlanAnswer.choice）。
+const (
+	WorkModeExecute = "execute"
+	WorkModePlan    = "plan"
+
+	PlanApprove  = "approve"  // 批准：退出 Plan 模式，立即开新回合按计划执行
+	PlanRevise   = "revise"   // 要求修改：feedback 交给模型，留在 Plan 模式
+	PlanContinue = "continue" // 继续计划：留在 Plan 模式
+)
+
+// PlanChoices 计划卡的全部选择。
+var PlanChoices = []string{PlanApprove, PlanRevise, PlanContinue}
+
 // 交互种类与结果。
 const (
 	InteractionApproval = "approval"
@@ -203,6 +232,7 @@ const (
 	InteractionChoice   = "choice"
 	InteractionForm     = "form"
 	InteractionConfirm  = "confirm"
+	InteractionPlan     = "plan" // 计划卡（能力 work_mode）
 
 	OutcomeApproved = "approved"
 	OutcomeDenied   = "denied"
@@ -251,6 +281,16 @@ type SessionSnapshot struct {
 	// LastEnd 最近一个回合的结束原因（hello 能力 last_end）：只在 idle 时给；没有记录（旧会话、
 	// 还没跑完过回合、已被回退清掉）时不给。
 	LastEnd *TurnEnded `json:"last_end,omitempty"`
+	// Queued 还在排队、没开始处理的输入（hello 能力 send.queue，客户端改进 M12 协议T20），按发送顺序；
+	// 没有排队时不给。读的是存储里的信箱，与 cursor 不保证一致，之后的变化看 queue.changed。
+	Queued []QueuedInput `json:"queued,omitempty"`
+}
+
+// QueuedInput 一条排队中的输入（session.send {queue:true}）。
+type QueuedInput struct {
+	ID      string `json:"id"` // 发送时的 client_id，session.unqueue 用它取消
+	Content []Part `json:"content"`
+	At      int64  `json:"at"` // 受理时间（毫秒）
 }
 
 // 推理强度（Settings.reasoning / ModelInfo.efforts）：三档通用取值，各适配器自己映射

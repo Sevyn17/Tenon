@@ -65,6 +65,8 @@ func (a *actor) enqueue(c Command) error {
 		kind := store.InboxInput
 		if c.Kind == Note {
 			kind = store.InboxNote
+		} else if c.Queue {
+			kind = store.InboxQueued // 排队（M12 协议T20）：回合中不插入，回合结束后单独开回合
 		}
 		in := c.Content
 		if len(in) == 0 {
@@ -80,6 +82,9 @@ func (a *actor) enqueue(c Command) error {
 		reply(c, nil) // 先落 inbox 再确认（D2）
 		if !fresh {
 			return nil // 重放：首次准入胜出，不再触发（D6）
+		}
+		if kind == store.InboxQueued {
+			a.h.publishQueue(a.id)
 		}
 		c.done = nil
 		select {
@@ -221,7 +226,7 @@ func (a *actor) sleep(ctx context.Context) (bool, error) {
 // ScanOnce 兜底扫描：唤醒信箱里有信件的休眠会话（02 2.2）。并发扫描由租约决定谁生效。
 func (h *Host) ScanOnce(ctx context.Context) (int, error) {
 	if sc, ok := h.DB.(store.SleepScanner); ok { // 一次查出有可唤醒信件的休眠会话（审查 P1-37）
-		ids, err := sc.SleepingWithMail(ctx, []string{store.InboxInput, store.InboxNotice}, ScanBatch)
+		ids, err := sc.SleepingWithMail(ctx, []string{store.InboxInput, store.InboxNotice, store.InboxQueued}, ScanBatch)
 		if err != nil {
 			return 0, err
 		}
@@ -449,6 +454,9 @@ func (a *actor) drainInbox(ctx context.Context) (stop bool, err error) {
 		}
 	}()
 	for {
+		a.mu.Lock()
+		a.claimed = nil // 守卫拒绝 / 只记录的批次 continue 时也要清掉上一批的认领（M12 协议T20）
+		a.mu.Unlock()
 		// 先处理上一回合（含 Recover / Resume 开的回合）暂存的 Idle 命令，再取下一批。
 		if stop, err := a.flushQueued(ctx); stop || err != nil {
 			return stop, err
@@ -474,7 +482,7 @@ func (a *actor) drainInbox(ctx context.Context) (stop bool, err error) {
 			a.turnQueued = nil
 			continue
 		}
-		batch := collectInboxBatch(items, a.processing)
+		batch := collectDrainBatch(items, a.processing)
 		if batch == nil {
 			return false, nil
 		}
@@ -482,6 +490,17 @@ func (a *actor) drainInbox(ctx context.Context) (stop bool, err error) {
 		consume := make([]string, len(batch))
 		for i, it := range batch {
 			consume[i] = it.ItemID
+		}
+		// 排队项（M12 协议T20）：在锁内核对它还没被 Unqueue 取消，并登记为已认领，之后的取消一律失败。
+		if q := queuedIDs(batch); len(q) > 0 {
+			ok, err := a.claimQueued(ctx, q)
+			if err != nil {
+				return false, err
+			}
+			if !ok {
+				continue // 读信箱之后被取消了：重读
+			}
+			a.h.publishQueue(a.id)
 		}
 		a.processing = inboxSet(consume) // 本条正在被本回合消费：回合中插入不得重复取它
 		a.turnQueued = turnStart         // 回合开始时已在信箱、但不属于本回合的项：中途插入跳过
@@ -562,6 +581,9 @@ func (a *actor) drainInbox(ctx context.Context) (stop bool, err error) {
 		a.turnQueued = nil
 		a.turnCaps = nil
 		a.turnBudgetRef = ""
+		a.mu.Lock()
+		a.claimed = nil // 已随回合检查点消费（或回合失败留在信箱，可以再取消）
+		a.mu.Unlock()
 	}
 }
 
@@ -908,8 +930,8 @@ func (a *actor) between(need *session.Need) (*session.Need, error) {
 			}
 		case Send, Note:
 			// 运行中到达的用户消息：在下一次调模型前插入当前回合（09 9.4）。
-			// 已到 Done 边界时留给下一回合，inbox 不动。
-			if need.Kind != session.NeedDone {
+			// 已到 Done 边界时留给下一回合，inbox 不动。排队的 Send（M12 协议T20）不插入，等回合结束。
+			if need.Kind != session.NeedDone && !c.Queue {
 				reply(c, a.insertInput(context.Background()))
 			}
 		case SetConfig: // 内核暂存到下一个步边界，随下次 checkpoint 落库

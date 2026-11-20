@@ -34,6 +34,7 @@ func Run(t *testing.T, open func(t *testing.T) store.Store) {
 		{"ReplayListAndNotify", testReplayAndList},
 		{"Definitions", testDefinitions},
 		{"InboxIdempotentAcrossConsume", testInbox},
+		{"InboxUnqueue", testUnqueue},
 		{"ToolStateMachine", testToolStateMachine},
 		{"ConfirmLifecycle", testConfirmLifecycle},
 		{"PendConfirmRefreshesHash", testPendConfirmRefresh},
@@ -571,6 +572,50 @@ func testInbox(t *testing.T, db store.Store) {
 	items, _ = db.Inbox(ctx, "s1")
 	if len(items) != 1 || items[0].ItemID != "i2" {
 		t.Fatalf("消费后: %+v", items)
+	}
+}
+
+// testUnqueue 排队项取消（客户端改进 M12 协议T20）：只取消未消费的 queued 项，行保留、同 id 重放仍被拒；
+// 没实现 QueueStore 的存储跳过。
+func testUnqueue(t *testing.T, db store.Store) {
+	qs, ok := db.(store.QueueStore)
+	if !ok {
+		t.Skip("存储没实现 QueueStore")
+	}
+	ctx := context.Background()
+	c := newCore()
+	create(t, db, store.SessionMeta{ID: "s1"}, c)
+	_, _ = db.Admit(ctx, "s1", store.InboxItem{ItemID: "in", Kind: store.InboxInput, Input: `[]`})
+	_, _ = db.Admit(ctx, "s1", store.InboxItem{ItemID: "q1", Kind: store.InboxQueued, Input: `[]`})
+	_, _ = db.Admit(ctx, "s1", store.InboxItem{ItemID: "q2", Kind: store.InboxQueued, Input: `[]`})
+	items, _ := db.Inbox(ctx, "s1")
+	if len(items) != 3 || items[1].Kind != store.InboxQueued {
+		t.Fatalf("kind 往返: %+v", items)
+	}
+	if done, err := qs.Unqueue(ctx, "s1", "in"); err != nil || done {
+		t.Fatalf("不是排队项不能取消: %v %v", done, err)
+	}
+	if done, err := qs.Unqueue(ctx, "s1", "q1"); err != nil || !done {
+		t.Fatalf("取消 q1: %v %v", done, err)
+	}
+	if done, _ := qs.Unqueue(ctx, "s1", "q1"); done {
+		t.Fatal("重复取消应失败")
+	}
+	if done, _ := qs.Unqueue(ctx, "s1", "ghost"); done {
+		t.Fatal("不存在的项应失败")
+	}
+	if ok, _ := db.Admit(ctx, "s1", store.InboxItem{ItemID: "q1", Kind: store.InboxQueued, Input: `[]`}); ok {
+		t.Fatal("取消后重放仍应被拒")
+	}
+	items, _ = db.Inbox(ctx, "s1")
+	if len(items) != 2 || items[0].ItemID != "in" || items[1].ItemID != "q2" {
+		t.Fatalf("取消后: %+v", items)
+	}
+	if err := db.Commit(ctx, store.Checkpoint{SessionID: "s1", Header: c.Snapshot().Header, ConsumeInbox: []string{"q2"}}); err != nil {
+		t.Fatal(err)
+	}
+	if done, _ := qs.Unqueue(ctx, "s1", "q2"); done {
+		t.Fatal("已消费的项不能取消")
 	}
 }
 

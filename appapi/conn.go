@@ -377,8 +377,12 @@ func (c *Conn) translate(e bus.Envelope) []wire.Envelope {
 	case store.EventSettings:
 		model, _ := m["model"].(string)
 		reasoning, _ := m["reasoning"].(string)
+		workMode, _ := m["work_mode"].(string) // M12 Plan 模式；旧事件没有这个键 = execute（omitempty 不发）
+		if workMode == wire.WorkModeExecute {
+			workMode = ""
+		}
 		return []wire.Envelope{c.envelope(e.Session, wire.EvSettingsChanged, e.Seq, 0,
-			wire.SettingsChanged{Settings: wire.Settings{MaxSteps: uint32(intOf(m["max_steps"])), Model: model, Reasoning: reasoning}})}
+			wire.SettingsChanged{Settings: wire.Settings{MaxSteps: uint32(intOf(m["max_steps"])), Model: model, Reasoning: reasoning, WorkMode: workMode}})}
 	case store.EventInteractionOpened: // 载荷是宿主登记时生成的线上 Interaction；子会话的也写在根会话上
 		var it wire.Interaction
 		if raw, err := json.Marshal(m); err != nil || json.Unmarshal(raw, &it) != nil {
@@ -427,6 +431,8 @@ func (c *Conn) translate(e bus.Envelope) []wire.Envelope {
 		reason, _ := m["reason"].(string)
 		return []wire.Envelope{c.envelope(e.Session, wire.EvTurnRejected, 0, 0,
 			wire.TurnRejected{Inputs: stringList(m["inputs"]), Reason: reason})}
+	case host.EventQueueChanged: // 排队列表变化（M12 协议T20）
+		return []wire.Envelope{c.envelope(e.Session, wire.EvQueueChanged, 0, 0, queueChanged(m))}
 	case EventNotice:
 		text, _ := m["text"].(string)
 		level, _ := m["level"].(string)

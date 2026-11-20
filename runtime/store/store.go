@@ -118,6 +118,14 @@ type InboxStore interface {
 	InInbox(ctx context.Context, sessionID, itemID string) (bool, error)
 }
 
+// QueueStore 可选：取消排队的输入（客户端改进 M12 协议T20，session.unqueue）。不加进 Store：
+// 没实现的存储不报 send.queue 能力，session.send 的 queue 被忽略（退回原行为），session.unqueue 返回 unsupported。
+type QueueStore interface {
+	// Unqueue 把一条未消费、kind 为 queued 的信箱项标记为已消费（行保留，同 id 重放仍被拒）。
+	// 返回 true = 取消成功；false = 没有这条、已被消费或不是排队项。
+	Unqueue(ctx context.Context, sessionID, itemID string) (bool, error)
+}
+
 // LeaseStore 会话写租约（02 2.2：租约带纪元）。
 //
 // 语义：host 打开会话时抢租约，租约纪元加一；这一轮的所有写入（Commit、检查点、
@@ -369,6 +377,9 @@ const (
 	InboxNote    = "note"    // 补报：拼在下次输入前，不单独开回合
 	InboxContext = "context" // 背景：不开回合，等下一次 wake 一起进模型（13 13.3）
 	InboxNotice  = "notice"  // 通知：进下一次状态更新（12）
+	// InboxQueued 排队的用户输入（客户端改进 M12 协议T20）：回合中不插入，当前回合结束后单独开一个回合，
+	// 多条按准入顺序逐条处理。与 input 一样持久在信箱里，重启后照常处理。
+	InboxQueued = "queued"
 )
 
 // InboxItem 一条待处理输入。Input 为内容 JSON（session.Content）。

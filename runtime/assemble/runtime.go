@@ -24,6 +24,7 @@ import (
 	"github.com/Sevyn17/tenon/runtime/store"
 	"github.com/Sevyn17/tenon/runtime/toolhub"
 	"github.com/Sevyn17/tenon/runtime/useconf"
+	"github.com/Sevyn17/tenon/runtime/workmode"
 )
 
 // SessionCx 构造一个会话时贡献函数拿到的上下文。
@@ -210,6 +211,18 @@ func (b *Builder) Build(id, defName string, child bool) (*agent.Agent, *session.
 				}
 			}})
 	}
+	// Plan 模式（M12，docs/50 5.2）执行前把关：工具显露已去掉会改动的工具，模型凭历史硬调时在这里拒绝。
+	// 读最近一次提交的会话头（工具执行前有 before_tool 检查点，回合中的 SetExt 已随它落库）。
+	hub.AddGate(toolhub.Gate{Name: "work-mode-plan",
+		Check: func(_ context.Context, cx *toolhub.Cx, _ json.RawMessage) (toolhub.Verdict, string) {
+			if cx == nil || cx.Tool == nil || workmode.Of(a.Committed().Header.Ext) != workmode.Plan {
+				return toolhub.VerdictAbstain, ""
+			}
+			if workmode.Allowed(cx.Tool, cx.Items) {
+				return toolhub.VerdictAbstain, ""
+			}
+			return toolhub.VerdictDeny, "Plan 模式下不能用会改动的工具；先用 exit_plan 提交计划，批准后再执行"
+		}})
 	if !hub.Authorized() { // 没装权限组件：用内核缺省授权判定者（有副作用的工具一律询问，P0-7）
 		hub.AddAuthorizer(toolhub.DefaultAuthorizer())
 	}

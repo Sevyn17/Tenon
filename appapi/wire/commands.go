@@ -201,6 +201,9 @@ type SendArgs struct {
 	Content  []Part `json:"content,omitempty"`
 	Text     string `json:"text,omitempty"`
 	ClientID string `json:"client_id"`
+	// Queue 排队（hello 能力 send.queue，客户端改进 M12 协议T20）：回合进行中不插进当前回合，
+	// 回合结束后单独开回合；空闲时与普通发送相同。旧服务端忽略这个字段（按插入处理）。
+	Queue bool `json:"queue,omitempty"`
 }
 
 // SendResult session.send 的结果：受理的回合与条目。
@@ -214,6 +217,17 @@ type SteerArgs struct {
 	Session  string `json:"session"`
 	Text     string `json:"text"`
 	ClientID string `json:"client_id"`
+}
+
+// UnqueueArgs session.unqueue：取消一条排队的输入（能力 send.queue）。ID 是发送时的 client_id。
+type UnqueueArgs struct {
+	Session string `json:"session"`
+	ID      string `json:"id"`
+}
+
+// UnqueueResult session.unqueue 的结果：removed=false 表示没有这条、已开始处理或已取消。
+type UnqueueResult struct {
+	Removed bool `json:"removed"`
 }
 
 // RewindArgs session.rewind：把日志截断到某回合首条用户输入。
@@ -273,6 +287,8 @@ type SettingsArgs struct {
 	Model *string `json:"model,omitempty"`
 	// Reasoning 推理强度：ReasoningEfforts 之一，"" = 回到厂商缺省；回合中到步边界生效。
 	Reasoning *string `json:"reasoning,omitempty"`
+	// WorkMode 工作方式：execute / plan（客户端改进 M12，能力 work_mode）。立即生效（回合中到下一步）；不改权限档位。
+	WorkMode *string `json:"work_mode,omitempty"`
 }
 
 // WorkspaceInfo 一个工作区（项目目录）。workspace.list 的一项、workspace.open 的结果。

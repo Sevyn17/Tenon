@@ -17,6 +17,7 @@ import (
 	"github.com/Sevyn17/tenon/runtime/ext"
 	"github.com/Sevyn17/tenon/runtime/store"
 	"github.com/Sevyn17/tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/runtime/workmode"
 )
 
 // Service 本插件提供的服务键。
@@ -157,6 +158,10 @@ func (*plug) Setup(cx *component.Registrar) error {
 				for i := len(caps) - 1; i >= 0; i-- {
 					d := caps[i]
 					p.Cap = &Policy{Mode: d.ID, Def: d, Rules: p.Rules, Root: p.Root, Sandbox: p.Sandbox, Cap: p.Cap}
+				}
+				// Plan 模式（M12，docs/50 5.2）：再叠一层 read-only 上限兜底。只收窄，不改会话自己的档位。
+				if sc.Agent != nil && workmode.Of(sc.Agent.Committed().Header.Ext) == workmode.Plan {
+					p.Cap = &Policy{Mode: ReadOnly, Def: builtinDef(ReadOnly), Rules: p.Rules, Root: p.Root, Sandbox: p.Sandbox, Cap: p.Cap}
 				}
 				return p
 			}

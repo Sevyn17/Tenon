@@ -33,6 +33,7 @@ import (
 	_ "github.com/Sevyn17/tenon/modules/tools/codemode"
 	_ "github.com/Sevyn17/tenon/modules/tools/fs"
 	_ "github.com/Sevyn17/tenon/modules/tools/mcp"
+	_ "github.com/Sevyn17/tenon/modules/tools/planmode"
 	_ "github.com/Sevyn17/tenon/modules/tools/shell"
 	_ "github.com/Sevyn17/tenon/modules/tools/todo"
 	_ "github.com/Sevyn17/tenon/modules/tools/web"

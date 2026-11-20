@@ -625,7 +625,9 @@ func itemSubject(it store.InboxItem) string {
 
 // wakeKind 这类信件是否需要会话醒着处理：input 开回合、notice 进状态更新；
 // context（背景）与旧格式 note（补报）只跟随下一条 input，单独存在时不唤醒、不阻止休眠。
-func wakeKind(kind string) bool { return kind == store.InboxInput || kind == store.InboxNotice }
+func wakeKind(kind string) bool {
+	return kind == store.InboxInput || kind == store.InboxNotice || kind == store.InboxQueued
+}
 
 // wakeable 信箱里是否有需要会话醒着处理的信件（休眠、扫描唤醒、投递唤醒共用，审查 P1-16：
 // 原先只要信箱非空就不睡，只有背景信件的会话永远常驻内存；背景信件还会唤醒休眠会话）。

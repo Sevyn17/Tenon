@@ -411,6 +411,9 @@ func (c *Client) Tools(remote []RemoteTool) []*toolhub.Tool {
 		}
 		// 只读工具断线后可以安全重发（2026-11-04 审查 P1-8：原先所有调用都重连重发）。
 		readOnly := c.Server.Trust == TrustReadonly || (rt.Annotations.ReadOnlyHint != nil && *rt.Annotations.ReadOnlyHint)
+		if readOnly {
+			attrs[toolhub.AttrReadOnly] = true // Plan 模式保留声明只读的工具（docs/50 5.2）
+		}
 		out = append(out, &toolhub.Tool{
 			Spec:     session.ToolSpec{Name: PublicName(c.Server.Name, raw), Description: desc, Schema: schema},
 			Risk:     risk,

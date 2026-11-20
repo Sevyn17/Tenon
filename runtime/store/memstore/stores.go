@@ -60,6 +60,27 @@ func (s *Store) InInbox(ctx context.Context, sessionID, itemID string) (bool, er
 	return false, nil
 }
 
+// Unqueue 取消一条未消费的排队输入（kind = queued，客户端改进 M12 协议T20）：标记为已消费，行保留。
+func (s *Store) Unqueue(ctx context.Context, sessionID, itemID string) (bool, error) {
+	if err := s.lock(); err != nil {
+		return false, err
+	}
+	defer s.mu.Unlock()
+	q := s.inbox[sessionID]
+	for i := range q {
+		if q[i].it.ItemID == itemID {
+			if q[i].consumed || q[i].it.Kind != store.InboxQueued {
+				return false, nil
+			}
+			q[i].consumed = true
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+var _ store.QueueStore = (*Store)(nil)
+
 // —— 工具记录 ——//
 
 // msTime 与 sqlite 一致：截止时间按毫秒存，零值保持零值。

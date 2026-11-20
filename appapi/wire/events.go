@@ -47,6 +47,7 @@ const (
 	EvLagged           = "session.lagged"
 	EvSessionsChanged  = "sessions.changed"
 	EvModelRetrying    = "model.retrying" // 能力 model_retrying（客户端改进 M8）
+	EvQueueChanged     = "queue.changed"  // 能力 send.queue（客户端改进 M12）
 )
 
 // Durable 事件是否持久（带 cursor、写事件表）。
@@ -67,7 +68,7 @@ func Public(kind string) bool {
 	switch kind {
 	case EvTurnStarted, EvTurnEnded, EvTurnRejected, EvMessageStarted, EvMessageDelta, EvMessageEnded,
 		EvMessageDiscarded, EvToolStarted, EvToolArgsDelta, EvToolRunning, EvToolProgress, EvToolEnded,
-		EvNotice, EvSynced, EvLagged, EvSessionsChanged, EvModelRetrying:
+		EvNotice, EvSynced, EvLagged, EvSessionsChanged, EvModelRetrying, EvQueueChanged:
 		return true
 	}
 	return false
@@ -158,6 +159,12 @@ type TurnEnded struct {
 type TurnRejected struct {
 	Inputs []string `json:"inputs"`
 	Reason string   `json:"reason"`
+}
+
+// QueueChanged 会话的排队列表变化（能力 send.queue，客户端改进 M12 协议T20）：排队、取消、开始处理时各发一次，
+// 载荷是变化后的完整列表（空数组 = 没有排队）。易失事件：重连后以 session.get 的 queued 为准。
+type QueueChanged struct {
+	Queued []QueuedInput `json:"queued"`
 }
 
 // MessageStarted 一条助手消息开始（后续是 MessageDelta）。

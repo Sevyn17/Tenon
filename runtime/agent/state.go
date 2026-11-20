@@ -11,6 +11,7 @@ import (
 	"github.com/Sevyn17/tenon/runtime/reqlog"
 	"github.com/Sevyn17/tenon/runtime/session"
 	"github.com/Sevyn17/tenon/runtime/store"
+	"github.com/Sevyn17/tenon/runtime/workmode"
 )
 
 // capsState 本轮的授权工具范围（信封 caps 交集，T3）。host 线程写，工具 goroutine 读。
@@ -193,6 +194,7 @@ type commitBuf struct {
 	maxSteps  uint32
 	model     string
 	reasoning string
+	workMode  string            // Ext work_mode（M12 Plan 模式）：变了也算设置变化
 	ext       map[string]string // 键 → 值的 JSON
 }
 
@@ -204,7 +206,7 @@ func (b *commitBuf) reset(logLen int) {
 
 // remember 记下已提交的运行状态、设置与 Ext（打开会话与每次提交后调用）。
 func (b *commitBuf) remember(run string, h session.Header) {
-	b.known, b.run, b.maxSteps, b.model, b.reasoning, b.ext = true, run, maxStepsOf(h), modelOf(h), reasoningOf(h), extJSON(h.Ext)
+	b.known, b.run, b.maxSteps, b.model, b.reasoning, b.workMode, b.ext = true, run, maxStepsOf(h), modelOf(h), reasoningOf(h), workmode.Of(h.Ext), extJSON(h.Ext)
 }
 
 // stateEvents 新头部相对已提交状态的变化 → 持久事件（运行状态、设置、Ext 各项）。
@@ -223,8 +225,8 @@ func (b *commitBuf) stateEvents(run string, h session.Header) []store.Event {
 		d, _ := json.Marshal(ev)
 		out = append(out, store.Event{Kind: store.EventRunState, Data: d})
 	}
-	if ms, md, rs := maxStepsOf(h), modelOf(h), reasoningOf(h); ms != b.maxSteps || md != b.model || rs != b.reasoning {
-		d, _ := json.Marshal(map[string]any{"max_steps": ms, "model": md, "reasoning": rs})
+	if ms, md, rs, wm := maxStepsOf(h), modelOf(h), reasoningOf(h), workmode.Of(h.Ext); ms != b.maxSteps || md != b.model || rs != b.reasoning || wm != b.workMode {
+		d, _ := json.Marshal(map[string]any{"max_steps": ms, "model": md, "reasoning": rs, "work_mode": wm})
 		out = append(out, store.Event{Kind: store.EventSettings, Data: d})
 	}
 	now := extJSON(h.Ext)

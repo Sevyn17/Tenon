@@ -21,6 +21,9 @@ const (
 	// AttrMayWrite 本工具可能改工作区里任意文件（shell、扩展进程、非只读 MCP），值为 true。
 	// 文件检查点据此在调用前后扫描工作区。run_code 不设：它的子调用各自经过调用栈。
 	AttrMayWrite = "may_write_files"
+	// AttrReadOnly 工具自己声明只读（MCP 的 readOnlyHint、trust = readonly 的服务），值为 true。
+	// Plan 模式据此保留它（docs/50 5.2：没声明副作用的工具当作会写）。
+	AttrReadOnly = "read_only_hint"
 )
 
 // 效果类别（06 - 工具权限设计方案 §二）：权限项的 Item.Class 取这些值，权限插件按它查封顶表。

@@ -36,6 +36,7 @@ import (
 	"github.com/Sevyn17/tenon/runtime/session"
 	"github.com/Sevyn17/tenon/runtime/store"
 	"github.com/Sevyn17/tenon/runtime/toolhub"
+	"github.com/Sevyn17/tenon/runtime/workmode"
 )
 
 // LocalPrincipal 桌面端与单机网页服务的连接身份（10.8）。
@@ -87,6 +88,7 @@ var commands = map[string]handler{
 	"session.entries":     bind((*App).Entries),
 	"session.send":        bind((*App).Send),
 	"session.steer":       bind((*App).Steer),
+	"session.unqueue":     bind((*App).Unqueue),
 	"session.cancel":      bind((*App).Cancel),
 	"session.rewind":      bind((*App).Rewind),
 	"session.compact":     bind((*App).Compact),
@@ -324,6 +326,11 @@ func (v *App) capabilities() []string {
 	out = append(out, "model_retrying")
 	// notices（客户端改进 M10 T19）：notice 连接级送达、带 level / source，第一次 hello 后补发最近 20 条。总是有。
 	out = append(out, CapNotices)
+	// send.queue（客户端改进 M12 协议T20）：session.send {queue}、session.unqueue、快照 queued 与 queue.changed。
+	// 存储实现了 QueueStore 才报；没有时 queue 被忽略（按原来的插入处理），session.unqueue 返回 unsupported。
+	if v.queueOK() {
+		out = append(out, CapSendQueue)
+	}
 	// changes（客户端改进 M9）：changes.list / diff / revert 与 session.rewind {restore_files, force}。装了 checkpoint 才报。
 	if o.Changes != nil {
 		out = append(out, "changes")
@@ -340,6 +347,8 @@ func (v *App) capabilities() []string {
 	if o.MCP != nil {
 		out = append(out, CapMCP)
 	}
+	// work_mode（M12 Plan 模式）：session.settings {work_mode}、Settings.work_mode、plan 交互。框架内置，总是报。
+	out = append(out, CapWorkMode)
 	return out
 }
 
@@ -901,7 +910,7 @@ func (v *App) snapshot(ctx context.Context, id string) (wire.SessionSnapshot, er
 	return wire.SessionSnapshot{ID: id, Parent: l.Meta.ParentID, Origin: l.Meta.Origin, Title: l.Meta.Title, Pinned: pinnedOf(l.Meta.Meta),
 		Archived: store.ArchivedOf(l.Meta.Meta), RunState: WireRunState(h.Status), Mode: v.committedMode(id, modeHdr), Settings: settingsOf(h),
 		Log: wire.LogPos{Base: h.CompactionBase, Len: h.LogLen}, Interactions: v.openInteractions(ctx, id), Cursor: l.Cursor,
-		Live: v.live(id, h), LastEnd: lastEnd}, nil
+		Live: v.live(id, h), LastEnd: lastEnd, Queued: v.queuedOf(ctx, id)}, nil
 }
 
 // live 进行中回合当前步的流式状态（读内存、不承诺与 cursor 一致，10.2.2 规则 7）；空闲时不给。
@@ -942,6 +951,9 @@ func settingsOf(h session.Header) wire.Settings {
 	st := wire.Settings{MaxSteps: h.Config.Policy.MaxSteps, Model: h.Config.Model}
 	if r := h.Config.Params.Reasoning; r != nil {
 		st.Reasoning = *r
+	}
+	if workmode.Of(h.Ext) == workmode.Plan { // M12：execute 不发（omitempty），和没设过的会话一样
+		st.WorkMode = wire.WorkModePlan
 	}
 	return st
 }
@@ -1029,7 +1041,8 @@ func (v *App) Send(ctx context.Context, in wire.SendArgs) (wire.SendResult, erro
 		return wire.SendResult{}, err
 	}
 	queued := hd.InTurn()
-	if err := hd.Do(host.Command{Kind: host.Send, ItemID: in.ClientID, Content: content}); err != nil {
+	// queue（M12 协议T20）：存储不支持排队时忽略，退回原行为（回合中插入）。
+	if err := hd.Do(host.Command{Kind: host.Send, ItemID: in.ClientID, Content: content, Queue: in.Queue && v.queueOK()}); err != nil {
 		return wire.SendResult{}, err
 	}
 	v.unarchive(ctx, in.Session) // 往已归档的会话发消息自动恢复（客户端改进 M7）
@@ -1410,8 +1423,11 @@ func (v *App) Settings(ctx context.Context, in wire.SettingsArgs) (wire.Settings
 		return wire.SettingsResult{}, err
 	}
 	cur := settingsOf(l.Snapshot.Header)
-	if in.MaxSteps == nil && in.Model == nil && in.Reasoning == nil {
+	if in.MaxSteps == nil && in.Model == nil && in.Reasoning == nil && in.WorkMode == nil {
 		return wire.SettingsResult{Settings: cur, Committed: true}, nil
+	}
+	if in.WorkMode != nil && *in.WorkMode != "" && !workmode.Valid(*in.WorkMode) {
+		return wire.SettingsResult{}, invalid("工作方式 %q 不认识（可选：execute / plan）", *in.WorkMode)
 	}
 	if in.Model != nil {
 		if v.o.Models == nil {
@@ -1428,9 +1444,22 @@ func (v *App) Settings(ctx context.Context, in wire.SettingsArgs) (wire.Settings
 	if in.Reasoning != nil && *in.Reasoning != "" && !wire.ValidReasoning(*in.Reasoning) {
 		return wire.SettingsResult{}, invalid("推理强度 %q 不认识（可选：%s）", *in.Reasoning, strings.Join(wire.ReasoningEfforts, " / "))
 	}
-	ok, err := v.apply(in.Session, hd, host.Command{Kind: host.SetConfig, MaxSteps: in.MaxSteps, Model: in.Model, Reasoning: in.Reasoning})
-	if err != nil {
-		return wire.SettingsResult{}, err
+	ok := true
+	if in.MaxSteps != nil || in.Model != nil || in.Reasoning != nil {
+		if ok, err = v.apply(in.Session, hd, host.Command{Kind: host.SetConfig, MaxSteps: in.MaxSteps, Model: in.Model, Reasoning: in.Reasoning}); err != nil {
+			return wire.SettingsResult{}, err
+		}
+	}
+	if in.WorkMode != nil { // M12 Plan 模式：存在会话头 Ext（execute 删键），不碰权限档位
+		wok, err := v.apply(in.Session, hd, host.Command{Kind: host.SetExt, Key: workmode.ExtKey, Value: workmode.ExtValue(*in.WorkMode)})
+		if err != nil {
+			return wire.SettingsResult{}, err
+		}
+		ok = ok && wok
+		cur.WorkMode = ""
+		if *in.WorkMode == workmode.Plan {
+			cur.WorkMode = wire.WorkModePlan
+		}
 	}
 	if in.MaxSteps != nil {
 		cur.MaxSteps = *in.MaxSteps
