@@ -20,6 +20,8 @@ import type {
   MessageStarted,
   Mode,
   ModelRetrying,
+  QueueChanged,
+  QueuedInput,
   SessionSnapshot,
   SettingsChanged,
   StateChanged,
@@ -108,6 +110,10 @@ export interface SessionState {
   lastEnd: TurnEnded | null; // 最近一次回合结束（尾巴的异常状态行用）
   rejected: TurnRejected | null;
   closed?: string; // 会话已关闭的原因
+  /** 排队中的输入（能力 send.queue）：快照的 queued 与易失事件 queue.changed 的全量；空 = 没有排队。 */
+  queued: QueuedInput[];
+  /** 工作模式（能力 work_mode）：execute / plan；快照或 settings_changed 没带 = execute。 */
+  workMode: string;
 }
 
 export function initialState(id: string): SessionState {
@@ -131,6 +137,8 @@ export function initialState(id: string): SessionState {
     turn: null,
     lastEnd: null,
     rejected: null,
+    queued: [],
+    workMode: "execute",
   };
 }
 
@@ -148,6 +156,9 @@ export function applySnapshot(s: SessionState, snap: SessionSnapshot, now = Date
     maxSteps: snap.settings.max_steps,
     model: snap.settings.model ?? "",
     reasoning: snap.settings.reasoning ?? "",
+    workMode: snap.settings.work_mode || "execute",
+    // 排队以快照为准（重连、会话切换时覆盖易失事件攒下的）
+    queued: snap.queued ?? [],
     base: snap.log.base,
     len: Math.max(s.len, snap.log.len),
     cursor: snap.cursor,
@@ -226,8 +237,10 @@ export function reduce(s: SessionState, ev: Envelope, now = Date.now()): Session
     }
     case "session.settings_changed": {
       const st = (ev.data as SettingsChanged).settings;
-      return { ...s, maxSteps: st.max_steps, model: st.model ?? s.model, reasoning: st.reasoning ?? "" };
+      return { ...s, maxSteps: st.max_steps, model: st.model ?? s.model, reasoning: st.reasoning ?? "", workMode: st.work_mode || "execute" };
     }
+    case "queue.changed":
+      return { ...s, queued: (ev.data as QueueChanged).queued ?? [] };
     case "session.mode_changed":
       return { ...s, mode: ev.data as Mode };
     case "session.updated": {

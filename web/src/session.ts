@@ -24,7 +24,14 @@ export interface Outgoing {
   content?: Part[];
   state: "sending" | "sent" | "failed";
   steer: boolean;
+  /** 回合中按排队发送（session.send {queue: true}，能力 send.queue）：不插进当前回合。 */
+  queue?: boolean;
   error?: string;
+}
+
+export interface SendOptions {
+  /** 回合进行中时排队（回合结束后按顺序各开一回合）而不是插话；空闲时等同普通发送。需要能力 send.queue。 */
+  queue?: boolean;
 }
 
 export interface SessionView extends SessionState {
@@ -40,8 +47,10 @@ export interface SessionStore extends ReadStore<SessionView> {
   close(): void;
   /** 向上翻一页。 */
   loadOlder(): Promise<void>;
-  /** 发送：空闲时开回合；回合中按插话（steer）。 */
-  send(text: string, content?: Part[]): Promise<void>;
+  /** 发送：空闲时开回合；回合中按插话（steer），opts.queue 时排队。 */
+  send(text: string, content?: Part[], opts?: SendOptions): Promise<void>;
+  /** 取消一条排队中的输入（session.unqueue）；false = 已经开始处理或已取消。 */
+  unqueue(id: string): Promise<boolean>;
   /** 重发一条失败的输入。 */
   retry(clientID: string): Promise<void>;
   /** 丢掉一条失败的输入。 */
@@ -139,7 +148,19 @@ export function createSessionStore(conn: Connection, id: string, hooks: SessionS
 
   const deliver = async (o: Outgoing) => {
     try {
-      if (o.steer) {
+      if (o.queue) {
+        const r = await conn.call("session.send", {
+          session: id,
+          client_id: o.client_id,
+          queue: true,
+          ...(o.content?.length ? { content: o.content } : { text: o.text }),
+        });
+        // 进了服务端队列：由 queued（快照 / queue.changed）显示，outbox 不再挂着
+        if (r?.queued) {
+          patch((v) => ({ ...v, outbox: v.outbox.filter((x) => x.client_id !== o.client_id) }));
+          return;
+        }
+      } else if (o.steer) {
         try {
           await conn.call("session.steer", { session: id, text: o.text, client_id: o.client_id });
         } catch (e) {
@@ -203,10 +224,12 @@ export function createSessionStore(conn: Connection, id: string, hooks: SessionS
         patch((x) => ({ ...x, loadingOlder: false }));
       }
     },
-    async send(text, content) {
+    async send(text, content, opts) {
       const t = text.trim();
       if (!t && !content?.length) return;
-      const o: Outgoing = { client_id: clientID(), text: t, content, state: "sending", steer: store.get().runState === "running" && !content?.length };
+      const running = store.get().runState === "running";
+      const queue = !!opts?.queue && running;
+      const o: Outgoing = { client_id: clientID(), text: t, content, state: "sending", steer: running && !queue && !content?.length, ...(queue ? { queue } : {}) };
       patch((v) => ({ ...v, outbox: [...v.outbox, o] }));
       // 已有人打开本会话、订阅还没建好：等它建好再发（加载失败也照发，失败原因由加载自己报）。
       if (refs > 0 && loading) await loading;
@@ -224,6 +247,11 @@ export function createSessionStore(conn: Connection, id: string, hooks: SessionS
     },
     async cancel() {
       await conn.call("session.cancel", { session: id });
+    },
+    async unqueue(qid) {
+      const r = await conn.call("session.unqueue", { session: id, id: qid });
+      if (r.removed) setState((s) => ({ ...s, queued: s.queued.filter((q) => q.id !== qid) }));
+      return !!r.removed;
     },
   };
 }
