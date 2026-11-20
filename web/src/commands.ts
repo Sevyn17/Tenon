@@ -40,6 +40,11 @@ export const COMMANDS = [
   "changes.revert",
   "skills.list",
   "skills.setEnabled",
+  "mcp.list",
+  "mcp.test",
+  "mcp.save",
+  "mcp.remove",
+  "mcp.setEnabled",
   "workspace.list",
   "workspace.open",
   "workspace.reload",
@@ -106,6 +111,11 @@ export interface CommandMap {
   "changes.revert": [W.ChangesRevertArgs, W.ChangesRevertResult];
   "skills.list": [W.Empty, W.SkillsListResult];
   "skills.setEnabled": [W.SkillsSetEnabledArgs, W.SkillsSetEnabledResult];
+  "mcp.list": [W.Empty, W.MCPListResult];
+  "mcp.test": [W.MCPTestArgs, W.MCPTestResult];
+  "mcp.save": [W.MCPSaveArgs, W.MCPEditResult];
+  "mcp.remove": [W.MCPRemoveArgs, W.MCPEditResult];
+  "mcp.setEnabled": [W.MCPSetEnabledArgs, W.MCPEditResult];
   "workspace.list": [W.Empty, W.WorkspaceListResult];
   "workspace.open": [W.WorkspaceOpenArgs, W.WorkspaceOpenResult];
   "workspace.reload": [W.WorkspaceReloadArgs, W.WorkspaceReloadResult];

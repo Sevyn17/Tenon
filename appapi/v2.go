@@ -111,6 +111,11 @@ var commands = map[string]handler{
 	"changes.revert":      bind((*App).ChangesRevert),
 	"skills.list":         bind((*App).SkillsList),
 	"skills.setEnabled":   bind((*App).SkillsSetEnabled),
+	"mcp.list":            bind((*App).MCPList), // 客户端改进 M11（mcp.go）
+	"mcp.test":            bind((*App).MCPTest),
+	"mcp.save":            bind((*App).MCPSave),
+	"mcp.remove":          bind((*App).MCPRemove),
+	"mcp.setEnabled":      bind((*App).MCPSetEnabled),
 	"models.list":         bind((*App).ModelsList),
 	// 平台账号（可选能力；应用没接平台时返回 Configured=false，不报错）
 	"platform.status":           bind((*App).PlatformStatus),
@@ -323,6 +328,10 @@ func (v *App) capabilities() []string {
 	// skills（M11 配置T18）：skills.list / skills.setEnabled。开了 skills 插件才报。
 	if o.Skills != nil {
 		out = append(out, "skills")
+	}
+	// mcp（M11 配置T14）：mcp.list / test / save / remove / setEnabled。开了 mcp 插件才报（save / remove 是否可用看 editable）。
+	if o.MCP != nil {
+		out = append(out, CapMCP)
 	}
 	return out
 }

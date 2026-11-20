@@ -66,6 +66,8 @@ type plug struct {
 	local   *resmgr.Manager
 	enabled *Enabled
 	modes   map[string]toolhub.SandboxMode // stdio 服务生效的沙箱（有沙箱插件时）
+	// trusted 项目受信（项目 mcp.toml 生效）；explicit 用了 -config 显式文件（用户级、项目定义都不读）。
+	trusted, explicit bool
 
 	mu     sync.Mutex
 	status map[string]*ServerStatus
@@ -78,7 +80,7 @@ func init() { component.Register("mcp", func() component.Component { return &plu
 func (*plug) Meta() component.Meta {
 	return component.Meta{Name: "mcp", Version: "0.2.0", Description: "连接外部 MCP 服务，把它们提供的工具交给模型使用", Effects: []string{component.EffectTools, component.EffectExec, component.EffectNetwork}, Config: &PluginConfig{},
 		Requires: []string{assemble.ServiceUI, component.KeyLayers.Maybe(), toolhub.KeySandbox.Maybe(), toolhub.KeySandboxPolicy.Maybe(), "?" + pkgs.Service,
-			"?" + assemble.ServiceWorkdir, resmgr.KeyBound.Maybe()},
+			"?" + assemble.ServiceWorkdir, "?" + assemble.ServiceTrust, resmgr.KeyBound.Maybe()},
 		Provides: []string{Service}}
 }
 
@@ -102,6 +104,7 @@ func (p *plug) Setup(cx *component.Registrar) error {
 		p.bound = b
 	}
 	var warns []string
+	p.trusted, p.explicit = assemble.ProjectTrusted(cx), pc.Config != ""
 	if pc.Config != "" {
 		// 显式路径（命令行 -config）：调用方点名要读这个文件，路径按原样用，不看来源，也不看启用记录。
 		if p.cfg, err = LoadConfig(pc.Config); err != nil {

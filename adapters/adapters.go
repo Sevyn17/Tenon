@@ -17,6 +17,7 @@ import (
 	"github.com/Sevyn17/tenon/modules/security/permission"
 	"github.com/Sevyn17/tenon/modules/tools/checkpoint"
 	"github.com/Sevyn17/tenon/modules/tools/fs"
+	"github.com/Sevyn17/tenon/modules/tools/mcp"
 	"github.com/Sevyn17/tenon/runtime/assemble"
 	"github.com/Sevyn17/tenon/runtime/component"
 	"github.com/Sevyn17/tenon/runtime/store"
@@ -85,6 +86,13 @@ func Fill(o *appapi.Options, p Parts) (*permission.Sessions, error) {
 		if v, ok := p.Asm.Value(skills.ServiceName); ok {
 			if s, ok := v.(*skills.Skills); ok && s != nil {
 				o.Skills = Skills{S: s}
+			}
+		}
+	}
+	if o.MCP == nil { // MCP 管理页（客户端改进 M11 配置T14）：mcp.list / test / setEnabled（save / remove 另要 MCPEditor）
+		if v, ok := p.Asm.Value(mcp.Service); ok {
+			if s, ok := v.(*mcp.ServiceAPI); ok && s != nil {
+				o.MCP = MCP{S: s}
 			}
 		}
 	}

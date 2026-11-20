@@ -31,6 +31,7 @@ var tsTypes = []any{
 	ArtifactPutArgs{}, ArtifactPutResult{}, TraceArgs{}, TraceResult{}, FilesArgs{}, FileInfo{}, FilesResult{},
 	ChangesArgs{}, ChangeFile{}, ChangesResult{}, ChangesDiffArgs{}, ChangesDiffResult{}, ChangesRevertArgs{}, ChangeConflict{}, ChangesRevertResult{},
 	SkillInfo{}, SkillsListResult{}, SkillsSetEnabledArgs{}, SkillsSetEnabledResult{},
+	MCPTool{}, MCPServerInfo{}, MCPListResult{}, MCPServerDraft{}, MCPTestArgs{}, MCPTestResult{}, MCPSaveArgs{}, MCPRemoveArgs{}, MCPSetEnabledArgs{}, MCPEditResult{},
 	WorkspaceTrustPreviewResult{}, TrustMCPServer{}, TrustHook{}, TrustMode{}, TrustPackage{}, TrustPluginSetting{}, WorkspaceTrustArgs{}, WorkspaceTrustResult{},
 	ConfigField{}, PluginInfo{},
 	PluginPending{}, ProfileScope{}, PluginsListResult{}, PluginsSetArgs{}, PluginsSetResult{}, PackageInfo{}, UISlot{}, UIData{}, PackagesListResult{}, AccountStatus{}, AccountLoginArgs{}, AccountLoginResult{}, AccountEntitlements{},
@@ -63,6 +64,9 @@ var tsConsts = []struct {
 	{"ConflictReasons", []string{ConflictExists, ConflictAnswered, ConflictStale, ConflictLeased, ConflictFiles}},
 	{"ChangeScopes", []string{ChangeScopeSession, ChangeScopeTurn, ChangeScopeFromTurn}},
 	{"SkillScopes", []string{SkillScopeGlobal, SkillScopeWorkspace}},
+	{"MCPScopes", []string{MCPScopeGlobal, MCPScopeWorkspace}},
+	{"MCPStates", []string{MCPStateConnected, MCPStateStarting, MCPStateFailed, MCPStateDisabled}},
+	{"MCPTransports", []string{MCPTransportStdio, MCPTransportHTTP}},
 	{"NoticeLevels", []string{NoticeInfo, NoticeWarn, NoticeError}},
 	{"TrustLevels", []string{TrustTrusted, TrustUntrusted}},
 }
@@ -77,6 +81,9 @@ var rawType = reflect.TypeOf(json.RawMessage(nil))
 // 改变公开面且丢掉透传语义。TS 侧收窄没有这些约束。
 var tsFieldOverride = map[string]string{
 	"UISlot.view": "DeclNode | DeclNode[]",
+	// map[string]*string：null = 保留已保存的值（见 MCPServerDraft）。
+	"MCPServerDraft.env":     "Record<string, string | null>",
+	"MCPServerDraft.headers": "Record<string, string | null>",
 }
 
 // tsFieldType 字段的 TS 类型：先查 override，再按 Go 类型推。

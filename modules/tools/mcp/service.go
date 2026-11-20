@@ -5,7 +5,11 @@ package mcp
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
 	"fmt"
+	"os"
 	"sort"
 
 	"github.com/Sevyn17/tenon/runtime/resmgr"
@@ -118,6 +122,34 @@ func (s *ServiceAPI) Servers() []ServerStatus {
 // Enabled 本工作区的启用记录（写 mcp-enabled.toml）；用 -config 显式文件时为 nil（不看启用记录）。
 // 改了记录要重建运行时（workspace.reload）才生效。
 func (s *ServiceAPI) Enabled() *Enabled { return s.p.enabled }
+
+// Workdir 本运行时的工作区目录（项目定义文件按它找）；空 = 没有工作区。
+func (s *ServiceAPI) Workdir() string { return s.p.workdir }
+
+// ProjectTrusted 本运行时项目是否受信（受信时项目 mcp.toml 生效）。
+func (s *ServiceAPI) ProjectTrusted() bool { return s.p.trusted }
+
+// Explicit 用了 -config 显式文件：只读这个文件，用户级与项目 mcp.toml、启用记录都不生效。
+func (s *ServiceAPI) Explicit() bool { return s.p.explicit }
+
+// CheckServer 按 mcp.toml 的规则校验一个服务定义（名字、command / url 二选一、trust、sandbox、scope）。
+func CheckServer(s Server) error { return checkServers([]Server{s}) }
+
+// FileRevision 定义文件内容的版本号（sha256 前 8 字节的十六进制）：mcp.list 带给前端，mcp.save / remove 据此做并发校验。
+// 文件不存在按空内容算。
+func FileRevision(path string) (string, error) {
+	b, err := os.ReadFile(path)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return "", err
+	}
+	return Revision(b), nil
+}
+
+// Revision 一段定义文件内容的版本号（同 FileRevision）。
+func Revision(b []byte) string {
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:8])
+}
 
 // Instances 资源管理器里当前在跑的 MCP 实例（含别的工作区取的全局实例）。没有应用级资源管理器时只有本运行时的。
 func (s *ServiceAPI) Instances() []resmgr.Instance {

@@ -47,6 +47,7 @@ var viewerCommands = map[string]bool{
 	"changes.list": true, "changes.diff": true, // changes.revert 写文件，只给 operator
 	"skills.list":            true, // skills.setEnabled 写启停记录，只给 operator
 	"workspace.trustPreview": true, // workspace.trust 写信任记录并重建，只给 operator
+	"mcp.list":               true, // mcp.test 起进程，save / remove / setEnabled 写用户级文件并重建，只给 operator
 }
 
 // Conn 一个客户端连接。方法并发安全；用完调用 Close。

@@ -738,6 +738,152 @@ type SkillsSetEnabledResult struct {
 	Skill SkillInfo `json:"skill"`
 }
 
+// MCP 服务的实例范围（MCPServerInfo.scope、MCPServerDraft.scope）与启用记录范围（MCPSetEnabledArgs.scope、
+// MCPServerInfo.disabled_scope）：同一组值。
+const (
+	MCPScopeGlobal    = "global"
+	MCPScopeWorkspace = "workspace"
+)
+
+// MCP 服务在本工作区的状态（MCPServerInfo.state）。
+const (
+	MCPStateConnected = "connected" // 运行中，tools 是它提供的工具
+	MCPStateStarting  = "starting"  // 启用了但还没连上（或启用记录刚改、还没重建）
+	MCPStateFailed    = "failed"    // 启动或 tools/list 失败，error 是原因
+	MCPStateDisabled  = "disabled"  // 本工作区停用（disabled_scope 说明是哪条记录）
+)
+
+// MCP 服务的连接方式（MCPServerInfo.transport、MCPServerDraft.transport）。
+const (
+	MCPTransportStdio = "stdio"
+	MCPTransportHTTP  = "http"
+)
+
+// MCPTool 服务提供的一个工具。
+type MCPTool struct {
+	Name        string `json:"name"`        // 服务端原名
+	Public      string `json:"public"`      // 模型侧名字 mcp__<服务>__<工具>
+	Description string `json:"description"` // 一句话（第一行，过长截断）
+}
+
+// MCPServerInfo 一个 MCP 服务定义与它在本工作区的状态（mcp.list，能力 mcp）。env / headers 只给键名，值不回显。
+type MCPServerInfo struct {
+	Name string `json:"name"`
+	// Source user（用户级 mcp.toml）| project（受信项目的 mcp.toml）| package:<包名>（插件包）| config（-config 显式文件）。
+	Source    string   `json:"source"`
+	Transport string   `json:"transport"` // MCPTransport*
+	Command   string   `json:"command,omitempty"`
+	Args      []string `json:"args"`
+	URL       string   `json:"url,omitempty"`
+	// Cwd 定义里写的工作目录（用户级定义是文件原值，可直接回填编辑表单）；EffectiveCwd 实际使用的工作目录
+	// （按工作区的 stdio 服务缺省为项目根，相对路径按项目根解析）。
+	Cwd          string `json:"cwd,omitempty"`
+	EffectiveCwd string `json:"effective_cwd,omitempty"`
+	Timeout      int    `json:"timeout,omitempty"` // 秒；0 = 60
+	Scope        string `json:"scope"`             // 生效的实例范围 MCPScope*
+	Trust        string `json:"trust,omitempty"`   // ask（空）/ readonly / trusted
+	Sandbox      string `json:"sandbox,omitempty"` // 空 = 缺省档位的沙箱
+	Enabled      bool   `json:"enabled"`           // 本工作区的启用记录（最新记录）
+	// DisabledScope 让它停用的那条记录的范围（MCPScope*）；启用时为空。
+	DisabledScope string    `json:"disabled_scope,omitempty"`
+	State         string    `json:"state"`           // MCPState*
+	Error         string    `json:"error,omitempty"` // state = failed 时的原因
+	Tools         []MCPTool `json:"tools"`           // 只有 connected 时非空
+	EnvKeys       []string  `json:"env_keys"`
+	HeaderKeys    []string  `json:"header_keys"`
+	// Readonly 不能经 mcp.save / mcp.remove 改（插件包、-config 文件、项目定义：去对应文件改）。只能启停。
+	Readonly bool `json:"readonly,omitempty"`
+}
+
+// MCPListResult mcp.list 的结果：本工作区看得到的全部服务（含停用的），顺序为用户级、项目、插件包。
+type MCPListResult struct {
+	Servers []MCPServerInfo `json:"servers"`
+	// UserPath 用户级定义文件（mcp.save / remove 写这里）；ProjectPath 当前项目的定义文件（项目受信才生效）。
+	UserPath    string `json:"user_path,omitempty"`
+	ProjectPath string `json:"project_path,omitempty"`
+	// Revision 用户级 mcp.toml 当前内容的版本号；mcp.save / remove 带上它做并发校验。
+	Revision string `json:"revision"`
+	// Editable mcp.save / remove 可用（应用支持写定义且没用 -config 显式文件）。
+	Editable bool `json:"editable"`
+	// Workspace 工作区范围启用记录的键（规范化的工作目录）；空 = 只能全局记录。
+	Workspace string `json:"workspace,omitempty"`
+	// Notes 给人看的说明（项目未受信时项目定义没列出、用了 -config 等）。
+	Notes []string `json:"notes,omitempty"`
+}
+
+// MCPServerDraft 编辑表单里的一个服务定义（mcp.test、mcp.save）。command 与 url 须且只能给一个。
+//
+// env / headers 的写法（前端只知道键名，不知道值）：
+//   - 键对应字符串：设成这个新值；
+//   - 键对应 null：保留用户级 mcp.toml 里同名服务这个键的原值（原来没有这个键 → invalid）；
+//   - 没提到的键：保留原值（同名服务原来有的键都留着）；
+//   - 要删掉的键放进 env_remove / header_remove（与 env / headers 里同一个键同时出现 → invalid）。
+//
+// 所以「只改命令、不动密钥」时 env 可以整个不传。新建服务（用户级没有同名定义）时没有原值可保留。
+type MCPServerDraft struct {
+	Name      string   `json:"name"`
+	Transport string   `json:"transport,omitempty"` // MCPTransport*；空 = 按 command / url 推断
+	Command   string   `json:"command,omitempty"`
+	Args      []string `json:"args,omitempty"`
+	Cwd       string   `json:"cwd,omitempty"`
+	URL       string   `json:"url,omitempty"`
+	Timeout   int      `json:"timeout,omitempty"`
+	Trust     string   `json:"trust,omitempty"`
+	Sandbox   string   `json:"sandbox,omitempty"`
+	Scope     string   `json:"scope,omitempty"` // MCPScope*；空 = workspace
+	// Env / Headers 见类型注释：值为 null = 保留原值。
+	Env          map[string]*string `json:"env,omitempty"`
+	Headers      map[string]*string `json:"headers,omitempty"`
+	EnvRemove    []string           `json:"env_remove,omitempty"`
+	HeaderRemove []string           `json:"header_remove,omitempty"`
+}
+
+// MCPTestArgs mcp.test：用草稿定义临时连一次（会起进程或发请求，只给 operator），拉工具列表后断开；不保存、不注册工具。
+type MCPTestArgs struct {
+	Server MCPServerDraft `json:"server"`
+}
+
+// MCPTestResult mcp.test 的结果。连不上不报错：ok = false，error 是给人看的原因。
+type MCPTestResult struct {
+	OK    bool      `json:"ok"`
+	Error string    `json:"error,omitempty"`
+	Tools []MCPTool `json:"tools"`
+}
+
+// MCPSaveArgs mcp.save：在用户级 mcp.toml 里新增或替换同名 [[server]]（文件里别的段与注释原样保留，
+// 被替换的那一段里的注释会丢），然后重建运行时（同 workspace.reload；全局范围、定义没变的服务进程不重启）。
+// Revision 非空且与文件当前版本不同 → conflict（details.reason = stale，details.revision 是当前版本）。
+// 插件包、项目、-config 来源的同名服务不能改 → invalid。有回合在跑时缺省 not_idle（什么都不写），Force 先取消再重建。
+type MCPSaveArgs struct {
+	Server   MCPServerDraft `json:"server"`
+	Revision string         `json:"revision,omitempty"`
+	Force    bool           `json:"force,omitempty"`
+}
+
+// MCPRemoveArgs mcp.remove：删掉用户级 mcp.toml 里的同名定义（没有 → not_found），并发校验与重建同 mcp.save。
+type MCPRemoveArgs struct {
+	Name     string `json:"name"`
+	Revision string `json:"revision,omitempty"`
+	Force    bool   `json:"force,omitempty"`
+}
+
+// MCPSetEnabledArgs mcp.setEnabled：写启用记录（用户级 mcp-enabled.toml，不进项目仓库）后重建运行时。
+// scope = global 对所有工作区；workspace 只对当前工作区（与全局结果相同时删掉本工作区的覆盖）。空 = global。
+type MCPSetEnabledArgs struct {
+	Name    string `json:"name"`
+	Enabled bool   `json:"enabled"`
+	Scope   string `json:"scope,omitempty"`
+	Force   bool   `json:"force,omitempty"`
+}
+
+// MCPEditResult mcp.save / remove / setEnabled 的结果。Reloaded 为真时旧连接随后断开，客户端重连、重新 hello 后
+// 再调 mcp.list 看新状态；应用不能重建时（没有工作区管理器）Reloaded = false，改动在下次启动生效。
+type MCPEditResult struct {
+	Revision  string        `json:"revision"` // 写完后用户级 mcp.toml 的版本号
+	Reloaded  bool          `json:"reloaded"`
+	Workspace WorkspaceInfo `json:"workspace"`
+}
+
 // ConfigField 插件配置项的 Schema（plugins.list）。
 type ConfigField struct {
 	Key         string `json:"key"`

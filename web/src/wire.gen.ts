@@ -38,6 +38,15 @@ export type ChangeScope = (typeof ChangeScopes)[number];
 export const SkillScopes = ["global", "workspace"] as const;
 export type SkillScope = (typeof SkillScopes)[number];
 
+export const MCPScopes = ["global", "workspace"] as const;
+export type MCPScope = (typeof MCPScopes)[number];
+
+export const MCPStates = ["connected", "starting", "failed", "disabled"] as const;
+export type MCPState = (typeof MCPStates)[number];
+
+export const MCPTransports = ["stdio", "http"] as const;
+export type MCPTransport = (typeof MCPTransports)[number];
+
 export const NoticeLevels = ["info", "warn", "error"] as const;
 export type NoticeLevel = (typeof NoticeLevels)[number];
 
@@ -844,6 +853,97 @@ export interface SkillsSetEnabledArgs {
 
 export interface SkillsSetEnabledResult {
   skill: SkillInfo;
+}
+
+export interface MCPTool {
+  name: string;
+  public: string;
+  description: string;
+}
+
+export interface MCPServerInfo {
+  name: string;
+  source: string;
+  transport: string;
+  command?: string;
+  args: string[];
+  url?: string;
+  cwd?: string;
+  effective_cwd?: string;
+  timeout?: number;
+  scope: string;
+  trust?: string;
+  sandbox?: string;
+  enabled: boolean;
+  disabled_scope?: string;
+  state: string;
+  error?: string;
+  tools: MCPTool[];
+  env_keys: string[];
+  header_keys: string[];
+  readonly?: boolean;
+}
+
+export interface MCPListResult {
+  servers: MCPServerInfo[];
+  user_path?: string;
+  project_path?: string;
+  revision: string;
+  editable: boolean;
+  workspace?: string;
+  notes?: string[];
+}
+
+export interface MCPServerDraft {
+  name: string;
+  transport?: string;
+  command?: string;
+  args?: string[];
+  cwd?: string;
+  url?: string;
+  timeout?: number;
+  trust?: string;
+  sandbox?: string;
+  scope?: string;
+  env?: Record<string, string | null>;
+  headers?: Record<string, string | null>;
+  env_remove?: string[];
+  header_remove?: string[];
+}
+
+export interface MCPTestArgs {
+  server: MCPServerDraft;
+}
+
+export interface MCPTestResult {
+  ok: boolean;
+  error?: string;
+  tools: MCPTool[];
+}
+
+export interface MCPSaveArgs {
+  server: MCPServerDraft;
+  revision?: string;
+  force?: boolean;
+}
+
+export interface MCPRemoveArgs {
+  name: string;
+  revision?: string;
+  force?: boolean;
+}
+
+export interface MCPSetEnabledArgs {
+  name: string;
+  enabled: boolean;
+  scope?: string;
+  force?: boolean;
+}
+
+export interface MCPEditResult {
+  revision: string;
+  reloaded: boolean;
+  workspace: WorkspaceInfo;
 }
 
 export interface WorkspaceTrustPreviewResult {

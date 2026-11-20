@@ -223,10 +223,15 @@ github.com/Sevyn17/tenon/adapters: method (Changes) Diff(ctx context.Context, in
 github.com/Sevyn17/tenon/adapters: method (Changes) GitAvailable() bool
 github.com/Sevyn17/tenon/adapters: method (Changes) List(ctx context.Context, in github.com/Sevyn17/tenon/appapi/wire.ChangesArgs, live func(string) bool) (github.com/Sevyn17/tenon/appapi/wire.ChangesResult, error)
 github.com/Sevyn17/tenon/adapters: method (Changes) Revert(ctx context.Context, r github.com/Sevyn17/tenon/appapi.ChangeRevert) (github.com/Sevyn17/tenon/appapi.ChangeReverted, error)
+github.com/Sevyn17/tenon/adapters: func DraftServer(d github.com/Sevyn17/tenon/appapi/wire.MCPServerDraft) (github.com/Sevyn17/tenon/modules/tools/mcp.Server, error)
 github.com/Sevyn17/tenon/adapters: func Files(root string) github.com/Sevyn17/tenon/appapi.Files
 github.com/Sevyn17/tenon/adapters: func Fill(o *github.com/Sevyn17/tenon/appapi.Options, p Parts) (*github.com/Sevyn17/tenon/modules/security/permission.Sessions, error)
 github.com/Sevyn17/tenon/adapters: var FollowupTimeout time.Duration
 github.com/Sevyn17/tenon/adapters: func FollowupsFrom(m *github.com/Sevyn17/tenon/runtime/assemble.Models) func(ctx context.Context, model string, input string, answer string) ([]string, error)
+github.com/Sevyn17/tenon/adapters: type MCP struct{S *github.com/Sevyn17/tenon/modules/tools/mcp.ServiceAPI}
+github.com/Sevyn17/tenon/adapters: method (MCP) List(context.Context) (github.com/Sevyn17/tenon/appapi/wire.MCPListResult, error)
+github.com/Sevyn17/tenon/adapters: method (MCP) SetEnabled(_ context.Context, name string, enabled bool, scope string) error
+github.com/Sevyn17/tenon/adapters: method (MCP) Test(ctx context.Context, d github.com/Sevyn17/tenon/appapi/wire.MCPServerDraft) ([]github.com/Sevyn17/tenon/appapi/wire.MCPTool, error)
 github.com/Sevyn17/tenon/adapters: const MaxDiffBytes untyped int
 github.com/Sevyn17/tenon/adapters: const MaxDiffLines untyped int
 github.com/Sevyn17/tenon/adapters: const MaxScanFiles untyped int
@@ -301,7 +306,10 @@ github.com/Sevyn17/tenon/apphost: method (WorkspaceManager) Current() *Workspace
 github.com/Sevyn17/tenon/apphost: method (WorkspaceManager) List() []github.com/Sevyn17/tenon/appapi/wire.WorkspaceInfo
 github.com/Sevyn17/tenon/apphost: method (WorkspaceManager) Open(_ context.Context, path string) (github.com/Sevyn17/tenon/appapi/wire.WorkspaceInfo, error)
 github.com/Sevyn17/tenon/apphost: method (WorkspaceManager) Reload(_ context.Context) (github.com/Sevyn17/tenon/appapi/wire.WorkspaceInfo, error)
+github.com/Sevyn17/tenon/apphost: method (WorkspaceManager) RemoveMCPServer(_ context.Context, name string, revision string) (github.com/Sevyn17/tenon/appapi.MCPWrite, error)
+github.com/Sevyn17/tenon/apphost: method (WorkspaceManager) ResolveMCPDraft(_ context.Context, d github.com/Sevyn17/tenon/appapi/wire.MCPServerDraft) (github.com/Sevyn17/tenon/appapi/wire.MCPServerDraft, error)
 github.com/Sevyn17/tenon/apphost: method (WorkspaceManager) Resources() *github.com/Sevyn17/tenon/runtime/resmgr.Manager
+github.com/Sevyn17/tenon/apphost: method (WorkspaceManager) SaveMCPServer(_ context.Context, d github.com/Sevyn17/tenon/appapi/wire.MCPServerDraft, revision string) (github.com/Sevyn17/tenon/appapi.MCPWrite, error)
 github.com/Sevyn17/tenon/apphost: method (WorkspaceManager) SetTrust(_ context.Context, level string) (github.com/Sevyn17/tenon/appapi.TrustChange, error)
 github.com/Sevyn17/tenon/apphost: method (WorkspaceManager) TrustPreview(context.Context) (github.com/Sevyn17/tenon/appapi/wire.WorkspaceTrustPreviewResult, error)
 github.com/Sevyn17/tenon/apphost: type WorkspaceOptions struct{Flags Flags; SleepAfter time.Duration; Upload bool; OnSwitch func(api *github.com/Sevyn17/tenon/appapi.App); RecentPath string; Platform github.com/Sevyn17/tenon/appapi.Platform; ResourceIdle time.Duration; ResourceMax int}
@@ -455,6 +463,24 @@ github.com/Sevyn17/tenon/appapi/wire: type LiveTool struct{CallID string; Name s
 github.com/Sevyn17/tenon/appapi/wire: type LogCompacted struct{Upto int; EntryIdx int}
 github.com/Sevyn17/tenon/appapi/wire: type LogPos struct{Base int; Len int}
 github.com/Sevyn17/tenon/appapi/wire: type LogRewound struct{To int; VoidedInteractions []string}
+github.com/Sevyn17/tenon/appapi/wire: type MCPEditResult struct{Revision string; Reloaded bool; Workspace WorkspaceInfo}
+github.com/Sevyn17/tenon/appapi/wire: type MCPListResult struct{Servers []MCPServerInfo; UserPath string; ProjectPath string; Revision string; Editable bool; Workspace string; Notes []string}
+github.com/Sevyn17/tenon/appapi/wire: type MCPRemoveArgs struct{Name string; Revision string; Force bool}
+github.com/Sevyn17/tenon/appapi/wire: type MCPSaveArgs struct{Server MCPServerDraft; Revision string; Force bool}
+github.com/Sevyn17/tenon/appapi/wire: const MCPScopeGlobal untyped string
+github.com/Sevyn17/tenon/appapi/wire: const MCPScopeWorkspace untyped string
+github.com/Sevyn17/tenon/appapi/wire: type MCPServerDraft struct{Name string; Transport string; Command string; Args []string; Cwd string; URL string; Timeout int; Trust string; Sandbox string; Scope string; Env map[string]*string; Headers map[string]*string; EnvRemove []string; HeaderRemove []string}
+github.com/Sevyn17/tenon/appapi/wire: type MCPServerInfo struct{Name string; Source string; Transport string; Command string; Args []string; URL string; Cwd string; EffectiveCwd string; Timeout int; Scope string; Trust string; Sandbox string; Enabled bool; DisabledScope string; State string; Error string; Tools []MCPTool; EnvKeys []string; HeaderKeys []string; Readonly bool}
+github.com/Sevyn17/tenon/appapi/wire: type MCPSetEnabledArgs struct{Name string; Enabled bool; Scope string; Force bool}
+github.com/Sevyn17/tenon/appapi/wire: const MCPStateConnected untyped string
+github.com/Sevyn17/tenon/appapi/wire: const MCPStateDisabled untyped string
+github.com/Sevyn17/tenon/appapi/wire: const MCPStateFailed untyped string
+github.com/Sevyn17/tenon/appapi/wire: const MCPStateStarting untyped string
+github.com/Sevyn17/tenon/appapi/wire: type MCPTestArgs struct{Server MCPServerDraft}
+github.com/Sevyn17/tenon/appapi/wire: type MCPTestResult struct{OK bool; Error string; Tools []MCPTool}
+github.com/Sevyn17/tenon/appapi/wire: type MCPTool struct{Name string; Public string; Description string}
+github.com/Sevyn17/tenon/appapi/wire: const MCPTransportHTTP untyped string
+github.com/Sevyn17/tenon/appapi/wire: const MCPTransportStdio untyped string
 github.com/Sevyn17/tenon/appapi/wire: type MediaRef struct{Ref string; MIME string; Size uint64; SHA256 string}
 github.com/Sevyn17/tenon/appapi/wire: type MessageDelta struct{StreamID string; Text string}
 github.com/Sevyn17/tenon/appapi/wire: type MessageStarted struct{StreamID string; EntryID string; Part string; Attempt int}

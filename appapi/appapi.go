@@ -63,6 +63,8 @@ type Options struct {
 	Changes Changes
 	// Skills 本地技能列表与启停（skills.list / skills.setEnabled，skills 插件）；nil = 不提供。
 	Skills Skills
+	// MCP MCP 服务列表、测试与启用记录（mcp.*，mcp 插件）；nil = 不提供。写定义另要 Workspaces 实现 MCPEditor。
+	MCP MCP
 	// Upload 传输层挂了 UploadHandler（HTTP 上传大附件）：hello 的能力清单带 upload。
 	Upload bool
 	// Platform 平台账号能力（platform.* 命令）；nil = 这个应用不接平台。
