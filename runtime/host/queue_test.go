@@ -81,10 +81,9 @@ func TestQueuedSendWaitsForTurnEnd(t *testing.T) {
 			if got != want {
 				t.Fatalf("queue=true 历史：\n got %s\nwant %s", got, want)
 			}
-		} else if !strings.HasPrefix(got, "user:use tool | assistant: | tool:echoed | user:B") || strings.Contains(got, "assistant:done") {
-			// 原行为：插进当前回合，工具结果之后直接是 B，没有单独的 done 回合。
-			// （已提交历史里插入的 B 出现两次，HEAD 上就是这样，与本改动无关，见 queue-notes。）
-			t.Fatalf("queue=false 应插入当前回合：%s", got)
+		} else if want := "user:use tool | assistant: | tool:echoed | user:B | assistant:re:B"; got != want {
+			// 原行为：插进当前回合，工具结果之后直接是 B（只一次），没有单独的 done 回合。
+			t.Fatalf("queue=false 历史：\n got %s\nwant %s", got, want)
 		}
 		if q, _ := r.h.Queued(context.Background(), "s1"); len(q) != 0 {
 			t.Fatalf("处理完不应还在排队：%+v", q)

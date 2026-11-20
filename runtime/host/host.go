@@ -596,6 +596,10 @@ type actor struct {
 	budgetedTurn uint32
 	// steered 本回合已受理的插话 client_id（protocol 2 steer 幂等：插话只在回合中有效，同回合重发只确认不重复插入）。只在 actor 协程里读写。
 	steered map[string]bool
+	// midInserted 本回合已经中途插入（MidInput）的 inbox 项。插入后的消费只记在下一次检查点的缓冲里，
+	// 检查点之前信箱里还读得到它们；同一步边界里 mailDirty 兜底读信箱和随后的 Send/Deliver 命令会各插一次，
+	// 这里据此跳过（插话重复缺陷，2026-11-20）。回合开始时清空。只在 actor 协程里读写。
+	midInserted map[string]bool
 	// turnInputs 即将开始的回合吃进的输入（inbox item id），turn_start 发出后清空。只在 actor 协程里读写。
 	turnInputs []string
 	// turnOpen 已发 turn_start、还没发 turn_end（publishTurnEnd）。turnFailed 据此决定要不要补发 turn_end

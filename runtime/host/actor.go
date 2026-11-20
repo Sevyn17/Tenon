@@ -671,6 +671,7 @@ func inboxSet(ids []string) map[string]bool {
 func (a *actor) turn(ctx context.Context, resumed bool, f func(context.Context) (session.EndReason, error)) (session.EndReason, error) {
 	// 先登记取消函数再排并发槽位：排队期间到达的 Cancel 要能取消这一轮（02 2.4）。
 	a.steered = nil
+	a.midInserted = nil
 	a.turnOpen = false // 上一轮（如 restart 重跑失败）留下的标记不带进这一轮
 	tctx, cancel := context.WithCancel(ctx)
 	a.mu.Lock()
@@ -1081,7 +1082,7 @@ func (a *actor) insertInput(ctx context.Context) error {
 // insertFrom 同 insertInput，用调用方已读到的信箱项（步边界读一次，不再重读）。
 // 已被 applyNotices 消费的 notice 不是 input，collectInboxBatch 不会取它们。
 func (a *actor) insertFrom(ctx context.Context, items []store.InboxItem) error {
-	batch := collectInboxBatch(items, a.mergeSkip(a.processing, a.turnQueued))
+	batch := collectInboxBatch(items, a.mergeSkip(a.processing, a.turnQueued, a.midInserted))
 	if batch == nil {
 		return nil
 	}
@@ -1123,6 +1124,12 @@ func (a *actor) insertFrom(ctx context.Context, items []store.InboxItem) error {
 		return err
 	}
 	a.ag.Consume(ids...)
+	if a.midInserted == nil {
+		a.midInserted = make(map[string]bool, len(ids))
+	}
+	for _, id := range ids {
+		a.midInserted[id] = true
+	}
 	return nil
 }
 
