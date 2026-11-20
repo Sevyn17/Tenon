@@ -104,6 +104,10 @@ var commands = map[string]handler{
 	"interactions.list":   bind((*App).Interactions),
 	"plugins.list":        bind((*App).PluginsList),
 	"packages.list":       bind((*App).PackagesList),
+	"packages.preview":    bind((*App).PackagesPreview), // 客户端改进 M11 配置T22（packages.go）
+	"packages.install":    bind((*App).PackagesInstall),
+	"packages.remove":     bind((*App).PackagesRemove),
+	"packages.setEnabled": bind((*App).PackagesSetEnabled),
 	"plugins.set":         bind((*App).PluginsSet),
 	"workspace.files":     bind((*App).WorkspaceFiles),
 	"changes.list":        bind((*App).ChangesList),
@@ -267,6 +271,9 @@ func (v *App) capabilities() []string {
 			out = append(out, "reload")
 			if _, ok := o.Workspaces.(Truster); ok { // 客户端改进 M11：界面里信任项目（trust.go）
 				out = append(out, CapWorkspaceTrust)
+			}
+			if _, ok := o.Workspaces.(PackageManager); ok { // 客户端改进 M11 配置T22：插件包管理（packages.go）
+				out = append(out, CapPackagesManage)
 			}
 		}
 	}
@@ -1788,7 +1795,10 @@ func (v *App) PluginsList(_ context.Context, _ wire.Empty) (wire.PluginsListResu
 func (v *App) pluginInfo(st component.State, cur, next *component.Profile) wire.PluginInfo {
 	wp := wire.PluginInfo{Name: st.Name, On: st.On, Default: st.Default, Source: st.Source,
 		Effects: append([]string{}, st.Effects...), Schema: []wire.ConfigField{}, Config: configOf(cur, st.Name),
-		Mandatory: slices.Contains(cur.Mandatory, st.Name)}
+		Mandatory: slices.Contains(cur.Mandatory, st.Name), Risks: PluginRisks(st.Effects)}
+	if len(wp.Risks) == 0 {
+		wp.Risks = nil // 没有风险时不发这个字段（omitempty）
+	}
 	if m, ok := component.MetaOf(st.Name); ok {
 		wp.Version, wp.Description = m.Version, m.Description // 客户端改进 M10 T17
 		for _, f := range component.SchemaOf(m.Config) {
@@ -1902,24 +1912,6 @@ func (v *App) PluginsSet(_ context.Context, in wire.PluginsSetArgs) (wire.Plugin
 		if st.Name == in.Name {
 			out.Plugin = v.pluginInfo(st, v.o.Profile, next)
 		}
-	}
-	return out, nil
-}
-
-// PackagesList 已加载的插件包（用户级在前、项目级在后）。
-func (v *App) PackagesList(_ context.Context, _ wire.Empty) (wire.PackagesListResult, error) {
-	out := wire.PackagesListResult{Packages: []wire.PackageInfo{}}
-	for _, k := range v.o.Packages {
-		pi := wire.PackageInfo{Name: k.Name, Version: k.Version, Description: k.Description,
-			Scope: k.Scope, Source: k.File, Contents: k.Contents()}
-		for _, u := range k.UISlots() {
-			ws := wire.UISlot{ID: u.ID, Slot: u.Slot, Title: u.Title, Order: u.Order, Requires: u.Requires, View: u.View}
-			if u.Data != nil {
-				ws.Data = &wire.UIData{Cmd: u.Data.Cmd, Args: u.Data.Args}
-			}
-			pi.UI = append(pi.UI, ws)
-		}
-		out.Packages = append(out.Packages, pi)
 	}
 	return out, nil
 }

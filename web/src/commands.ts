@@ -34,6 +34,10 @@ export const COMMANDS = [
   "plugins.list",
   "plugins.set",
   "packages.list",
+  "packages.preview",
+  "packages.install",
+  "packages.remove",
+  "packages.setEnabled",
   "workspace.files",
   "changes.list",
   "changes.diff",
@@ -105,6 +109,10 @@ export interface CommandMap {
   "plugins.list": [W.Empty, W.PluginsListResult];
   "plugins.set": [W.PluginsSetArgs, W.PluginsSetResult];
   "packages.list": [W.Empty, W.PackagesListResult];
+  "packages.preview": [W.PackagesPreviewArgs, W.PackagesPreviewResult];
+  "packages.install": [W.PackagesInstallArgs, W.PackagesEditResult];
+  "packages.remove": [W.PackagesRemoveArgs, W.PackagesEditResult];
+  "packages.setEnabled": [W.PackagesSetEnabledArgs, W.PackagesEditResult];
   "workspace.files": [W.FilesArgs, W.FilesResult];
   "changes.list": [W.ChangesArgs, W.ChangesResult];
   "changes.diff": [W.ChangesDiffArgs, W.ChangesDiffResult];

@@ -126,7 +126,18 @@ func Load(home, root string, trusted bool) ([]*pkgs.Package, []string, error) {
 		if err != nil {
 			return nil, nil, err
 		}
-		all, notes = append(all, ps...), append(notes, ns...)
+		// 停用的用户级包（<home>/plugins-enabled.toml，packages.setEnabled 维护，M11 配置T22）不加载。
+		// 记录读不出来时提示一句、按全部启用。
+		dis, err := Disabled(home)
+		if err != nil {
+			notes = append(notes, err.Error()+"，按全部启用")
+		}
+		for _, p := range ps {
+			if !dis[p.Name] {
+				all = append(all, p)
+			}
+		}
+		notes = append(notes, ns...)
 	}
 	projDir := filepath.Join(appid.Project(root), "plugins")
 	if trusted {

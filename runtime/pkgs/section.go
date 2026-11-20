@@ -21,6 +21,8 @@ type Section struct {
 	Decode func(dir string, md toml.MetaData, prim toml.Primitive) (any, error)
 	// Summary 可空：Contents 里这一段的描述；空 = 只写 Label。
 	Summary func(v any) string
+	// Risks 可空：这一段内容带来的风险（Risk* 常量，见 Package.Risks；客户端改进 M11 T22/T24）。
+	Risks func(v any) []string
 }
 
 var (

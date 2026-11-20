@@ -98,6 +98,14 @@ func init() {
 				ss = append(ss, u.Slot)
 			}
 			return "界面 " + strings.Join(ss, "、")
+		},
+		Risks: func(v any) []string {
+			us, _ := v.([]UISlot)
+			p := &Package{Sections: map[string]any{"ui": us}}
+			if len(p.UICommands()) > 0 {
+				return []string{RiskCommands}
+			}
+			return nil
 		}})
 }
 

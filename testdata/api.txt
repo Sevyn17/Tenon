@@ -278,6 +278,7 @@ github.com/Sevyn17/tenon/apphost: func NormPath(p string) string
 github.com/Sevyn17/tenon/apphost: func OpenWorkspaceManager(o WorkspaceOptions) (*WorkspaceManager, error)
 github.com/Sevyn17/tenon/apphost: func Overrides(f Flags, root string) map[string]map[string]any
 github.com/Sevyn17/tenon/apphost: func PackageNotices(p *github.com/Sevyn17/tenon/runtime/component.Profile, ps []*github.com/Sevyn17/tenon/runtime/pkgs.Package) []string
+github.com/Sevyn17/tenon/apphost: func PreviewPackage(source string, prof *github.com/Sevyn17/tenon/runtime/component.Profile) (github.com/Sevyn17/tenon/appapi/wire.PackagesPreviewResult, error)
 github.com/Sevyn17/tenon/apphost: type Profiles struct{Base string; Extra string; Root string; Trusted bool}
 github.com/Sevyn17/tenon/apphost: method (Profiles) Denied() map[string][]string
 github.com/Sevyn17/tenon/apphost: method (Profiles) Edit(scope string, e github.com/Sevyn17/tenon/runtime/component.PluginEdit, ifRevision *string) (string, error)
@@ -303,15 +304,20 @@ github.com/Sevyn17/tenon/apphost: func WorkspaceKey(root string) string
 github.com/Sevyn17/tenon/apphost: type WorkspaceManager struct{}
 github.com/Sevyn17/tenon/apphost: method (WorkspaceManager) Close()
 github.com/Sevyn17/tenon/apphost: method (WorkspaceManager) Current() *Workspace
+github.com/Sevyn17/tenon/apphost: method (WorkspaceManager) InstallPackage(_ context.Context, source string) (github.com/Sevyn17/tenon/appapi.PackageWrite, error)
 github.com/Sevyn17/tenon/apphost: method (WorkspaceManager) List() []github.com/Sevyn17/tenon/appapi/wire.WorkspaceInfo
 github.com/Sevyn17/tenon/apphost: method (WorkspaceManager) Open(_ context.Context, path string) (github.com/Sevyn17/tenon/appapi/wire.WorkspaceInfo, error)
+github.com/Sevyn17/tenon/apphost: method (WorkspaceManager) PreviewPackage(_ context.Context, source string) (github.com/Sevyn17/tenon/appapi/wire.PackagesPreviewResult, error)
 github.com/Sevyn17/tenon/apphost: method (WorkspaceManager) Reload(_ context.Context) (github.com/Sevyn17/tenon/appapi/wire.WorkspaceInfo, error)
 github.com/Sevyn17/tenon/apphost: method (WorkspaceManager) RemoveMCPServer(_ context.Context, name string, revision string) (github.com/Sevyn17/tenon/appapi.MCPWrite, error)
+github.com/Sevyn17/tenon/apphost: method (WorkspaceManager) RemovePackage(_ context.Context, name string) (github.com/Sevyn17/tenon/appapi.PackageWrite, error)
 github.com/Sevyn17/tenon/apphost: method (WorkspaceManager) ResolveMCPDraft(_ context.Context, d github.com/Sevyn17/tenon/appapi/wire.MCPServerDraft) (github.com/Sevyn17/tenon/appapi/wire.MCPServerDraft, error)
 github.com/Sevyn17/tenon/apphost: method (WorkspaceManager) Resources() *github.com/Sevyn17/tenon/runtime/resmgr.Manager
 github.com/Sevyn17/tenon/apphost: method (WorkspaceManager) SaveMCPServer(_ context.Context, d github.com/Sevyn17/tenon/appapi/wire.MCPServerDraft, revision string) (github.com/Sevyn17/tenon/appapi.MCPWrite, error)
+github.com/Sevyn17/tenon/apphost: method (WorkspaceManager) SetPackageEnabled(_ context.Context, name string, enabled bool) (github.com/Sevyn17/tenon/appapi.PackageWrite, error)
 github.com/Sevyn17/tenon/apphost: method (WorkspaceManager) SetTrust(_ context.Context, level string) (github.com/Sevyn17/tenon/appapi.TrustChange, error)
 github.com/Sevyn17/tenon/apphost: method (WorkspaceManager) TrustPreview(context.Context) (github.com/Sevyn17/tenon/appapi/wire.WorkspaceTrustPreviewResult, error)
+github.com/Sevyn17/tenon/apphost: method (WorkspaceManager) UserPackages(context.Context) ([]github.com/Sevyn17/tenon/appapi/wire.PackageInfo, error)
 github.com/Sevyn17/tenon/apphost: type WorkspaceOptions struct{Flags Flags; SleepAfter time.Duration; Upload bool; OnSwitch func(api *github.com/Sevyn17/tenon/appapi.App); RecentPath string; Platform github.com/Sevyn17/tenon/appapi.Platform; ResourceIdle time.Duration; ResourceMax int}
 github.com/Sevyn17/tenon/appapi/wire: type APIKey struct{ID string; Name string; Prefix string; CreatedAt string; LastUsedAt string; ExpiresAt string; Revoked bool}
 github.com/Sevyn17/tenon/appapi/wire: type APIKeyCreateArgs struct{Name string; ExpiresIn int64}
@@ -506,13 +512,21 @@ github.com/Sevyn17/tenon/appapi/wire: const OutcomeApproved untyped string
 github.com/Sevyn17/tenon/appapi/wire: const OutcomeDenied untyped string
 github.com/Sevyn17/tenon/appapi/wire: const OutcomeExpired untyped string
 github.com/Sevyn17/tenon/appapi/wire: const OutcomeVoided untyped string
-github.com/Sevyn17/tenon/appapi/wire: type PackageInfo struct{Name string; Version string; Description string; Scope string; Source string; Contents string; UI []UISlot}
+github.com/Sevyn17/tenon/appapi/wire: type PackageConfig struct{Plugin string; Key string; Value any; Ignored bool}
+github.com/Sevyn17/tenon/appapi/wire: type PackageInfo struct{Name string; Version string; Description string; Scope string; Source string; Contents string; UI []UISlot; Enabled bool; Dir string; Risks []string; Managed bool; Error string}
+github.com/Sevyn17/tenon/appapi/wire: type PackageInstalled struct{Version string; Enabled bool; Compare string; Error string}
+github.com/Sevyn17/tenon/appapi/wire: type PackagesEditResult struct{Name string; Trashed string; Reloaded bool; Workspace WorkspaceInfo}
+github.com/Sevyn17/tenon/appapi/wire: type PackagesInstallArgs struct{Source string; Force bool}
 github.com/Sevyn17/tenon/appapi/wire: type PackagesListResult struct{Packages []PackageInfo}
+github.com/Sevyn17/tenon/appapi/wire: type PackagesPreviewArgs struct{Source string}
+github.com/Sevyn17/tenon/appapi/wire: type PackagesPreviewResult struct{Name string; Version string; Description string; Contents string; Dir string; MCPServers []TrustMCPServer; Hooks []TrustHook; Skills []string; Prompts []string; Agents []string; Config []PackageConfig; UI []UISlot; UICommands []string; Risks []string; Installed *PackageInstalled; Notes []string}
+github.com/Sevyn17/tenon/appapi/wire: type PackagesRemoveArgs struct{Name string; Force bool}
+github.com/Sevyn17/tenon/appapi/wire: type PackagesSetEnabledArgs struct{Name string; Enabled bool; Force bool}
 github.com/Sevyn17/tenon/appapi/wire: type Part struct{Kind string; Text string; Media *MediaRef; Data any; Schema string}
 github.com/Sevyn17/tenon/appapi/wire: type PasswordAuthArgs struct{Email string; Password string; Name string}
 github.com/Sevyn17/tenon/appapi/wire: type PlatformConfigureArgs struct{ServerURL string; Test bool; DryRun bool}
 github.com/Sevyn17/tenon/appapi/wire: type PlatformConfigureResult struct{Saved bool; LoggedOut bool; Test *BYOKTestResult; Status AccountStatus}
-github.com/Sevyn17/tenon/appapi/wire: type PluginInfo struct{Name string; Version string; Description string; On bool; Default bool; Source string; Effects []string; Schema []ConfigField; Config map[string]any; Mandatory bool; Pending *PluginPending}
+github.com/Sevyn17/tenon/appapi/wire: type PluginInfo struct{Name string; Version string; Description string; On bool; Default bool; Source string; Effects []string; Schema []ConfigField; Config map[string]any; Mandatory bool; Pending *PluginPending; Risks []string}
 github.com/Sevyn17/tenon/appapi/wire: type PluginPending struct{On bool; Config map[string]any}
 github.com/Sevyn17/tenon/appapi/wire: type PluginsListResult struct{Plugins []PluginInfo; Scopes []ProfileScope; Denied map[string][]string}
 github.com/Sevyn17/tenon/appapi/wire: type PluginsSetArgs struct{Name string; Enabled *bool; Config map[string]any; Scope string; IfRevision *string}
@@ -533,6 +547,12 @@ github.com/Sevyn17/tenon/appapi/wire: type RespondResult struct{Outcome string}
 github.com/Sevyn17/tenon/appapi/wire: type Response struct{Approve *bool; Scope string; Text *string; Value encoding/json.RawMessage}
 github.com/Sevyn17/tenon/appapi/wire: type RewindArgs struct{Session string; ToTurn uint32; IfCursor *int64; RestoreFiles bool; Force bool}
 github.com/Sevyn17/tenon/appapi/wire: type RewindResult struct{To int; Files []string}
+github.com/Sevyn17/tenon/appapi/wire: const RiskCommands untyped string
+github.com/Sevyn17/tenon/appapi/wire: const RiskConfig untyped string
+github.com/Sevyn17/tenon/appapi/wire: const RiskExec untyped string
+github.com/Sevyn17/tenon/appapi/wire: const RiskNetwork untyped string
+github.com/Sevyn17/tenon/appapi/wire: const RiskPrompt untyped string
+github.com/Sevyn17/tenon/appapi/wire: const RiskWrite untyped string
 github.com/Sevyn17/tenon/appapi/wire: const RoleOperator untyped string
 github.com/Sevyn17/tenon/appapi/wire: const RoleViewer untyped string
 github.com/Sevyn17/tenon/appapi/wire: const RunIdle untyped string
@@ -590,6 +610,10 @@ github.com/Sevyn17/tenon/appapi/wire: type Usage struct{Input uint64; Output uin
 github.com/Sevyn17/tenon/appapi/wire: func ValidReasoning(s string) bool
 github.com/Sevyn17/tenon/appapi/wire: func ValidateView(raw []byte) error
 github.com/Sevyn17/tenon/appapi/wire: const Version untyped int
+github.com/Sevyn17/tenon/appapi/wire: const VersionNewer untyped string
+github.com/Sevyn17/tenon/appapi/wire: const VersionOlder untyped string
+github.com/Sevyn17/tenon/appapi/wire: const VersionSame untyped string
+github.com/Sevyn17/tenon/appapi/wire: const VersionUnknown untyped string
 github.com/Sevyn17/tenon/appapi/wire: type WorkspaceInfo struct{Path string; Name string; Trusted bool; Current bool; OpenedAt int64; Missing bool}
 github.com/Sevyn17/tenon/appapi/wire: type WorkspaceListResult struct{Items []WorkspaceInfo}
 github.com/Sevyn17/tenon/appapi/wire: type WorkspaceOpenArgs struct{Path string}

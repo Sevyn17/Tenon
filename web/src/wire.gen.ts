@@ -41,6 +41,12 @@ export type SkillScope = (typeof SkillScopes)[number];
 export const MCPScopes = ["global", "workspace"] as const;
 export type MCPScope = (typeof MCPScopes)[number];
 
+export const Risks = ["exec", "network", "write", "config", "prompt", "commands"] as const;
+export type Risk = (typeof Risks)[number];
+
+export const VersionCompares = ["newer", "same", "older", "unknown"] as const;
+export type VersionCompare = (typeof VersionCompares)[number];
+
 export const MCPStates = ["connected", "starting", "failed", "disabled"] as const;
 export type MCPState = (typeof MCPStates)[number];
 
@@ -1034,6 +1040,7 @@ export interface PluginInfo {
   config: Record<string, unknown>;
   mandatory?: boolean;
   pending?: PluginPending;
+  risks?: string[];
 }
 
 export interface PluginPending {
@@ -1077,6 +1084,11 @@ export interface PackageInfo {
   source: string;
   contents: string;
   ui?: UISlot[];
+  enabled: boolean;
+  dir?: string;
+  risks?: string[];
+  managed?: boolean;
+  error?: string;
 }
 
 export interface UISlot {
@@ -1096,6 +1108,66 @@ export interface UIData {
 
 export interface PackagesListResult {
   packages: PackageInfo[];
+}
+
+export interface PackagesPreviewArgs {
+  source: string;
+}
+
+export interface PackagesPreviewResult {
+  name: string;
+  version?: string;
+  description?: string;
+  contents: string;
+  dir: string;
+  mcp_servers: TrustMCPServer[];
+  hooks: TrustHook[];
+  skills: string[];
+  prompts: string[];
+  agents: string[];
+  config: PackageConfig[];
+  ui: UISlot[];
+  ui_commands: string[];
+  risks: string[];
+  installed?: PackageInstalled;
+  notes?: string[];
+}
+
+export interface PackageConfig {
+  plugin: string;
+  key: string;
+  value: unknown;
+  ignored?: boolean;
+}
+
+export interface PackageInstalled {
+  version?: string;
+  enabled: boolean;
+  compare: string;
+  error?: string;
+}
+
+export interface PackagesInstallArgs {
+  source: string;
+  force?: boolean;
+}
+
+export interface PackagesRemoveArgs {
+  name: string;
+  force?: boolean;
+}
+
+export interface PackagesSetEnabledArgs {
+  name: string;
+  enabled: boolean;
+  force?: boolean;
+}
+
+export interface PackagesEditResult {
+  name: string;
+  trashed?: string;
+  reloaded: boolean;
+  workspace: WorkspaceInfo;
 }
 
 export interface AccountStatus {

@@ -917,6 +917,9 @@ type PluginInfo struct {
 	Mandatory bool `json:"mandatory,omitempty"`
 	// Pending 改过、要重启才生效（按 plugins.set 写入的文件重新合并的结果与当前进程不同）。
 	Pending *PluginPending `json:"pending,omitempty"`
+	// Risks 打开这个插件前要确认的风险（客户端改进 M11 T24），由 effects 推断：exec → exec，network → network，
+	// system_prompt / rewrite_result → prompt；tools 不算。前端在打开带 exec 或 network 的插件时弹确认。
+	Risks []string `json:"risks,omitempty"`
 }
 
 // PluginPending 重启后的开关与配置。
@@ -972,6 +975,17 @@ type PackageInfo struct {
 	Contents    string `json:"contents"`
 	// UI 包的界面贡献（[[ui]] 段）：前端按它往插槽放声明式视图。
 	UI []UISlot `json:"ui,omitempty"`
+	// Enabled 是否生效（客户端改进 M11 配置T22）。旧服务端不给这个字段：没有能力 packages.manage 时按启用处理。
+	// 停用的用户级包也列出（enabled = false、contents 照常），不提供组件、不放界面。
+	Enabled bool `json:"enabled"`
+	// Dir 包目录（绝对路径）。
+	Dir string `json:"dir,omitempty"`
+	// Risks 风险项（Risk* 常量：exec / network / write / config / prompt / commands），推断规则见 runtime/pkgs/risks.go。
+	Risks []string `json:"risks,omitempty"`
+	// Managed 能经 packages.remove / setEnabled 管理（用户级包且应用支持 packages.manage）。项目级包只读。
+	Managed bool `json:"managed,omitempty"`
+	// Error 用户级目录里有这个包但没加载的原因（清单坏了、被同名项目包覆盖）；空 = 正常。
+	Error string `json:"error,omitempty"`
 }
 
 // UISlot 一条界面贡献：插槽位置 + 声明式视图（形状见 declarative.go 的 DeclNode 或数组）+ 可选的数据来源。
@@ -995,6 +1009,101 @@ type UIData struct {
 // PackagesListResult packages.list 的结果。
 type PackagesListResult struct {
 	Packages []PackageInfo `json:"packages"`
+}
+
+// 插件包与插件的风险项（PackageInfo.risks、PackagesPreviewResult.risks、PluginInfo.risks）。
+const (
+	RiskExec     = "exec"     // 会在本机执行命令（stdio MCP 服务、钩子、exec 类插件）
+	RiskNetwork  = "network"  // 会连外部地址（http MCP 服务、network 类插件）
+	RiskWrite    = "write"    // 执行的命令不在只读沙箱里，可能改文件
+	RiskConfig   = "config"   // 改内置插件的缺省配置
+	RiskPrompt   = "prompt"   // 改模型看到的系统提示词或工具结果
+	RiskCommands = "commands" // 界面按钮能调协议命令
+)
+
+// 预览时新包版本与已安装版本的比较（PackageInstalled.compare）。
+const (
+	VersionNewer   = "newer"   // 新包更新
+	VersionSame    = "same"    // 相同
+	VersionOlder   = "older"   // 新包更旧（降级）
+	VersionUnknown = "unknown" // 有一方不是数字点分的版本号，比不出来
+)
+
+// PackagesPreviewArgs packages.preview：只读解析一个本地目录或 .zip（在服务端所在的机器上），不安装。
+// 只给 operator（会读服务端本机任意路径）。
+type PackagesPreviewArgs struct {
+	Source string `json:"source"`
+}
+
+// PackagesPreviewResult 安装确认框要的内容。清单不合法时命令返回 invalid（message 说明原因）。
+type PackagesPreviewResult struct {
+	Name        string `json:"name"`
+	Version     string `json:"version,omitempty"`
+	Description string `json:"description,omitempty"`
+	Contents    string `json:"contents"`
+	// Dir 装好后的目录（<home>/plugins/<名>）；命令行与钩子里的 ${TENON_PLUGIN_DIR} 已按它展开。
+	Dir        string           `json:"dir"`
+	MCPServers []TrustMCPServer `json:"mcp_servers"` // source = package:<名>
+	Hooks      []TrustHook      `json:"hooks"`
+	Skills     []string         `json:"skills"`  // 技能名
+	Prompts    []string         `json:"prompts"` // 提示词片段文件（相对包目录）
+	Agents     []string         `json:"agents"`  // 定义（如 platform:helper）
+	Config     []PackageConfig  `json:"config"`  // [config.<插件>] 的每个键
+	UI         []UISlot         `json:"ui"`
+	// UICommands 界面按钮 / 链接 / 表单能调的协议命令（视图里 kind = call 的 cmd）。
+	UICommands []string `json:"ui_commands"`
+	Risks      []string `json:"risks"`
+	// Installed 已安装的同名用户级包；没有时不给。
+	Installed *PackageInstalled `json:"installed,omitempty"`
+	// Notes 提示：负责的插件没开、会被忽略的配置键、本地包没有签名等。
+	Notes []string `json:"notes,omitempty"`
+}
+
+// PackageConfig 插件包给某个内置插件设的一项缺省配置。
+type PackageConfig struct {
+	Plugin string `json:"plugin"`
+	Key    string `json:"key"`
+	Value  any    `json:"value"`
+	// Ignored 插件包不能设（端点、凭据、存储位置），加载时会丢掉。
+	Ignored bool `json:"ignored,omitempty"`
+}
+
+// PackageInstalled 预览时已安装的同名包。
+type PackageInstalled struct {
+	Version string `json:"version,omitempty"`
+	Enabled bool   `json:"enabled"`
+	Compare string `json:"compare"`         // Version*：新包相对已安装的
+	Error   string `json:"error,omitempty"` // 已安装的那份清单坏了
+}
+
+// PackagesInstallArgs packages.install：把 source 装到用户级插件包目录。同名已安装时旧包挪进
+// <home>/plugins/.trash/<名>-<时间>（可手工挪回恢复）。force 同 mcp.save：有回合在跑时先取消再重建。
+type PackagesInstallArgs struct {
+	Source string `json:"source"`
+	Force  bool   `json:"force,omitempty"`
+}
+
+// PackagesRemoveArgs packages.remove：把用户级包挪进 .trash（不删除）。项目包 → invalid；没有 → not_found。
+type PackagesRemoveArgs struct {
+	Name  string `json:"name"`
+	Force bool   `json:"force,omitempty"`
+}
+
+// PackagesSetEnabledArgs packages.setEnabled：启停用户级包（记录在 <home>/plugins-enabled.toml）。
+type PackagesSetEnabledArgs struct {
+	Name    string `json:"name"`
+	Enabled bool   `json:"enabled"`
+	Force   bool   `json:"force,omitempty"`
+}
+
+// PackagesEditResult packages.install / remove / setEnabled 的结果。Reloaded 为真时旧连接随后断开，
+// 客户端重连、重新 hello 后再调 packages.list；setEnabled 状态没变时不重建（reloaded = false）。
+type PackagesEditResult struct {
+	Name string `json:"name"`
+	// Trashed 挪进 .trash 的旧包目录（覆盖安装、卸载）；空 = 没有。
+	Trashed   string        `json:"trashed,omitempty"`
+	Reloaded  bool          `json:"reloaded"`
+	Workspace WorkspaceInfo `json:"workspace"`
 }
 
 // —— 平台账号（protocol 2 的可选能力；应用没接平台时这些命令返回空状态）——

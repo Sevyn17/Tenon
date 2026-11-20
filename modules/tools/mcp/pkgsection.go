@@ -37,6 +37,23 @@ func init() {
 				ns = append(ns, s.Name)
 			}
 			return "MCP 服务 " + strings.Join(ns, "、")
+		},
+		// 风险（客户端改进 M11 T22/T24）：stdio 服务会执行命令，沙箱不是 read-only 时还可能写文件；http 服务会连外部地址。
+		Risks: func(v any) []string {
+			ss, _ := v.([]Server)
+			var rs []string
+			for _, s := range ss {
+				if s.Command != "" {
+					rs = append(rs, pkgs.RiskExec)
+					if s.Sandbox != "read-only" {
+						rs = append(rs, pkgs.RiskWrite)
+					}
+				}
+				if s.URL != "" {
+					rs = append(rs, pkgs.RiskNetwork)
+				}
+			}
+			return rs
 		}})
 }
 
