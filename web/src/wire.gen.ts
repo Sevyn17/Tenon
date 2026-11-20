@@ -35,8 +35,14 @@ export type ConflictReason = (typeof ConflictReasons)[number];
 export const ChangeScopes = ["session", "turn", "from_turn"] as const;
 export type ChangeScope = (typeof ChangeScopes)[number];
 
+export const SkillScopes = ["global", "workspace"] as const;
+export type SkillScope = (typeof SkillScopes)[number];
+
 export const NoticeLevels = ["info", "warn", "error"] as const;
 export type NoticeLevel = (typeof NoticeLevels)[number];
+
+export const TrustLevels = ["trusted", "untrusted"] as const;
+export type TrustLevel = (typeof TrustLevels)[number];
 
 export interface Entry {
   id: string;
@@ -811,6 +817,98 @@ export interface ChangeConflict {
 export interface ChangesRevertResult {
   reverted: string[];
   conflicts?: ChangeConflict[];
+}
+
+export interface SkillInfo {
+  name: string;
+  description: string;
+  source: string;
+  path: string;
+  model_invocable: boolean;
+  enabled: boolean;
+  disabled_scope?: string;
+  disabled_reason?: string;
+}
+
+export interface SkillsListResult {
+  skills: SkillInfo[];
+  workspace?: string;
+  warnings?: string[];
+}
+
+export interface SkillsSetEnabledArgs {
+  name: string;
+  enabled: boolean;
+  scope?: string;
+}
+
+export interface SkillsSetEnabledResult {
+  skill: SkillInfo;
+}
+
+export interface WorkspaceTrustPreviewResult {
+  root: string;
+  key: string;
+  trusted: boolean;
+  level?: string;
+  why?: string;
+  forced?: boolean;
+  files: string[];
+  mcp_servers: TrustMCPServer[];
+  hooks: TrustHook[];
+  widened_modes: TrustMode[];
+  default_mode?: string;
+  packages: TrustPackage[];
+  plugins: TrustPluginSetting[];
+  notes?: string[];
+}
+
+export interface TrustMCPServer {
+  name: string;
+  command?: string;
+  args?: string[];
+  url?: string;
+  source: string;
+}
+
+export interface TrustHook {
+  event: string;
+  matcher?: string;
+  command: string;
+  source: string;
+}
+
+export interface TrustMode {
+  id: string;
+  title?: string;
+  widened: string[];
+  approved?: boolean;
+}
+
+export interface TrustPackage {
+  name: string;
+  version?: string;
+  description?: string;
+  dir: string;
+}
+
+export interface TrustPluginSetting {
+  name: string;
+  enabled?: boolean;
+  keys?: string[];
+  ignored?: string[];
+}
+
+export interface WorkspaceTrustArgs {
+  level: string;
+  force?: boolean;
+}
+
+export interface WorkspaceTrustResult {
+  workspace: WorkspaceInfo;
+  key: string;
+  level: string;
+  reloaded?: boolean;
 }
 
 export interface ConfigField {

@@ -38,9 +38,13 @@ export const COMMANDS = [
   "changes.list",
   "changes.diff",
   "changes.revert",
+  "skills.list",
+  "skills.setEnabled",
   "workspace.list",
   "workspace.open",
   "workspace.reload",
+  "workspace.trustPreview",
+  "workspace.trust",
   "models.list",
   "platform.status",
   "platform.login",
@@ -100,9 +104,13 @@ export interface CommandMap {
   "changes.list": [W.ChangesArgs, W.ChangesResult];
   "changes.diff": [W.ChangesDiffArgs, W.ChangesDiffResult];
   "changes.revert": [W.ChangesRevertArgs, W.ChangesRevertResult];
+  "skills.list": [W.Empty, W.SkillsListResult];
+  "skills.setEnabled": [W.SkillsSetEnabledArgs, W.SkillsSetEnabledResult];
   "workspace.list": [W.Empty, W.WorkspaceListResult];
   "workspace.open": [W.WorkspaceOpenArgs, W.WorkspaceOpenResult];
   "workspace.reload": [W.WorkspaceReloadArgs, W.WorkspaceReloadResult];
+  "workspace.trustPreview": [W.Empty, W.WorkspaceTrustPreviewResult];
+  "workspace.trust": [W.WorkspaceTrustArgs, W.WorkspaceTrustResult];
   "models.list": [W.Empty, W.ModelsListResult];
   "platform.status": [W.Empty, W.AccountStatus];
   "platform.login": [W.AccountLoginArgs, W.AccountLoginResult];

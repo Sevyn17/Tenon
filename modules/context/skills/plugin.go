@@ -12,12 +12,17 @@ import (
 
 const valueKey = "skills"
 
+// ServiceName 本插件提供的服务（值为 *Skills）：skills.list / skills.setEnabled 经它取技能目录与启停记录
+// （adapters.Skills）。
+const ServiceName = "service:skills"
+
 type plug struct{}
 
 func init() { component.Register("skills", func() component.Component { return &plug{} }) }
 
 func (*plug) Meta() component.Meta {
-	return component.Meta{Name: "skills", Version: "0.1.0", Description: "技能：发现可复用的操作说明，需要时加载进系统提示词", Effects: []string{component.EffectTools, component.EffectSystemPrompt}, Requires: []string{assemble.ServiceWorkdir, assemble.ServiceUI, "?" + assemble.ServiceTrust, "?" + pkgs.Service}}
+	return component.Meta{Name: "skills", Version: "0.1.0", Description: "技能：发现可复用的操作说明，需要时加载进系统提示词", Effects: []string{component.EffectTools, component.EffectSystemPrompt}, Requires: []string{assemble.ServiceWorkdir, assemble.ServiceUI, "?" + assemble.ServiceTrust, "?" + pkgs.Service},
+		Provides: []string{ServiceName}}
 }
 
 func (*plug) Setup(cx *component.Registrar) error {
@@ -34,17 +39,18 @@ func (*plug) Setup(cx *component.Registrar) error {
 	if err != nil {
 		return err
 	}
-	var extra []string
+	var extra []PackageDir
 	for _, k := range ps {
 		if k.SkillsDir != "" {
-			extra = append(extra, k.SkillsDir)
+			extra = append(extra, PackageDir{Name: k.Name, Dir: k.SkillsDir})
 		}
 	}
 	for _, it := range Items() {
 		component.RegisterAt(cx, assemble.PermItems, "skills", it)
 	}
-	// 技能索引装配期扫一次，各会话共用（工具与系统块读同一份）。
-	s := NewSkillsTrust(root, assemble.ProjectTrusted(cx), extra...) // 不受信项目不读项目技能（审查 P1-4）
+	// 技能索引装配期扫一次，各会话共用（工具与系统块读同一份）。启停记录每次建会话时重读（state.go），
+	// 所以 skills.setEnabled 之后新会话就按新记录，不用重建运行时。
+	s := NewSkillsPackages(root, assemble.ProjectTrusted(cx), extra) // 不受信项目不读项目技能（审查 P1-4）
 	for _, w := range s.Warnings {
 		ui.Warn("技能", w)
 	}
@@ -52,10 +58,11 @@ func (*plug) Setup(cx *component.Registrar) error {
 	component.RegisterAt(cx, assemble.SessionTools, "skills", assemble.ToolsEntry{Order: 25,
 		Tools: func() []*toolhub.Tool { return []*toolhub.Tool{sk} },
 		// 没有技能时不暴露 skill 工具（2026-11-04 审查 P2 工具体验：原先空目录也给模型一个调不通的工具）。
-		Visible: func(*assemble.SessionCx) bool { return len(s.List()) > 0 }})
+		// 全部停用时同样不暴露。
+		Visible: func(*assemble.SessionCx) bool { return len(s.Enabled()) > 0 }})
 	component.RegisterAt(cx, assemble.SystemBlock, "skills", assemble.BlockEntry{Order: 20,
 		Func: func(*assemble.SessionCx) (*session.SystemBlock, error) { return s.Block(), nil }})
-	return nil
+	return cx.Provide("skills", s)
 }
 
 func (*plug) Start(*component.Scope) error { return nil }

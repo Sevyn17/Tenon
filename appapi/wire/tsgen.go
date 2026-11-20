@@ -30,6 +30,8 @@ var tsTypes = []any{
 	ModeSetResult{}, ModeShowArgs{}, ModeItem{}, ModeShowResult{}, ArtifactGetArgs{}, ArtifactGetResult{},
 	ArtifactPutArgs{}, ArtifactPutResult{}, TraceArgs{}, TraceResult{}, FilesArgs{}, FileInfo{}, FilesResult{},
 	ChangesArgs{}, ChangeFile{}, ChangesResult{}, ChangesDiffArgs{}, ChangesDiffResult{}, ChangesRevertArgs{}, ChangeConflict{}, ChangesRevertResult{},
+	SkillInfo{}, SkillsListResult{}, SkillsSetEnabledArgs{}, SkillsSetEnabledResult{},
+	WorkspaceTrustPreviewResult{}, TrustMCPServer{}, TrustHook{}, TrustMode{}, TrustPackage{}, TrustPluginSetting{}, WorkspaceTrustArgs{}, WorkspaceTrustResult{},
 	ConfigField{}, PluginInfo{},
 	PluginPending{}, ProfileScope{}, PluginsListResult{}, PluginsSetArgs{}, PluginsSetResult{}, PackageInfo{}, UISlot{}, UIData{}, PackagesListResult{}, AccountStatus{}, AccountLoginArgs{}, AccountLoginResult{}, AccountEntitlements{},
 	APIKey{}, APIKeyListResult{}, APIKeyCreateArgs{}, APIKeyCreateResult{}, APIKeyRevokeArgs{}, APIKeyRevokeResult{},
@@ -60,7 +62,9 @@ var tsConsts = []struct {
 		CodeUnsupported, CodeInternal}},
 	{"ConflictReasons", []string{ConflictExists, ConflictAnswered, ConflictStale, ConflictLeased, ConflictFiles}},
 	{"ChangeScopes", []string{ChangeScopeSession, ChangeScopeTurn, ChangeScopeFromTurn}},
+	{"SkillScopes", []string{SkillScopeGlobal, SkillScopeWorkspace}},
 	{"NoticeLevels", []string{NoticeInfo, NoticeWarn, NoticeError}},
+	{"TrustLevels", []string{TrustTrusted, TrustUntrusted}},
 }
 
 var rawType = reflect.TypeOf(json.RawMessage(nil))

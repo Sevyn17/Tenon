@@ -20,6 +20,7 @@ import (
 
 	"github.com/Sevyn17/tenon/appapi"
 	"github.com/Sevyn17/tenon/appapi/wire"
+	"github.com/Sevyn17/tenon/runtime/resmgr"
 )
 
 // MaxRecentWorkspaces 最近列表最多记几个目录。
@@ -37,6 +38,10 @@ type WorkspaceOptions struct {
 	RecentPath string
 	// Platform 平台账号（platform.* 命令）；nil = 不接平台。切换工作区后新 App 沿用同一个。
 	Platform appapi.Platform
+	// ResourceIdle 统一资源管理器里没有引用的实例（如 MCP 进程）多久回收；0 = resmgr.DefaultIdle（5 分钟），<0 = 立即回收。
+	ResourceIdle time.Duration
+	// ResourceMax 资源管理器的实例数上限；0 = 不限。
+	ResourceMax int
 }
 
 // Workspace 一个已打开的工作区：运行时 + 应用接口层。
@@ -53,13 +58,16 @@ type WorkspaceManager struct {
 	cur     *Workspace
 	curRoot string
 	view    sync.RWMutex // 保护 cur 的读（Current）
+	// res 统一资源管理器（docs/50 5.1）：跨工作区存活，每次打开工作区 Bind 一份视图注入给组件（service:resources）。
+	res *resmgr.Manager
 }
 
 // OpenWorkspaceManager 打开启动时的工作区（o.Flags.Workdir）。失败时没有任何资源残留。
 func OpenWorkspaceManager(o WorkspaceOptions) (*WorkspaceManager, error) {
-	m := &WorkspaceManager{o: o}
+	m := &WorkspaceManager{o: o, res: resmgr.New(resmgr.Options{Idle: o.ResourceIdle, Max: o.ResourceMax})}
 	ws, err := m.start(o.Flags.Workdir)
 	if err != nil {
+		m.res.Close()
 		return nil, err
 	}
 	m.cur, m.curRoot = ws, ws.Runtime.Root
@@ -74,7 +82,7 @@ func (m *WorkspaceManager) Current() *Workspace {
 	return m.cur
 }
 
-// Close 关掉当前工作区。
+// Close 关掉当前工作区与资源管理器里的全部实例（进程退出时）。
 func (m *WorkspaceManager) Close() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -85,7 +93,21 @@ func (m *WorkspaceManager) Close() {
 	if ws != nil {
 		ws.Runtime.Close()
 	}
+	if m.res != nil {
+		m.res.Close()
+	}
 }
+
+// hold 暂缓资源回收（见 resmgr.Manager.Hold）；没有管理器时什么也不做。
+func (m *WorkspaceManager) hold() func() {
+	if m.res == nil {
+		return func() {}
+	}
+	return m.res.Hold()
+}
+
+// Resources 统一资源管理器：列出在跑的实例（管理页、协议用）。管理器关闭后仍可调 List（为空）。
+func (m *WorkspaceManager) Resources() *resmgr.Manager { return m.res }
 
 // start 在 dir 上装配并接线一套运行时，跑 ready 点位，把装配提示发成 notice。
 func (m *WorkspaceManager) start(dir string) (*Workspace, error) { return m.startWith(dir, nil) }
@@ -94,10 +116,23 @@ func (m *WorkspaceManager) start(dir string) (*Workspace, error) { return m.star
 func (m *WorkspaceManager) startWith(dir string, pre *loaded) (*Workspace, error) {
 	f := m.o.Flags
 	f.Workdir = dir
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return nil, err
+	}
+	// 本工作区在资源管理器里的视图：运行时关掉时交还它取过的全部引用（Runtime.Close）。
+	var bound *resmgr.Bound
+	if m.res != nil {
+		bound = m.res.Bind(resmgr.Owner{Workspace: WorkspaceKey(abs)})
+	}
 	// 网页端、桌面端都没有终端可问：无信任记录的项目按不受信（同启动时）；界面走协议（UI 为 nil）。
 	rt, err := start(StartOptions{Flags: f, SleepAfter: m.o.SleepAfter,
-		App: AppOptions{MaxSteps: f.MaxSteps, Upload: m.o.Upload, Workspaces: m, Platform: m.o.Platform}}, pre)
+		App:       AppOptions{MaxSteps: f.MaxSteps, Upload: m.o.Upload, Workspaces: m, Platform: m.o.Platform},
+		resources: bound}, pre)
 	if err != nil {
+		if bound != nil {
+			bound.Close()
+		}
 		return nil, err
 	}
 	built, err := rt.BuildApp()
@@ -137,6 +172,8 @@ func (m *WorkspaceManager) Open(_ context.Context, path string) (wire.WorkspaceI
 		return m.info(m.cur.Runtime.Root, m.cur.Runtime.Trusted, true), nil
 	}
 	oldRoot := m.curRoot
+	// 旧运行时交还引用到新运行时取到之间不回收：全局范围的实例（如 MCP 进程）留给新工作区接着用。
+	defer m.hold()()
 	m.swap(nil, "")
 	ws, err := m.start(abs)
 	if err != nil {
@@ -164,6 +201,7 @@ func (m *WorkspaceManager) Reload(_ context.Context) (wire.WorkspaceInfo, error)
 		return wire.WorkspaceInfo{}, ErrNoWorkspace
 	}
 	root, prev := m.curRoot, m.cur.Runtime.loaded
+	defer m.hold()() // 同 Open：重建期间全局实例不回收
 	m.swap(nil, "")
 	ws, err := m.start(root)
 	if err != nil {

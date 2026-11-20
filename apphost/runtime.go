@@ -22,8 +22,10 @@ import (
 	"github.com/Sevyn17/tenon/runtime/assemble"
 	"github.com/Sevyn17/tenon/runtime/bus"
 	"github.com/Sevyn17/tenon/runtime/component"
+	"github.com/Sevyn17/tenon/runtime/ext"
 	"github.com/Sevyn17/tenon/runtime/host"
 	"github.com/Sevyn17/tenon/runtime/pkgs"
+	"github.com/Sevyn17/tenon/runtime/resmgr"
 	"github.com/Sevyn17/tenon/runtime/store"
 )
 
@@ -91,8 +93,9 @@ type Runtime struct {
 	// BaseProfile 产品内置的 base profile 原文（同 Flags.BaseProfile）。
 	BaseProfile string
 
-	readyErrs []error // ready 点位的错误（BuildApp 时跑，Built.Ready 交出）
-	loaded    *loaded // 这次读到的信任与 profile（WorkspaceManager.Reload 回落用）
+	readyErrs []error       // ready 点位的错误（BuildApp 时跑，Built.Ready 交出）
+	loaded    *loaded       // 这次读到的信任与 profile（WorkspaceManager.Reload 回落用）
+	resources *resmgr.Bound // StartOptions.resources（Close 时交还引用）
 }
 
 // StartOptions Start 的参数。
@@ -106,6 +109,10 @@ type StartOptions struct {
 	SleepAfter time.Duration
 	// App 跑会话时的选项（BuildApp 用；会话钩子等要在装配时给，所以放在这里）。
 	App AppOptions
+
+	// resources 本工作区在统一资源管理器里的视图（WorkspaceManager 给；空 = 组件自己管实例）。
+	// 注入为 service:resources；Runtime.Close 时交还它取过的全部引用。
+	resources *resmgr.Bound
 }
 
 // AppOptions 跑会话时的选项。
@@ -189,6 +196,10 @@ func start(o StartOptions, pre *loaded) (*Runtime, error) {
 	if o.App.MaxSteps >= 0 {
 		opts = append(opts, tenon.WithKernel(map[string]any{"max_steps": o.App.MaxSteps}))
 	}
+	if o.resources != nil {
+		r.resources = o.resources
+		opts = append(opts, tenon.WithService(ext.ServiceResources, o.resources))
+	}
 	if o.App.Hooks != nil {
 		opts = append(opts, tenon.WithSessionHooks(o.App.Hooks))
 	}
@@ -240,6 +251,9 @@ func WorkspaceKey(root string) string { return NormPath(root) }
 func (r *Runtime) Close() {
 	if r.App != nil {
 		_ = r.App.Close(context.Background())
+	}
+	if r.resources != nil { // 组件关闭时已交还自己的引用；这里兜底交还剩下的
+		r.resources.Close()
 	}
 }
 

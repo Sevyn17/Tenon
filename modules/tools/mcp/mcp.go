@@ -49,6 +49,12 @@ type Server struct {
 	Trust string `toml:"trust"`
 	// Sandbox stdio 子进程的沙箱：read-only / workspace-write / danger-full-access；空 = 缺省档位的 [sandbox]。
 	Sandbox string `toml:"sandbox"`
+	// Scope 实例能共享到的范围（docs/50 5.1）：global = 所有工作区共用一份，切换工作区不重启；
+	// workspace（缺省）= 每个工作区各起一份，stdio 服务的工作目录缺省为项目根。
+	// 只有用户级定义（~/.<应用>/mcp.toml、用户级插件包）能写 global；项目定义一律按工作区。
+	Scope string `toml:"scope"`
+	// Source 定义来源：user / project / package:<包名> / config（-config 显式文件）。由插件填，不从文件读。
+	Source string `toml:"-"`
 
 	confine func(cmd *exec.Cmd) (func(), error) // 由 Open 按 Config.Confine 填入
 	// noExpand 插件包来源（第三方）：env / headers 不展开宿主环境变量，只认已替换好的 ${TENON_PLUGIN_DIR}
@@ -117,9 +123,29 @@ func checkServers(ss []Server) error {
 				return fmt.Errorf("服务 %s：%w", s.Name, err)
 			}
 		}
+		switch s.Scope {
+		case "", ScopeGlobal, ScopeWorkspace:
+		default:
+			return fmt.Errorf("服务 %s 的 scope %q 不合法（global / workspace）", s.Name, s.Scope)
+		}
 	}
 	return nil
 }
+
+// 实例范围（Server.Scope）。
+const (
+	ScopeGlobal    = "global"
+	ScopeWorkspace = "workspace"
+)
+
+// 定义来源（Server.Source）。
+const (
+	SourceUser    = "user"
+	SourceProject = "project"
+	SourceConfig  = "config"
+	// SourcePackage 插件包来源的前缀，完整写法 "package:<包名>"。
+	SourcePackage = "package:"
+)
 
 func (s Server) timeout() time.Duration {
 	if s.Timeout > 0 {
@@ -540,10 +566,7 @@ func Open(ctx context.Context, cfg Config) *Source {
 	res := make([]result, len(cfg.Server))
 	var wg sync.WaitGroup
 	for i, sv := range cfg.Server {
-		if cfg.Confine != nil && sv.Command != "" {
-			conf, orig := cfg.Confine, sv
-			sv.confine = func(cmd *exec.Cmd) (func(), error) { return conf(cmd, orig) }
-		}
+		sv = cfg.confined(sv)
 		wg.Add(1)
 		go func(i int, sv Server) {
 			defer wg.Done()

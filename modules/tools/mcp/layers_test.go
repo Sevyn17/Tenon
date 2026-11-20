@@ -47,14 +47,27 @@ func assembleMCP(t *testing.T, layers component.LayeredConfig) *plug {
 	return p
 }
 
-// 18 方案第七节：mcp 只认项目层，且项目层不受信不用。用户层即使写了也不生效。
+// docs/50 5.1（推翻 18 方案第七节）：用户层是全局定义，受信项目层是工作区定义；项目层不受信不用。
+// 项目与用户重名时项目覆盖并提示；项目定义一律按工作区分配。
 func TestMCPFromLayers(t *testing.T) {
+	t.Setenv("TENON_HOME", t.TempDir()) // 启用记录读用户级目录：用空目录
+	g := server("user", "http://user.example")
+	g["scope"] = "global"
+	dup := server("same", "http://user-same.example")
+	pg := server("proj", "http://proj.example")
+	pg["scope"] = "global" // 项目定义写 global 无效
 	p := assembleMCP(t, fakeLayers{
-		mcpLayer(component.OriginUser, true, server("user", "http://user.example")),
-		mcpLayer(component.OriginProject, true, server("proj", "http://proj.example")),
+		mcpLayer(component.OriginUser, true, g, dup),
+		mcpLayer(component.OriginProject, true, pg, server("same", "http://proj-same.example")),
 	})
-	if n := len(p.cfg.Server); n != 1 || p.cfg.Server[0].Name != "proj" {
-		t.Fatalf("只应有受信项目层的服务，得 %+v", p.cfg.Server)
+	got := map[string]Server{}
+	for _, s := range p.cfg.Server {
+		got[s.Name] = s
+	}
+	if len(p.cfg.Server) != 3 || got["user"].Source != SourceUser || got["user"].Scope != ScopeGlobal ||
+		got["proj"].Source != SourceProject || got["proj"].Scope != ScopeWorkspace ||
+		got["same"].Source != SourceProject || got["same"].URL != "http://proj-same.example" {
+		t.Fatalf("合并结果不对：%+v", p.cfg.Server)
 	}
 
 	p = assembleMCP(t, fakeLayers{
@@ -67,6 +80,18 @@ func TestMCPFromLayers(t *testing.T) {
 
 // 项目层的服务照样校验（与文件、插件包共用 checkServers）。
 func TestMCPLayerValidates(t *testing.T) {
+	for _, l := range []component.ConfigLayer{
+		mcpLayer(component.OriginUser, true, map[string]any{"name": "a", "url": "http://x", "scope": "session"}),
+	} {
+		p := &plug{}
+		if _, err := component.Assemble(component.Spec{
+			Plugins:   []component.Entry{{Name: "mcp"}},
+			Inject:    map[string]any{assemble.ServiceUI: testUI{}, component.KeyLayers.Name(): fakeLayers{l}},
+			Instances: map[string]component.Component{"mcp": p},
+		}); err == nil {
+			t.Fatal("非法 scope 应报错")
+		}
+	}
 	bad := mcpLayer(component.OriginProject, true, map[string]any{"name": "bad name", "url": "http://x"})
 	p := &plug{}
 	_, err := component.Assemble(component.Spec{

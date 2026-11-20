@@ -13,6 +13,7 @@ import (
 
 	"github.com/Sevyn17/tenon/appapi"
 	"github.com/Sevyn17/tenon/appapi/wire"
+	"github.com/Sevyn17/tenon/modules/context/skills"
 	"github.com/Sevyn17/tenon/modules/security/permission"
 	"github.com/Sevyn17/tenon/modules/tools/checkpoint"
 	"github.com/Sevyn17/tenon/modules/tools/fs"
@@ -77,6 +78,13 @@ func Fill(o *appapi.Options, p Parts) (*permission.Sessions, error) {
 		if v, ok := p.Asm.Value(checkpoint.ServiceName); ok {
 			if e, ok := v.(*checkpoint.Engine); ok && e != nil {
 				o.Changes = Changes{E: e}
+			}
+		}
+	}
+	if o.Skills == nil { // 本地技能（客户端改进 M11 配置T18）：skills.list / skills.setEnabled
+		if v, ok := p.Asm.Value(skills.ServiceName); ok {
+			if s, ok := v.(*skills.Skills); ok && s != nil {
+				o.Skills = Skills{S: s}
 			}
 		}
 	}

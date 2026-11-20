@@ -109,6 +109,8 @@ var commands = map[string]handler{
 	"changes.list":        bind((*App).ChangesList),
 	"changes.diff":        bind((*App).ChangesDiff),
 	"changes.revert":      bind((*App).ChangesRevert),
+	"skills.list":         bind((*App).SkillsList),
+	"skills.setEnabled":   bind((*App).SkillsSetEnabled),
 	"models.list":         bind((*App).ModelsList),
 	// 平台账号（可选能力；应用没接平台时返回 Configured=false，不报错）
 	"platform.status":           bind((*App).PlatformStatus),
@@ -130,6 +132,8 @@ var commands = map[string]handler{
 	"workspace.list":            bind((*App).WorkspaceList),
 	"workspace.open":            bind((*App).WorkspaceOpen),
 	"workspace.reload":          bind((*App).WorkspaceReload),
+	"workspace.trustPreview":    bind((*App).WorkspaceTrustPreview), // 客户端改进 M11（trust.go）
+	"workspace.trust":           bind((*App).WorkspaceTrust),
 }
 
 // Commands protocol 2 支持的命令名（排序后）。
@@ -256,6 +260,9 @@ func (v *App) capabilities() []string {
 		// reload（客户端改进 M3）：工作区管理器能在当前目录上重建运行时（workspace.reload）。CLI 没有管理器，不报。
 		if _, ok := o.Workspaces.(Reloader); ok {
 			out = append(out, "reload")
+			if _, ok := o.Workspaces.(Truster); ok { // 客户端改进 M11：界面里信任项目（trust.go）
+				out = append(out, CapWorkspaceTrust)
+			}
 		}
 	}
 	// **platform 能力**（2026-11-16 补）：此前漏了这条，导致 `client.can("platform")`
@@ -312,6 +319,10 @@ func (v *App) capabilities() []string {
 	// changes.git（M9 T10）：changes.list / diff 接受 scope=git（未提交改动，只读）。本机有 git 且工作区在仓库里才报。
 	if v.gitScope() {
 		out = append(out, "changes.git")
+	}
+	// skills（M11 配置T18）：skills.list / skills.setEnabled。开了 skills 插件才报。
+	if o.Skills != nil {
+		out = append(out, "skills")
 	}
 	return out
 }

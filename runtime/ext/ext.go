@@ -46,6 +46,8 @@ const (
 	ServiceTrust    = "service:trust"    // bool：项目是否受信；未预置按受信
 	ServicePackages = "service:packages" // []*pkgs.Package：已加载的插件包
 	ServiceLayers   = "service:layers"   // component.LayeredConfig：部署期配置的分层来源
+	// ServiceResources *resmgr.Bound：统一资源管理器按本工作区绑定的视图（apphost 注入；没注入时组件自己管实例）。
+	ServiceResources = "service:resources"
 )
 
 // 组件提供的服务。

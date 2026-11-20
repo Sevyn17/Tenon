@@ -315,6 +315,99 @@ type WorkspaceReloadResult struct {
 	Workspace WorkspaceInfo `json:"workspace"`
 }
 
+// 项目信任级别（workspace.trust 的 level；trust.toml 里的取值）。
+const (
+	TrustTrusted   = "trusted"
+	TrustUntrusted = "untrusted"
+)
+
+// WorkspaceTrustPreviewResult workspace.trustPreview：当前工作区受信后会生效的项目配置（只读空跑，不启动任何东西），
+// 以及当前的信任状态。已受信时列的是正在生效的内容。hello 能力 workspace.trust。
+type WorkspaceTrustPreviewResult struct {
+	Root string `json:"root"` // 工作区目录
+	// Key 信任范围：信任记录记在这个目录上（向上找到的 git 根，找不到就是工作区目录本身），其下所有子目录都继承。
+	Key     string `json:"key"`
+	Trusted bool   `json:"trusted"` // 当前运行时是否受信
+	// Level 当前适用的信任记录（最近的上级记录）：trusted / untrusted；空 = 没有记录（界面里按不受信）。
+	Level string `json:"level,omitempty"`
+	Why   string `json:"why,omitempty"` // 当前信任结果的来由（trust.toml、命令行 -trust-project、无记录……）
+	// Forced 启动参数强制受信（-trust-project / -project-hooks）：改信任记录对本次运行不起作用。
+	Forced bool `json:"forced,omitempty"`
+	// Files 受信后会被读取的项目配置文件与插件包目录（相对 root，/ 分隔）。
+	Files      []string         `json:"files"`
+	MCPServers []TrustMCPServer `json:"mcp_servers"`
+	Hooks      []TrustHook      `json:"hooks"`
+	// WidenedModes 项目 modes 目录里放宽了权限的档位。信任后首次选用（或作为缺省档位）仍要单独确认一次（approved = 已确认过同一放宽清单）。
+	WidenedModes []TrustMode `json:"widened_modes"`
+	// DefaultMode 项目 permissions.toml 设的新会话缺省档位；空 = 没设。
+	DefaultMode string               `json:"default_mode,omitempty"`
+	Packages    []TrustPackage       `json:"packages"` // 项目插件包
+	Plugins     []TrustPluginSetting `json:"plugins"`  // 项目 profile.toml 的插件开关与配置
+	// Notes 读取中的问题与提示（文件解析失败、负责的插件没开、按受信读配置会失败等），给人看。
+	Notes []string `json:"notes,omitempty"`
+}
+
+// TrustMCPServer 受信后会启动的一个项目 MCP 服务。不回显 env / headers（可能带密钥）。
+type TrustMCPServer struct {
+	Name    string   `json:"name"`
+	Command string   `json:"command,omitempty"` // stdio 服务的命令
+	Args    []string `json:"args,omitempty"`
+	URL     string   `json:"url,omitempty"` // http 服务的地址
+	// Source project = 项目 mcp.toml；package:<名> = 项目插件包。
+	Source string `json:"source"`
+}
+
+// TrustHook 受信后会执行的一条项目钩子。
+type TrustHook struct {
+	Event   string `json:"event"` // pre_tool_use / post_tool_use / stop
+	Matcher string `json:"matcher,omitempty"`
+	Command string `json:"command"`
+	Source  string `json:"source"` // 同 TrustMCPServer.Source
+}
+
+// TrustMode 一个放宽了权限的项目档位。
+type TrustMode struct {
+	ID       string   `json:"id"`
+	Title    string   `json:"title,omitempty"`
+	Widened  []string `json:"widened"`
+	Approved bool     `json:"approved,omitempty"`
+}
+
+// TrustPackage 一个项目插件包。
+type TrustPackage struct {
+	Name        string `json:"name"`
+	Version     string `json:"version,omitempty"`
+	Description string `json:"description,omitempty"`
+	Dir         string `json:"dir"`
+}
+
+// TrustPluginSetting 项目 profile.toml 里的一行插件设置。
+type TrustPluginSetting struct {
+	Name    string   `json:"name"`
+	Enabled *bool    `json:"enabled,omitempty"` // 没写 = 不改开关
+	Keys    []string `json:"keys,omitempty"`    // 设了的配置键
+	// Ignored 项目不能设、加载时会丢掉的键（端点、凭据、存储位置）。
+	Ignored []string `json:"ignored,omitempty"`
+}
+
+// WorkspaceTrustArgs workspace.trust：写当前工作区的信任记录（范围 = 预览里的 key），然后重建运行时。
+// Level：trusted 信任；untrusted 明确不信任；空串删除记录（撤销，按上级记录或不受信）。
+// 有会话正在跑回合时同 workspace.reload：缺省 not_idle，Force 先取消再重建。
+// 重建失败时信任记录改回原样：回到原来配置的返回 invalid（details.reverted = true）。
+type WorkspaceTrustArgs struct {
+	Level string `json:"level"`
+	Force bool   `json:"force,omitempty"`
+}
+
+// WorkspaceTrustResult workspace.trust 的结果。Reloaded 为真时旧连接随后断开，客户端重连并重新 hello；
+// 生效的信任状态没变（比如启动参数强制受信）时只写记录、不重建。
+type WorkspaceTrustResult struct {
+	Workspace WorkspaceInfo `json:"workspace"`
+	Key       string        `json:"key"`
+	Level     string        `json:"level"`
+	Reloaded  bool          `json:"reloaded,omitempty"`
+}
+
 // ModelInfo models.list 的一项。
 type ModelInfo struct {
 	ID       string `json:"id"`
@@ -592,6 +685,57 @@ type ChangeConflict struct {
 type ChangesRevertResult struct {
 	Reverted  []string         `json:"reverted"` // 还原了（dry_run：将要还原）的文件
 	Conflicts []ChangeConflict `json:"conflicts,omitempty"`
+}
+
+// 技能来源（SkillInfo.source；客户端改进 M11 配置T18）。插件包带的技能是 "package:<包名>"。
+const (
+	SkillSourceProject = "project"
+	SkillSourceUser    = "user"
+	SkillSourcePackage = "package"
+)
+
+// 技能启停范围（SkillsSetEnabledArgs.scope、SkillInfo.disabled_scope）。
+const (
+	SkillScopeGlobal    = "global"
+	SkillScopeWorkspace = "workspace"
+)
+
+// SkillInfo 一个本地技能（skills.list，能力 skills）。
+type SkillInfo struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	// Source project（受信项目的 .<应用>/skills、.agents/skills）| user（用户级 <home>/skills）| package:<包名>。
+	Source string `json:"source"`
+	Path   string `json:"path"` // SKILL.md 或 <name>.md 的绝对路径
+	// ModelInvocable false = 技能声明了 disable-model-invocation，启用也不进模型的技能目录。
+	ModelInvocable bool `json:"model_invocable"`
+	Enabled        bool `json:"enabled"`
+	// DisabledScope 让它停用的记录范围（SkillScope*）；启用时为空。
+	DisabledScope string `json:"disabled_scope,omitempty"`
+	// DisabledReason 停用原因（给人看）；启用时为空。
+	DisabledReason string `json:"disabled_reason,omitempty"`
+}
+
+// SkillsListResult skills.list 的结果：当前工作区看得到的全部技能（含已停用的），按名排序。
+type SkillsListResult struct {
+	Skills []SkillInfo `json:"skills"`
+	// Workspace 工作区范围记录的键（与 hello 的 workspace 不一定同值：这里总是规范化的工作目录）；空 = 只能全局记录。
+	Workspace string `json:"workspace,omitempty"`
+	// Warnings 扫描时跳过的技能（格式不对、重名等）与启停记录读不出来的原因。
+	Warnings []string `json:"warnings,omitempty"`
+}
+
+// SkillsSetEnabledArgs skills.setEnabled：启用或停用一个技能。记录写在用户级（不进项目仓库），对之后新建的会话生效。
+type SkillsSetEnabledArgs struct {
+	Name    string `json:"name"`
+	Enabled bool   `json:"enabled"`
+	// Scope SkillScope*；空 = global。workspace 只影响当前工作区：与全局结果相同时删掉本工作区的覆盖。
+	Scope string `json:"scope,omitempty"`
+}
+
+// SkillsSetEnabledResult skills.setEnabled 的结果：改完后这个技能在当前工作区的有效状态。
+type SkillsSetEnabledResult struct {
+	Skill SkillInfo `json:"skill"`
 }
 
 // ConfigField 插件配置项的 Schema（plugins.list）。
