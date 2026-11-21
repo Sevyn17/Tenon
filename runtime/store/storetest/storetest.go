@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -62,6 +63,7 @@ func Run(t *testing.T, open func(t *testing.T) store.Store) {
 		{"Interactions", testInteractions},
 		{"SessionMetaUpdate", testSessionMetaUpdate},
 		{"Workspace", testWorkspace},
+		{"TopLevelFork", testTopLevelFork},
 		{"Preview", testPreview},
 		{"SessionQuery", testSessionQuery},
 		{"TurnRange", testTurnRange},
@@ -142,6 +144,66 @@ func testWorkspace(t *testing.T, db store.Store) {
 	if ls, err := ul.ListUnassigned(ctx, 0, 1, false); err != nil || len(ls) != 1 {
 		t.Fatalf("limit 应生效：%v %v", ls, err)
 	}
+}
+
+// testTopLevelFork 用户分叉的会话（origin=fork，带 parent）在顶层列表里算顶层；subagent / member / side 仍是子会话。
+// 三条列表路径（ListSessionsIn、ListUnassigned、QuerySessions）一致。
+func testTopLevelFork(t *testing.T, db store.Store) {
+	ctx := context.Background()
+	create(t, db, store.SessionMeta{ID: "p", Workspace: "w"}, newCore())
+	create(t, db, store.SessionMeta{ID: "p/fork", ParentID: "p", Origin: store.OriginFork}, newCore())
+	create(t, db, store.SessionMeta{ID: "p/sub", ParentID: "p", Origin: "subagent"}, newCore())
+	create(t, db, store.SessionMeta{ID: "p/mem", ParentID: "p", Origin: "member"}, newCore())
+	create(t, db, store.SessionMeta{ID: "p/side", ParentID: "p", Origin: "side"}, newCore())
+	create(t, db, store.SessionMeta{ID: "u"}, newCore())
+	create(t, db, store.SessionMeta{ID: "u/fork", ParentID: "u", Origin: store.OriginFork}, newCore())
+	create(t, db, store.SessionMeta{ID: "u/sub", ParentID: "u", Origin: "subagent"}, newCore())
+	set := func(ls []store.SessionInfo, err error) []string {
+		t.Helper()
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out []string
+		for _, x := range ls {
+			out = append(out, x.ID)
+		}
+		slices.Sort(out)
+		return out
+	}
+	eq := func(name string, got []string, w ...string) {
+		t.Helper()
+		slices.Sort(w)
+		if !slices.Equal(got, w) {
+			t.Errorf("%s：%v，应为 %v", name, got, w)
+		}
+	}
+	eq("ListSessionsIn 顶层", set(db.ListSessionsIn(ctx, "w", 0, 50, true)), "p", "p/fork")
+	eq("ListSessionsIn 全部", set(db.ListSessionsIn(ctx, "w", 0, 50, false)), "p", "p/fork", "p/sub", "p/mem", "p/side")
+	eq("ListSessionsIn 不分工作区顶层", set(db.ListSessionsIn(ctx, "", 0, 50, true)), "p", "p/fork", "u", "u/fork")
+	for _, x := range []struct{ parent, origin string }{{"", ""}, {"p", "fork"}, {"p", "subagent"}, {"p", "member"}, {"p", "side"}} {
+		if got, w := store.TopLevel(x.parent, x.origin), x.parent == "" || x.origin == "fork"; got != w {
+			t.Errorf("TopLevel(%q, %q) = %v", x.parent, x.origin, got)
+		}
+	}
+	if ul, ok := db.(store.UnassignedLister); ok {
+		eq("ListUnassigned 顶层", set(ul.ListUnassigned(ctx, 0, 50, true)), "u", "u/fork")
+	}
+	qs, ok := db.(store.SessionQueryStore)
+	if !ok {
+		return
+	}
+	eq("QuerySessions 顶层", set(qs.QuerySessions(ctx, store.SessionQuery{Workspace: "w", TopOnly: true})), "p", "p/fork")
+	eq("QuerySessions 未归属顶层", set(qs.QuerySessions(ctx, store.SessionQuery{Unassigned: true, TopOnly: true})), "u", "u/fork")
+	eq("QuerySessions 按 parent 仍含分叉", set(qs.QuerySessions(ctx, store.SessionQuery{Parent: "p"})), "p/fork", "p/sub", "p/mem", "p/side")
+	ms, ok := db.(store.SessionMetaStore)
+	if !ok {
+		return
+	}
+	if err := ms.UpdateSessionMeta(ctx, "p/fork", nil, map[string]any{store.MetaArchived: true}); err != nil {
+		t.Fatal(err)
+	}
+	eq("QuerySessions 顶层排除已归档的分叉", set(qs.QuerySessions(ctx, store.SessionQuery{Workspace: "w", TopOnly: true})), "p")
+	eq("QuerySessions 只看已归档含分叉", set(qs.QuerySessions(ctx, store.SessionQuery{Workspace: "w", TopOnly: true, Archived: store.ArchivedOnly})), "p/fork")
 }
 
 // —— 辅助 ——//

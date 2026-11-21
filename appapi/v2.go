@@ -406,7 +406,7 @@ func (v *App) SessionsList(ctx context.Context, in wire.ListArgs) (wire.ListResu
 		}
 		out := wire.ListResult{Items: []wire.SessionInfo{}}
 		for _, s := range items {
-			if (in.All || s.ParentID == "") && inWS(s) && keepArchived(archived, s.Meta) {
+			if (in.All || store.TopLevel(s.ParentID, s.Origin)) && inWS(s) && keepArchived(archived, s.Meta) {
 				out.Items = append(out.Items, wireInfo(s))
 			}
 		}

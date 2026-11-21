@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { applyChanged, archivedOf, createSessionsStore, lastEndOf, listed, mergeChanged, workspaceOf, type SessionExtra, type SessionsView } from "./sessions";
+import { applyChanged, archivedOf, createSessionsStore, isChildRow, lastEndOf, listed, mergeChanged, workspaceOf, type SessionExtra, type SessionsView } from "./sessions";
 import { createStore } from "./store";
 import type { Connection } from "./transport";
 import type { Envelope, HelloResult, ListArgs, ListResult, SessionInfo, SessionsChanged } from "./wire.gen";
@@ -182,6 +182,18 @@ describe("M7 sessions.changed 插入未知会话（服务端报 sessions.changed
     const v0 = view([r7("a", 20)]);
     expect(mergeChanged(v0, d, FULL)).toEqual({ view: v0, refresh: false });
     expect(mergeChanged({ ...v0, all: true }, d, FULL).view.items.map((x) => x.id)).toEqual(["a/sub", "a"]);
+  });
+
+  it("用户分叉的会话（origin=fork）带 parent 也算顶层：缺省列表就插", () => {
+    const d = ch("fork-1", 30, { parent: "a", origin: "fork" });
+    const r = mergeChanged(view([r7("a", 20)]), d, FULL);
+    expect(r.refresh).toBe(false);
+    expect(r.view.items.map((x) => x.id)).toEqual(["fork-1", "a"]);
+    expect(isChildRow(r.view.items[0])).toBe(false);
+    expect(isChildRow({ parent: "a", origin: "subagent" })).toBe(true);
+    expect(isChildRow({ parent: "a", origin: "side" })).toBe(true);
+    expect(isChildRow({ parent: "a" })).toBe(true);
+    expect(isChildRow({})).toBe(false);
   });
 
   it("别的工作区：不插；没有工作区的进「未归属」（分组已查过时）", () => {

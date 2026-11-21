@@ -78,6 +78,15 @@ const (
 	ArchivedInclude                       // 都要
 )
 
+// OriginFork 用户主动分叉出的会话（session.fork）。它带 parent（记来源），但在列表里算顶层会话。
+const OriginFork = "fork"
+
+// TopLevel 会话在列表里是否算顶层：没有父会话，或是用户主动分叉的（origin=fork）。
+// subagent / member / side 仍是子会话。各存储的 TopOnly 过滤与它一致。
+func TopLevel(parentID, origin string) bool {
+	return parentID == "" || origin == OriginFork
+}
+
 // SessionQuery 会话列表的查询条件（各条件之间是「且」）。
 type SessionQuery struct {
 	// Workspace 非空：只列属于它的会话。Unassigned 为真时忽略。
@@ -88,7 +97,7 @@ type SessionQuery struct {
 	Before int64
 	// Limit 每页条数；<= 0 或 > 500 按 50。
 	Limit int
-	// TopOnly 只列顶层会话（parent 为空）。
+	// TopOnly 只列顶层会话（TopLevel：parent 为空，或用户主动分叉的 origin=fork）。
 	TopOnly bool
 	// Parent 非空：只列它的直接子会话。
 	Parent string

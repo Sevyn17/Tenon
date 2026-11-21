@@ -47,6 +47,14 @@ export function archivedOf(x: SessionInfo | SessionsChanged): boolean {
   return x.archived === true;
 }
 
+/**
+ * 会话行是否算子会话（列表里折叠进「含子会话」、缩进显示）：带 parent 且不是用户主动分叉的。
+ * origin=fork 的分叉会话虽然记了来源 parent，但在列表里算顶层（与服务端 store.TopLevel 一致）。
+ */
+export function isChildRow(x: { parent?: string; origin?: string }): boolean {
+  return !!x.parent && x.origin !== "fork";
+}
+
 /** 线上来的字符串字段：不是字符串就当没有。 */
 function str(v: unknown): string | undefined {
   return typeof v === "string" ? v : undefined;
@@ -362,7 +370,7 @@ export function applyChanged(v: SessionsView, d: SessionsChanged, ctx?: ChangedC
 
 /** 按插入规则放一行列表里原来没有的会话。 */
 function insertNew(v: SessionsView, row: SessionRow, ctx: ChangedContext): { view: SessionsView; refresh: boolean } {
-  if (row.parent && !v.all) return { view: v, refresh: false };
+  if (isChildRow(row) && !v.all) return { view: v, refresh: false };
   const ws = row.workspace ?? "";
   if (ctx.workspace && ws !== ctx.workspace) {
     // 没有工作区的会话进「未归属」分组（服务端有这项能力、分组已查过时）；别的工作区的不显示。

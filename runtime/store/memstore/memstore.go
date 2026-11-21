@@ -726,7 +726,7 @@ func (s *Store) query(q store.SessionQuery, archived store.ArchivedFilter) ([]st
 	}
 	var out []store.SessionInfo
 	for _, x := range s.sessions {
-		if x.status == "deleted" || (q.Before > 0 && x.updatedAt >= q.Before) || (q.TopOnly && x.meta.ParentID != "") ||
+		if x.status == "deleted" || (q.Before > 0 && x.updatedAt >= q.Before) || (q.TopOnly && !store.TopLevel(x.meta.ParentID, x.meta.Origin)) ||
 			(q.Parent != "" && x.meta.ParentID != q.Parent) {
 			continue
 		}
