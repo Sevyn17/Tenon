@@ -67,7 +67,7 @@ var tsConsts = []struct {
 		CodeConflict, CodeDenied, CodeNeedConfirm, CodeCursorExpired, CodeUnauthorized, CodeForbidden,
 		CodeUnsupported, CodeInternal}},
 	{"ConflictReasons", []string{ConflictExists, ConflictAnswered, ConflictStale, ConflictLeased, ConflictFiles}},
-	{"ChangeScopes", []string{ChangeScopeSession, ChangeScopeTurn, ChangeScopeFromTurn}},
+	{"ChangeScopes", []string{ChangeScopeSession, ChangeScopeTurn, ChangeScopeFromTurn, ChangeScopeGit}},
 	{"SkillScopes", []string{SkillScopeGlobal, SkillScopeWorkspace}},
 	{"MCPScopes", []string{MCPScopeGlobal, MCPScopeWorkspace}},
 	{"Risks", []string{RiskExec, RiskNetwork, RiskWrite, RiskConfig, RiskPrompt, RiskCommands}},

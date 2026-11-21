@@ -24,6 +24,7 @@ import (
 	"golang.org/x/net/websocket"
 
 	"github.com/Sevyn17/tenon/appapi"
+	"github.com/Sevyn17/tenon/appapi/guard"
 	"github.com/Sevyn17/tenon/appapi/wire"
 )
 
@@ -326,8 +327,21 @@ func (s *Server) handleConn(ws *websocket.Conn) {
 	defer ac.Close()
 	var wg sync.WaitGroup
 	wg.Add(2)
-	go func() { defer wg.Done(); <-ctx.Done(); _ = ws.Close() }()
-	go func() { defer wg.Done(); s.events(ctx, c, ac) }()
+	go func() {
+		defer wg.Done()
+		defer guard.Recover("web关闭监听", nil)
+		<-ctx.Done()
+		_ = ws.Close()
+	}()
+	go func() {
+		defer wg.Done()
+		defer guard.Recover("web事件泵", func() {
+			cancel()
+			ac.Close()
+			_ = ws.Close()
+		})
+		s.events(ctx, c, ac)
+	}()
 	sem := make(chan struct{}, MaxInflight)
 	for {
 		var text string
@@ -351,6 +365,9 @@ func (s *Server) handleConn(ws *websocket.Conn) {
 		go func(f request) {
 			defer wg.Done()
 			defer func() { <-sem }()
+			defer guard.Recover("web命令 "+f.Cmd, func() {
+				c.send(response{ID: f.ID, Error: appapi.Errorf(appapi.CodeInternal, "命令 %s执行发生内部错误", f.Cmd)})
+			})
 			res, err := ac.Call(ctx, f.Cmd, f.Args)
 			if err != nil {
 				c.send(response{ID: f.ID, Error: appapi.AsError(err)})

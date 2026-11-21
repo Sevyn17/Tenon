@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"github.com/Sevyn17/tenon/appapi"
+	"github.com/Sevyn17/tenon/appapi/guard"
 	"github.com/Sevyn17/tenon/appapi/wire"
 )
 
@@ -135,6 +136,7 @@ func (s *Service) StartEvents() {
 	s.cancel, s.done = cancel, make(chan struct{})
 	go func(done chan struct{}) {
 		defer close(done)
+		defer guard.Recover("bind事件泵", func() { c.Close() })
 		for {
 			evs, err := c.Next(ctx)
 			if err != nil {

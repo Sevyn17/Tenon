@@ -24,6 +24,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Sevyn17/tenon/appapi/guard"
 	"github.com/Sevyn17/tenon/appapi/wire"
 	"github.com/Sevyn17/tenon/runtime/bus"
 	"github.com/Sevyn17/tenon/runtime/host"
@@ -154,7 +155,11 @@ func (c *Conn) Close() {
 }
 
 // Call 执行一条 protocol 2 命令：订阅命令在这里处理，其余交给 App.Call；viewer 只能查询和订阅（forbidden）。
-func (c *Conn) Call(ctx context.Context, cmd string, args json.RawMessage) (any, error) {
+func (c *Conn) Call(ctx context.Context, cmd string, args json.RawMessage) (result any, err error) {
+	defer guard.Recover("appapi命令 "+cmd, func() {
+		result = nil
+		err = Errorf(wire.CodeInternal, "命令 %s执行发生内部错误", cmd)
+	})
 	if c.p.Role != wire.RoleOperator && !viewerCommands[cmd] {
 		return nil, Errorf(wire.CodeForbidden, "身份 %s（%s）不能执行 %s", c.p.ID, c.p.Role, cmd)
 	}
@@ -260,6 +265,7 @@ func (c *Conn) Unsubscribe(id string) {
 
 // run 一个订阅的主循环（一个协程：持久与易失按到达顺序处理）。
 func (c *Conn) run(ctx context.Context, id string, live *bus.Sub, replay []bus.Envelope, last int64) {
+	defer guard.Recover("appapi会话事件 "+id, func() { c.Close() })
 	defer live.Close()
 	for _, e := range replay {
 		if !c.pushWait(ctx, c.translate(e)) {
@@ -447,6 +453,7 @@ func (c *Conn) translate(e bus.Envelope) []wire.Envelope {
 
 // watchNotices 连接级 notice（客户端改进 M10 T19）：任一会话的和全局的提示都推；编号不超过分界的由 hello 后补发，这里丢掉。
 func (c *Conn) watchNotices(sub *bus.Sub) {
+	defer guard.Recover("appapi提示 watcher", func() { c.Close() })
 	for e := range sub.C() {
 		if seq := int64(intOf(dataMap(e.Data)[noticeSeqKey])); seq > 0 && seq <= c.noticeFloor {
 			continue
@@ -494,6 +501,7 @@ func (c *Conn) modeOf(id string, m map[string]any) *wire.Mode {
 // watchSessions 连接级 sessions.changed：本进程任一会话的运行状态、标题与置顶变化或删除时刷新列表里的一行
 // （易失，重连后重新查列表）。
 func (c *Conn) watchSessions(sub *bus.Sub) {
+	defer guard.Recover("appapi会话列表 watcher", func() { c.Close() })
 	for e := range sub.C() {
 		var row wire.SessionsChanged
 		switch {

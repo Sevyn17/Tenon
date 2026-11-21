@@ -22,6 +22,9 @@ const MaxUpload = 64 << 20
 // UploadPath 上传的路径（网页服务与桌面端相同）。
 const UploadPath = "/api/artifacts"
 
+// maxUploadField是 session/mime表单项的原始读取上限；多读一个字节用于拒绝截断。
+const maxUploadField = 256
+
 // UploadHandler 处理 POST multipart 上传（只接受一个 file 字段）。
 func (v *App) UploadHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -58,10 +61,18 @@ func (v *App) UploadHandler() http.Handler {
 			}
 			switch p.FormName() {
 			case "session":
-				b, _ := io.ReadAll(io.LimitReader(p, 256))
+				b, _ := io.ReadAll(io.LimitReader(p, maxUploadField+1))
+				if len(b) > maxUploadField {
+					writeErr(w, http.StatusBadRequest, Errorf(wire.CodeBadRequest, "session字段超过 %d字节", maxUploadField))
+					return
+				}
 				sess = strings.TrimSpace(string(b))
 			case "mime":
-				b, _ := io.ReadAll(io.LimitReader(p, 256))
+				b, _ := io.ReadAll(io.LimitReader(p, maxUploadField+1))
+				if len(b) > maxUploadField {
+					writeErr(w, http.StatusBadRequest, Errorf(wire.CodeBadRequest, "mime字段超过 %d字节", maxUploadField))
+					return
+				}
 				typ = strings.TrimSpace(string(b))
 			case "file":
 				if data != nil {
@@ -79,6 +90,14 @@ func (v *App) UploadHandler() http.Handler {
 			}
 			_ = p.Close()
 		}
+		if err := need(sess); err != nil {
+			writeErr(w, http.StatusBadRequest, AsError(err))
+			return
+		}
+		if err := validID(sess); err != nil {
+			writeErr(w, http.StatusBadRequest, Errorf(wire.CodeBadRequest, "%v", err))
+			return
+		}
 		if err := v.exists(r.Context(), sess); err != nil {
 			e := AsError(err)
 			writeErr(w, http.StatusNotFound, e)
@@ -88,7 +107,11 @@ func (v *App) UploadHandler() http.Handler {
 			writeErr(w, http.StatusRequestEntityTooLarge, invalid("文件大小 %d 字节，须在 1 到 %d 之间", len(data), MaxUpload))
 			return
 		}
-		if typ == "" || len(typ) > 255 {
+		if len(typ) > 255 {
+			writeErr(w, http.StatusBadRequest, Errorf(wire.CodeBadRequest, "mime超过255字节"))
+			return
+		}
+		if typ == "" {
 			typ = "application/octet-stream"
 		}
 		h, err := v.o.Artifacts.Put(r.Context(), sess, typ, data)

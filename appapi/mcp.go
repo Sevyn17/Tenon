@@ -45,7 +45,9 @@ type MCPEditor interface {
 // MCPWrite 一次写入的结果。Undo 把文件改回写入前的样子（重建失败时调用）。
 type MCPWrite struct {
 	Revision string
-	Undo     func() error
+	// Changed为 false表示目标状态已经满足，没有写入，也不需要重建。
+	Changed bool
+	Undo    func() error
 }
 
 func (v *App) mcp() (MCP, error) {
@@ -161,6 +163,9 @@ func (v *App) mcpApply(ctx context.Context, rl Reloader, force bool, write func(
 	if err != nil {
 		return wire.MCPEditResult{}, AsError(err)
 	}
+	if !w.Changed {
+		return wire.MCPEditResult{Revision: w.Revision, Workspace: v.currentWorkspace()}, nil
+	}
 	undo := func(e *Error) *Error {
 		if w.Undo != nil {
 			if err := w.Undo(); err != nil {
@@ -203,7 +208,11 @@ func (v *App) MCPSave(ctx context.Context, in wire.MCPSaveArgs) (wire.MCPEditRes
 	if err := v.mcpWritable(ctx, m, d.Name); err != nil {
 		return wire.MCPEditResult{}, err
 	}
-	return v.mcpApply(ctx, rl, in.Force, func() (MCPWrite, error) { return ed.SaveMCPServer(ctx, d, in.Revision) })
+	return v.mcpApply(ctx, rl, in.Force, func() (MCPWrite, error) {
+		w, err := ed.SaveMCPServer(ctx, d, in.Revision)
+		w.Changed = err == nil
+		return w, err
+	})
 }
 
 // MCPRemove 见 wire.MCPRemoveArgs。
@@ -223,7 +232,11 @@ func (v *App) MCPRemove(ctx context.Context, in wire.MCPRemoveArgs) (wire.MCPEdi
 	if err := v.mcpWritable(ctx, m, name); err != nil {
 		return wire.MCPEditResult{}, err
 	}
-	return v.mcpApply(ctx, rl, in.Force, func() (MCPWrite, error) { return ed.RemoveMCPServer(ctx, name, in.Revision) })
+	return v.mcpApply(ctx, rl, in.Force, func() (MCPWrite, error) {
+		w, err := ed.RemoveMCPServer(ctx, name, in.Revision)
+		w.Changed = err == nil
+		return w, err
+	})
 }
 
 // MCPSetEnabled 见 wire.MCPSetEnabledArgs。应用不能重建时只写记录（reloaded = false）。
@@ -250,13 +263,22 @@ func (v *App) MCPSetEnabled(ctx context.Context, in wire.MCPSetEnabledArgs) (wir
 		rl = r
 	}
 	return v.mcpApply(ctx, rl, in.Force, func() (MCPWrite, error) {
-		if err := m.SetEnabled(ctx, name, in.Enabled, scope); err != nil {
-			return MCPWrite{}, err
-		}
-		r, err := m.List(ctx)
+		before, err := m.List(ctx)
 		if err != nil {
 			return MCPWrite{}, err
 		}
-		return MCPWrite{Revision: r.Revision}, nil
+		for _, server := range before.Servers {
+			if server.Name == name && server.Enabled == in.Enabled {
+				return MCPWrite{Revision: before.Revision, Changed: false}, nil
+			}
+		}
+		if err := m.SetEnabled(ctx, name, in.Enabled, scope); err != nil {
+			return MCPWrite{}, err
+		}
+		after, err := m.List(ctx)
+		if err != nil {
+			return MCPWrite{}, err
+		}
+		return MCPWrite{Revision: after.Revision, Changed: true}, nil
 	})
 }
