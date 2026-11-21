@@ -1,0 +1,12 @@
+version: 2
+updates:
+  # gomod 也会跟踪 goja 等使用伪版本的依赖。
+  - package-ecosystem: gomod
+    directory: "/"
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: npm
+    directory: "/web"
+    schedule:
+      interval: weekly

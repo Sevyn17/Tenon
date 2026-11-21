@@ -30,7 +30,7 @@ jobs:
       GOPROXY: https://goproxy.cn,https://goproxy.io,https://proxy.golang.org,direct
       GOSUMDB: sum.golang.google.cn
       GOTOOLCHAIN: local
-      GOFLAGS: -mod=mod
+      GOFLAGS: -mod=readonly
     steps:
       - uses: actions/checkout@v4
 
@@ -96,7 +96,7 @@ jobs:
 
       - name: 文件名（Go 模块 zip 只收字母、数字与 ASCII 标点）
         run: |
-          badpaths=$(git ls-files -z | perl -CS -0ne 'chomp; for $c (split //) { if (ord($c) < 128) { next if $c =~ m{[A-Za-z0-9!#$%&()+,\-.=@\[\]^_{}~ /]} } else { next if $c =~ /\p{L}/ } print "  $_\n"; last }')
+          badpaths=$(git ls-files -z | perl scripts/check-filenames.pl)
           if [ -n "$badpaths" ]; then echo "文件名含 go 模块不接受的字符："; echo "$badpaths"; exit 1; fi
 
       - name: 文档链接
@@ -119,6 +119,11 @@ jobs:
 
       - name: go vet
         run: go vet ./...
+
+      # 漏洞库需要联网；自建 Gitea runner 不强制此步。
+      - name: govulncheck（GitHub 托管 runner）
+        if: runner.environment == 'github-hosted'
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
       # 失败时把失败包逐个 -v 重跑；用 ::error:: 把失败行写进 check-run 注解（无需登录即可从 API 读）。
       - name: go test
@@ -144,17 +149,11 @@ jobs:
       #
       # 包列表按「有没有并发」挑，不是按目录顺手列：appapi（16 处 go func / 定时器 / 锁）、
       # modelhub（9 处）、agentdef、memstore 都曾漏在外面，而 D5/D6 两个并发缺陷正出在 appapi 与
-      # runtime/host 的交互上。新增带协程或共享状态的包时，记得加进来。
+      # runtime/host 的交互上。新增带协程或共享状态的包时，请加到 scripts/race-pkgs.txt（ci.sh 与本步骤共用）。
       - name: go test -race
         run: |
           set -o pipefail
-          PKGS="./runtime/host/ ./runtime/store/... ./runtime/session/ ./runtime/toolhub/ \
-            ./runtime/agent/ ./runtime/bus/ ./runtime/inject/ \
-            ./runtime/modelhub/ ./runtime/agentdef/ ./runtime/component/ ./runtime/callctx/ \
-            ./runtime/extproc/ ./runtime/reqlog/ \
-            ./modules/security/... ./modules/collab/... ./modules/extend/... \
-            ./modules/tools/... \
-            ./appapi/ ./apphost/ ./transport/... ./tenontest/"
+          PKGS=$(cat scripts/race-pkgs.txt | tr '\n' ' ')
           if go test -race -count=1 $PKGS 2>&1 | tee /tmp/race.log; then
             exit 0
           fi
@@ -170,6 +169,9 @@ jobs:
             done
           done
           exit 1
+
+      - name: go.mod / go.sum 未被改写
+        run: git diff --exit-code go.mod go.sum
 
   web:
     name: 前端（typecheck / test）

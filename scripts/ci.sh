@@ -7,7 +7,7 @@ echo "== gofmt"
 bad=$(gofmt -l .)
 if [ -n "$bad" ]; then echo "未 gofmt：$bad"; exit 1; fi
 echo "== 文件名（Go 模块 zip 只收字母、数字和 ASCII !#\$%&()+,-.=@[]^_{}~ 空格，全角标点会让 go get 失败）"
-badpaths=$(git ls-files -z | perl -CS -0ne 'chomp; for $c (split //) { if (ord($c) < 128) { next if $c =~ m{[A-Za-z0-9!#$%&()+,\-.=@\[\]^_{}~ /]} } else { next if $c =~ /\p{L}/ } print "  $_\n"; last }')
+badpaths=$(git ls-files -z | perl scripts/check-filenames.pl)
 if [ -n "$badpaths" ]; then echo "文件名含 go 模块不接受的字符："; echo "$badpaths"; exit 1; fi
 echo "== 文档链接"
 if command -v perl >/dev/null 2>&1; then
@@ -22,7 +22,6 @@ go vet ./...
 echo "== go test"
 go test -count=1 ./...
 echo "== go test -race（宿主、存储、会话、工具、权限、装配、扩展进程）"
-go test -race -count=1 ./runtime/host/ ./runtime/store/... ./runtime/session/ ./runtime/toolhub/ ./runtime/agent/ ./runtime/bus/ ./runtime/inject/ \
-  ./modules/security/... ./modules/collab/... ./modules/extend/... ./runtime/extproc/ ./runtime/component/ ./runtime/callctx/ \
-  ./tenontest/ ./apphost/ ./transport/...
+mapfile -t race_pkgs < scripts/race-pkgs.txt
+go test -race -count=1 "${race_pkgs[@]}"
 echo "== 通过"
