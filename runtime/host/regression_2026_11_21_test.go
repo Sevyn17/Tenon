@@ -92,11 +92,11 @@ func TestApprovalCorrFallbackAcceptsEnvelope(t *testing.T) {
 // 两种登记都失败时，Interact必须按原始 corr删除 askWait。
 func TestInteractDoubleFailureCleansAskWait(t *testing.T) {
 	h, db := newHumanRig(t, &scriptedModel{})
-	mustOpen(t, h, "s1")
 	h.DB = &hostFaultStore{Store: db,
 		openInteractionFn: func(context.Context, store.Pending, int64) error { return errors.New("open failed") },
 		issueCorrFn:       func(context.Context, store.Pending) error { return errors.New("issue failed") },
 	}
+	mustOpen(t, h, "s1")
 	if _, err := h.Interact(context.Background(), "s1", Request{Kind: "question", Title: "问题"}); err == nil {
 		t.Fatal("双失败应返回登记错误")
 	}
@@ -218,7 +218,6 @@ type respondResult struct {
 // 修复后若取消先完成，Respond必须 voided；若 Respond持锁先完成，则取消分支必须收回已送达答案。
 func TestRespondResolveRaceDoesNotLoseAnswer(t *testing.T) {
 	h, db := newHumanRig(t, &scriptedModel{})
-	mustOpen(t, h, "s1")
 	entered := make(chan struct{})
 	release := make(chan struct{})
 	h.DB = &hostFaultStore{Store: db, resolveFn: func(ctx context.Context, id string, r store.Resolution) (store.Pending, bool, error) {
@@ -230,6 +229,7 @@ func TestRespondResolveRaceDoesNotLoseAnswer(t *testing.T) {
 		}
 		return p, won, err
 	}}
+	mustOpen(t, h, "s1")
 	ctx, cancel := context.WithCancel(context.Background())
 	interactDone := make(chan interactResult, 1)
 	opened := make(chan string, 1)
