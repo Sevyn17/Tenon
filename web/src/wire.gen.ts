@@ -1427,6 +1427,140 @@ export interface PlatformConfigureResult {
   status: AccountStatus;
 }
 
+export interface ProviderKind {
+  kind: string;
+  name: string;
+  protocol: string;
+  base_url?: string;
+  needs_key: boolean;
+  multiple?: boolean;
+}
+
+export interface ProviderKey {
+  id: string;
+  name?: string;
+  masked_key: string;
+  created_at?: string;
+  models: number;
+}
+
+export interface ProviderModel {
+  id: string;
+  name: string;
+  label?: string;
+  model_id: string;
+  enabled: boolean;
+  source: string;
+  key?: string;
+  is_default?: boolean;
+}
+
+export interface ModelProviderInfo {
+  id: string;
+  kind: string;
+  name: string;
+  protocol: string;
+  base_url: string;
+  default_base_url?: string;
+  needs_key: boolean;
+  configured: boolean;
+  keys: ProviderKey[];
+  models: ProviderModel[];
+  fetched_at?: string;
+}
+
+export interface ModelProvidersListResult {
+  kinds: ProviderKind[];
+  providers: ModelProviderInfo[];
+  revision: string;
+  path?: string;
+}
+
+export interface ProviderKeyDraft {
+  id?: string;
+  name?: string;
+  value?: string;
+}
+
+export interface ProviderModelDraft {
+  id?: string;
+  name?: string;
+  label?: string;
+  enabled?: boolean;
+  key?: string;
+}
+
+export interface ModelProviderDraft {
+  id?: string;
+  kind?: string;
+  name?: string;
+  protocol?: string;
+  base_url?: string;
+  keys?: ProviderKeyDraft[];
+  key_remove?: string[];
+  models?: ProviderModelDraft[];
+  model_remove?: string[];
+}
+
+export interface ModelProvidersSaveArgs {
+  provider: ModelProviderDraft;
+  revision?: string;
+  force?: boolean;
+}
+
+export interface ModelProvidersRemoveArgs {
+  provider: string;
+  revision?: string;
+  force?: boolean;
+}
+
+export interface ModelProvidersSetModelEnabledArgs {
+  provider: string;
+  id?: string;
+  name?: string;
+  enabled: boolean;
+  revision?: string;
+  force?: boolean;
+}
+
+export interface ModelProvidersEditResult {
+  revision: string;
+  reloaded: boolean;
+  provider?: ModelProviderInfo;
+  workspace: WorkspaceInfo;
+}
+
+export interface ModelProvidersTestArgs {
+  provider?: string;
+  kind?: string;
+  key?: string;
+  api_key?: string;
+  base_url?: string;
+  protocol?: string;
+  model?: string;
+}
+
+export interface ModelProvidersFetchArgs {
+  provider?: string;
+  kind?: string;
+  key?: string;
+  api_key?: string;
+  base_url?: string;
+  protocol?: string;
+  dry_run?: boolean;
+}
+
+export interface ModelProvidersFetchResult {
+  ok: boolean;
+  models: string[];
+  added?: number;
+  error_kind?: string;
+  status?: number;
+  message: string;
+  revision?: string;
+  provider?: ModelProviderInfo;
+}
+
 export interface AdminModelProvider {
   id: string;
   key: string;

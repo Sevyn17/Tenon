@@ -59,6 +59,12 @@ export const COMMANDS = [
   "workspace.trustPreview",
   "workspace.trust",
   "models.list",
+  "models.providers.list",
+  "models.providers.save",
+  "models.providers.remove",
+  "models.providers.setModelEnabled",
+  "models.providers.test",
+  "models.providers.fetchModels",
   "platform.status",
   "platform.login",
   "platform.logout",
@@ -138,6 +144,12 @@ export interface CommandMap {
   "workspace.trustPreview": [W.Empty, W.WorkspaceTrustPreviewResult];
   "workspace.trust": [W.WorkspaceTrustArgs, W.WorkspaceTrustResult];
   "models.list": [W.Empty, W.ModelsListResult];
+  "models.providers.list": [W.Empty, W.ModelProvidersListResult];
+  "models.providers.save": [W.ModelProvidersSaveArgs, W.ModelProvidersEditResult];
+  "models.providers.remove": [W.ModelProvidersRemoveArgs, W.ModelProvidersEditResult];
+  "models.providers.setModelEnabled": [W.ModelProvidersSetModelEnabledArgs, W.ModelProvidersEditResult];
+  "models.providers.test": [W.ModelProvidersTestArgs, W.BYOKTestResult];
+  "models.providers.fetchModels": [W.ModelProvidersFetchArgs, W.ModelProvidersFetchResult];
   "platform.status": [W.Empty, W.AccountStatus];
   "platform.login": [W.AccountLoginArgs, W.AccountLoginResult];
   "platform.logout": [W.Empty, W.AccountStatus];
