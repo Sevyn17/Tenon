@@ -173,8 +173,8 @@ func (a *actor) run() {
 			a.exitErr = err
 			return
 		}
-		if c.Kind == "barrier" { // Wait：inbox 处理完才返回
-			reply(c, nil)
+		if c.Kind == "barrier" { // Wait：inbox 处理完才返回；顶层会话最近一轮失败时带上失败原因
+			reply(c, a.failErr)
 		}
 	}
 }
@@ -368,8 +368,13 @@ func (a *actor) idle(ctx context.Context, c Command) (bool, error) {
 		if terr == nil {
 			terr = turnErr(end)
 		}
-		if terr != nil && a.turnFailed(ctx, terr) {
-			return true, terr
+		if terr != nil {
+			if a.turnFailed(ctx, terr) {
+				return true, terr
+			}
+			if !a.child() { // 顶层会话：actor 留着，失败照样交回给 Resume 的调用方
+				return false, terr
+			}
 		}
 		return false, nil
 	case Steer:
@@ -450,7 +455,7 @@ func (a *actor) idle(ctx context.Context, c Command) (bool, error) {
 func (a *actor) drainInbox(ctx context.Context) (stop bool, err error) {
 	defer func() {
 		if !stop && err == nil {
-			a.replyBarriers(nil)
+			a.replyBarriers(a.failErr)
 		}
 	}()
 	for {
@@ -573,6 +578,12 @@ func (a *actor) drainInbox(ctx context.Context) (stop bool, err error) {
 			terr = turnErr(end)
 		}
 		if terr != nil {
+			if !a.child() {
+				// 顶层会话失败后 actor 不退出、接着取下一批：本批输入必须随失败的提交消费掉，
+				// 否则 drive 在回合开始的检查点之前就出错（如 Core.Input 失败）时，同一批会被反复取出、
+				// 反复失败（自激循环）。已在 before_model 检查点消费过的重复登记无害。
+				a.ag.Consume(consume...)
+			}
 			if a.turnFailed(ctx, terr) {
 				return true, terr
 			}
@@ -673,6 +684,7 @@ func (a *actor) turn(ctx context.Context, resumed bool, f func(context.Context) 
 	a.steered = nil
 	a.midInserted = nil
 	a.turnOpen = false // 上一轮（如 restart 重跑失败）留下的标记不带进这一轮
+	a.failErr = nil    // 新的一轮：上一轮的失败不再交给 Wait
 	tctx, cancel := context.WithCancel(ctx)
 	a.mu.Lock()
 	a.cancel, a.inTurn = cancel, true
@@ -838,9 +850,18 @@ func (a *actor) turnFailed(ctx context.Context, err error) bool {
 		a.exitErr = cerr
 		return true
 	}
-	if a.ag.Origin == "" { // 顶层会话：保持原行为，错误原样交回调用方
-		a.exitErr = err
-		return true
+	if !a.child() {
+		if errors.Is(err, store.ErrConflict) || errors.Is(err, store.ErrLeaseLost) {
+			a.exitErr = err // 别的写者已推进或接管：本 actor 不能再写，照旧退出
+			return true
+		}
+		// 顶层会话：actor 留着，下一条输入照常开回合（2026-11-21）。原先（T2a-3）在这里退出，
+		// 只为把错误交给 Handle.Wait；结果 401 之类的失败让会话随之关闭，客户端只能重开。
+		// 失败原因已经由上面的 last_end / turn_end 报出；错误另记在 failErr，交给之后的 Wait。
+		// 不会自激：失败的一轮已收尾成 Idle 并提交（重启后不再续跑），本轮输入已消费（drainInbox），
+		// 交还的插话只写成补报、不单独开回合；不像子会话的 restart 那样重跑。
+		a.failErr = err
+		return false
 	}
 	switch a.h.treePolicy() {
 	case "restart":
@@ -868,6 +889,13 @@ func (a *actor) turnFailed(ctx context.Context, err error) bool {
 		a.exitErr = err
 		return true
 	}
+}
+
+// child 会话是否是所属树里的子会话（子智能体 / 工作组成员，与 isChild 同一判断）。
+// 顶层会话的 Origin 不是空串：新建记 new（M6），分叉记 fork / side，按定义投递建的记 agent，
+// 只看 Origin 是否为空会把它们都当成子会话。
+func (a *actor) child() bool {
+	return a.ag.Origin == "subagent" || a.ag.Origin == "member"
 }
 
 // treePolicy 所属树策略，缺省 give_up。

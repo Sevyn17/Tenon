@@ -609,5 +609,8 @@ type actor struct {
 	// 绝大多数步没有新信）。经本宿主写信箱的路径（投递、Send / Note、交还插话）都会置位；打开时置位以读到积压。
 	mailDirty atomic.Bool
 	exitErr   error
-	once      sync.Once
+	// failErr 顶层会话最近一轮的失败（turnFailed 记下，actor 不退出）：Wait 的屏障回复它，
+	// 调用方（SDK Send、测试）照样拿到失败原因。下一轮开始时（turn）清空。只在 actor 协程里读写。
+	failErr error
+	once    sync.Once
 }

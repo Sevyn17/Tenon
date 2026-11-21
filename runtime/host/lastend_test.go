@@ -43,19 +43,27 @@ func lastEndHost(t *testing.T, m agent.Model) (*Host, store.Store, *bus.Sub) {
 	return h, db, sub
 }
 
-// sendUntilExit 发一条消息，等 actor 因回合失败退出，返回退出错误。
+// sendUntilExit 发一条消息，等回合失败收尾，返回 Wait 交回的失败。顶层会话失败后 actor 不退出（2026-11-21）。
 func sendUntilExit(t *testing.T, h *Host, text string) error {
 	t.Helper()
 	hd := mustOpen(t, h, "s1")
 	if err := hd.Do(Command{Kind: Send, ItemID: NewItemID(), Text: text, Source: "user", Trust: "trusted"}); err != nil {
 		t.Fatal(err)
 	}
+	done := make(chan error, 1)
+	go func() { done <- hd.Wait() }()
+	var err error
+	select {
+	case err = <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("回合失败后 Wait 应返回")
+	}
 	select {
 	case <-hd.Done():
-	case <-time.After(5 * time.Second):
-		t.Fatal("回合失败后 actor 应退出")
+		t.Fatalf("顶层会话回合失败后 actor 不应退出：%v", hd.Err())
+	default:
 	}
-	return hd.Err()
+	return err
 }
 
 // drain 取出已发布的事件（actor 退出时已全部发布；bus.Publish 同步入队）。
