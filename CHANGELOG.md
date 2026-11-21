@@ -1,4 +1,4 @@
-# 变更日志
+﻿# 变更日志
 
 本文件记录**已发布版本**与**已合入但未发版**的变更。版本规则与发版判据见
 [07 - SDK 接口](<docs/01 - 设计文档/框架设计/07 - SDK 接口.md>) 7.4 与 7.4.1。
@@ -8,6 +8,47 @@
 
 ---
 
+## [未发版] -2026-11-21（审查修复批次，分支 review-fixes-2026-11-21）
+
+>本轮整体审查（对象=整体，缺陷+优化两遍）→全面核查 →按修正清单修复。多数是缺陷修复，
+>含两处**行为变更**（下游可能察觉），单列如下。
+
+###行为变更（非符号删除，但下游可能察觉）
+
+- **插件包内 stdio MCP服务的缺省工作目录不再设为包目录**，改为工作区根。
+原行为下包内进程以包目录为工作目录，Windows会锁住该目录，导致覆盖安装/卸载时
+`rename`旧包进 `.trash`必失败（`being used by another process`）。
+包要访问包内文件，改用 `${TENON_PLUGIN_DIR}`（已注入 env）或显式 `cwd`；**显式写了 `cwd`的包行为不变**。
+（`modules/tools/mcp/plugin.go`）
+- **`mcp.setEnabled`状态没变时不再重建运行时**：写入前比对当前状态，未变则跳过 `Reload`，
+`MCPEditResult.Reloaded=false`。原先重复 `setEnabled`会断开所有 MCP连接并重建。
+（`appapi/mcp.go`）
+
+###修复
+
+- **extproc崩溃重启后重握手重建连接**：原先只重启进程不重握手，旧连接 EOF后工具中间件
+fail-closed拒绝全部工具调用；崩溃计数改为稳定运行一分钟后清零（原先只增不减）。
+- **runtime/host**：人工确认 corr-only降级路径保留等待者（原误删导致回信成普通输入）；
+`AcquireLease`失败关闭 `exit`（原已分发 Handle永卡）；交互双失败不再泄漏等待者；
+Respond竞态下「回答成功却无人收」改为按 voided处理。
+- **协议层**：`tsgen`补 `ChangeScopeGit`（原 `wire.gen.ts`的 `ChangeScope`缺 `git`）；
+WebSocket/事件 goroutine加 panic防护（原单连接 bug杀整个进程）；
+`upload`的 `session`/`mime`字段超限返回 `bad_request`（原静默截断）。
+- **前端 `@tenon/client`**：重连/背压后按 `session.get`快照重同步（原易失的 `turn.ended`/
+`queue.changed`丢失导致幽灵流与工具卡）；`opened` Map淘汰；Wails/WebSocket生命周期防护；
+`mergeEntries`加单条追加 O(1)快路径；重连退避加 jitter。
+- **Windows三个必失败测试**：包内 MCP服务 CWD（见上）、`TestMCPCommandsFlow`断言改语义比对、
+`TestCheckpointWrapsHooks`钩子命令跨平台。
+- **依赖**：`dlclark/regexp2/v2` v2.11.0 → v2.13.2（CVE-2026-77299 ReDoS）。
+
+###工程
+
+- CI加 `govulncheck`（GitHub托管 runner）、`dependabot`（gomod + npm）、`-mod=readonly`防脏 go.mod；
+race包列表抽成 `scripts/race-pkgs.txt`单一事实来源（原 ci.sh缺5个包）。
+- README版本提示更新；文档 SQLite/会话层旧概念残留清理。
+-已知待办：Go工具链升1.26.11+（标准库 GO-2026-6859）；goja拆独立子模块（见遗留清单 D9）。
+
+---
 ## [v0.5.0] - 2026-11-21
 
 > 小版本：从 `v0.4.0` 起（17 个提交，`8d39714`…`2bba75a`）。`testdata/api.txt` 只增不删
