@@ -3,6 +3,7 @@ package host
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/Sevyn17/tenon/runtime/agent"
 	"github.com/Sevyn17/tenon/runtime/mail"
@@ -56,10 +57,32 @@ func TestInboxTracePersistsAndApplies(t *testing.T) {
 		t.Fatal("未读回 probe 项")
 	}
 
-	// 换一个宿主打开同一份存储，再投一条带 trace 的，确认回合仍用 inbox 里的 trace。
+	//换一个宿主打开同一份存储。h2的 actor启动时会消化 inbox里残留的 probe（roundtrip回合）。
+	//先等它把 probe消化完，再投新 Send：否则 probe可能与新 Send同批——renderBatchWithTrace
+	//取批次第一个非空 trace，新回合就会拿到 roundtrip而非 parent-tr-2（Linux -race下更易合批，CI检出）。
 	h2 := &Host{DB: db}
 	h2.New = h.New
 	hd2 := mustOpen(t, h2, "child")
+	for i := 0; i < 500; i++ {
+		items, err := db.Inbox(ctx, "child")
+		if err != nil {
+			t.Fatal(err)
+		}
+		gone := true
+		for _, it := range items {
+			if it.ItemID == "probe" {
+				gone = false
+			}
+		}
+		if gone {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+		if i == 499 {
+			t.Fatal("probe未被新宿主消化")
+		}
+	}
+	//确认 probe被消化后，再投一条带 trace的，回合应用 inbox里的 trace。
 	if err := hd2.Do(Command{Kind: Send, ItemID: NewItemID(), Text: "再来", Trace: "parent-tr-2"}); err != nil {
 		t.Fatal(err)
 	}
@@ -67,7 +90,7 @@ func TestInboxTracePersistsAndApplies(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got := hd2.Agent().TraceID(); got != "parent-tr-2" {
-		t.Fatalf("换宿主后回合 trace 应为 parent-tr-2，得 %q", got)
+		t.Fatalf("换宿主后回合 trace应为 parent-tr-2，得 %q", got)
 	}
 }
 
