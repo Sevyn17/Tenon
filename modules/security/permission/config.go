@@ -112,6 +112,11 @@ type Sessions struct {
 	// ModeApproved 受信项目的放宽档位是否已被用户确认（§9.6，应用按 trust.toml 实现；可空 = 一律未确认）。
 	// 项目档位当新会话缺省时也要过这道确认，没确认过退回内置缺省档位。
 	ModeApproved func(mode Mode, widened []string) bool
+	// UserHome 用户级目录（<home>/modes、<home>/permissions.toml 所在）；空 = 不能在界面里编辑档位（edit.go）。
+	UserHome string
+	// Pinned 非空时新会话缺省档位被固定（启动参数强制、受信项目 permissions.toml 设了 mode），
+	// mode.setDefault 只写文件、不改当前进程的缺省档位；值是给人看的原因。
+	Pinned string
 
 	mu     sync.Mutex
 	state  map[string]*sessState
@@ -119,6 +124,8 @@ type Sessions struct {
 	gen    map[Mode]int   // 档位定义变化次数（Notice 用）
 	items  []toolhub.Item // 权限项注册表（首个会话装配时登记，mode show / 档位标注用）
 	lookup func(tool string) []toolhub.Item
+	// itemTools 权限项 → 管的工具名（首个会话装配时登记，mode.show 用）
+	itemTools map[string][]string
 }
 
 type sessState struct {
@@ -214,7 +221,9 @@ func (s *Sessions) get(id string) *sessState {
 // defaultMode 新会话的缺省档位：permissions.toml 的 mode；它若是受信项目提交的放宽档位
 // 且用户没确认过，退回内置缺省档位（不让项目悄悄把所有新会话放宽，§9.6）。调用方不持锁。
 func (s *Sessions) defaultMode() Mode {
+	s.mu.Lock()
 	m := s.Default
+	s.mu.Unlock()
 	if m == "" {
 		return Default
 	}

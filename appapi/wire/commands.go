@@ -550,15 +550,104 @@ type ModeShowArgs struct {
 type ModeItem struct {
 	Item    string `json:"item"`
 	Title   string `json:"title"`
-	Value   string `json:"value"`
+	Value   string `json:"value"` // switch / match：allow / ask / deny（match 型是未命中规则时的缺省）；level：级别
 	Source  string `json:"source"`
 	Bounded bool   `json:"bounded"`
+	// 以下 docs/51 第 6 节（权限档位页）。Class 类别（read / write / exec / network / interact / spawn / collab /
+	// orchestrate / external，即 toolhub.Effect*；MCP 服务按 trust 取 read / write / external）。
+	Class string `json:"class,omitempty"`
+	// Type switch（开关，三选一）/ match（匹配，另有规则）/ level（级别，取值在 Levels 里）。
+	Type string `json:"type,omitempty"`
+	// Owner 声明该项的插件（插件包声明的项也在这里出现）。
+	Owner  string   `json:"owner,omitempty"`
+	Tools  []string `json:"tools,omitempty"`  // 它管的工具名（按名字排序；还没有会话装配过时可能为空）
+	Levels []string `json:"levels,omitempty"` // 仅 level 型
+	// Allow / Ask / Deny 仅 match 型：规则（含 base 继承来的，继承链上是追加）。
+	Allow []string `json:"allow,omitempty"`
+	Ask   []string `json:"ask,omitempty"`
+	Deny  []string `json:"deny,omitempty"`
+	// Overridden 本档位文件自己写了这一项（否则沿 base / 建议值）。
+	Overridden bool `json:"overridden,omitempty"`
 }
 
 // ModeShowResult mode.show 的结果：按权限项列出的取值与来源。
 type ModeShowResult struct {
 	Mode  string     `json:"mode"`
 	Items []ModeItem `json:"items"`
+	// 以下 docs/51 第 6 节：档位本身的信息。Editable 为真时可以 mode.save / mode.remove（用户级自定义档位）；
+	// Revision 是档位文件当前版本，mode.save / remove 带上它防并发覆盖。
+	Name        string `json:"name,omitempty"`
+	Base        string `json:"base,omitempty"`
+	Description string `json:"description,omitempty"`
+	Builtin     bool   `json:"builtin,omitempty"`
+	Project     bool   `json:"project,omitempty"`
+	Editable    bool   `json:"editable,omitempty"`
+	Revision    string `json:"revision,omitempty"`
+}
+
+// ModeItemDraft mode.save 里一个权限项的写法（同档位文件 [items] 的一项）：switch 型只给 default；
+// match 型 default + allow / ask / deny 规则；level 型给 level。全空的项不写进文件（沿 base）。
+type ModeItemDraft struct {
+	Default string   `json:"default,omitempty"`
+	Level   string   `json:"level,omitempty"`
+	Allow   []string `json:"allow,omitempty"`
+	Ask     []string `json:"ask,omitempty"`
+	Deny    []string `json:"deny,omitempty"`
+}
+
+// ModeDraft 一份自定义档位。ID 即文件名（不能含空格和 /\:*?"<>|）；Base 继承的档位（通常是内置档位）；
+// Items 键是权限项 id。规则沿 base 是追加的：base 已有的规则不必再写。
+type ModeDraft struct {
+	ID          string                   `json:"id"`
+	Name        string                   `json:"name,omitempty"`
+	Base        string                   `json:"base,omitempty"`
+	Description string                   `json:"description,omitempty"`
+	Items       map[string]ModeItemDraft `json:"items,omitempty"`
+}
+
+// ModeSaveArgs mode.save：新建或整份替换用户级自定义档位 <home>/modes/<id>.toml（格式同 mode copy）。
+// 内置档位 id → invalid；项目档位 → invalid。Create 为真时同名档位已存在 → conflict（reason = exists）。
+// Revision 非空且与文件当前版本不同 → conflict（reason = stale，details.revision 是当前版本）。
+// 立即生效：用着这个档位的会话下一回合起按新定义判定。
+type ModeSaveArgs struct {
+	Mode     ModeDraft `json:"mode"`
+	Revision string    `json:"revision,omitempty"`
+	Create   bool      `json:"create,omitempty"`
+}
+
+// ModeSaveResult mode.save 的结果。
+type ModeSaveResult struct {
+	Mode     ModeInfo `json:"mode"`
+	Revision string   `json:"revision"`
+}
+
+// ModeRemoveArgs mode.remove：删用户级自定义档位。内置 / 项目档位 → invalid；不存在 → not_found；
+// 被别的档位当 base 时 → invalid（不删）。Revision 同 mode.save。
+type ModeRemoveArgs struct {
+	ID       string `json:"id"`
+	Revision string `json:"revision,omitempty"`
+}
+
+// ModeRemoveResult mode.remove 的结果。FellBack 为真表示删的是新会话缺省档位，缺省已退回 Default
+// （用户级 permissions.toml 的 mode 也改了），Note 是给人看的说明。已经在用这个档位的会话下一回合按「每次询问」处理。
+type ModeRemoveResult struct {
+	ID       string `json:"id"`
+	Default  string `json:"default"`
+	FellBack bool   `json:"fell_back,omitempty"`
+	Note     string `json:"note,omitempty"`
+}
+
+// ModeSetDefaultArgs mode.setDefault：把用户级 permissions.toml 的 mode 设为 id（文件别的内容保留），
+// 之后新建的会话用它；mode.list 的 default 随之变化。档位不存在 → not_found。
+type ModeSetDefaultArgs struct {
+	ID string `json:"id"`
+}
+
+// ModeSetDefaultResult mode.setDefault 的结果。Pinned 非空表示文件已写，但当前缺省档位被别处固定
+// （启动参数强制、受信项目 permissions.toml 设了 mode），Default 仍是固定的那个。
+type ModeSetDefaultResult struct {
+	Default string `json:"default"`
+	Pinned  string `json:"pinned,omitempty"`
 }
 
 // ArtifactGetArgs artifact.get：按 id 取一段工件内容。
@@ -1346,6 +1435,170 @@ type BYOKSetDefaultArgs struct {
 
 // BYOKSetDefaultResult platform.byok.setDefault 的结果（空）。
 type BYOKSetDefaultResult struct{}
+
+// —— 自定义模型：厂商 → 密钥 → 模型（Mortise docs/51 第 4 节；能力 providers）——
+//
+// 由应用实现 appapi.ModelProviders（Platform 的可选扩展）。密钥值只在写入时传，读回来只有掩码与 id。
+// 平台的 platform.byok.* 仍可用：每个启用的模型对应旧接口里的一套配置（id 相同）。
+
+// ProviderKind 一种厂商（models.providers.list 的 kinds）。Multiple = 可以加多个实例（openai-compatible）。
+type ProviderKind struct {
+	Kind     string `json:"kind"`
+	Name     string `json:"name"`
+	Protocol string `json:"protocol"`           // openai | anthropic
+	BaseURL  string `json:"base_url,omitempty"` // 预填的接口地址；openai-compatible 没有
+	NeedsKey bool   `json:"needs_key"`
+	Multiple bool   `json:"multiple,omitempty"`
+}
+
+// ProviderKey 厂商下的一把密钥（不含明文）。Models = 用这把密钥的模型数。
+type ProviderKey struct {
+	ID        string `json:"id"`
+	Name      string `json:"name,omitempty"`
+	MaskedKey string `json:"masked_key"`
+	CreatedAt string `json:"created_at,omitempty"`
+	Models    int    `json:"models"`
+}
+
+// ProviderModel 厂商下的一个模型。ID 是条目 id（setModelEnabled、save 的 models[].id、platform.byok.setDefault 用）；
+// ModelID 是模型目录里的 id（session.settings 的 model），启用并重建运行时后出现在 models.list。
+// Source：fetched（从厂商的模型列表拉到）/ manual（手动加）。Key 空 = 用厂商的第一把密钥。
+type ProviderModel struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Label     string `json:"label,omitempty"`
+	ModelID   string `json:"model_id"`
+	Enabled   bool   `json:"enabled"`
+	Source    string `json:"source"`
+	Key       string `json:"key,omitempty"`
+	IsDefault bool   `json:"is_default,omitempty"`
+}
+
+// ModelProviderInfo 一个厂商（内置的没配置时也列出，Configured = false）。
+type ModelProviderInfo struct {
+	ID             string          `json:"id"` // 内置厂商 = kind；openai-compatible 的实例另有 id
+	Kind           string          `json:"kind"`
+	Name           string          `json:"name"`
+	Protocol       string          `json:"protocol"`
+	BaseURL        string          `json:"base_url"`
+	DefaultBaseURL string          `json:"default_base_url,omitempty"`
+	NeedsKey       bool            `json:"needs_key"`
+	Configured     bool            `json:"configured"`
+	Keys           []ProviderKey   `json:"keys"`
+	Models         []ProviderModel `json:"models"`
+	FetchedAt      string          `json:"fetched_at,omitempty"`
+}
+
+// ModelProvidersListResult models.providers.list 的结果：已配置的在前。Revision 是配置文件当前版本（写命令带上做并发校验）。
+type ModelProvidersListResult struct {
+	Kinds     []ProviderKind      `json:"kinds"`
+	Providers []ModelProviderInfo `json:"providers"`
+	Revision  string              `json:"revision"`
+	Path      string              `json:"path,omitempty"`
+}
+
+// ProviderKeyDraft 保存时的一把密钥。ID 空 = 新密钥（value 必填）；ID 非空 = 改已有的：value 为 null 或不给 = 保留原值。
+type ProviderKeyDraft struct {
+	ID    string  `json:"id,omitempty"`
+	Name  string  `json:"name,omitempty"`
+	Value *string `json:"value,omitempty"`
+}
+
+// ProviderModelDraft 保存时的一个模型。ID 空且 name 在厂商下唯一存在 = 改那一个，否则新增（source = manual，缺省启用）。
+// 指针字段为 null 或不给 = 不改。Key 给空串 = 用第一把密钥。
+type ProviderModelDraft struct {
+	ID      string  `json:"id,omitempty"`
+	Name    string  `json:"name,omitempty"`
+	Label   *string `json:"label,omitempty"`
+	Enabled *bool   `json:"enabled,omitempty"`
+	Key     *string `json:"key,omitempty"`
+}
+
+// ModelProviderDraft models.providers.save 的厂商表单。ID 空 + kind = openai-compatible 新建一个实例（name、base_url 必填）；
+// 内置厂商 ID = kind（没配置过也行）。字段为空 = 不改。没提到的密钥、模型都保留；删除放进 key_remove / model_remove
+// （密钥 id；模型条目 id 或名字）。
+type ModelProviderDraft struct {
+	ID          string               `json:"id,omitempty"`
+	Kind        string               `json:"kind,omitempty"`
+	Name        string               `json:"name,omitempty"`
+	Protocol    string               `json:"protocol,omitempty"` // 只有 openai-compatible 可改
+	BaseURL     string               `json:"base_url,omitempty"`
+	Keys        []ProviderKeyDraft   `json:"keys,omitempty"`
+	KeyRemove   []string             `json:"key_remove,omitempty"`
+	Models      []ProviderModelDraft `json:"models,omitempty"`
+	ModelRemove []string             `json:"model_remove,omitempty"`
+}
+
+// ModelProvidersSaveArgs models.providers.save。Revision 非空且与文件当前版本不同 → conflict（details.reason = stale，
+// details.revision 是当前版本）。改动影响模型目录（启停、地址、协议、默认）时重建运行时：有回合在跑缺省 not_idle（不写），
+// Force 先取消再重建。只改密钥值不重建（下次调用就用新值）。
+type ModelProvidersSaveArgs struct {
+	Provider ModelProviderDraft `json:"provider"`
+	Revision string             `json:"revision,omitempty"`
+	Force    bool               `json:"force,omitempty"`
+}
+
+// ModelProvidersRemoveArgs models.providers.remove：删掉一个厂商的全部配置（内置厂商回到未配置）。
+type ModelProvidersRemoveArgs struct {
+	Provider string `json:"provider"`
+	Revision string `json:"revision,omitempty"`
+	Force    bool   `json:"force,omitempty"`
+}
+
+// ModelProvidersSetModelEnabledArgs models.providers.setModelEnabled：按条目 id（优先）或名字（厂商下唯一时）启停一个模型。
+type ModelProvidersSetModelEnabledArgs struct {
+	Provider string `json:"provider"`
+	ID       string `json:"id,omitempty"`
+	Name     string `json:"name,omitempty"`
+	Enabled  bool   `json:"enabled"`
+	Revision string `json:"revision,omitempty"`
+	Force    bool   `json:"force,omitempty"`
+}
+
+// ModelProvidersEditResult 写命令的结果。Reloaded = 重建了运行时（models.list 已是新目录）；Provider 是写后的厂商（删除时没有）。
+type ModelProvidersEditResult struct {
+	Revision  string             `json:"revision"`
+	Reloaded  bool               `json:"reloaded"`
+	Provider  *ModelProviderInfo `json:"provider,omitempty"`
+	Workspace WorkspaceInfo      `json:"workspace"`
+}
+
+// ModelProvidersTestArgs models.providers.test（结果同 platform.byok.test）：以已保存的厂商为底（没保存的用 kind 的预填），
+// 非空字段覆盖。Key 是密钥 id；APIKey 给明文（测还没保存的密钥）；都不给用第一把。Model 空 = 只列模型。
+type ModelProvidersTestArgs struct {
+	Provider string  `json:"provider,omitempty"`
+	Kind     string  `json:"kind,omitempty"`
+	Key      string  `json:"key,omitempty"`
+	APIKey   *string `json:"api_key,omitempty"`
+	BaseURL  string  `json:"base_url,omitempty"`
+	Protocol string  `json:"protocol,omitempty"`
+	Model    string  `json:"model,omitempty"`
+}
+
+// ModelProvidersFetchArgs models.providers.fetchModels：拉厂商的 /models。厂商已保存且没给 DryRun 时把新模型并进列表
+// （source = fetched，缺省停用；已有的不动；上次拉到、这次没有、又没启用的删掉），不重建运行时。
+type ModelProvidersFetchArgs struct {
+	Provider string  `json:"provider,omitempty"`
+	Kind     string  `json:"kind,omitempty"`
+	Key      string  `json:"key,omitempty"`
+	APIKey   *string `json:"api_key,omitempty"`
+	BaseURL  string  `json:"base_url,omitempty"`
+	Protocol string  `json:"protocol,omitempty"`
+	DryRun   bool    `json:"dry_run,omitempty"`
+}
+
+// ModelProvidersFetchResult 拉不到不是命令错误：OK = false，ErrorKind 同 platform.byok.test 的分类，Message 是给人看的原因
+// （厂商没有列表接口时 not_found，提示手动添加）。
+type ModelProvidersFetchResult struct {
+	OK        bool               `json:"ok"`
+	Models    []string           `json:"models"`
+	Added     int                `json:"added,omitempty"`
+	ErrorKind string             `json:"error_kind,omitempty"`
+	Status    int                `json:"status,omitempty"`
+	Message   string             `json:"message"`
+	Revision  string             `json:"revision,omitempty"`
+	Provider  *ModelProviderInfo `json:"provider,omitempty"`
+}
 
 // AdminModelProvider 平台侧厂商（只读）。
 type AdminModelProvider struct {

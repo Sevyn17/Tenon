@@ -44,6 +44,40 @@ type ModeItem struct {
 	Value   string `json:"value"`
 	Source  string `json:"source"`
 	Bounded bool   `json:"bounded"` // 匹配是否构成边界（shell 命令匹配不构成）
+	// 以下 docs/51 第 6 节（权限档位页），含义见 wire.ModeItem。
+	Class      string   `json:"class,omitempty"`
+	Type       string   `json:"type,omitempty"`
+	Owner      string   `json:"owner,omitempty"`
+	Tools      []string `json:"tools,omitempty"`
+	Levels     []string `json:"levels,omitempty"`
+	Allow      []string `json:"allow,omitempty"`
+	Ask        []string `json:"ask,omitempty"`
+	Deny       []string `json:"deny,omitempty"`
+	Overridden bool     `json:"overridden,omitempty"`
+}
+
+// CapModeEdit hello 能力：mode.save / mode.remove / mode.setDefault 可用（docs/51 第 6 节）。
+const CapModeEdit = "mode.edit"
+
+// ModeDetail 档位本身的信息（mode.show 的档位字段）。
+type ModeDetail struct {
+	Name, Base, Description string
+	Builtin, Project        bool
+	Editable                bool   // 用户级自定义档位：能 save / remove
+	Revision                string // 档位文件当前版本
+}
+
+// ModeEditor Modes 的可选扩展（docs/51 第 6 节）：在界面里编辑档位。做成可选接口，已有实现不受影响；
+// 没实现或 Editable 为假时 mode.save / remove / setDefault 返回 unsupported，hello 不报 mode.edit。
+// 返回的错误是 *Error 时原样交给客户端（invalid / not_found / conflict）。
+type ModeEditor interface {
+	Editable() bool
+	Detail(mode string) (ModeDetail, error)
+	SaveMode(d wire.ModeDraft, revision string, create bool) (ModeInfo, string, error)
+	// RemoveMode 返回删后的新会话缺省档位；fellBack 表示删的正是缺省档位、已退回内置缺省。
+	RemoveMode(id, revision string) (def string, fellBack bool, err error)
+	// SetDefaultMode 返回生效的缺省档位；pinned 非空表示被别处固定（文件照写）。
+	SetDefaultMode(id string) (def, pinned string, err error)
 }
 
 // Modes 权限档位（permission 插件提供，应用适配）。

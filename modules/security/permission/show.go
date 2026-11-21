@@ -6,6 +6,7 @@ package permission
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -19,6 +20,51 @@ func (s *Sessions) SetItems(items []toolhub.Item) {
 	if s.items == nil {
 		s.items = append([]toolhub.Item(nil), items...)
 	}
+}
+
+// SetItemTools 并入“权限项 → 它管的工具名”（每次构造会话时登记；mode.show 用）。取并集：子会话的工具集
+// 是收窄的，MCP 工具要等连接起来才有，只记第一个会话会漏。
+func (s *Sessions) SetItemTools(m map[string][]string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.itemTools == nil {
+		s.itemTools = map[string][]string{}
+	}
+	for id, ns := range m {
+		cur := s.itemTools[id]
+		for _, n := range ns {
+			if !slices.Contains(cur, n) {
+				cur = append(cur, n)
+			}
+		}
+		sort.Strings(cur)
+		s.itemTools[id] = cur
+	}
+}
+
+// ItemTools 权限项 id 管的工具名（按名字排序；不需要授权的工具不在里面）。
+func (s *Sessions) ItemTools(id string) []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]string(nil), s.itemTools[id]...)
+}
+
+// itemTools 从会话的工具集算出每个权限项管哪些工具（NoAuth 工具不引用权限项，自然不出现）。
+func itemTools(h *toolhub.Hub) map[string][]string {
+	out := map[string][]string{}
+	for _, n := range h.Names() {
+		t, ok := h.Get(n)
+		if !ok || t.NoAuth {
+			continue
+		}
+		for _, it := range h.ItemsOf(t) {
+			out[it.ID] = append(out[it.ID], n)
+		}
+	}
+	for k := range out {
+		sort.Strings(out[k])
+	}
+	return out
 }
 
 // SetLookup 记下“工具名 → 权限项”的查询（第一次构造会话时登记；各会话工具集相同）。

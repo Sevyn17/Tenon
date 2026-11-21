@@ -32,6 +32,9 @@ export const COMMANDS = [
   "mode.get",
   "mode.set",
   "mode.show",
+  "mode.save",
+  "mode.remove",
+  "mode.setDefault",
   "plugins.list",
   "plugins.set",
   "packages.list",
@@ -108,6 +111,9 @@ export interface CommandMap {
   "mode.get": [W.SessionArgs, W.ModeSetResult];
   "mode.set": [W.ModeSetArgs, W.ModeSetResult];
   "mode.show": [W.ModeShowArgs, W.ModeShowResult];
+  "mode.save": [W.ModeSaveArgs, W.ModeSaveResult];
+  "mode.remove": [W.ModeRemoveArgs, W.ModeRemoveResult];
+  "mode.setDefault": [W.ModeSetDefaultArgs, W.ModeSetDefaultResult];
   "plugins.list": [W.Empty, W.PluginsListResult];
   "plugins.set": [W.PluginsSetArgs, W.PluginsSetResult];
   "packages.list": [W.Empty, W.PackagesListResult];

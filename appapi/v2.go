@@ -99,6 +99,9 @@ var commands = map[string]handler{
 	"mode.get":            bind((*App).ModeGet),
 	"mode.set":            bind((*App).ModeSet),
 	"mode.show":           bind((*App).ModeShow),
+	"mode.save":           bind((*App).ModeSave), // docs/51 第 6 节（mode_edit.go）
+	"mode.remove":         bind((*App).ModeRemove),
+	"mode.setDefault":     bind((*App).ModeSetDefault),
 	"artifact.get":        bind((*App).ArtifactGet),
 	"artifact.put":        bind((*App).ArtifactPut),
 	"trace.explain":       bind((*App).Trace),
@@ -123,6 +126,13 @@ var commands = map[string]handler{
 	"mcp.remove":          bind((*App).MCPRemove),
 	"mcp.setEnabled":      bind((*App).MCPSetEnabled),
 	"models.list":         bind((*App).ModelsList),
+	// 自定义模型：厂商 → 密钥 → 模型（docs/51 第 4 节，providers.go）
+	"models.providers.list":            bind((*App).ModelProvidersList),
+	"models.providers.save":            bind((*App).ModelProvidersSave),
+	"models.providers.remove":          bind((*App).ModelProvidersRemove),
+	"models.providers.setModelEnabled": bind((*App).ModelProvidersSetModelEnabled),
+	"models.providers.test":            bind((*App).ModelProvidersTest),
+	"models.providers.fetchModels":     bind((*App).ModelProvidersFetchModels),
 	// 平台账号（可选能力；应用没接平台时返回 Configured=false，不报错）
 	"platform.status":           bind((*App).PlatformStatus),
 	"platform.login":            bind((*App).PlatformLogin),
@@ -256,6 +266,9 @@ func (v *App) capabilities() []string {
 	}
 	if o.Modes != nil {
 		out = append(out, "modes")
+		if ed, ok := o.Modes.(ModeEditor); ok && ed.Editable() { // docs/51 第 6 节：界面里编辑档位
+			out = append(out, CapModeEdit)
+		}
 	}
 	if o.Profile != nil {
 		out = append(out, "plugins")
@@ -293,6 +306,9 @@ func (v *App) capabilities() []string {
 		}
 		if _, ok := o.Platform.(PlatformConfigurer); ok {
 			out = append(out, "platform_configure")
+		}
+		if _, ok := o.Platform.(ModelProviders); ok { // docs/51 第 4 节：models.providers.*（providers.go）
+			out = append(out, CapProviders)
 		}
 	}
 	if o.Followups != nil {
@@ -1722,8 +1738,11 @@ func (v *App) ModeShow(ctx context.Context, in wire.ModeShowArgs) (wire.ModeShow
 	}
 	out := wire.ModeShowResult{Mode: mode, Items: []wire.ModeItem{}}
 	for _, it := range items {
-		out.Items = append(out.Items, wire.ModeItem{Item: it.Item, Title: it.Title, Value: it.Value, Source: it.Source, Bounded: it.Bounded})
+		out.Items = append(out.Items, wire.ModeItem{Item: it.Item, Title: it.Title, Value: it.Value, Source: it.Source, Bounded: it.Bounded,
+			Class: it.Class, Type: it.Type, Owner: it.Owner, Tools: it.Tools, Levels: it.Levels, Allow: it.Allow, Ask: it.Ask, Deny: it.Deny,
+			Overridden: it.Overridden})
 	}
+	v.modeDetail(m, &out) // docs/51 第 6 节：档位本身的信息（mode_edit.go）
 	return out, nil
 }
 

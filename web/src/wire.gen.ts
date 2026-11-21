@@ -754,11 +754,75 @@ export interface ModeItem {
   value: string;
   source: string;
   bounded: boolean;
+  class?: string;
+  type?: string;
+  owner?: string;
+  tools?: string[];
+  levels?: string[];
+  allow?: string[];
+  ask?: string[];
+  deny?: string[];
+  overridden?: boolean;
 }
 
 export interface ModeShowResult {
   mode: string;
   items: ModeItem[];
+  name?: string;
+  base?: string;
+  description?: string;
+  builtin?: boolean;
+  project?: boolean;
+  editable?: boolean;
+  revision?: string;
+}
+
+export interface ModeItemDraft {
+  default?: string;
+  level?: string;
+  allow?: string[];
+  ask?: string[];
+  deny?: string[];
+}
+
+export interface ModeDraft {
+  id: string;
+  name?: string;
+  base?: string;
+  description?: string;
+  items?: Record<string, ModeItemDraft>;
+}
+
+export interface ModeSaveArgs {
+  mode: ModeDraft;
+  revision?: string;
+  create?: boolean;
+}
+
+export interface ModeSaveResult {
+  mode: ModeInfo;
+  revision: string;
+}
+
+export interface ModeRemoveArgs {
+  id: string;
+  revision?: string;
+}
+
+export interface ModeRemoveResult {
+  id: string;
+  default: string;
+  fell_back?: boolean;
+  note?: string;
+}
+
+export interface ModeSetDefaultArgs {
+  id: string;
+}
+
+export interface ModeSetDefaultResult {
+  default: string;
+  pinned?: string;
 }
 
 export interface ArtifactGetArgs {

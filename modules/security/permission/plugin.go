@@ -60,7 +60,7 @@ func (*plug) Setup(cx *component.Registrar) error {
 	if err != nil {
 		return err
 	}
-	cfgs, err := configsFromLayers(cx)
+	cfgs, lay, err := configsFromLayers(cx)
 	if err != nil {
 		return err
 	}
@@ -72,6 +72,16 @@ func (*plug) Setup(cx *component.Registrar) error {
 	if err != nil {
 		return err
 	}
+	// 界面里编辑档位（edit.go）：只有配置来源里有用户层时才可写——写进去的 permissions.toml 下次启动才会被读到。
+	if lay.user {
+		s.UserHome = userHome()
+	}
+	switch {
+	case cfg.ForceMode != "":
+		s.Pinned = "启动参数强制了档位 " + cfg.ForceMode
+	case lay.projectMode != "":
+		s.Pinned = "项目 permissions.toml 设了 mode = " + lay.projectMode + "（项目层优先）"
+	}
 	if err := cx.AgentConfig(&UseConfig{}); err != nil {
 		return err
 	}
@@ -81,6 +91,7 @@ func (*plug) Setup(cx *component.Registrar) error {
 			// §9.5：与参数无关地必然 deny 的工具不进模型工具列表（每次构造工具列表时按当前档位求值）。
 			hub, id := sc.Hub, sc.ID
 			s.SetItems(hub.Items())
+			s.SetItemTools(itemTools(hub))
 			s.SetLookup(func(n string) []toolhub.Item {
 				t, ok := hub.Get(n)
 				if !ok {
@@ -177,14 +188,17 @@ func (*plug) Start(*component.Scope) error { return nil }
 // configsFromLayers 从部署期配置来源取各层的 permissions。
 // 没注入来源返回空：嵌入场景缺省不读 ~/.tenon/permissions.toml（18 方案第七节）。
 // 项目层不受信就不用——项目规则只能加严，但档位名会成为新会话缺省，不该悄悄生效。
-func configsFromLayers(cx *component.Registrar) ([]Config, error) {
+func configsFromLayers(cx *component.Registrar) ([]Config, layerInfo, error) {
+	var info layerInfo
 	src, ok, err := component.GetOptional(cx, component.KeyLayers)
 	if err != nil || !ok {
-		return nil, err
+		return nil, info, err
 	}
+	// 有配置来源就当有用户层（文件来源的用户层在文件不存在时不出现，但写了之后下次启动会读到）。
+	info.user = true
 	layers, err := src.Layers(context.Background())
 	if err != nil {
-		return nil, err
+		return nil, info, err
 	}
 	var cs []Config
 	for _, l := range layers {
@@ -193,14 +207,23 @@ func configsFromLayers(cx *component.Registrar) ([]Config, error) {
 		}
 		var c Config
 		if err := component.DecodeValue(l.File("permissions"), &c); err != nil {
-			return nil, fmt.Errorf("permission: %s: %w", layerWhere(l), err)
+			return nil, info, fmt.Errorf("permission: %s: %w", layerWhere(l), err)
 		}
 		if err := checkConfig(c, layerWhere(l)); err != nil {
-			return nil, err
+			return nil, info, err
+		}
+		if l.Origin == component.OriginProject && c.Mode != "" {
+			info.projectMode = c.Mode
 		}
 		cs = append(cs, c)
 	}
-	return cs, nil
+	return cs, info, nil
+}
+
+// layerInfo 配置来源的概况（界面编辑档位用）。
+type layerInfo struct {
+	user        bool   // 注入了配置来源（用户层可写）
+	projectMode string // 受信项目层设的 mode（会盖过用户层）
 }
 
 // layerWhere 报错时指给用户看的位置；来源没给就用层名。

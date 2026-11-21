@@ -4,9 +4,11 @@ package adapters
 
 import (
 	"encoding/json"
+	"errors"
 	"strings"
 
 	"github.com/Sevyn17/tenon/appapi"
+	"github.com/Sevyn17/tenon/appapi/wire"
 	"github.com/Sevyn17/tenon/modules/security/permission"
 	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
@@ -98,10 +100,103 @@ func (m PermModes) Show(id, mode string) ([]appapi.ModeItem, error) {
 		if it.Type == toolhub.ItemLevel {
 			val = s.Level
 		}
-		out = append(out, appapi.ModeItem{Item: it.ID, Title: it.Title, Value: val, Source: src,
-			Bounded: it.Type != toolhub.ItemMatch || it.Bounded})
+		_, own := d.File.Items[it.ID]
+		row := appapi.ModeItem{Item: it.ID, Title: it.Title, Value: val, Source: src,
+			Bounded: it.Type != toolhub.ItemMatch || it.Bounded,
+			Class:   it.Class, Type: string(it.Type), Owner: it.Owner, Tools: m.P.ItemTools(it.ID), Overridden: own}
+		switch it.Type {
+		case toolhub.ItemMatch:
+			row.Allow, row.Ask, row.Deny = clone(s.Allow), clone(s.Ask), clone(s.Deny)
+		case toolhub.ItemLevel:
+			row.Levels = clone(it.Levels)
+		}
+		out = append(out, row)
 	}
 	return out, nil
+}
+
+func clone(xs []string) []string {
+	if len(xs) == 0 {
+		return nil
+	}
+	return append([]string(nil), xs...)
+}
+
+// —— 界面里编辑档位（appapi.ModeEditor，docs/51 第 6 节）——
+
+var _ appapi.ModeEditor = PermModes{}
+
+func (m PermModes) Editable() bool { return m.P.Editable() }
+
+func (m PermModes) Detail(mode string) (appapi.ModeDetail, error) {
+	d, ok := m.P.Registry().Get(permission.Mode(mode))
+	if !ok {
+		return appapi.ModeDetail{}, appapi.Errorf(appapi.CodeNotFound, "没有档位 %q", mode)
+	}
+	return appapi.ModeDetail{Name: d.Title, Base: d.File.Base, Description: d.Description, Builtin: d.Builtin, Project: d.Project,
+		Editable: m.P.UserEditable(d.ID), Revision: m.P.ModeRevision(d.ID)}, nil
+}
+
+func (m PermModes) info(id permission.Mode) appapi.ModeInfo {
+	d, ok := m.P.Registry().Get(id)
+	if !ok {
+		return appapi.ModeInfo{ID: string(id), Label: string(id)}
+	}
+	items := m.P.Items()
+	return appapi.ModeInfo{ID: string(d.ID), Label: permission.Label(d, items), Short: permission.Short(d), Builtin: d.Builtin,
+		Project: d.Project, Widened: permission.Widened(d, items), Description: d.Description}
+}
+
+func (m PermModes) SaveMode(in wire.ModeDraft, revision string, create bool) (appapi.ModeInfo, string, error) {
+	e := permission.ModeEdit{ID: permission.Mode(in.ID), Name: in.Name, Base: in.Base, Description: in.Description,
+		Items: map[string]permission.ItemFile{}}
+	for k, v := range in.Items {
+		e.Items[k] = permission.ItemFile{Default: v.Default, Level: v.Level, Allow: v.Allow, Ask: v.Ask, Deny: v.Deny}
+	}
+	rev, err := m.P.SaveMode(e, revision, create)
+	if err != nil {
+		return appapi.ModeInfo{}, "", editError(err)
+	}
+	return m.info(e.ID), rev, nil
+}
+
+func (m PermModes) RemoveMode(id, revision string) (string, bool, error) {
+	fb, err := m.P.RemoveMode(permission.Mode(id), revision)
+	if err != nil {
+		return "", false, editError(err)
+	}
+	return m.DefaultMode(), fb, nil
+}
+
+func (m PermModes) SetDefaultMode(id string) (string, string, error) {
+	pinned, err := m.P.SetDefaultMode(permission.Mode(id))
+	if err != nil {
+		return "", "", editError(err)
+	}
+	return m.DefaultMode(), pinned, nil
+}
+
+// editError permission.EditError → 协议错误码。
+func editError(err error) error {
+	var ee *permission.EditError
+	if !errors.As(err, &ee) {
+		return err
+	}
+	switch ee.Kind {
+	case permission.EditNotFound:
+		return appapi.Errorf(appapi.CodeNotFound, "%s", ee.Msg)
+	case permission.EditUnsupported:
+		return appapi.Errorf(appapi.CodeUnsupported, "%s", ee.Msg)
+	case permission.EditStale, permission.EditExists:
+		reason := wire.ConflictStale
+		if ee.Kind == permission.EditExists {
+			reason = wire.ConflictExists
+		}
+		e := appapi.Errorf(appapi.CodeConflict, "%s", ee.Msg)
+		e.Details = map[string]any{"reason": reason, "revision": ee.Revision}
+		return e
+	}
+	return appapi.Errorf(wire.CodeInvalid, "%s", ee.Msg)
 }
 
 func (m PermModes) Notice(id string) string         { return m.P.Notice(id) }

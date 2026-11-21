@@ -243,13 +243,18 @@ github.com/Sevyn17/tenon/adapters: type Parts struct{Asm *github.com/Sevyn17/ten
 github.com/Sevyn17/tenon/adapters: type PermModes struct{P *github.com/Sevyn17/tenon/modules/security/permission.Sessions; Approvals ModeApprovals}
 github.com/Sevyn17/tenon/adapters: method (PermModes) AllowForSession(id string, tool string, args encoding/json.RawMessage) (added []string, all []string)
 github.com/Sevyn17/tenon/adapters: method (PermModes) DefaultMode() string
+github.com/Sevyn17/tenon/adapters: method (PermModes) Detail(mode string) (github.com/Sevyn17/tenon/appapi.ModeDetail, error)
+github.com/Sevyn17/tenon/adapters: method (PermModes) Editable() bool
 github.com/Sevyn17/tenon/adapters: method (PermModes) ExtKeys() (mode string, rules string)
 github.com/Sevyn17/tenon/adapters: method (PermModes) Get(id string) github.com/Sevyn17/tenon/appapi.ModeState
 github.com/Sevyn17/tenon/adapters: method (PermModes) List() []github.com/Sevyn17/tenon/appapi.ModeInfo
 github.com/Sevyn17/tenon/adapters: method (PermModes) Notice(id string) string
+github.com/Sevyn17/tenon/adapters: method (PermModes) RemoveMode(id string, revision string) (string, bool, error)
+github.com/Sevyn17/tenon/adapters: method (PermModes) SaveMode(in github.com/Sevyn17/tenon/appapi/wire.ModeDraft, revision string, create bool) (github.com/Sevyn17/tenon/appapi.ModeInfo, string, error)
 github.com/Sevyn17/tenon/adapters: method (PermModes) SessionAllow(tool string, args encoding/json.RawMessage) (rules []string, blocked []string)
 github.com/Sevyn17/tenon/adapters: method (PermModes) SessionRules(id string) []string
 github.com/Sevyn17/tenon/adapters: method (PermModes) Set(id string, mode string, confirm bool) (github.com/Sevyn17/tenon/appapi.ModeState, error)
+github.com/Sevyn17/tenon/adapters: method (PermModes) SetDefaultMode(id string) (string, string, error)
 github.com/Sevyn17/tenon/adapters: method (PermModes) Show(id string, mode string) ([]github.com/Sevyn17/tenon/appapi.ModeItem, error)
 github.com/Sevyn17/tenon/adapters: type Skills struct{S *github.com/Sevyn17/tenon/modules/context/skills.Skills}
 github.com/Sevyn17/tenon/adapters: method (Skills) List(context.Context) (github.com/Sevyn17/tenon/appapi/wire.SkillsListResult, error)
@@ -494,13 +499,21 @@ github.com/Sevyn17/tenon/appapi/wire: type MessageDelta struct{StreamID string; 
 github.com/Sevyn17/tenon/appapi/wire: type MessageStarted struct{StreamID string; EntryID string; Part string; Attempt int}
 github.com/Sevyn17/tenon/appapi/wire: type Mode struct{Mode string; Label string; Sandbox string}
 github.com/Sevyn17/tenon/appapi/wire: type ModeChanged = Mode struct{Mode string; Label string; Sandbox string}
+github.com/Sevyn17/tenon/appapi/wire: type ModeDraft struct{ID string; Name string; Base string; Description string; Items map[string]ModeItemDraft}
 github.com/Sevyn17/tenon/appapi/wire: type ModeInfo struct{ID string; Label string; Short string; Builtin bool; Project bool; Widened []string; Description string}
-github.com/Sevyn17/tenon/appapi/wire: type ModeItem struct{Item string; Title string; Value string; Source string; Bounded bool}
+github.com/Sevyn17/tenon/appapi/wire: type ModeItem struct{Item string; Title string; Value string; Source string; Bounded bool; Class string; Type string; Owner string; Tools []string; Levels []string; Allow []string; Ask []string; Deny []string; Overridden bool}
+github.com/Sevyn17/tenon/appapi/wire: type ModeItemDraft struct{Default string; Level string; Allow []string; Ask []string; Deny []string}
 github.com/Sevyn17/tenon/appapi/wire: type ModeListResult struct{Modes []ModeInfo; Default string}
+github.com/Sevyn17/tenon/appapi/wire: type ModeRemoveArgs struct{ID string; Revision string}
+github.com/Sevyn17/tenon/appapi/wire: type ModeRemoveResult struct{ID string; Default string; FellBack bool; Note string}
+github.com/Sevyn17/tenon/appapi/wire: type ModeSaveArgs struct{Mode ModeDraft; Revision string; Create bool}
+github.com/Sevyn17/tenon/appapi/wire: type ModeSaveResult struct{Mode ModeInfo; Revision string}
 github.com/Sevyn17/tenon/appapi/wire: type ModeSetArgs struct{Session string; Mode string; Confirm bool}
+github.com/Sevyn17/tenon/appapi/wire: type ModeSetDefaultArgs struct{ID string}
+github.com/Sevyn17/tenon/appapi/wire: type ModeSetDefaultResult struct{Default string; Pinned string}
 github.com/Sevyn17/tenon/appapi/wire: type ModeSetResult struct{State Mode; Committed bool}
 github.com/Sevyn17/tenon/appapi/wire: type ModeShowArgs struct{Session string; Mode string}
-github.com/Sevyn17/tenon/appapi/wire: type ModeShowResult struct{Mode string; Items []ModeItem}
+github.com/Sevyn17/tenon/appapi/wire: type ModeShowResult struct{Mode string; Items []ModeItem; Name string; Base string; Description string; Builtin bool; Project bool; Editable bool; Revision string}
 github.com/Sevyn17/tenon/appapi/wire: type ModelInfo struct{ID string; Alias bool; Provider string; Name string; Label string; ContextWindow int; Images bool; Reasoning bool; Efforts []string; Available bool; Reason string}
 github.com/Sevyn17/tenon/appapi/wire: type ModelRetrying struct{Attempt int; Max int; WaitMs int64; Reason string}
 github.com/Sevyn17/tenon/appapi/wire: type ModelsListResult struct{Models []ModelInfo; Default string; Effective *EffectiveModel}
