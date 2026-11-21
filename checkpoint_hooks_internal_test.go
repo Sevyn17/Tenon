@@ -13,6 +13,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	goruntime "runtime"
 	"strings"
 	"testing"
 
@@ -56,9 +57,15 @@ func TestCheckpointWrapsHooks(t *testing.T) {
 	ctx := context.Background()
 	root := t.TempDir()
 	db := memstore.New()
+	//钩子命令要跨平台：hooks在 Windows经 PowerShell执行，`echo x> file`在 PowerShell里不是重定向
+	//（实测文件保持原样），在 bash里才是。Windows改用 cmd /c的重定向，Unix用 sh的。
+	hookCmd := "echo formatted> a.txt"
+	if goruntime.GOOS == "windows" {
+		hookCmd = `cmd /c "echo formatted> a.txt"`
+	}
 	hook := component.ConfigLayer{Name: "user", Origin: component.OriginUser, Trusted: true,
 		Values: map[string]any{"hooks": map[string]any{"hook": []map[string]any{
-			{"event": "post_tool_use", "matcher": "write_file", "command": "echo formatted> a.txt"}}}}}
+			{"event": "post_tool_use", "matcher": "write_file", "command": hookCmd}}}}}
 	asm, err := component.Assemble(component.Spec{
 		Plugins: []component.Entry{{Name: "hooks"}, {Name: checkpoint.Name}},
 		Inject: map[string]any{assemble.ServiceWorkdir: root, assemble.ServiceUI: cpUI{},

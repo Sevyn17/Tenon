@@ -14,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/BurntSushi/toml"
+
 	"github.com/Sevyn17/tenon/appapi"
 	"github.com/Sevyn17/tenon/appapi/wire"
 )
@@ -150,8 +152,29 @@ func TestMCPCommandsFlow(t *testing.T) {
 	if s, _ := serverIn(l2, "s"); s.State != wire.MCPStateConnected || len(s.Tools) != 1 || s.Tools[0].Name != "s2_tool" || len(s.EnvKeys) != 3 {
 		t.Fatalf("未给值的 env 键应保留：%+v", s)
 	}
-	if b, _ := os.ReadFile(userFile); !strings.Contains(string(b), pidsS) {
-		t.Fatalf("FAKE_PID_FILE 的原值应保留在文件里：\n%s", b)
+	//断言解析后的语义值而非原始文本：mcp.save重写 [[server]]段时，TOML编码器会把 Windows
+	//路径的反斜杠转义成 \\，原始子串匹配在 Windows上必失败。
+	if b, _ := os.ReadFile(userFile); !strings.Contains(string(b), "FAKE_PID_FILE") {
+		t.Fatalf("FAKE_PID_FILE键应保留在文件里：\n%s", b)
+	} else {
+		var parsed struct {
+			Server []struct {
+				Name string            `toml:"name"`
+				Env  map[string]string `toml:"env"`
+			} `toml:"server"`
+		}
+		if err := toml.Unmarshal(b, &parsed); err != nil {
+			t.Fatalf("解析写回的 mcp.toml：%v", err)
+		}
+		found := false
+		for _, sv := range parsed.Server {
+			if sv.Name == "s" && sv.Env["FAKE_PID_FILE"] == pidsS {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("FAKE_PID_FILE的值 %q应原样保留（语义上）：\n%s", pidsS, b)
+		}
 	}
 	// 显式删除一个键
 	rm := map[string]any{"name": "s", "command": exe, "timeout": 10, "env_remove": []string{"FAKE_PID_FILE"}}

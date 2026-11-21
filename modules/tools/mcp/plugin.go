@@ -457,7 +457,14 @@ func (p *plug) addPackages(cx *component.Registrar) error {
 			cwd := pkgs.Expand(s.Cwd, k.Dir)
 			if s.Command != "" {
 				if cwd == "" {
-					cwd = k.Dir
+					//缺省不把工作目录设为包目录：包内进程以包目录为工作目录时，Windows会锁住该目录，
+					//覆盖安装/卸载 rename旧包进 .trash会失败（being used by another process）。
+					//包要访问包内文件用 ${TENON_PLUGIN_DIR}（已注入 env）或显式 cwd；显式 cwd保持原行为。
+					if p.workdir != "" {
+						cwd = p.workdir
+					} else {
+						cwd = k.Dir
+					}
 				} else if !filepath.IsAbs(cwd) {
 					cwd = filepath.Join(k.Dir, cwd)
 				}
