@@ -13,7 +13,7 @@ import type { Envelope, ProtocolError } from "./wire.gen";
 
 export type Listener = (e: Envelope) => void;
 
-/** 连接状态：connecting 首次连接中；open 可用；reconnecting 断线后重连中；closed 已关闭（close() 之后）。 */
+/** 连接状态：connecting 首次连接中；open 可用；reconnecting 断线后重连中；closed 已关闭（close() 或 Wails 运行时加载失败）。 */
 export type ConnectionState = "connecting" | "open" | "reconnecting" | "closed";
 
 export interface Transport {
@@ -63,6 +63,7 @@ export const WAILS_RECONNECTED_EVENT = "tenon:reconnected";
 export function wailsTransport(runtime: string | Promise<WailsRuntime> = "/wails/runtime.js"): Transport {
   const rt = typeof runtime === "string" ? (import(/* @vite-ignore */ runtime) as Promise<WailsRuntime>) : runtime;
   let off: (() => void) | null = null;
+  let closed = false;
   return {
     async call(cmd, args) {
       const r = await rt;
@@ -78,6 +79,7 @@ export function wailsTransport(runtime: string | Promise<WailsRuntime> = "/wails
       state("connecting");
       rt.then(
         (r) => {
+          if (closed) return;
           const offEvent = r.Events.On(WAILS_EVENT, (ev) => {
             const d = ev?.data;
             if (d && typeof d === "object") emit(d as Envelope);
@@ -95,10 +97,13 @@ export function wailsTransport(runtime: string | Promise<WailsRuntime> = "/wails
           };
           state("open");
         },
-        () => state("reconnecting"),
+        () => {
+          if (!closed) state("closed");
+        },
       );
     },
     close() {
+      closed = true;
       off?.();
       off = null;
     },
@@ -177,7 +182,7 @@ export function wsTransport(url: string, opts: { heartbeatMs?: number; heartbeat
           return;
         }
         setState(everOpen ? "reconnecting" : "connecting");
-        setTimeout(() => void connect().catch(() => {}), delay);
+        setTimeout(() => void connect().catch(() => {}), delay * (0.8 +0.4 * Math.random()));
         delay = Math.min(delay * 2, 10000);
       };
       s.onmessage = (m) => {
@@ -209,7 +214,12 @@ export function wsTransport(url: string, opts: { heartbeatMs?: number; heartbeat
       const id = String(++seq);
       return new Promise((resolve, reject) => {
         pending.set(id, { resolve, reject });
-        s.send(JSON.stringify({ id, cmd, args: args ?? {} }));
+        try {
+          s.send(JSON.stringify({ id, cmd, args: args ?? {} }));
+        } catch (e) {
+          pending.delete(id);
+          reject(toApiError(e));
+        }
       });
     },
     start(fn, state) {
@@ -263,6 +273,7 @@ export function connect(t: Transport): Connection {
     },
     state,
     close() {
+      listeners.clear();
       t.close();
       state.set("closed");
     },

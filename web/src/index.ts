@@ -112,13 +112,19 @@ export function createClient(opts: ClientOptions = {}): Client {
     session(id) {
       let s = opened.get(id);
       if (!s) {
-        s = createSessionStore(conn, id, { onSnapshot: (snap) => interactions.absorb(id, snap.interactions ?? []) });
+        s = createSessionStore(conn, id, {
+          onSnapshot: (snap) => interactions.absorb(id, snap.interactions ?? []),
+          onClose: () => {
+            if (opened.get(id) === s) opened.delete(id);
+          },
+        });
         opened.set(id, s);
       }
       return s;
     },
     close() {
       for (const s of opened.values()) s.close();
+      opened.clear();
       sessions.close();
       interactions.close();
       notices.close();

@@ -12,7 +12,7 @@ import { clientID } from "./transport";
 import { ApiError, LOCAL_RECONNECTED } from "./commands";
 import { createStore, type ReadStore } from "./store";
 import { applySnapshot, initialState, mergeEntries, reduce, type SessionState } from "./session-reducer";
-import type { CursorRef, Envelope, Part, SessionSnapshot } from "./wire.gen";
+import type { CursorRef, EntryAppended, Envelope, Part, SessionSnapshot } from "./wire.gen";
 
 /** 首屏与每次向上翻页取多少条。 */
 export const PAGE = 50;
@@ -61,6 +61,8 @@ export interface SessionStore extends ReadStore<SessionView> {
 export interface SessionStoreOptions {
   /** 每次取到快照时调用（交互 store 用它补上快照里的 interactions：订阅前就打开的交互不会漏掉）。 */
   onSnapshot?: (snap: SessionSnapshot) => void;
+  /** 最后一个打开者关闭后调用（client 据此淘汰 opened 里的实例）。 */
+  onClose?: () => void;
 }
 
 export function createSessionStore(conn: Connection, id: string, hooks: SessionStoreOptions = {}): SessionStore {
@@ -79,6 +81,8 @@ export function createSessionStore(conn: Connection, id: string, hooks: SessionS
   const subscribe = async (after: number, g: number) => {
     try {
       await conn.call("session.subscribe", { session: id, after });
+      if (g !== gen) return;
+      setState((s) => ({ ...s, status: "ready", error: undefined }));
     } catch (e) {
       if (g !== gen) return;
       if (e instanceof ApiError && e.code === "cursor_expired") {
@@ -89,17 +93,32 @@ export function createSessionStore(conn: Connection, id: string, hooks: SessionS
     }
   };
 
+  // 易失事件在断线 / 背压期间不会回放：先清掉旧的 live，再用快照覆盖 run_state、queued 和当前 live。
+  // 仍从旧游标续订，以补上快照前已经落库、但本端还没收到的持久条目。
+  const recover = async (after: number, g: number) => {
+    setState((s) => ({ ...s, status: "loading", error: undefined, streams: [], tools: [], retry: null, queued: [] }));
+    try {
+      const snap = await conn.call("session.get", { session: id });
+      if (g !== gen) return;
+      hooks.onSnapshot?.(snap);
+      setState((s) => ({ ...applySnapshot(s, snap), status: "loading", error: undefined }));
+      await subscribe(after, g);
+    } catch (e) {
+      if (g !== gen) return;
+      setState((s) => ({ ...s, status: "error", error: e instanceof Error ? e.message : String(e) }));
+    }
+  };
+
   const onEvent = (ev: Envelope) => {
     const g = gen;
     if (ev.kind === LOCAL_RECONNECTED) {
-      void subscribe(store.get().cursor, g);
+      void recover(store.get().cursor, g);
       return;
     }
     if (ev.session !== id) return;
     if (ev.kind === "session.lagged") {
-      // 背压断开：只丢了易失事件，从最后送达的持久游标重新订阅
-      setState((s) => ({ ...s, streams: [] }));
-      void subscribe((ev.data as CursorRef).cursor, g);
+      // 背压断开与传输重连走同一条快照恢复路径。
+      void recover((ev.data as CursorRef).cursor, g);
       return;
     }
     patch((v) => {
@@ -109,7 +128,7 @@ export function createSessionStore(conn: Connection, id: string, hooks: SessionS
         const ins = new Set((ev.data as { inputs?: string[] }).inputs ?? []);
         outbox = outbox.filter((o) => !ins.has(o.client_id));
       } else if (ev.kind === "entry.appended") {
-        const ids = new Set(next.entries[next.entries.length - 1]?.client_ids ?? []);
+        const ids = new Set((ev.data as EntryAppended).entry.client_ids ?? []);
         if (ids.size) outbox = outbox.filter((o) => !ids.has(o.client_id));
       }
       return { ...v, ...next, outbox };
@@ -208,6 +227,7 @@ export function createSessionStore(conn: Connection, id: string, hooks: SessionS
       gen++;
       off?.();
       off = null;
+      hooks.onClose?.();
       void conn.call("session.unsubscribe", { session: id }).catch(() => {});
     },
     async loadOlder() {

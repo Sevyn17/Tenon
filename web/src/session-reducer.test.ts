@@ -154,7 +154,12 @@ describe("session reducer", () => {
     let st = run(initialState("s"), ev("tool.started", { call_id: "c1", name: "shell", entry_id: "e1" }));
     st = run(st, ev("tool.progress", { call_id: "c1", text: "早到的" }));
     expect(st.tools[0].live).toBeUndefined();
-    st = run(st, ev("tool.running", { call_id: "c1", args: {} }), ev("tool.progress", { call_id: "c1", text: "a" }), ev("tool.progress", { call_id: "c1", text: "a\nb" }));
+    st = run(
+      st,
+      ev("tool.running", { call_id: "c1", args: {} }),
+      ev("tool.progress", { call_id: "c1", text: "a" }),
+      ev("tool.progress", { call_id: "c1", text: "a\nb" }),
+    );
     expect(st.tools[0].live).toBe("a\nb");
     st = run(st, ev("tool.ended", { call_id: "c1", status: "ok", preview: "done" }));
     expect(st.tools[0].live).toBeUndefined();
@@ -209,5 +214,26 @@ describe("last_end（回合结束原因持久化，docs/50 M2 协议T3）", () =
     expect(run(s, ev("log.rewound", { to: 2, voided_interactions: [] })).lastEnd).toBeNull();
     const s1 = run(base, ev("turn.ended", failed(1)));
     expect(run(s1, ev("log.rewound", { to: 2, voided_interactions: [] })).lastEnd?.turn).toBe(1);
+  });
+});
+
+describe("mergeEntries有序快路径", () => {
+  it("单条递增直接追加；同 idx替换、乱序与多条页仍排序去重", () => {
+    const base = mergeEntries(initialState("s"), [entry(0, 1, "user"), entry(1, 1)]);
+    const appended = mergeEntries(base, [entry(2, 1)]);
+    expect(appended.entries.map((e) => e.idx)).toEqual([0, 1, 2]);
+    expect(base.entries.map((e) => e.idx)).toEqual([0, 1]);
+
+    const replacement = { ...entry(1, 1), at: 99 };
+    const replaced = mergeEntries(appended, [replacement]);
+    expect(replaced.entries.map((e) => e.idx)).toEqual([0, 1, 2]);
+    expect(replaced.entries[1].at).toBe(99);
+
+    const older = { ...entry(0, 1, "user"), at: 88 };
+    const outOfOrder = mergeEntries(replaced, [entry(4, 2), entry(3, 2)]);
+    const deduped = mergeEntries(outOfOrder, [older]);
+    expect(deduped.entries.map((e) => e.idx)).toEqual([0, 1, 2, 3, 4]);
+    expect(deduped.entries[0].at).toBe(88);
+    expect(deduped.len).toBe(5);
   });
 });

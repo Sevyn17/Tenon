@@ -192,6 +192,9 @@ export function mergeEntries(s: SessionState, page: Entry[], base?: number, len?
 
 function mergeSorted(a: Entry[], b: Entry[]): Entry[] {
   if (b.length === 0) return a;
+  const last = a[a.length - 1];
+  // 流式追加是热路径：有序单条直接接尾，避免每条事件都重建 Map 并全量排序。
+  if (b.length === 1 && (!last || b[0].idx > last.idx)) return [...a, b[0]];
   const m = new Map<number, Entry>();
   for (const e of a) m.set(e.idx, e);
   for (const e of b) m.set(e.idx, e);
