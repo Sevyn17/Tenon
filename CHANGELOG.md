@@ -8,6 +8,86 @@
 
 ---
 
+## [v0.5.0] - 2026-11-21
+
+> 小版本：从 `v0.4.0` 起（17 个提交，`8d39714`…`2bba75a`）。`testdata/api.txt` 只增不删
+> （新增 121 行符号，22 个既有结构体追加字段），无符号删除、无函数签名变化；但若干既有行为变了
+> （见「破坏性变更」），按 07 篇 7.4.1 注意事项不塞进 patch，动 minor。
+> 内容是 Mortise 客户端改进（docs/50 M7–M12）与第二批收尾的框架侧部分；M13、M14 在本仓库没有改动。
+> 应用协议仍是 protocol 2（只加命令、事件、字段）。
+
+### 破坏性变更
+
+> 公开面没有删除或改签名的符号。下面是下游升级后**可能察觉的变化**。
+
+- **22 个结构体追加了字段**：`apphost.WorkspaceOptions`（`ResourceIdle` / `ResourceMax`）；`wire.ConfigField`（`Elem`）、
+  `EntriesArgs`（`Turn`）、`ForkArgs`（`UptoTurn`）、`HelloResult`（`Workspace`）、`Interaction`（`Plan`）、
+  `ListArgs`（`Query` / `Parent` / `Archived`）、`ModeInfo`（`Description`）、`ModeListResult`（`Default`）、
+  `Notice`（`Replay`）、`PackageInfo`（`Enabled` / `Dir` / `Risks` / `Managed` / `Error`）、
+  `PluginInfo`（`Version` / `Description` / `Risks`）、`RewindArgs`（`RestoreFiles` / `Force`）、`RewindResult`（`Files`）、
+  `SendArgs`（`Queue`）、`SessionInfo`（`Archived` / `LastEnd`）、`SessionSnapshot`（`Archived` / `Queued`）、
+  `SessionUpdated`（`Archived`）、`SessionsChanged`（`Preview` / `Parent` / `Origin` / `Workspace` / `Archived` / `LastEnd`）、
+  `Settings` / `SettingsArgs`（`WorkMode`）、`UpdateArgs`（`Archived`）。
+  带字段名的字面量不受影响；不带字段名的会编译失败，其中 `ForkArgs.UptoTurn`、`Interaction.Plan`、
+  `PluginInfo.Version` / `Description`、`SessionSnapshot.Archived` 插在中间。
+- **notice 改为连接级送达，会话订阅不再推 notice**。每个连接 hello 后补发最近 20 条（`replay=true`），之后实时推；
+  靠会话订阅收 notice 的客户端要改订连接级（能力 `notices`；`05a770a`，决策日志 2026-11-19）。
+- **MCP 定义来源变了**：用户级 `mcp.toml` 是全局定义（可写 `scope = "global"`，所有工作区共用一个进程）；
+  受信项目的 `mcp.toml` 直接生效，与用户级重名时项目覆盖并提示；不受信不读。MCP 进程经资源管理器取，
+  切换工作区与 `workspace.reload` 时全局服务不重启（`542bbb3`，决策日志 2026-11-20）。
+- **两个新插件缺省开**：文件检查点 `checkpoint`（进 `Default()`，write_file / edit 写入前存原文，shell 等调用前后扫描工作区）
+  与 `plan-mode`（`exit_plan` 工具，只在 Plan 模式显露）。不想要的要在配置里关（`e0ed70e`、`268378d`）。
+- **顶层会话回合失败后 actor 不再退出**：收尾成 Idle、记 `last_end`，`Wait` / SDK `Send` 照样拿到错误，
+  下一条 send 直接开新回合；本批输入随失败提交消费，不反复重跑。写冲突、租约失效、提交失败仍退出。
+  靠「失败即会话关闭」重开会话的客户端可以去掉重开（`c8d2db8`，决策日志 2026-11-21）。
+- **子会话判定收窄为 origin=subagent / member**。以前看 `Origin == ""`，M6 起新建会话都记了 origin，
+  顶层会话实际走了子会话的所属树策略；现在 fork / side / agent 来源都按顶层处理（`c8d2db8`）。
+- **分叉出的会话（origin=fork）算顶层会话**：`store.TopLevel` / `store.OriginFork`，`SessionQuery.TopOnly` 改按 TopLevel，
+  进缺省列表与置顶路径；subagent / member / side 仍是子会话。自己实现存储的要跟着改，`storetest` 有 `TopLevelFork`
+  覆盖（`2bba75a`，决策日志 2026-11-21）。
+- **工具调用中间件「后登记的在外层」由测试锁定**（与 `component.Wrap` 注释相反，`runtime/assemble/toolcallorder_test.go`）；
+  hooks 加 `Provides service:hooks`，checkpoint `Requires ?service:hooks`，于是检查点包在 hooks 外层，
+  post_tool_use 格式化器的改动记进同一快照。依赖登记顺序的自定义中间件请核对嵌套（`e0ed70e`，决策日志 2026-11-19）。
+
+### 新增
+
+- **会话列表**（M7）：`store.Preview` 填预览；`sessions.changed` 带 preview / parent / origin / workspace / archived / last_end
+  （能力 `sessions.changed.full`）；`HelloResult.workspace`；`sessions.list` 加 `query` / `parent` / `archived` 与可选接口
+  `SessionQueryStore`（能力 `sessions.query`）；`session.update` 归档，归档时取消置顶、发消息自动恢复（`8d39714`）。
+- **按回合取日志与分叉、模型重试事件**（M8）：`session.entries {turn}`、`session.fork {upto_turn}`（不含该回合，
+  可选接口 `TurnRangeStore`，能力 `entries.turn`）；易失事件 `model.retrying {attempt, max, wait_ms, reason}`
+  （能力 `model_retrying`），连接被拒时也发（`e5a8536`、`3c9132a`）。
+- **文件检查点与改动命令**（M9）：插件 `checkpoint`（diff 与还原引擎，冲突时一字节不写、演练、强制、Undo；
+  单文件 2 MiB、每会话 256 MiB）；`changes.list` / `changes.diff` / `changes.revert`（能力 `changes`，revert 只给 operator）；
+  `session.rewind {restore_files, force}`；shell / MCP / 扩展进程调用前后扫描（`scan_max_files` 缺省 20000）；
+  只读 git 未提交范围 `scope:git`（能力 `changes.git`）；扫描提速：单条只读 shell 命令跳过扫描、`wsfs.Tree` 增量快照
+  （Windows ReadDirectoryChangesW、Linux inotify）、指纹未变时复用 git status，2 万文件 Windows NTFS 无改动调用
+  236→31 ms（`e0ed70e`、`cc64f85`、`8bca0c4`、`b04d7e0`）。
+- **档位与插件说明**（M10）：`ModeInfo.description`、`ModeListResult.default`（可选接口 `ModeDefaulter`）、
+  `PluginInfo.version` / `description`（`Meta.Description`）、`ConfigField.elem`（结构体数组与 map 前端只读）、
+  连接级 notice（level / source / replay，能力 `notices`）；前端 `Client.notices`（`05a770a`、`d2a69cb`）。
+- **资源管理器与配置管理**（M11）：`runtime/resmgr`（范围 global / tenant / workspace / session，引用计数、空闲回收、上限）；
+  `mcp.list` / `test` / `save` / `remove` / `setEnabled`（能力 `mcp`，只写用户级 mcp.toml，带 revision 冲突检查）；
+  `workspace.trustPreview` / `workspace.trust`（可选接口 `Truster`，能力 `workspace.trust`）；
+  `skills.list` / `skills.setEnabled`（能力 `skills`）；`packages.preview` / `install` / `remove` / `setEnabled`
+  （能力 `packages.manage`，只管用户级包）与 `PluginInfo.risks`；`adapters.Changes` / `MCP` / `Skills`、
+  `apphost.PreviewPackage` 与 `WorkspaceManager` 的对应方法（`542bbb3`、`b1146b7`、`4bb056d`）。
+- **排队与 Plan 模式**（M12）：`session.send {queue}`（能力 `send.queue`，回合结束后一条一回合按顺序执行，重启不丢；
+  `SessionSnapshot.queued`、易失事件 `queue.changed`、`session.unqueue`、可选接口 `store.QueueStore`）；
+  `session.settings {work_mode}`（execute / plan，能力 `work_mode`），Plan 下隐藏写文件与执行类工具，
+  `exit_plan {plan, steps?}` 弹 kind=plan 的计划卡；前端 session store 记排队列表与 workMode（`268378d`、`2f3773b`）。
+
+### 变更
+
+- **前端 sessions 导出 `isChildRow`**，按 origin 判断子会话，与后端 `store.TopLevel` 一致（`2bba75a`）。
+
+### 修复
+
+- **回合中插话在日志里写两次**：步边界经 `mailDirty` 与 Send 唤醒各插一次；新增 `midInserted` 跳过本回合已插入的
+  信箱项，插入失败不登记、取消不丢（`a2c79c1`，决策日志 2026-11-20）。
+
+---
+
 ## [v0.4.0] - 2026-11-18
 
 > 小版本：从 `v0.3.3` 起。`testdata/api.txt` 只增不删（新增 35 行符号，9 个既有结构体追加字段），
