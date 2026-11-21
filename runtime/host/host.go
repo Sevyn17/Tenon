@@ -465,7 +465,10 @@ func (h *Host) open(ctx context.Context, id, def string, f Factory, pre func(*ag
 	holder := h.leaseHolder()
 	epoch, err := h.DB.AcquireLease(ctx, id, holder)
 	if err != nil {
+		//先摘除，再关闭本次未运行的 actor；新 Open可重新登记，已分发 Handle则会退出。
 		h.remove(id)
+		a.exitErr = ErrClosed
+		a.once.Do(func() { close(a.exit) })
 		return Handle{}, err
 	}
 	// 休眠中的会话：抢到租约即唤醒（02 2.2）。状态迁移也带新纪元，旧节点迟到的迁移被拒。

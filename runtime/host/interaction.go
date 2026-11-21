@@ -92,15 +92,15 @@ func (a *actor) responders() []string {
 	return []string{"local"}
 }
 
-// openInteraction 登记一次交互（同时是一条待回复）。登记失败时退回只登记 corr（回信路径仍可用），
-// 再失败 corr 为空。返回交互 id（空 = 没登记成交互）与 corr。
-// openInteraction 登记一次交互，返回交互 id 与 corr。
+// openInteraction登记一次交互（同时是一条待回复），返回交互 id、corr与 corr是否登记成功。
+// 交互落库失败时退回只登记 corr（回信路径仍可用）；两种登记都失败时 ok=false，
+// corr仍返回原始值供调用方清理 register已挂上的等待者，但不得再发布这个 corr。
 //
 // register 在**落库之前**调用（可为 nil），用来把等待通道挂进 humanWait / askWait：
 // 交互一旦落库，界面就可能立刻回答，而 Respond 靠这两个表判断「有没有人在等」。
 // 先落库再挂通道会留一个窗口，回答落进去会被误判成「上次进程留下的交互」而标成
 // voided（D6：CI 慢机器上偶发「已结束（voided）」）。所以在同一个临界区里先挂后落。
-func (a *actor) openInteraction(kind, title string, body map[string]any, deadline time.Time, register func(corr string), extra ...map[string]any) (iid, corr string) {
+func (a *actor) openInteraction(kind, title string, body map[string]any, deadline time.Time, register func(corr string), extra ...map[string]any) (iid, corr string, ok bool) {
 	corr = mail.NewID()
 	iid = "i-" + NewItemID()
 	idx, turn := 0, uint32(0)
@@ -121,13 +121,13 @@ func (a *actor) openInteraction(kind, title string, body map[string]any, deadlin
 		register(corr)
 	}
 	if err := a.h.DB.OpenInteraction(context.Background(), p, a.epoch); err == nil {
-		return iid, corr
+		return iid, corr, true
 	}
 	p.InteractionID, p.Kind, p.Payload, p.Root = "", "", nil, ""
 	if err := a.h.DB.IssueCorr(context.Background(), p); err != nil {
-		return "", ""
+		return "", corr, false
 	}
-	return "", corr
+	return "", corr, true
 }
 
 func firstMap(ms []map[string]any) map[string]any {
@@ -174,16 +174,19 @@ func (h *Host) Respond(ctx context.Context, id string, r store.Resolution, ans A
 	h.humanMu.Lock()
 	ch, okA := h.humanWait[p.Corr]
 	qch, okQ := h.askWait[p.Corr]
-	h.humanMu.Unlock()
 	if !okA && !okQ {
+		h.humanMu.Unlock()
 		if _, open := h.Get(p.SessionID); !open {
 			return store.Pending{}, false, fmt.Errorf("%w: 会话 %s 不在本进程，交互 %s 由持有它的进程处理", store.ErrLeaseLost, p.SessionID, id)
 		}
 		got, _, err := h.DB.ResolveInteraction(ctx, id, store.Resolution{Outcome: OutcomeVoided})
 		return got, false, err
 	}
+	//等待者注销也受 humanMu保护：判定、送达与注销不能交错。
+	//若等待方已选中取消/超时分支，它会在注销时取走这里送达的答案。
 	got, won, err := h.DB.ResolveInteraction(ctx, id, r)
 	if err != nil || !won {
+		h.humanMu.Unlock()
 		return got, won, err
 	}
 	if okA {
@@ -197,6 +200,7 @@ func (h *Host) Respond(ctx context.Context, id string, r store.Resolution, ans A
 		default:
 		}
 	}
+	h.humanMu.Unlock()
 	return got, true, nil
 }
 
@@ -221,6 +225,22 @@ func (h *Host) Interact(ctx context.Context, sessionID string, r Request) (Answe
 	return h.interact(ctx, sessionID, r, nil)
 }
 
+// abandonAsk原子地注销等待者并最后检查一次答案。Respond持同一把锁送达，
+// 因此若它已胜出，即使等待方先选中了超时/取消分支，也能在这里收回答案而不丢失。
+func (h *Host) abandonAsk(corr string, ch chan Answer) (Answer, bool) {
+	h.humanMu.Lock()
+	defer h.humanMu.Unlock()
+	if h.askWait[corr] == ch {
+		delete(h.askWait, corr)
+	}
+	select {
+	case ans := <-ch:
+		return ans, true
+	default:
+		return Answer{}, false
+	}
+}
+
 func (h *Host) interact(ctx context.Context, sessionID string, r Request, opened func(string)) (Answer, error) {
 	hd, ok := h.Get(sessionID)
 	if !ok {
@@ -242,7 +262,7 @@ func (h *Host) interact(ctx context.Context, sessionID string, r Request, opened
 		body = map[string]any{}
 	}
 	ch := make(chan Answer, 1)
-	iid, corr := a.openInteraction(r.Kind, r.Title, body, r.Deadline, func(corr string) {
+	iid, corr, registered := a.openInteraction(r.Kind, r.Title, body, r.Deadline, func(corr string) {
 		h.humanMu.Lock()
 		if h.askWait == nil {
 			h.askWait = map[string]chan Answer{}
@@ -250,7 +270,7 @@ func (h *Host) interact(ctx context.Context, sessionID string, r Request, opened
 		h.askWait[corr] = ch
 		h.humanMu.Unlock()
 	}, extra)
-	if corr == "" || iid == "" {
+	if !registered || corr == "" || iid == "" {
 		h.humanMu.Lock()
 		delete(h.askWait, corr)
 		h.humanMu.Unlock()
@@ -280,12 +300,24 @@ func (h *Host) interact(ctx context.Context, sessionID string, r Request, opened
 		outcome = "" // 已由 Respond 结束（结果按回答定），closeInteraction 不覆盖
 		return ans, nil
 	case <-timeout:
+		if ans, answered := h.abandonAsk(corr, ch); answered {
+			outcome = ""
+			return ans, nil
+		}
 		outcome = OutcomeExpired
 		return Answer{}, fmt.Errorf("host: 交互 %s 已过截止时间", iid)
 	case <-ctx.Done():
+		if ans, answered := h.abandonAsk(corr, ch); answered {
+			outcome = ""
+			return ans, nil
+		}
 		outcome = waitOutcome(r.Deadline)
 		return Answer{}, ctx.Err()
 	case <-a.exit:
+		if ans, answered := h.abandonAsk(corr, ch); answered {
+			outcome = ""
+			return ans, nil
+		}
 		return Answer{}, ErrClosed
 	}
 }

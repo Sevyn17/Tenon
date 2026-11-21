@@ -23,8 +23,8 @@ func (h *Host) deliverHuman(ctx context.Context, env mail.Envelope) error {
 // resolveHuman 把人工确认的回答（回信信封）交给等待中的工具确认。返回是否有等待者。
 func (h *Host) resolveHuman(corr, body string) bool {
 	h.humanMu.Lock()
+	defer h.humanMu.Unlock()
 	ch, ok := h.humanWait[corr]
-	h.humanMu.Unlock()
 	if !ok {
 		return false
 	}
@@ -33,6 +33,21 @@ func (h *Host) resolveHuman(corr, body string) bool {
 	default:
 	}
 	return true
+}
+
+// abandonHuman与 abandonAsk同理：注销和最后取答必须跟 Respond/resolveHuman的送达互斥。
+func (h *Host) abandonHuman(corr string, ch chan bool) (bool, bool) {
+	h.humanMu.Lock()
+	defer h.humanMu.Unlock()
+	if h.humanWait[corr] == ch {
+		delete(h.humanWait, corr)
+	}
+	select {
+	case ok := <-ch:
+		return ok, true
+	default:
+		return false, false
+	}
 }
 
 // decisionFromBody 解析确认回答。内核只认规范形式：JSON `{"approve":true}` / `{"allow":true}` /

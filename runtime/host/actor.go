@@ -986,12 +986,12 @@ func (a *actor) between(need *session.Need) (*session.Need, error) {
 // 迟到回信核对不过，不会被当成普通消息开新回合。
 func (a *actor) wireConfirm() {
 	a.ag.Hub.SetAwait(a.ag.AwaitFunc(func(ctx context.Context, cx *toolhub.Cx, reason string, deadline time.Time) bool {
-		// 登记成 approval 交互（protocol 2，interaction.go）：打开与结束都是持久事件；登记失败时 corr 为空，
-		// 只发 call_id，回信路径不可用，Confirm 命令照常。
+		//登记成 approval交互（protocol2，interaction.go）：corr-only降级时仍可用信封回信，
+		//两种登记都失败时 corr为空，只发 call_id，Confirm命令照常。
 		// 等待通道在 openInteraction 里**落库之前**挂上（register 回调），否则回答可能落在
 		// 「已落库但还没人等」的窗口里被误判成遗留交互而作废（D6）。
 		w := make(chan bool, 1)
-		iid, corr := a.openInteraction("approval", cx.Tool.Spec.Name+" 需要确认", map[string]any{
+		iid, corr, registered := a.openInteraction("approval", cx.Tool.Spec.Name+" 需要确认", map[string]any{
 			"tool": cx.Tool.Spec.Name, "call_id": cx.CallID, "args": jsonArgs(cx.Args), "reason": reason}, deadline, func(corr string) {
 			a.h.humanMu.Lock()
 			if a.h.humanWait == nil {
@@ -1003,10 +1003,13 @@ func (a *actor) wireConfirm() {
 		a.mu.Lock()
 		a.waiters[cx.CallID] = w
 		a.mu.Unlock()
-		if corr != "" && iid == "" {
+		if !registered {
+			//两种登记都失败：原始 corr只用于清掉 register挂上的等待者，不能发布。
+			// corr-only降级成功则保留等待者，信封回信仍可批准/拒绝。
 			a.h.humanMu.Lock()
 			delete(a.h.humanWait, corr)
 			a.h.humanMu.Unlock()
+			corr = ""
 		}
 		outcome := OutcomeVoided
 		defer func() {
@@ -1034,9 +1037,23 @@ func (a *actor) wireConfirm() {
 			}
 			return ok
 		case <-ctx.Done():
+			if ok, answered := a.h.abandonHuman(corr, w); answered {
+				outcome = OutcomeDenied
+				if ok {
+					outcome = OutcomeApproved
+				}
+				return ok
+			}
 			outcome = waitOutcome(deadline)
 			return false
 		case <-a.exit:
+			if ok, answered := a.h.abandonHuman(corr, w); answered {
+				outcome = OutcomeDenied
+				if ok {
+					outcome = OutcomeApproved
+				}
+				return ok
+			}
 			return false
 		}
 	}))
