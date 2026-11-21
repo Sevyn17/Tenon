@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -442,38 +443,50 @@ func TestScanTiming20k(t *testing.T) {
 		}
 	}
 	t.Logf("生成 20000 个文件：%v（%s）", time.Since(start), root)
-	// 尽量清页缓存（需要免密 sudo；不行就是「新进程第一次遍历」）
-	cold := "新进程第一次遍历（未清页缓存）"
-	if exec.Command("sudo", "-n", "sh", "-c", "sync; echo 3 > /proc/sys/vm/drop_caches").Run() == nil {
-		cold = "清页缓存后"
-	}
-	e := New(root, nil, nil)
-	e.NoGit = true
-	for i, label := range []string{"冷：" + cold, "热"} {
-		t0 := time.Now()
-		m, err := wsfs.WalkSkip(context.Background(), root, DefaultScanMaxFiles, e.skipDirs())
-		if err != nil || len(m) != 20000 {
-			t.Fatalf("第 %d 次：%d %v", i, len(m), err)
-		}
-		t.Logf("Walk 2 万文件 %s：%v", label, time.Since(t0))
-	}
-	h := &harness{t: t, e: e, art: &fakeArt{}, root: root, scope: &fakeScope{turn: 1}}
 	t0 := time.Now()
-	h.shell("s1", func() {})
-	t.Logf("一次 shell 调用的扫描开销（两次 Walk，无 git）：%v", time.Since(t0))
+	if m, err := wsfs.WalkSkip(context.Background(), root, DefaultScanMaxFiles, New(root, nil, nil).skipDirs()); err != nil || len(m) != 20000 {
+		t.Fatalf("Walk：%d %v", len(m), err)
+	}
+	t.Logf("单次 Walk 2 万文件：%v", time.Since(t0))
+	// med 跑 5 次取中位数；f 返回自己量的耗时（准备动作不计）。
+	med := func(f func() time.Duration) time.Duration {
+		ds := make([]time.Duration, 5)
+		for i := range ds {
+			ds[i] = f()
+		}
+		sort.Slice(ds, func(i, j int) bool { return ds[i] < ds[j] })
+		return ds[2]
+	}
+	n := 0
+	run := func(label string, noWatch, noGit bool) {
+		e := New(root, nil, nil)
+		e.noWatch, e.NoGit = noWatch, noGit
+		defer e.Close()
+		h := &harness{t: t, e: e, art: &fakeArt{}, root: root, scope: &fakeScope{turn: 1}}
+		call := func(cmd string) time.Duration {
+			t0 := time.Now()
+			h.shellCmd("s1", cmd, func() {})
+			return time.Since(t0)
+		}
+		first := call("make")
+		second := med(func() time.Duration { return call("make") })
+		ext := med(func() time.Duration {
+			n++
+			h.put(fmt.Sprintf("d%03d/f000.txt", n%200), fmt.Sprint(n)) // 两次调用之间的一处外部改动
+			return call("make")
+		})
+		ro := med(func() time.Duration { return call("cat d000/f001.txt") })
+		t.Logf("%s：首次 %v｜第二次（无改动）%v｜一处外部改动 %v｜只读命令 %v（快照 %+v，git status %d 次）",
+			label, first.Round(100*time.Microsecond), second.Round(100*time.Microsecond),
+			ext.Round(100*time.Microsecond), ro.Round(100*time.Microsecond), e.treeFor().Stats(), e.statusRuns.Load())
+	}
+	run("无 git｜每次全量（提速前的做法）", true, true)
+	run("无 git｜增量", false, true)
 	if _, err := exec.LookPath("git"); err == nil {
 		gitT(t, root, "init", "-q")
 		gitT(t, root, "add", "-A")
 		gitT(t, root, "commit", "-q", "-m", "x")
-		e2 := New(root, nil, nil)
-		t0 = time.Now()
-		if _, err := e2.gitStatus(context.Background(), false); err != nil {
-			t.Fatal(err)
-		}
-		t.Logf("git status（2 万个已跟踪文件）：%v", time.Since(t0))
-		h2 := &harness{t: t, e: e2, art: &fakeArt{}, root: root, scope: &fakeScope{turn: 1}}
-		t0 = time.Now()
-		h2.shell("s1", func() {})
-		t.Logf("一次 shell 调用的扫描开销（两次 Walk + git status）：%v", time.Since(t0))
+		run("git｜每次全量 + 每次 git status（提速前的做法）", true, false)
+		run("git｜增量 + git status 复用", false, false)
 	}
 }

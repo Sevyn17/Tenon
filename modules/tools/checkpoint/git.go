@@ -97,6 +97,7 @@ func (e *Engine) gitStatus(ctx context.Context, untracked bool) (map[string]*git
 	if untracked {
 		u = "--untracked-files=all"
 	}
+	e.statusRuns.Add(1)
 	out, err := e.runGit(ctx, "status", "--porcelain=v1", "-z", "--no-renames", u, "--", ".")
 	if err != nil {
 		return nil, err

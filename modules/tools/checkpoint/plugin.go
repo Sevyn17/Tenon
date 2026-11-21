@@ -7,6 +7,8 @@ package checkpoint
 // 钩子外面，post_tool_use 格式化器的改动算进同一次调用，不记成 drift。
 
 import (
+	"context"
+
 	"github.com/Sevyn17/tenon/runtime/assemble"
 	"github.com/Sevyn17/tenon/runtime/component"
 	"github.com/Sevyn17/tenon/runtime/store"
@@ -73,4 +75,13 @@ func (p *plug) Setup(cx *component.Registrar) error {
 	return cx.Provide("checkpoint", e)
 }
 
-func (*plug) Start(*component.Scope) error { return nil }
+// Start 插件关闭时释放工作区监视器句柄（wsfs.Tree）。
+func (p *plug) Start(sc *component.Scope) error {
+	sc.OnClose(func(context.Context) error {
+		if p.e != nil {
+			return p.e.Close()
+		}
+		return nil
+	})
+	return nil
+}

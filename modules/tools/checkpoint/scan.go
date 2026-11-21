@@ -17,6 +17,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"sort"
@@ -48,7 +49,8 @@ const unknownHash = "unknown"
 
 // scanSnap 一个会话最近一次扫描的结果（回合末补扫与它比）。
 type scanSnap struct {
-	stats   map[string]wsfs.FileStat
+	stats   map[string]wsfs.FileStat // owned 为假时是 wsfs.Tree 交出的只读 map，改之前先复制
+	owned   bool
 	dirty   map[string]bool // 不能用 HEAD 当基线的文件（path_key）：调用前已改或之后被改过
 	gitOK   bool
 	pending bool // 本回合有 may_write 或 job_* 调用，回合末要补扫
@@ -93,22 +95,107 @@ func (e *Engine) markTooMany(session string) {
 	}
 }
 
-// walk 扫一次工作区；超上限时标注会话并返回 nil。
-func (e *Engine) walk(ctx context.Context, session string) map[string]wsfs.FileStat {
-	m, err := wsfs.WalkSkip(ctx, e.Root, e.scanMax(), e.skipDirs())
+// treeFor 本工作区的增量快照（懒建；根目录换了重建，旧的释放）。
+func (e *Engine) treeFor() *wsfs.Tree {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.tree != nil && e.tree.Root() == e.Root {
+		return e.tree
+	}
+	if e.tree != nil {
+		_ = e.tree.Close()
+	}
+	e.tree = wsfs.NewTree(e.Root, e.scanMax(), e.skipDirs())
+	e.tree.NoWatch = e.noWatch
+	e.gitDirty = nil
+	return e.tree
+}
+
+// walk 取一次工作区快照（返回的 map 只读）与代号（代号相同 = 内容相同）；超上限时标注会话并返回 nil。
+// full = 不管有没有变更通知都全量遍历（回合末补扫）。
+func (e *Engine) walk(ctx context.Context, session string, full bool) (map[string]wsfs.FileStat, uint64) {
+	m, gen, err := e.treeFor().Snapshot(ctx, full)
 	if err != nil {
 		if errors.Is(err, wsfs.ErrTooManyFiles) {
 			e.markTooMany(session)
 		}
-		return nil
+		return nil, 0
 	}
-	return m
+	return m, gen
+}
+
+// gitDirtyCache 最近一次调用前 git status 的结果，键为当时的工作区快照代号与 git 目录指纹。
+// 两者都没变时 git status 的输入（工作区文件的 stat、索引、HEAD、配置）没变，结果也不变，直接复用。
+// 跳过的目录（vendor、node_modules）和被忽略的已跟踪文件不在快照里，它们的 git 状态可能变了没被发现，
+// 但 dirty 只用于快照里比出变化的文件，这些文件不会被查到，所以不影响结果。
+type gitDirtyCache struct {
+	gen   uint64
+	fp    string
+	dirty map[string]bool
+}
+
+// gitFingerprint git 目录里决定 git status 结果的文件（index、HEAD 及其指向的分支、packed-refs、config）的状态；
+// 取不到 git 目录返回 ""（不复用）。
+func (e *Engine) gitFingerprint() string {
+	e.dirsOnce.Do(func() {
+		out, err := e.runGit(context.Background(), "rev-parse", "--absolute-git-dir", "--git-common-dir")
+		if err != nil {
+			return
+		}
+		ls := strings.Split(strings.TrimRight(string(out), "\r\n"), "\n")
+		if len(ls) < 2 {
+			return
+		}
+		gd, cd := strings.TrimSpace(ls[0]), strings.TrimSpace(ls[1])
+		if !filepath.IsAbs(cd) {
+			cd = filepath.Join(e.Root, cd)
+		}
+		e.gitDir, e.gitComm = filepath.FromSlash(gd), filepath.FromSlash(cd)
+	})
+	if e.gitDir == "" {
+		return ""
+	}
+	var b strings.Builder
+	st := func(p string) {
+		if fi, err := os.Stat(p); err == nil {
+			fmt.Fprintf(&b, "%d/%d;", fi.Size(), fi.ModTime().UnixNano())
+		} else {
+			b.WriteString("-;")
+		}
+	}
+	st(filepath.Join(e.gitDir, "index"))
+	head, err := os.ReadFile(filepath.Join(e.gitDir, "HEAD"))
+	if err != nil {
+		return ""
+	}
+	b.Write(head)
+	if ref, ok := strings.CutPrefix(strings.TrimSpace(string(head)), "ref: "); ok {
+		st(filepath.Join(e.gitComm, filepath.FromSlash(ref)))
+	}
+	st(filepath.Join(e.gitComm, "packed-refs"))
+	st(filepath.Join(e.gitComm, "config"))
+	st(filepath.Join(e.gitDir, "config.worktree"))
+	return b.String()
 }
 
 // preDirty 调用前 git status（不含未跟踪文件）里出现的文件；不是 git 仓库或失败时 gitOK = false。
-func (e *Engine) preDirty(ctx context.Context) (map[string]bool, bool) {
+// gen 为调用前快照的代号：和上一次一样、git 目录指纹也一样时复用上一次的结果（见 gitDirtyCache）。
+// 返回的 map 只读。
+func (e *Engine) preDirty(ctx context.Context, gen uint64) (map[string]bool, bool) {
 	if !e.gitProbe().ok {
 		return nil, false
+	}
+	fp := ""
+	if gen != 0 && !e.noWatch { // noWatch 是提速前做法的对照：每次都跑
+		fp = e.gitFingerprint()
+	}
+	if fp != "" {
+		e.mu.Lock()
+		c := e.gitDirty
+		e.mu.Unlock()
+		if c != nil && c.gen == gen && c.fp == fp {
+			return c.dirty, true
+		}
 	}
 	st, err := e.gitStatus(ctx, false)
 	if err != nil {
@@ -117,6 +204,11 @@ func (e *Engine) preDirty(ctx context.Context) (map[string]bool, bool) {
 	d := make(map[string]bool, len(st))
 	for k := range st {
 		d[k] = true
+	}
+	if fp != "" && e.gitFingerprint() == fp { // git status 期间 git 目录变了（用户在提交）：不缓存
+		e.mu.Lock()
+		e.gitDirty = &gitDirtyCache{gen: gen, fp: fp, dirty: d}
+		e.mu.Unlock()
 	}
 	return d, true
 }
@@ -137,24 +229,32 @@ func mayWrite(attrs map[string]any) bool {
 
 func isJobTool(name string) bool { return strings.HasPrefix(name, "job_") }
 
-// scanCall may_write_files 调用：前后各扫一次。
+// scanCall may_write_files 调用：前后各扫一次（增量快照，见 wsfs.Tree）。能保守判定为只读的 shell 命令
+// 前后都不扫，只标记回合末补扫（兜底，见 readonly.go）。
 func (e *Engine) scanCall(ctx context.Context, req component.ToolCallReq,
 	next func(context.Context, component.ToolCallReq) (component.ToolCallResp, error)) (component.ToolCallResp, error) {
-	pre := e.walk(ctx, req.SessionID)
+	if readOnlyShell(req.Tool, req.Args) {
+		e.markPending(req.SessionID, TurnOf(req.Scope))
+		return next(ctx, req)
+	}
+	pre, preGen := e.walk(ctx, req.SessionID, false)
 	if pre == nil {
 		return next(ctx, req)
 	}
-	dirty, gitOK := e.preDirty(ctx)
+	dirty, gitOK := e.preDirty(ctx, preGen)
 	resp, err := next(ctx, req)
 	if resp.Output.Kind == toolhub.Confirm {
 		return resp, err // 批准后整条链重跑，那时再扫
 	}
-	post := e.walk(ctx, req.SessionID)
+	post, postGen := e.walk(ctx, req.SessionID, false)
 	if post == nil {
 		return resp, err
 	}
 	turn := TurnOf(req.Scope)
-	changed := e.recordScan(ctx, req.SessionID, turn, req.CallID, req.Tool, pre, post, dirty, gitOK)
+	var changed []string
+	if postGen != preGen { // 代号相同 = 快照没变，不用逐个比
+		changed = e.recordScan(ctx, req.SessionID, turn, req.CallID, req.Tool, pre, post, dirty, gitOK)
+	}
 	nd := map[string]bool{}
 	for k := range dirty {
 		nd[k] = true
@@ -269,16 +369,14 @@ func (e *Engine) rescan(ctx context.Context, session string) {
 	}
 	s.pending = false
 	turn, gitOK := s.turn, s.gitOK
-	pre := make(map[string]wsfs.FileStat, len(s.stats)) // 拷贝：noteWrite 在锁内改 s.stats
-	for k, v := range s.stats {
-		pre[k] = v
-	}
+	pre := s.stats
+	s.owned = false // 之后 noteWrite 先复制再改，pre 不会被动
 	dirty := make(map[string]bool, len(s.dirty))
 	for k := range s.dirty {
 		dirty[k] = true
 	}
 	e.mu.Unlock()
-	post := e.walk(ctx, session)
+	post, _ := e.walk(ctx, session, true) // 兜底：不信通知，全量遍历
 	if post == nil {
 		return
 	}
@@ -301,6 +399,9 @@ func (e *Engine) noteWrite(session, rel, key, abs string) {
 		return
 	}
 	s.dirty[key] = true
+	if !s.owned { // 快照是 wsfs.Tree 交出的只读 map（或补扫正在用）：写时复制
+		s.stats, s.owned = maps.Clone(s.stats), true
+	}
 	if fi, err := os.Lstat(abs); err == nil && fi.Mode().IsRegular() {
 		s.stats[rel] = wsfs.FileStat{ModTime: fi.ModTime(), Size: fi.Size()}
 	} else {

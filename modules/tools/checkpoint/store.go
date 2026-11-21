@@ -18,8 +18,10 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
+	"github.com/Sevyn17/tenon/modules/internal/wsfs"
 	"github.com/Sevyn17/tenon/runtime/store"
 	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
@@ -92,13 +94,21 @@ type Engine struct {
 	git      gitInfo
 	snaps    map[string]*scanSnap // 会话 → 最近一次扫描
 	tooMany  map[string]bool      // 会话 → 因文件太多跳过过扫描
-	mu       sync.Mutex
-	lastSeq  int64
-	used     map[string]int64           // 会话 → 本进程内新存的内容字节数
-	stored   map[string]map[string]bool // 会话 → 已存过的哈希（不重复计配额）
-	warned   map[string]bool
-	touched  map[string]map[string]string // 会话 → path_key → 相对路径（本回合碰过，回合末对账）
-	pathLock map[string]*sync.Mutex
+	tree     *wsfs.Tree           // 工作区增量快照（第一次扫描时建，Close / 最后一个会话删除时释放）
+	gitDirty *gitDirtyCache       // 上一次调用前 git status 的结果（工作区与 git 目录都没变时复用）
+	noWatch  bool                 // 不用文件变更通知、每次全量（耗时对照测量用）
+	dirsOnce sync.Once
+	gitDir   string // 绝对路径的 git 目录与公共目录（指纹用；取不到为空，不复用 git status）
+	gitComm  string
+	// statusRuns git status 实际执行次数（测试与耗时测量看缓存是否生效）。
+	statusRuns atomic.Int64
+	mu         sync.Mutex
+	lastSeq    int64
+	used       map[string]int64           // 会话 → 本进程内新存的内容字节数
+	stored     map[string]map[string]bool // 会话 → 已存过的哈希（不重复计配额）
+	warned     map[string]bool
+	touched    map[string]map[string]string // 会话 → path_key → 相对路径（本回合碰过，回合末对账）
+	pathLock   map[string]*sync.Mutex
 }
 
 // New 构造引擎。
@@ -455,6 +465,25 @@ func (e *Engine) DeleteSession(ctx context.Context, session string) error {
 	delete(e.touched, session)
 	delete(e.snaps, session)
 	delete(e.tooMany, session)
+	var t *wsfs.Tree
+	if len(e.snaps) == 0 { // 没有会话还要比对快照了：释放监视器，下次扫描再懒启动
+		t, e.tree, e.gitDirty = e.tree, nil, nil
+	}
 	e.mu.Unlock()
+	if t != nil {
+		_ = t.Close()
+	}
+	return nil
+}
+
+// Close 释放工作区监视器（插件关闭时）。之后的扫描会重新懒启动一个。
+func (e *Engine) Close() error {
+	e.mu.Lock()
+	t := e.tree
+	e.tree, e.gitDirty = nil, nil
+	e.mu.Unlock()
+	if t != nil {
+		return t.Close()
+	}
 	return nil
 }
