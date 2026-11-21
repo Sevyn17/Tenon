@@ -9,9 +9,9 @@ require (
 	github.com/BurntSushi/toml v1.6.0
 	github.com/dop251/goja v0.0.0-20261028213108-85be1416108e
 	github.com/google/uuid v1.6.0
-	golang.org/x/net v0.62.0
-	golang.org/x/sys v0.49.0
-	golang.org/x/text v0.43.0
+	golang.org/x/net v0.63.0
+	golang.org/x/sys v0.50.0
+	golang.org/x/text v0.44.0
 )
 
 require (
