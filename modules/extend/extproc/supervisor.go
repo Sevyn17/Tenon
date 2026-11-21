@@ -18,6 +18,8 @@ import (
 const (
 	DefaultMaxCrashes = 5
 	DefaultBackoff    = 200 * time.Millisecond
+	// DefaultStableFor进程稳定运行多久后清零连续崩溃计数。
+	DefaultStableFor = time.Minute
 )
 
 // Supervisor 监管一个外部插件进程。
@@ -29,18 +31,26 @@ type Supervisor struct {
 	MaxCrashes int
 	// Backoff 首次退避（<=0 用 DefaultBackoff）；每次崩溃翻倍，封顶 5 秒。
 	Backoff time.Duration
+	// StableFor进程稳定运行多久后清零连续崩溃计数（<=0用 DefaultStableFor）。
+	StableFor time.Duration
 	// OnCrash 进程退出（非主动停止）时回调；可为空。
 	OnCrash func(err error)
+	// OnRestart进程重启成功后回调；可为空。组件可在这里重建回桥并重新握手。
+	//返回错误表示重启后的初始化失败，Supervisor会标记不可用并终止新进程。
+	OnRestart func() error
 	// OnUnavailable 连续崩溃超限、标记不可用时回调；可为空。
 	OnUnavailable func()
 
-	mu      sync.Mutex
-	cmd     *exec.Cmd
-	stdin   io.WriteCloser
-	stdout  io.ReadCloser
-	crashes int
-	dead    bool
-	stopped bool
+	// restartMu串行化崩溃处理与重启回调，避免新进程很快再次退出时并发重建连接。
+	restartMu sync.Mutex
+	mu        sync.Mutex
+	cmd       *exec.Cmd
+	stdin     io.WriteCloser
+	stdout    io.ReadCloser
+	crashes   int
+	running   bool
+	dead      bool
+	stopped   bool
 }
 
 // Start 启动进程并接好 stdin/stdout。
@@ -76,8 +86,26 @@ func (s *Supervisor) startLocked(ctx context.Context) error {
 		return fmt.Errorf("extproc: 启动插件进程：%w", err)
 	}
 	s.cmd, s.stdin, s.stdout = cmd, in, out
+	s.running = true
 	go s.watch(cmd)
+	stableFor := s.StableFor
+	if stableFor <= 0 {
+		stableFor = DefaultStableFor
+	}
+	go s.resetCrashesAfterStable(cmd, stableFor)
 	return nil
+}
+
+// resetCrashesAfterStable只清当前仍存活进程的计数；旧进程的定时器不能清掉新崩溃。
+func (s *Supervisor) resetCrashesAfterStable(cmd *exec.Cmd, stableFor time.Duration) {
+	timer := time.NewTimer(stableFor)
+	defer timer.Stop()
+	<-timer.C
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.cmd == cmd && s.running && !s.dead && !s.stopped {
+		s.crashes = 0
+	}
 }
 
 // failLocked 启动失败：标记不可用并回调（调用方不能拿着 nil conn 继续用）。调用方持锁。
@@ -91,11 +119,21 @@ func (s *Supervisor) failLocked() {
 // watch 等进程退出；非主动停止时按退避重启，超限标记不可用。
 func (s *Supervisor) watch(cmd *exec.Cmd) {
 	err := cmd.Wait()
+	// Wait已返回就先标记退出，避免稳定期定时器把等待重启锁的死进程当成存活。
 	s.mu.Lock()
-	if s.stopped || s.dead {
+	if s.cmd == cmd {
+		s.running = false
+	}
+	s.mu.Unlock()
+	s.restartMu.Lock()
+	defer s.restartMu.Unlock()
+
+	s.mu.Lock()
+	if s.cmd != cmd || s.stopped || s.dead {
 		s.mu.Unlock()
 		return
 	}
+	s.running = false
 	s.crashes++
 	n := s.crashes
 	limit := s.MaxCrashes
@@ -119,7 +157,9 @@ func (s *Supervisor) watch(cmd *exec.Cmd) {
 	}
 	if n >= limit {
 		s.mu.Lock()
-		s.failLocked()
+		if !s.stopped && !s.dead {
+			s.failLocked()
+		}
 		s.mu.Unlock()
 		return
 	}
@@ -135,6 +175,23 @@ func (s *Supervisor) watch(cmd *exec.Cmd) {
 		return
 	}
 	s.mu.Unlock()
+
+	//管道只能在组件层转成 Conn；回调期间不能持 s.mu（它要读取新管道）。
+	if s.OnRestart != nil {
+		if e := s.OnRestart(); e != nil {
+			s.mu.Lock()
+			if s.stopped || s.dead {
+				s.mu.Unlock()
+				return
+			}
+			s.running = false
+			s.failLocked()
+			cmd = s.cmd
+			s.mu.Unlock()
+			_ = proc.Kill(cmd)
+			return
+		}
+	}
 }
 
 // Available 进程可用（没被标记不可用、没停）。
@@ -166,6 +223,7 @@ func (s *Supervisor) Stdout() io.ReadCloser {
 func (s *Supervisor) Stop() error {
 	s.mu.Lock()
 	s.stopped = true
+	s.running = false
 	cmd := s.cmd
 	s.mu.Unlock()
 	if cmd == nil {

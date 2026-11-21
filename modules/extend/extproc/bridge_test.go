@@ -14,7 +14,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Sevyn17/tenon/runtime/component"
 	"github.com/Sevyn17/tenon/runtime/extproc"
+	"github.com/Sevyn17/tenon/runtime/session"
 )
 
 // TestHelperPluginProcess 当子进程时的服务端：读 stdin 的 JSON-RPC，回握手 / 工具调用。
@@ -245,6 +247,108 @@ func startHelper(t *testing.T) (*extproc.Conn, func()) {
 		_ = cmd.Wait()
 	}
 	return conn, cleanup
+}
+
+// TestPlugCrashRestartReconnects覆盖真实链路：进程崩溃→Supervisor重启→组件重握手→回桥恢复。
+func TestPlugCrashRestartReconnects(t *testing.T) {
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := &plug{cfg: Config{
+		Command:    []string{exe, "-test.run", "^TestHelperPluginProcess$"},
+		Env:        []string{"TENON_EXTPROC_HELPER=1"},
+		MaxCrashes: 2,
+	}}
+	if err := p.startAndHandshake(); err != nil {
+		t.Fatalf("初次启动握手：%v", err)
+	}
+	defer func() { _ = p.sup.Stop() }()
+
+	//在进程仍稳定时调整测试时序；重启的 startLocked会读取这些配置。
+	p.sup.mu.Lock()
+	oldCmd := p.sup.cmd
+	p.sup.Backoff = 10 * time.Millisecond
+	p.sup.StableFor = 50 * time.Millisecond
+	p.sup.mu.Unlock()
+	oldConn := p.getConn()
+	if oldCmd == nil || oldCmd.Process == nil || oldConn == nil {
+		t.Fatal("初次启动后缺少进程或连接")
+	}
+
+	//直接杀进程模拟崩溃；握手成功并替换连接后，p.conn才会不同于 oldConn。
+	if err := oldCmd.Process.Kill(); err != nil {
+		t.Fatalf("杀掉插件进程：%v", err)
+	}
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		current := p.getConn()
+		p.sup.mu.Lock()
+		newCmd := p.sup.cmd
+		running := p.sup.running
+		p.sup.mu.Unlock()
+		if current != nil && current != oldConn && newCmd != oldCmd && running {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("进程重启后没有重建并完成握手")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	//稳定运行后清零「连续崩溃」计数，不能把数小时前的崩溃永久累积。
+	for {
+		p.sup.mu.Lock()
+		crashes := p.sup.crashes
+		p.sup.mu.Unlock()
+		if crashes == 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("稳定运行后崩溃计数未清零：%d", crashes)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if !p.sup.Available() {
+		t.Fatal("成功重启并稳定运行后进程不应不可用")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	// tool_call中间件必须重新连到新进程，而不是因旧 Conn关闭而全部 Denied。
+	calledNext := false
+	resp, err := p.toolCallMw()(ctx, component.ToolCallReq{Tool: "echo_tool"},
+		func(context.Context, component.ToolCallReq) (component.ToolCallResp, error) {
+			calledNext = true
+			return component.ToolCallResp{}, nil
+		})
+	if err != nil {
+		t.Fatalf("重启后的 tool_call中间件：%v", err)
+	}
+	if resp.Denied || !calledNext {
+		t.Fatalf("重启后的 tool_call应放行：resp=%+v calledNext=%v", resp, calledNext)
+	}
+
+	//实际调用一次外部工具，证明新 Conn不仅能握手，也能继续完成 JSON-RPC回桥。
+	p.mu.RLock()
+	specs := append([]extproc.ToolSpec(nil), p.tools...)
+	if len(specs) != 1 {
+		p.mu.RUnlock()
+		t.Fatalf("重启后的工具声明 = %+v", specs)
+	}
+	spec := specs[0]
+	p.mu.RUnlock()
+	out, err := p.toolOf(spec).Call(ctx, nil, json.RawMessage(`{"after":"restart"}`))
+	if err != nil {
+		t.Fatalf("重启后的工具调用：%v", err)
+	}
+	if out.Status != session.ToolOK {
+		t.Fatalf("重启后的工具调用失败：%+v", out)
+	}
+	want := `echo:{"after":"restart"}`
+	if len(out.Content) != 1 || out.Content[0].Text != want {
+		t.Fatalf("重启后的工具返回 = %+v，想要 %q", out.Content, want)
+	}
 }
 
 // itoa 小整数转字符串（避免为测试再引 strconv 之外的东西）。
