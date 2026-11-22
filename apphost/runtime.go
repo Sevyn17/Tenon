@@ -128,6 +128,10 @@ type AppOptions struct {
 	Workspaces appapi.Workspaces
 	// Extensions 产品扩展（appapi.Options.Extensions，docs/61 第 3 节）；可空。
 	Extensions []appapi.Extension
+	// DefaultAgent 新建顶层会话没给定义名时用的定义（tenon.WithDefaultAgent）；空 = 无定义会话。
+	DefaultAgent string
+	// StoreAgents 把存储的 definitions 表接成最前面的定义来源（tenon.WithStoreAgents）：产品的租户层副本。
+	StoreAgents bool
 }
 
 // Start 读信任与 profile，用 SDK 按 profile 装配（tenon.WithProfile）并启动组件（打开存储）。
@@ -202,6 +206,12 @@ func start(o StartOptions, pre *loaded) (*Runtime, error) {
 	}
 	if o.App.Hooks != nil {
 		opts = append(opts, tenon.WithSessionHooks(o.App.Hooks))
+	}
+	if o.App.DefaultAgent != "" {
+		opts = append(opts, tenon.WithDefaultAgent(o.App.DefaultAgent))
+	}
+	if o.App.StoreAgents {
+		opts = append(opts, tenon.WithStoreAgents())
 	}
 	if o.UI != nil {
 		opts = append(opts, tenon.WithUI(o.UI))

@@ -61,6 +61,8 @@ type config struct {
 	store      store.Store       // WithStore
 	models     *assemble.Models  // WithModels
 	agents     []agentdef.Source // WithAgents
+	// storeAgents 存储里的定义作为最前面的定义来源（WithStoreAgents，store_agents.go）。
+	storeAgents bool
 	// packages 插件包（WithPackages）：包带的定义单独存放，不算应用定义（T4d 审查 H2）。
 	packages []*pkgs.Package
 	workdir  string
@@ -396,7 +398,7 @@ func prepareAssembly(c *config) (*assemblyInput, error) {
 	if err != nil {
 		return nil, err
 	}
-	h := &host.Host{Bus: b, Workspace: c.workspace}
+	h := &host.Host{Bus: b, Workspace: c.workspace, DefaultDefinition: c.defaultAgent}
 	inject := buildInject(c, h, ui, workdir, handle, hasSQL)
 	appDefs, builtin, toolNames, extra, err := resolveDefinitionsAndTools(c)
 	if err != nil {
@@ -412,13 +414,6 @@ func prepareAssembly(c *config) (*assemblyInput, error) {
 
 // finishApp 第四段：装配完成后取服务、拼 App、校验定义。
 func finishApp(c *config, in *assemblyInput, asm *component.Assembly) (*App, error) {
-	defs, err := asm.Definitions(agentdef.Multi(in.appDefs, agentdef.Multi(pkgs.AgentSources(c.packages)...), in.builtin))
-	if err != nil {
-		return nil, fmt.Errorf("tenon: 定义: %w", err)
-	}
-	if len(c.packages) > 0 {
-		asm.SetPackages(pkgs.Infos(context.Background(), c.packages, agentdef.Scope{Tenant: store.Tenant}))
-	}
 	st := in.handle
 	if st == nil {
 		if v, ok := asm.Value(assemble.ServiceDB); ok {
@@ -428,11 +423,24 @@ func finishApp(c *config, in *assemblyInput, asm *component.Assembly) (*App, err
 			return nil, fmt.Errorf("%w: 没有存储：WithStore，或在 profile 里开一个提供 %s 的组件", ErrInvalid, assemble.ServiceDB)
 		}
 	}
+	srcs := []agentdef.Source{in.appDefs, agentdef.Multi(pkgs.AgentSources(c.packages)...), in.builtin}
+	var storeDefs *agentdef.StoreSource
+	if c.storeAgents {
+		storeDefs = agentdef.NewStoreSource(handleDefs{h: st}, store.Tenant, "")
+		srcs = append([]agentdef.Source{storeDefs}, srcs...)
+	}
+	defs, err := asm.Definitions(agentdef.Multi(srcs...))
+	if err != nil {
+		return nil, fmt.Errorf("tenon: 定义: %w", err)
+	}
+	if len(c.packages) > 0 {
+		asm.SetPackages(pkgs.Infos(context.Background(), c.packages, agentdef.Scope{Tenant: store.Tenant}))
+	}
 	app := &App{asm: asm, defs: defs, host: in.host, bus: in.bus, handle: st, own: c.store, workdir: in.workdir,
 		ui: in.ui, pui: in.pui, trusted: c.projectTrust, kern: in.kern, hooks: c.hooks, approvals: c.approvals,
 		protocol: c.protocol, readyErrs: c.readyErrs, appDefs: in.appDefs, builtinDefs: in.builtin,
 		appToolNames: in.toolNames, defaultAgent: c.defaultAgent,
-		protocolUIOn: c.protocolUI || c.ui != nil, useSource: c.useSource}
+		protocolUIOn: c.protocolUI || c.ui != nil, useSource: c.useSource, storeDefs: storeDefs}
 	if v, ok := asm.Value(assemble.ServiceModelhub); ok {
 		app.models, _ = v.(*assemble.Models)
 	}
@@ -708,6 +716,7 @@ type App struct {
 	readyErrs func([]error)
 	// 外观用的（agents.go、session.go）。
 	useSource    useconf.Source
+	storeDefs    *agentdef.StoreSource // WithStoreAgents 时的存储定义来源（写副本、墓碑、按哈希查）
 	appDefs      agentdef.Source
 	builtinDefs  *agentdef.MemSource
 	appToolNames []string

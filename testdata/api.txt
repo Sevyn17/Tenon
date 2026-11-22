@@ -13,6 +13,7 @@ github.com/Sevyn17/tenon: method (App) NewSession(ctx context.Context, agentName
 github.com/Sevyn17/tenon: method (App) Open(ctx context.Context) error
 github.com/Sevyn17/tenon: method (App) Session(ctx context.Context, id string) (*Session, error)
 github.com/Sevyn17/tenon: method (App) Start(ctx context.Context) (err error)
+github.com/Sevyn17/tenon: method (App) StoreAgents() *github.com/Sevyn17/tenon/runtime/agentdef.StoreSource
 github.com/Sevyn17/tenon: type AppID = github.com/Sevyn17/tenon/runtime/appid.ID struct{Name string; Dir string; Env string}
 github.com/Sevyn17/tenon: method (AppID) Command(sub string) string
 github.com/Sevyn17/tenon: method (AppID) EnvName(suffix string) string
@@ -160,6 +161,7 @@ github.com/Sevyn17/tenon: func WithService(key string, v any) Option
 github.com/Sevyn17/tenon: func WithSessionHooks(f func(*github.com/Sevyn17/tenon/runtime/assemble.SessionCx) github.com/Sevyn17/tenon/runtime/agent.Hooks) Option
 github.com/Sevyn17/tenon: func WithSleepAfter(d time.Duration) Option
 github.com/Sevyn17/tenon: func WithStore(s Store) Option
+github.com/Sevyn17/tenon: func WithStoreAgents() Option
 github.com/Sevyn17/tenon: func WithTenant(ctx context.Context, tenant string) context.Context
 github.com/Sevyn17/tenon: func WithTools(ts ...Tool) Option
 github.com/Sevyn17/tenon: func WithUI(ui UI) Option
@@ -178,6 +180,7 @@ github.com/Sevyn17/tenon/tenontest: method (App) NewSession(ctx context.Context,
 github.com/Sevyn17/tenon/tenontest: method (App) Open(ctx context.Context) error
 github.com/Sevyn17/tenon/tenontest: method (App) Session(ctx context.Context, id string) (*github.com/Sevyn17/tenon.Session, error)
 github.com/Sevyn17/tenon/tenontest: method (App) Start(ctx context.Context) (err error)
+github.com/Sevyn17/tenon/tenontest: method (App) StoreAgents() *github.com/Sevyn17/tenon/runtime/agentdef.StoreSource
 github.com/Sevyn17/tenon/tenontest: type Backend struct{Name string; Open func(t *testing.T) github.com/Sevyn17/tenon/runtime/store.Store}
 github.com/Sevyn17/tenon/tenontest: func Model(steps ...Step) github.com/Sevyn17/tenon.Option
 github.com/Sevyn17/tenon/tenontest: func New(t *testing.T, opts ...github.com/Sevyn17/tenon.Option) *App
@@ -267,7 +270,7 @@ github.com/Sevyn17/tenon/std: method (PermModes) Show(id string, mode string) ([
 github.com/Sevyn17/tenon/std: type Skills struct{S *github.com/Sevyn17/tenon/modules/context/skills.Skills}
 github.com/Sevyn17/tenon/std: method (Skills) List(context.Context) (github.com/Sevyn17/tenon/appapi/wire.SkillsListResult, error)
 github.com/Sevyn17/tenon/std: method (Skills) SetEnabled(_ context.Context, in github.com/Sevyn17/tenon/appapi/wire.SkillsSetEnabledArgs) (github.com/Sevyn17/tenon/appapi/wire.SkillsSetEnabledResult, error)
-github.com/Sevyn17/tenon/apphost: type AppOptions struct{MaxSteps int; Hooks func(*github.com/Sevyn17/tenon/runtime/assemble.SessionCx) github.com/Sevyn17/tenon/runtime/agent.Hooks; ModesWorkdir string; Upload bool; Workspaces github.com/Sevyn17/tenon/appapi.Workspaces; Extensions []github.com/Sevyn17/tenon/appapi.Extension}
+github.com/Sevyn17/tenon/apphost: type AppOptions struct{MaxSteps int; Hooks func(*github.com/Sevyn17/tenon/runtime/assemble.SessionCx) github.com/Sevyn17/tenon/runtime/agent.Hooks; ModesWorkdir string; Upload bool; Workspaces github.com/Sevyn17/tenon/appapi.Workspaces; Extensions []github.com/Sevyn17/tenon/appapi.Extension; DefaultAgent string; StoreAgents bool}
 github.com/Sevyn17/tenon/apphost: func ApproveMode(root string, mode string, widened string) error
 github.com/Sevyn17/tenon/apphost: type Assembled struct{Asm *github.com/Sevyn17/tenon/runtime/component.Assembly; Store github.com/Sevyn17/tenon/runtime/assemble.DBHandle; Models *github.com/Sevyn17/tenon/runtime/assemble.Models; Compact *github.com/Sevyn17/tenon/modules/context/compact-basic.Compactor; Defs github.com/Sevyn17/tenon/runtime/agentdef.Source}
 github.com/Sevyn17/tenon/apphost: type Built struct{API *github.com/Sevyn17/tenon/appapi.App; DB github.com/Sevyn17/tenon/runtime/store.Store; Model string; Perms *github.com/Sevyn17/tenon/modules/security/permission.Sessions; Builder *github.com/Sevyn17/tenon/runtime/assemble.Builder}
