@@ -18,6 +18,7 @@ import (
 	compact "github.com/Sevyn17/tenon/modules/context/compact-basic"
 	"github.com/Sevyn17/tenon/modules/security/permission"
 	"github.com/Sevyn17/tenon/runtime/agent"
+	"github.com/Sevyn17/tenon/runtime/agentdef"
 	"github.com/Sevyn17/tenon/runtime/appid"
 	"github.com/Sevyn17/tenon/runtime/assemble"
 	"github.com/Sevyn17/tenon/runtime/bus"
@@ -132,6 +133,9 @@ type AppOptions struct {
 	DefaultAgent string
 	// StoreAgents 把存储的 definitions 表接成最前面的定义来源（tenon.WithStoreAgents）：产品的租户层副本。
 	StoreAgents bool
+	// Agents 产品内置的定义来源（tenon.WithAgents），如 agentdef.FS(embed.FS, "agents")：不落盘、不能卸载，
+	// 优先级在存储副本之后、插件包之前。
+	Agents []agentdef.Source
 }
 
 // Start 读信任与 profile，用 SDK 按 profile 装配（tenon.WithProfile）并启动组件（打开存储）。
@@ -209,6 +213,9 @@ func start(o StartOptions, pre *loaded) (*Runtime, error) {
 	}
 	if o.App.DefaultAgent != "" {
 		opts = append(opts, tenon.WithDefaultAgent(o.App.DefaultAgent))
+	}
+	if len(o.App.Agents) > 0 {
+		opts = append(opts, tenon.WithAgents(o.App.Agents...))
 	}
 	if o.App.StoreAgents {
 		opts = append(opts, tenon.WithStoreAgents())

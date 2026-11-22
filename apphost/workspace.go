@@ -20,6 +20,7 @@ import (
 
 	"github.com/Sevyn17/tenon/appapi"
 	"github.com/Sevyn17/tenon/appapi/wire"
+	"github.com/Sevyn17/tenon/runtime/agentdef"
 	"github.com/Sevyn17/tenon/runtime/appid"
 	"github.com/Sevyn17/tenon/runtime/resmgr"
 )
@@ -39,6 +40,11 @@ type WorkspaceOptions struct {
 	RecentPath string
 	// Extensions 产品扩展（appapi.Options.Extensions）；切换工作区后新 App 沿用同一组。
 	Extensions []appapi.Extension
+	// DefaultAgent、StoreAgents 同 AppOptions；切换工作区后新 App 沿用。
+	DefaultAgent string
+	StoreAgents  bool
+	// Agents 同 AppOptions.Agents。
+	Agents []agentdef.Source
 	// ResourceIdle 统一资源管理器里没有引用的实例（如 MCP 进程）多久回收；0 = resmgr.DefaultIdle（5 分钟），<0 = 立即回收。
 	ResourceIdle time.Duration
 	// ResourceMax 资源管理器的实例数上限；0 = 不限。
@@ -128,7 +134,8 @@ func (m *WorkspaceManager) startWith(dir string, pre *loaded) (*Workspace, error
 	}
 	// 网页端、桌面端都没有终端可问：无信任记录的项目按不受信（同启动时）；界面走协议（UI 为 nil）。
 	rt, err := start(StartOptions{Flags: f, SleepAfter: m.o.SleepAfter,
-		App:       AppOptions{MaxSteps: f.MaxSteps, Upload: m.o.Upload, Workspaces: m, Extensions: m.o.Extensions},
+		App: AppOptions{MaxSteps: f.MaxSteps, Upload: m.o.Upload, Workspaces: m, Extensions: m.o.Extensions,
+			DefaultAgent: m.o.DefaultAgent, StoreAgents: m.o.StoreAgents, Agents: m.o.Agents},
 		resources: bound}, pre)
 	if err != nil {
 		if bound != nil {
