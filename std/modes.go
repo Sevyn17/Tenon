@@ -193,7 +193,14 @@ func editError(err error) error {
 	return appapi.Errorf(wire.CodeInvalid, "%s", ee.Msg)
 }
 
-func (m PermModes) Notice(id string) string         { return m.P.Notice(id) }
+func (m PermModes) Notice(id string) string { return m.P.Notice(id) }
+
+// NoticeOf 档位变化提示带稳定键（appapi.ModeNoticer）。
+func (m PermModes) NoticeOf(id string) (string, map[string]string, string) {
+	n := m.P.NoticeOf(id)
+	return n.Key, n.Args, n.Text
+}
+
 func (m PermModes) SessionRules(id string) []string { return m.P.SessionRules(id) }
 
 func (m PermModes) SessionAllow(tool string, args json.RawMessage) (rules, blocked []string) {

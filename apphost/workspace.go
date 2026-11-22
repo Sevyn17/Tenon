@@ -143,7 +143,7 @@ func (m *WorkspaceManager) startWith(dir string, pre *loaded) (*Workspace, error
 	}
 	// 这时还没有连接：提示记在 App 上，客户端连上、hello 之后补发（客户端改进 M10 T19，能力 notices）。
 	for _, e := range built.Ready(context.Background()) {
-		built.API.NoticeFrom("", wire.NoticeError, "ready", "ready: "+e.Error())
+		built.API.NoticeKey("", wire.NoticeError, "ready", appapi.NoticeKeyReadyFailed, map[string]string{"error": e.Error()}, "ready: "+e.Error())
 	}
 	for _, n := range rt.Notes {
 		built.API.NoticeFrom("", wire.NoticeInfo, "startup", n)
@@ -162,10 +162,10 @@ func (m *WorkspaceManager) Open(_ context.Context, path string) (wire.WorkspaceI
 	}
 	st, err := os.Stat(abs)
 	if err != nil {
-		return wire.WorkspaceInfo{}, fmt.Errorf("目录不存在：%s", abs)
+		return wire.WorkspaceInfo{}, fmt.Errorf("directory does not exist: %s", abs)
 	}
 	if !st.IsDir() {
-		return wire.WorkspaceInfo{}, fmt.Errorf("不是目录：%s", abs)
+		return wire.WorkspaceInfo{}, fmt.Errorf("not a directory: %s", abs)
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -180,7 +180,7 @@ func (m *WorkspaceManager) Open(_ context.Context, path string) (wire.WorkspaceI
 	if err != nil {
 		back, err2 := m.start(oldRoot)
 		if err2 != nil {
-			return wire.WorkspaceInfo{}, fmt.Errorf("%v；回到原工作区也失败：%v", err, err2)
+			return wire.WorkspaceInfo{}, fmt.Errorf("%v; reverting to the previous workspace also failed: %v", err, err2)
 		}
 		m.swap(back, back.Runtime.Root)
 		return wire.WorkspaceInfo{}, err
@@ -191,7 +191,7 @@ func (m *WorkspaceManager) Open(_ context.Context, path string) (wire.WorkspaceI
 }
 
 // Reload 在当前目录上重建运行时（appapi.Reloader，workspace.reload）：重读信任、各层 profile、插件包，插件 Setup
-// 读的外部配置（BYOK、登录令牌、平台目录）也随之重读。和 Open 一样先关旧的再开新的（会话库同时只能有一套运行时在写），
+// 读的外部配置（自定义模型、登录令牌等）也随之重读。和 Open 一样先关旧的再开新的（会话库同时只能有一套运行时在写），
 // 换上后通知传输层，客户端重连后重新 hello。
 // 新配置起不来时用上一次成功读到的信任与 profile 再开一次，返回 *appapi.ReloadReverted（运行时照常可用）；
 // 这也起不来就没有当前工作区，返回错误（只能重启进程）。有回合在跑时由调用方（appapi）先拦下或先取消。
@@ -211,9 +211,10 @@ func (m *WorkspaceManager) Reload(_ context.Context) (wire.WorkspaceInfo, error)
 		}
 		back, err2 := m.startWith(root, prev)
 		if err2 != nil {
-			return wire.WorkspaceInfo{}, fmt.Errorf("%v；回到原来的配置也失败：%v", err, err2)
+			return wire.WorkspaceInfo{}, fmt.Errorf("%v; reverting to the previous config also failed: %v", err, err2)
 		}
-		back.Built.API.NoticeFrom("", wire.NoticeWarn, "workspace", "重建运行时失败，已回到原来的配置："+err.Error())
+		back.Built.API.NoticeKey("", wire.NoticeWarn, "workspace", appapi.NoticeKeyReloadReverted, map[string]string{"error": err.Error()},
+			"runtime rebuild failed, reverted to the previous config: "+err.Error())
 		m.swap(back, back.Runtime.Root)
 		return wire.WorkspaceInfo{}, &appapi.ReloadReverted{Err: err}
 	}
@@ -346,4 +347,4 @@ func (m *WorkspaceManager) remember(root string) {
 }
 
 // ErrNoWorkspace 管理器已关闭。
-var ErrNoWorkspace = errors.New("没有打开的工作区")
+var ErrNoWorkspace = errors.New("no workspace is open")

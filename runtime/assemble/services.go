@@ -75,7 +75,7 @@ type ModelSources interface {
 // CredentialDescriber Secrets 的可选扩展：说明一个提供方的凭证从哪来（models.list 的 effective 与可用性用）。
 // 不实现、或 ok = false 时按缺省规则：key 以 env: 开头是环境变量，空 key 是不需要凭证，其余按 Resolve 的结果。
 type CredentialDescriber interface {
-	// DescribeCredential 按提供方的协议与 key 引用说明凭证：kind 如 env / byok / platform / none，label 给人看；
+	// DescribeCredential 按提供方的协议与 key 引用说明凭证：kind 如 env / none 或产品自定的种类，label 给人看；
 	// problem 非空 = 凭证现在不可用（原因）。
 	DescribeCredential(protocol, key string) (kind, label, problem string, ok bool)
 }

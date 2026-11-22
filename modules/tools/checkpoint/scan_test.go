@@ -42,11 +42,11 @@ func (h *harness) shell(sid string, run func()) {
 	h.shellAs(sid, "s"+itoa(h.n), func() toolhub.Output { run(); return toolhub.Text("ok") })
 }
 
-// jobOutput job_output（Read 风险）：只标记回合末补扫。
+// jobOutput job_output（Read 风险、background_task）：只标记回合末补扫。
 func (h *harness) jobOutput(sid string) {
 	h.t.Helper()
 	req := component.ToolCallReq{Tool: "job_output", Args: json.RawMessage(`{"id":"job-1"}`), SessionID: sid,
-		Risk: toolhub.Read, CallID: "j" + itoa(h.n), Scope: h.scope}
+		Risk: toolhub.Read, CallID: "j" + itoa(h.n), Attrs: map[string]any{toolhub.AttrBackgroundTask: true}, Scope: h.scope}
 	if _, err := h.e.Middleware()(context.Background(), req,
 		func(context.Context, component.ToolCallReq) (component.ToolCallResp, error) {
 			return component.ToolCallResp{Output: toolhub.Text("ok")}, nil

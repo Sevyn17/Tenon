@@ -31,14 +31,14 @@ type jsonSchema struct {
 func validateValue(schema, value json.RawMessage) error {
 	var v any
 	if err := json.Unmarshal(value, &v); err != nil {
-		return fmt.Errorf("回答不是合法 JSON：%v", err)
+		return fmt.Errorf("answer is not valid JSON: %v", err)
 	}
 	if len(schema) == 0 {
 		return nil
 	}
 	var s jsonSchema
 	if err := json.Unmarshal(schema, &s); err != nil {
-		return fmt.Errorf("交互的 schema 不合法：%v", err)
+		return fmt.Errorf("invalid interaction schema: %v", err)
 	}
 	return s.check("", v)
 }
@@ -84,9 +84,9 @@ func (s *jsonSchema) check(path string, v any) error {
 	at := func(format string, args ...any) error {
 		p := path
 		if p == "" {
-			p = "回答"
+			p = "answer"
 		}
-		return fmt.Errorf("%s："+format, append([]any{p}, args...)...)
+		return fmt.Errorf("%s: "+format, append([]any{p}, args...)...)
 	}
 	if ts := s.types(); len(ts) > 0 {
 		got, ok := typeOfJSON(v), false
@@ -96,7 +96,7 @@ func (s *jsonSchema) check(path string, v any) error {
 			}
 		}
 		if !ok {
-			return at("应为 %s，得到 %s", strings.Join(ts, " / "), got)
+			return at("expected %s, got %s", strings.Join(ts, " / "), got)
 		}
 	}
 	if len(s.Enum) > 0 {
@@ -107,31 +107,31 @@ func (s *jsonSchema) check(path string, v any) error {
 			}
 		}
 		if !hit {
-			return at("不在可选值里")
+			return at("not one of the allowed values")
 		}
 	}
 	switch x := v.(type) {
 	case float64:
 		if s.Minimum != nil && x < *s.Minimum {
-			return at("不能小于 %v", *s.Minimum)
+			return at("must be >= %v", *s.Minimum)
 		}
 		if s.Maximum != nil && x > *s.Maximum {
-			return at("不能大于 %v", *s.Maximum)
+			return at("must be <= %v", *s.Maximum)
 		}
 	case string:
 		n := utf8.RuneCountInString(x)
 		if s.MinLength != nil && n < *s.MinLength {
-			return at("至少 %d 个字", *s.MinLength)
+			return at("must be at least %d characters", *s.MinLength)
 		}
 		if s.MaxLength != nil && n > *s.MaxLength {
-			return at("最多 %d 个字", *s.MaxLength)
+			return at("must be at most %d characters", *s.MaxLength)
 		}
 	case []any:
 		if s.MinItems != nil && len(x) < *s.MinItems {
-			return at("至少选 %d 项", *s.MinItems)
+			return at("select at least %d item(s)", *s.MinItems)
 		}
 		if s.MaxItems != nil && len(x) > *s.MaxItems {
-			return at("最多选 %d 项", *s.MaxItems)
+			return at("select at most %d item(s)", *s.MaxItems)
 		}
 		if s.Items != nil {
 			for i, e := range x {
@@ -143,7 +143,7 @@ func (s *jsonSchema) check(path string, v any) error {
 	case map[string]any:
 		for _, r := range s.Required {
 			if val, ok := x[r]; !ok || val == nil || val == "" {
-				return fmt.Errorf("%s 必填", join(path, r))
+				return fmt.Errorf("%s is required", join(path, r))
 			}
 		}
 		keys := make([]string, 0, len(s.Properties))

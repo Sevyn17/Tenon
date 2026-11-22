@@ -15,7 +15,7 @@ type plug struct{}
 func init() { component.Register("todo", func() component.Component { return &plug{} }) }
 
 func (*plug) Meta() component.Meta {
-	return component.Meta{Name: "todo", Version: "0.1.0", Description: "待办工具：模型维护一份计划项列表，供人查看进度", Effects: []string{component.EffectTools}, Requires: []string{assemble.ServiceUI}}
+	return component.Meta{Name: "todo", Version: "0.1.0", Description: "Todo tool: the model keeps a plan list so people can follow progress", Effects: []string{component.EffectTools}, Requires: []string{assemble.ServiceUI}}
 }
 
 func (*plug) Setup(cx *component.Registrar) error {

@@ -421,6 +421,8 @@ export interface Notice {
   level: string;
   source?: string;
   text: string;
+  key?: string;
+  args?: Record<string, string>;
   replay?: boolean;
 }
 

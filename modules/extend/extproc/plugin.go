@@ -64,7 +64,7 @@ type plug struct {
 func init() { component.Register(ServiceName, func() component.Component { return &plug{} }) }
 
 func (*plug) Meta() component.Meta {
-	return component.Meta{Name: ServiceName, Version: "0.1.0", Description: "外部进程插件：启动扩展程序，把它提供的工具接进来", Effects: []string{component.EffectExec, component.EffectTools},
+	return component.Meta{Name: ServiceName, Version: "0.1.0", Description: "External process plugins: start extension programs and expose their tools", Effects: []string{component.EffectExec, component.EffectTools},
 		Config: &Config{}, Requires: []string{"?" + assemble.ServiceUI}}
 }
 

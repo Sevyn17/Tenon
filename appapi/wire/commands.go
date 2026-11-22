@@ -332,7 +332,7 @@ type WorkspaceOpenResult struct {
 	Workspace WorkspaceInfo `json:"workspace"`
 }
 
-// WorkspaceReloadArgs workspace.reload：在当前目录上重建运行时（重读 profile、插件包、BYOK、登录令牌）。
+// WorkspaceReloadArgs workspace.reload：在当前目录上重建运行时（重读 profile、插件包、插件读的外部配置）。
 // 有会话正在跑回合时缺省返回 not_idle（details.running = 会话数，details.sessions = 会话 id）；
 // Force 时先取消这些回合再重建。成功后旧连接会被断开，客户端重连后重新 hello。
 // 新配置起不来时回到原来的配置，返回 invalid（details.reverted = true，运行时照常可用）。hello 能力 reload。
@@ -468,18 +468,18 @@ type ModelsListResult struct {
 type EffectiveModel struct {
 	Model    string `json:"model"`              // 同 ModelsListResult.Default（别名或 provider/model）
 	Provider string `json:"provider,omitempty"` // 计划第一项的提供方
-	Protocol string `json:"protocol,omitempty"` // openai-chat / anthropic-messages / mortise-gateway ……
+	Protocol string `json:"protocol,omitempty"` // openai-chat / anthropic-messages / 产品自定协议 ……
 	BaseURL  string `json:"base_url,omitempty"`
 	Name     string `json:"name,omitempty"`  // 厂商模型名
 	Label    string `json:"label,omitempty"` // 界面显示名（同 ModelInfo.Label）
-	// CredKind 凭据来源：env（环境变量）、byok（我的模型）、platform（平台账号）、none（不需要凭据）、other。
+	// CredKind 凭据来源：env（环境变量）、none（不需要凭据）、other，或产品自定的种类。
 	CredKind string `json:"cred_kind"`
 	// CredLabel 给人看的凭据来源，如「环境变量 DEEPSEEK_API_KEY」「我的模型：DeepSeek 日常」「平台账号」。
 	CredLabel string `json:"cred_label,omitempty"`
 	// Origin 由哪项设置决定：flag（命令行参数）、env（环境变量）、profile（某层 profile）、auto（自动选择）、
 	// builtin（内置缺省）；config = 配置给的但宿主没细分；"" = 应用直接指定。
 	Origin string `json:"origin,omitempty"`
-	// OriginRef 补充：参数名（-model）、变量名（MORTISE_MODEL）、文件路径，或自动选择的理由。
+	// OriginRef 补充：参数名（-model）、变量名（<APP>_MODEL）、文件路径，或自动选择的理由。
 	OriginRef string `json:"origin_ref,omitempty"`
 	// Available 凭据现在可用；为假时 Reason 说明。
 	Available bool   `json:"available"`

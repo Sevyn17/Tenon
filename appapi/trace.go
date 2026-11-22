@@ -18,7 +18,7 @@ func RenderTrace(ctx context.Context, db store.TraceStore, trace string) (string
 		return "", err
 	}
 	if len(evs) == 0 {
-		return fmt.Sprintf("trace %s：没有记录\n", trace), nil
+		return fmt.Sprintf("trace %s: no records\n", trace), nil
 	}
 	sort.SliceStable(evs, func(i, j int) bool { return evs[i].At < evs[j].At })
 	seen := map[string]bool{}
@@ -33,7 +33,7 @@ func RenderTrace(ctx context.Context, db store.TraceStore, trace string) (string
 	var b strings.Builder
 	fmt.Fprintf(&b, "trace %s\n", trace)
 	if len(sessions) > 0 {
-		fmt.Fprintf(&b, "会话：%s\n", strings.Join(sessions, "、"))
+		fmt.Fprintf(&b, "sessions: %s\n", strings.Join(sessions, ", "))
 	}
 	for _, ev := range evs {
 		label := traceLabels[ev.Kind]
@@ -49,4 +49,4 @@ func RenderTrace(ctx context.Context, db store.TraceStore, trace string) (string
 	return b.String(), nil
 }
 
-var traceLabels = map[string]string{"envelope": "信封", "session": "会话", "tool": "工具", "guard_denied": "拒绝"}
+var traceLabels = map[string]string{"envelope": "env", "session": "sess", "tool": "tool", "guard_denied": "deny"}

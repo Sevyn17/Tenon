@@ -63,7 +63,7 @@ type MCPWrite struct {
 
 func (v *App) mcp() (MCP, error) {
 	if v.o.MCP == nil {
-		return nil, Errorf(wire.CodeUnsupported, "未开 MCP 插件（mcp）")
+		return nil, Errorf(wire.CodeUnsupported, "mcp plugin not enabled")
 	}
 	return v.o.MCP, nil
 }
@@ -73,7 +73,7 @@ func (v *App) mcpEditor() (MCPEditor, Reloader, error) {
 	ed, ok := v.o.Workspaces.(MCPEditor)
 	rl, ok2 := v.o.Workspaces.(Reloader)
 	if v.o.Workspaces == nil || !ok || !ok2 {
-		return nil, nil, Errorf(wire.CodeUnsupported, "这个应用不支持在界面里编辑 MCP 服务（直接改 mcp.toml 后重启）")
+		return nil, nil, Errorf(wire.CodeUnsupported, "this app does not support editing MCP servers (edit mcp.toml and restart)")
 	}
 	return ed, rl, nil
 }
@@ -146,11 +146,11 @@ func (v *App) mcpWritable(ctx context.Context, m MCP, name string) error {
 		return err
 	}
 	if !r.Editable {
-		return Errorf(wire.CodeUnsupported, "用了 -config 显式指定的 MCP 配置：用户级 mcp.toml 不生效，不能在界面里编辑")
+		return Errorf(wire.CodeUnsupported, "an explicit -config MCP file is in use; the user mcp.toml is inactive and cannot be edited")
 	}
 	for _, s := range r.Servers {
 		if s.Name == name && s.Source != "user" {
-			return invalid("服务 %s 来自 %s，只读（去对应的插件包、项目或配置文件里改）", name, s.Source)
+			return invalid("server %s comes from %s and is read-only (edit it in its package, project or config file)", name, s.Source)
 		}
 	}
 	return nil
@@ -164,7 +164,7 @@ func (v *App) mcpApply(ctx context.Context, rl Reloader, force bool, write func(
 	}
 	if len(ids) > 0 {
 		if !force {
-			e := Errorf(wire.CodeNotIdle, "还有 %d 个会话正在运行：改 MCP 服务要重建运行时，会中断它们（带 force 先取消再重建）", len(ids))
+			e := Errorf(wire.CodeNotIdle, "%d session(s) running: changing MCP servers rebuilds the runtime and interrupts them (use force to cancel and rebuild)", len(ids))
 			e.Details = map[string]any{"running": len(ids), "sessions": ids}
 			return wire.MCPEditResult{}, e
 		}
@@ -180,7 +180,7 @@ func (v *App) mcpApply(ctx context.Context, rl Reloader, force bool, write func(
 	undo := func(e *Error) *Error {
 		if w.Undo != nil {
 			if err := w.Undo(); err != nil {
-				e.Message += "；mcp.toml 也没能改回：" + err.Error()
+				e.Message += "; mcp.toml could not be restored either: " + err.Error()
 			}
 		}
 		return e
@@ -196,7 +196,7 @@ func (v *App) mcpApply(ctx context.Context, rl Reloader, force bool, write func(
 			e.Details = map[string]any{"reverted": true}
 			return wire.MCPEditResult{}, undo(e)
 		}
-		return wire.MCPEditResult{}, undo(Errorf(wire.CodeInternal, "重建运行时失败：%v", err))
+		return wire.MCPEditResult{}, undo(Errorf(wire.CodeInternal, "failed to rebuild runtime: %v", err))
 	}
 	return wire.MCPEditResult{Revision: w.Revision, Reloaded: true, Workspace: ws}, nil
 }
@@ -238,7 +238,7 @@ func (v *App) MCPRemove(ctx context.Context, in wire.MCPRemoveArgs) (wire.MCPEdi
 	}
 	name := strings.TrimSpace(in.Name)
 	if name == "" {
-		return wire.MCPEditResult{}, invalid("缺少 name")
+		return wire.MCPEditResult{}, invalid("missing name")
 	}
 	if err := v.mcpWritable(ctx, m, name); err != nil {
 		return wire.MCPEditResult{}, err
@@ -259,7 +259,7 @@ func (v *App) MCPSetEnabled(ctx context.Context, in wire.MCPSetEnabledArgs) (wir
 	}
 	name := strings.TrimSpace(in.Name)
 	if name == "" {
-		return wire.MCPEditResult{}, invalid("缺少 name")
+		return wire.MCPEditResult{}, invalid("missing name")
 	}
 	scope := in.Scope
 	switch scope {
@@ -267,7 +267,7 @@ func (v *App) MCPSetEnabled(ctx context.Context, in wire.MCPSetEnabledArgs) (wir
 		scope = wire.MCPScopeGlobal
 	case wire.MCPScopeGlobal, wire.MCPScopeWorkspace:
 	default:
-		return wire.MCPEditResult{}, invalid("scope 只能是 %s / %s，得到 %q", wire.MCPScopeGlobal, wire.MCPScopeWorkspace, in.Scope)
+		return wire.MCPEditResult{}, invalid("scope must be %s or %s, got %q", wire.MCPScopeGlobal, wire.MCPScopeWorkspace, in.Scope)
 	}
 	var rl Reloader
 	if r, ok := v.o.Workspaces.(Reloader); ok && v.o.Workspaces != nil {

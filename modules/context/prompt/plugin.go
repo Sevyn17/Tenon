@@ -34,7 +34,7 @@ type plug struct{}
 func init() { component.Register("prompt", func() component.Component { return &plug{} }) }
 
 func (*plug) Meta() component.Meta {
-	return component.Meta{Name: "prompt", Version: "0.1.0", Description: "基础系统提示词：告诉模型它的角色和工作方式", Default: true, Effects: []string{component.EffectSystemPrompt},
+	return component.Meta{Name: "prompt", Version: "0.1.0", Description: "Base system prompt: the model's role and working style", Default: true, Effects: []string{component.EffectSystemPrompt},
 		Requires: []string{assemble.ServiceWorkdir, "?" + pkgs.Service}, Config: &Config{}}
 }
 

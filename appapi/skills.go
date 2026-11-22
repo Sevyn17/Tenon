@@ -30,7 +30,7 @@ type Skills interface {
 
 func (v *App) skills() (Skills, error) {
 	if v.o.Skills == nil {
-		return nil, Errorf(wire.CodeUnsupported, "未开技能插件（skills）")
+		return nil, Errorf(wire.CodeUnsupported, "skills plugin not enabled")
 	}
 	return v.o.Skills, nil
 }
@@ -59,14 +59,14 @@ func (v *App) SkillsSetEnabled(ctx context.Context, in wire.SkillsSetEnabledArgs
 	}
 	in.Name = strings.TrimSpace(in.Name)
 	if in.Name == "" {
-		return wire.SkillsSetEnabledResult{}, invalid("缺少 name")
+		return wire.SkillsSetEnabledResult{}, invalid("missing name")
 	}
 	switch in.Scope {
 	case "":
 		in.Scope = wire.SkillScopeGlobal
 	case wire.SkillScopeGlobal, wire.SkillScopeWorkspace:
 	default:
-		return wire.SkillsSetEnabledResult{}, invalid("scope 只能是 %s / %s，得到 %q", wire.SkillScopeGlobal, wire.SkillScopeWorkspace, in.Scope)
+		return wire.SkillsSetEnabledResult{}, invalid("scope must be %s or %s, got %q", wire.SkillScopeGlobal, wire.SkillScopeWorkspace, in.Scope)
 	}
 	return s.SetEnabled(ctx, in)
 }

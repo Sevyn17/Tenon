@@ -10,7 +10,7 @@ import (
 // onPanic通常用于把命令改成 internal响应，或关闭发生故障的连接。
 func Recover(what string, onPanic func()) {
 	if r := recover(); r != nil {
-		log.Printf("%s panic：%v\n%s", what, r, debug.Stack())
+		log.Printf("%s panic: %v\n%s", what, r, debug.Stack())
 		if onPanic != nil {
 			onPanic()
 		}

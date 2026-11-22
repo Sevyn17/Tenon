@@ -54,8 +54,12 @@ func TestReadOnlyCommand(t *testing.T) {
 	if !readOnlyCommand("LS.EXE", true) || readOnlyCommand("LS.EXE", false) {
 		t.Error("Windows 上命令名不分大小写、可带 .exe；其他平台不行")
 	}
-	if readOnlyShell("mcp_x", json.RawMessage(`{"command":"ls"}`)) || !readOnlyShell("shell", json.RawMessage(`{"command":"ls"}`)) {
-		t.Error("只认 shell 工具")
+	cmdAttr := map[string]any{toolhub.AttrMayWrite: true, toolhub.AttrCommandArg: "command"}
+	if readOnlyCall(map[string]any{toolhub.AttrMayWrite: true}, json.RawMessage(`{"command":"ls"}`)) ||
+		!readOnlyCall(cmdAttr, json.RawMessage(`{"command":"ls"}`)) ||
+		!readOnlyCall(map[string]any{toolhub.AttrCommandArg: "cmd"}, json.RawMessage(`{"cmd":"ls"}`)) ||
+		readOnlyCall(cmdAttr, json.RawMessage(`{"command":1}`)) {
+		t.Error("只认声明了 command_arg 的工具，按属性指定的字段取命令")
 	}
 }
 
@@ -65,7 +69,7 @@ func (h *harness) shellCmd(sid, cmd string, run func()) {
 	h.n++
 	args, _ := json.Marshal(map[string]string{"command": cmd})
 	req := component.ToolCallReq{Tool: "shell", Args: args, SessionID: sid, Risk: toolhub.Dangerous,
-		CallID: "s" + itoa(h.n), Attrs: map[string]any{toolhub.AttrMayWrite: true}, Scope: h.scope}
+		CallID: "s" + itoa(h.n), Attrs: map[string]any{toolhub.AttrMayWrite: true, toolhub.AttrCommandArg: "command"}, Scope: h.scope}
 	if _, err := h.e.Middleware()(context.Background(), req,
 		func(context.Context, component.ToolCallReq) (component.ToolCallResp, error) {
 			run()

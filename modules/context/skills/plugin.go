@@ -21,7 +21,7 @@ type plug struct{}
 func init() { component.Register("skills", func() component.Component { return &plug{} }) }
 
 func (*plug) Meta() component.Meta {
-	return component.Meta{Name: "skills", Version: "0.1.0", Description: "技能：发现可复用的操作说明，需要时加载进系统提示词", Effects: []string{component.EffectTools, component.EffectSystemPrompt}, Requires: []string{assemble.ServiceWorkdir, assemble.ServiceUI, "?" + assemble.ServiceTrust, "?" + pkgs.Service},
+	return component.Meta{Name: "skills", Version: "0.1.0", Description: "Skills: discover reusable instructions and load them into the system prompt on demand", Effects: []string{component.EffectTools, component.EffectSystemPrompt}, Requires: []string{assemble.ServiceWorkdir, assemble.ServiceUI, "?" + assemble.ServiceTrust, "?" + pkgs.Service},
 		Provides: []string{ServiceName}}
 }
 

@@ -179,19 +179,19 @@ func declKindOf(typ string) (declKind, bool) {
 func ValidateView(raw []byte) error {
 	var v any
 	if err := json.Unmarshal(raw, &v); err != nil {
-		return fmt.Errorf("视图不是合法 JSON：%w", err)
+		return fmt.Errorf("view is not valid JSON: %w", err)
 	}
 	switch x := v.(type) {
 	case map[string]any:
 		return validateNode(x, "")
 	case []any:
 		if len(x) == 0 {
-			return fmt.Errorf("视图数组为空")
+			return fmt.Errorf("view array is empty")
 		}
 		for i, n := range x {
 			m, ok := n.(map[string]any)
 			if !ok {
-				return fmt.Errorf("第 %d 个节点不是对象", i+1)
+				return fmt.Errorf("node %d is not an object", i+1)
 			}
 			if err := validateNode(m, fmt.Sprintf("%d.", i+1)); err != nil {
 				return err
@@ -199,19 +199,19 @@ func ValidateView(raw []byte) error {
 		}
 		return nil
 	default:
-		return fmt.Errorf("视图须是带 type 的节点或节点数组")
+		return fmt.Errorf("view must be a node with type or an array of nodes")
 	}
 }
 
 // validateNode 校验单个节点。path 是报错用的位置前缀（如 "2.children.0."）。
 func validateNode(n map[string]any, path string) error {
-	where := "节点"
+	where := "node"
 	if path != "" {
-		where = "第 " + strings.TrimSuffix(path, ".") + " 个节点"
+		where = "node " + strings.TrimSuffix(path, ".")
 	}
 	typ, _ := n["type"].(string)
 	if typ == "" {
-		return fmt.Errorf("%s缺 type", where)
+		return fmt.Errorf("%s: missing type", where)
 	}
 	k, known := declKindOf(typ)
 	if !known {
@@ -219,17 +219,17 @@ func validateNode(n map[string]any, path string) error {
 	}
 	for _, f := range k.Required {
 		if _, ok := n[f]; !ok {
-			return fmt.Errorf("%s（%s）缺必填字段 %q", where, typ, f)
+			return fmt.Errorf("%s (%s): missing required field %q", where, typ, f)
 		}
 	}
 	if a, ok := n["action"]; ok && a != nil {
 		am, ok := a.(map[string]any)
 		if !ok {
-			return fmt.Errorf("%s（%s）的 action 不是对象", where, typ)
+			return fmt.Errorf("%s (%s): action is not an object", where, typ)
 		}
 		kind, _ := am["kind"].(string)
 		if !isDeclActionKind(kind) {
-			return fmt.Errorf("%s（%s）的 action.kind %q 不合法（合法：%s）",
+			return fmt.Errorf("%s (%s): invalid action.kind %q (valid: %s)",
 				where, typ, kind, strings.Join(declActionKinds, " / "))
 		}
 	}
@@ -247,12 +247,12 @@ func validateChildren(n map[string]any, key, path, where, typ string) error {
 	}
 	list, ok := raw.([]any)
 	if !ok {
-		return fmt.Errorf("%s（%s）的 %s 不是数组", where, typ, key)
+		return fmt.Errorf("%s (%s): %s is not an array", where, typ, key)
 	}
 	for i, c := range list {
 		m, ok := c.(map[string]any)
 		if !ok {
-			return fmt.Errorf("%s（%s）的 %s[%d] 不是对象", where, typ, key, i)
+			return fmt.Errorf("%s (%s): %s[%d] is not an object", where, typ, key, i)
 		}
 		if err := validateNode(m, fmt.Sprintf("%s%s.%d.", path, key, i)); err != nil {
 			return err

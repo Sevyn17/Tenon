@@ -13,7 +13,7 @@ type plug struct{}
 func init() { component.Register("web", func() component.Component { return &plug{} }) }
 
 func (*plug) Meta() component.Meta {
-	return component.Meta{Name: "web", Version: "0.1.0", Description: "联网工具：抓取网页、搜索，把网页转成模型可读的文本", Effects: []string{component.EffectTools, component.EffectNetwork}}
+	return component.Meta{Name: "web", Version: "0.1.0", Description: "Web tools: fetch pages and search, converting pages to model-readable text", Effects: []string{component.EffectTools, component.EffectNetwork}}
 }
 
 func (*plug) Setup(cx *component.Registrar) error {

@@ -36,7 +36,7 @@ func init() {
 }
 
 func (*compactPlugin) Meta() component.Meta {
-	return component.Meta{Name: "compact-basic", Version: "0.1.0", Description: "上下文压缩：对话太长时把早期内容压成摘要", Default: true, Effects: []string{component.EffectRewriteResult}, Config: &Config{},
+	return component.Meta{Name: "compact-basic", Version: "0.1.0", Description: "Context compaction: summarize early history when the conversation gets long", Default: true, Effects: []string{component.EffectRewriteResult}, Config: &Config{},
 		Requires: []string{assemble.ServiceModelhub}, Provides: []string{assemble.ServiceCompactor}}
 }
 

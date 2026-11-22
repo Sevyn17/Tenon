@@ -27,7 +27,7 @@ func (v *App) modeEditor() (ModeEditor, error) {
 	}
 	ed, ok := m.(ModeEditor)
 	if !ok || !ed.Editable() {
-		return nil, Errorf(wire.CodeUnsupported, "这个应用不支持在界面里编辑档位（直接改 modes/ 与 permissions.toml）")
+		return nil, Errorf(wire.CodeUnsupported, "this app does not support editing modes (edit modes/ and permissions.toml)")
 	}
 	return ed, nil
 }
@@ -60,7 +60,7 @@ func (v *App) ModeSave(_ context.Context, in wire.ModeSaveArgs) (wire.ModeSaveRe
 	}
 	in.Mode.ID = strings.TrimSpace(in.Mode.ID)
 	if in.Mode.ID == "" {
-		return wire.ModeSaveResult{}, Errorf(wire.CodeBadRequest, "缺少 mode.id")
+		return wire.ModeSaveResult{}, Errorf(wire.CodeBadRequest, "missing mode.id")
 	}
 	info, rev, err := ed.SaveMode(in.Mode, in.Revision, in.Create)
 	if err != nil {
@@ -76,7 +76,7 @@ func (v *App) ModeRemove(_ context.Context, in wire.ModeRemoveArgs) (wire.ModeRe
 		return wire.ModeRemoveResult{}, err
 	}
 	if in.ID == "" {
-		return wire.ModeRemoveResult{}, Errorf(wire.CodeBadRequest, "缺少 id")
+		return wire.ModeRemoveResult{}, Errorf(wire.CodeBadRequest, "missing id")
 	}
 	def, fb, err := ed.RemoveMode(in.ID, in.Revision)
 	if err != nil {
@@ -84,7 +84,7 @@ func (v *App) ModeRemove(_ context.Context, in wire.ModeRemoveArgs) (wire.ModeRe
 	}
 	out := wire.ModeRemoveResult{ID: in.ID, Default: def, FellBack: fb}
 	if fb {
-		out.Note = "删掉的是新会话默认档位，默认已改回 " + def
+		out.Note = "the removed mode was the default for new sessions; default reset to " + def
 	}
 	return out, nil
 }
@@ -96,7 +96,7 @@ func (v *App) ModeSetDefault(_ context.Context, in wire.ModeSetDefaultArgs) (wir
 		return wire.ModeSetDefaultResult{}, err
 	}
 	if in.ID == "" {
-		return wire.ModeSetDefaultResult{}, Errorf(wire.CodeBadRequest, "缺少 id")
+		return wire.ModeSetDefaultResult{}, Errorf(wire.CodeBadRequest, "missing id")
 	}
 	def, pinned, err := ed.SetDefaultMode(in.ID)
 	if err != nil {

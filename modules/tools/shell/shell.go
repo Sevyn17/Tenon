@@ -199,7 +199,7 @@ func defaultArgv() func(string) []string { return proc.ShellArgv(true) }
 
 // Tools 返回 shell、job_output、job_kill。
 func (s *Shell) Tools() []*toolhub.Tool {
-	tail := map[string]any{toolhub.AttrPreview: "tail"}
+	tail := map[string]any{toolhub.AttrPreview: "tail", toolhub.AttrBackgroundTask: true}
 	return []*toolhub.Tool{
 		{
 			Spec: session.ToolSpec{Name: "shell",
@@ -207,9 +207,10 @@ func (s *Shell) Tools() []*toolhub.Tool {
 				Schema:      json.RawMessage(`{"type":"object","properties":{"command":{"type":"string"},"timeout":{"type":"integer","description":"超时秒数"},"background":{"type":"boolean","description":"后台运行，立即返回 job id"},"sandbox_permissions":{"type":"string","enum":["read-only","workspace-write","danger-full-access"],"description":"仅在命令被沙箱拒绝后使用：为本次调用申请更宽的沙箱，需要用户批准"}},"required":["command"]}`)},
 			Risk:    toolhub.Dangerous,
 			Timeout: ShellMaxTimeout + 10*time.Second,
-			Attrs:   map[string]any{toolhub.AttrPreview: "tail", toolhub.AttrSandboxed: true, toolhub.AttrMayWrite: true},
-			Items:   []string{ItemExec},
-			Call:    s.callShell,
+			Attrs: map[string]any{toolhub.AttrPreview: "tail", toolhub.AttrSandboxed: true, toolhub.AttrMayWrite: true,
+				toolhub.AttrCommandArg: "command"},
+			Items: []string{ItemExec},
+			Call:  s.callShell,
 		},
 		{
 			Spec: session.ToolSpec{Name: "job_output",
@@ -226,6 +227,7 @@ func (s *Shell) Tools() []*toolhub.Tool {
 				Description: "终止一个后台 job（连同其子进程）。",
 				Schema:      json.RawMessage(`{"type":"object","properties":{"id":{"type":"string"}},"required":["id"]}`)},
 			Risk:  toolhub.Write,
+			Attrs: map[string]any{toolhub.AttrBackgroundTask: true},
 			Items: []string{ItemJob},
 			Call:  s.callKill,
 		},

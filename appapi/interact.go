@@ -32,10 +32,10 @@ func (v *App) Respond(ctx context.Context, in wire.RespondArgs) (wire.RespondRes
 
 func (v *App) respondAs(ctx context.Context, in wire.RespondArgs, p wire.Principal) (wire.RespondResult, error) {
 	if in.Interaction == "" {
-		return wire.RespondResult{}, Errorf(wire.CodeBadRequest, "缺少 interaction")
+		return wire.RespondResult{}, Errorf(wire.CodeBadRequest, "missing interaction")
 	}
 	if len(in.ClientID) > 128 {
-		return wire.RespondResult{}, invalid("client_id 超过 128 字节")
+		return wire.RespondResult{}, invalid("client_id exceeds 128 bytes")
 	}
 	db := v.o.DB
 	cur, err := db.Interaction(ctx, in.Interaction)
@@ -44,7 +44,7 @@ func (v *App) respondAs(ctx context.Context, in wire.RespondArgs, p wire.Princip
 	}
 	it := v.wireInteraction(cur)
 	if !slices.Contains(it.Responders, p.ID) {
-		return wire.RespondResult{}, Errorf(wire.CodeForbidden, "身份 %s 不能回答交互 %s", p.ID, in.Interaction)
+		return wire.RespondResult{}, Errorf(wire.CodeForbidden, "principal %s may not answer interaction %s", p.ID, in.Interaction)
 	}
 	if cur.Outcome != "" {
 		return answered(cur, in.ClientID)
@@ -55,7 +55,7 @@ func (v *App) respondAs(ctx context.Context, in wire.RespondArgs, p wire.Princip
 	switch cur.Kind {
 	case wire.InteractionApproval:
 		if in.Response.Approve == nil {
-			return wire.RespondResult{}, Errorf(wire.CodeBadRequest, "approval 交互须带 response.approve")
+			return wire.RespondResult{}, Errorf(wire.CodeBadRequest, "approval interaction requires response.approve")
 		}
 		ans.Approve = *in.Response.Approve
 		res.Outcome = wire.OutcomeDenied
@@ -66,23 +66,23 @@ func (v *App) respondAs(ctx context.Context, in wire.RespondArgs, p wire.Princip
 		case "", "once":
 		case "session":
 			if !ans.Approve {
-				return wire.RespondResult{}, invalid("scope=session 只用于批准")
+				return wire.RespondResult{}, invalid("scope=session applies to approvals only")
 			}
 			if v.o.Modes == nil {
-				return wire.RespondResult{}, Errorf(wire.CodeUnsupported, "未装权限插件，不能生成会话规则")
+				return wire.RespondResult{}, Errorf(wire.CodeUnsupported, "permission plugin not installed; cannot create session rules")
 			}
 			persist = func() { v.allowForSession(cur.SessionID, it.Approval) }
 		default:
-			return wire.RespondResult{}, invalid("scope 只能是 once / session，得到 %q", in.Response.Scope)
+			return wire.RespondResult{}, invalid("scope must be once or session, got %q", in.Response.Scope)
 		}
 	case wire.InteractionQuestion:
 		if in.Response.Text == nil {
-			return wire.RespondResult{}, Errorf(wire.CodeBadRequest, "question 交互须带 response.text")
+			return wire.RespondResult{}, Errorf(wire.CodeBadRequest, "question interaction requires response.text")
 		}
 		ans.Text, res.Answer, res.Outcome = *in.Response.Text, *in.Response.Text, wire.OutcomeAnswered
 	case wire.InteractionConfirm:
 		if in.Response.Approve == nil {
-			return wire.RespondResult{}, Errorf(wire.CodeBadRequest, "confirm 交互须带 response.approve")
+			return wire.RespondResult{}, Errorf(wire.CodeBadRequest, "confirm interaction requires response.approve")
 		}
 		ans.Approve, res.Outcome = *in.Response.Approve, wire.OutcomeDenied
 		if ans.Approve {
@@ -91,7 +91,7 @@ func (v *App) respondAs(ctx context.Context, in wire.RespondArgs, p wire.Princip
 	default: // choice、form 与插件自定义的 kind：回答是 value，按交互的 schema 校验
 		if len(in.Response.Value) == 0 {
 			if in.Response.Text == nil {
-				return wire.RespondResult{}, Errorf(wire.CodeBadRequest, "%s 交互须带 response.value", cur.Kind)
+				return wire.RespondResult{}, Errorf(wire.CodeBadRequest, "%s interaction requires response.value", cur.Kind)
 			}
 			b, _ := json.Marshal(*in.Response.Text) // 不认识的 kind 用通用卡回答：自由文本当作字符串值
 			in.Response.Value = b
@@ -117,7 +117,7 @@ func answered(p store.Pending, clientID string) (wire.RespondResult, error) {
 	if clientID != "" && p.ClientID == clientID {
 		return wire.RespondResult{Outcome: p.Outcome}, nil
 	}
-	e := conflict(wire.ConflictAnswered, "交互 %s 已结束（%s）", p.InteractionID, p.Outcome)
+	e := conflict(wire.ConflictAnswered, "interaction %s already ended (%s)", p.InteractionID, p.Outcome)
 	e.Details["outcome"] = p.Outcome
 	return wire.RespondResult{}, e
 }
@@ -138,7 +138,8 @@ func (v *App) allowForSession(sessionID string, ap *wire.Approval) {
 	}
 	go func() {
 		if err := hd.Do(host.Command{Kind: host.SetExt, Key: key, Value: all}); err != nil {
-			v.NoticeFrom(sessionID, wire.NoticeError, "permission", fmt.Sprintf("[会话规则未能保存：%v]", err))
+			v.NoticeKey(sessionID, wire.NoticeError, "permission", NoticeKeyRulesSaveFailed, map[string]string{"error": err.Error()},
+				fmt.Sprintf("[session rules not saved: %v]", err))
 		}
 	}()
 }

@@ -62,7 +62,7 @@ type plug struct {
 func init() { component.Register("workgroup", func() component.Component { return &plug{} }) }
 
 func (*plug) Meta() component.Meta {
-	return component.Meta{Name: "workgroup", Version: "0.1.0", Description: "工作组：领导会话给成员会话分派任务，大家共用一块看板", Effects: []string{component.EffectTools},
+	return component.Meta{Name: "workgroup", Version: "0.1.0", Description: "Workgroup: a lead session assigns tasks to member sessions on a shared board", Effects: []string{component.EffectTools},
 		Requires: []string{assemble.ServiceHost, assemble.ServiceDB, "?" + component.ServiceSQL, assemble.ServiceUI}}
 }
 

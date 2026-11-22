@@ -34,7 +34,7 @@ const (
 // Ended 是否终态。
 func (s Status) Ended() bool { return s == Done || s == Failed || s == Stopped }
 
-// 标准模块使用的 Kind。产品自己的来源用自己的命名（如 "mortise.terminal"）。
+// 标准模块使用的 Kind。产品自己的来源用自己的命名（如 "acme.terminal"）。
 const (
 	KindShell    = "shell"    // shell 后台 job
 	KindSubagent = "subagent" // 子智能体会话

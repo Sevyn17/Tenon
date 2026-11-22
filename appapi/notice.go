@@ -38,6 +38,11 @@ type noticeLog struct {
 
 // publish 编号记下一条提示并发到总线。level 空按 info。
 func (l *noticeLog) publish(b *bus.Bus, session, level, source, text string) {
+	l.publishKey(b, session, level, source, "", nil, text)
+}
+
+// publishKey 同 publish，另带稳定提示键与参数（wire.Notice.Key / Args，供产品翻译）。
+func (l *noticeLog) publishKey(b *bus.Bus, session, level, source, key string, args map[string]string, text string) {
 	if level == "" {
 		level = wire.NoticeInfo
 	}
@@ -45,13 +50,13 @@ func (l *noticeLog) publish(b *bus.Bus, session, level, source, text string) {
 	l.mu.Lock()
 	l.seq++
 	seq := l.seq
-	l.recs = append(l.recs, noticeRec{seq: seq, session: session, at: at, n: wire.Notice{Level: level, Source: source, Text: text}})
+	l.recs = append(l.recs, noticeRec{seq: seq, session: session, at: at, n: wire.Notice{Level: level, Source: source, Text: text, Key: key, Args: args}})
 	if n := len(l.recs); n > wire.NoticeKeep {
 		l.recs = append([]noticeRec(nil), l.recs[n-wire.NoticeKeep:]...)
 	}
 	l.mu.Unlock()
 	b.Publish(bus.Envelope{Session: session, At: at, Kind: EventNotice,
-		Data: map[string]any{"text": text, "level": level, "source": source, noticeSeqKey: seq}})
+		Data: map[string]any{"text": text, "level": level, "source": source, "key": key, "args": args, noticeSeqKey: seq}})
 }
 
 // last 当前最大编号（连接的分界）。
@@ -80,10 +85,42 @@ func (a *App) NoticeFrom(sessionID, level, source, text string) {
 	a.notices.publish(a.o.Bus, sessionID, level, source, text)
 }
 
+// NoticeKey 同 NoticeFrom，另带稳定提示键 key 与参数 args（wire.Notice.Key / Args）：产品按键翻译，
+// text 是英文兜底。
+func (a *App) NoticeKey(sessionID, level, source, key string, args map[string]string, text string) {
+	a.notices.publishKey(a.o.Bus, sessionID, level, source, key, args, text)
+}
+
+// ModeNoticer Modes 的可选扩展：档位变化提示带稳定键与参数（wire.Notice.Key / Args）。没实现时只用 Modes.Notice 的文本。
+type ModeNoticer interface {
+	NoticeOf(session string) (key string, args map[string]string, text string)
+}
+
+// 档位变化提示的稳定键（与 permission 插件一致）。
+const (
+	NoticeKeyModeReadFailed = "permission.mode_read_failed"
+	NoticeKeyModeGone       = "permission.mode_gone"
+	NoticeKeyModeUpdated    = "permission.mode_updated"
+)
+
+// 其他 appapi 自己发的提示的稳定键。参数 error 为原始错误文本。
+const (
+	NoticeKeyRulesSaveFailed    = "permission.rules_save_failed"
+	NoticeKeySettingsSaveFailed = "settings.save_failed"
+	NoticeKeyReloadReverted     = "workspace.reload_reverted"
+	NoticeKeyReadyFailed        = "ready.failed"
+)
+
 // modeNoticeLevel 档位变化提示的级别：读取失败、档位已不存在是 warn，配置更新是 info。
-// Modes.Notice 只给文本（接口不改），按 permission 插件的固定措辞判断。
-func modeNoticeLevel(text string) string {
-	if strings.Contains(text, "失败") || strings.Contains(text, "不存在") {
+// 有键按键判断；没有键（旧实现只给文本）时按英文措辞判断。
+func modeNoticeLevel(key, text string) string {
+	switch key {
+	case NoticeKeyModeReadFailed, NoticeKeyModeGone:
+		return wire.NoticeWarn
+	case NoticeKeyModeUpdated:
+		return wire.NoticeInfo
+	}
+	if strings.Contains(text, "failed") || strings.Contains(text, "no longer exists") {
 		return wire.NoticeWarn
 	}
 	return wire.NoticeInfo

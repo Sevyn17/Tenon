@@ -71,7 +71,7 @@ var rewindDo = func(hd host.Handle, c host.Command) error { return hd.Do(c) }
 
 func (v *App) changes() (Changes, error) {
 	if v.o.Changes == nil {
-		return nil, Errorf(wire.CodeUnsupported, "未装文件检查点插件（checkpoint）")
+		return nil, Errorf(wire.CodeUnsupported, "checkpoint plugin not installed")
 	}
 	return v.o.Changes, nil
 }
@@ -82,14 +82,14 @@ func checkScope(scope string, turn *uint32) error {
 	case "", wire.ChangeScopeSession:
 		return nil
 	case wire.ChangeScopeGit:
-		return invalid("scope=git 只读，不能还原")
+		return invalid("scope=git is read-only and cannot be reverted")
 	case wire.ChangeScopeTurn, wire.ChangeScopeFromTurn:
 		if turn == nil || *turn == 0 {
-			return invalid("scope=%s 须带 turn（≥ 1）", scope)
+			return invalid("scope=%s requires turn (>= 1)", scope)
 		}
 		return nil
 	}
-	return invalid("未知范围 %q", scope)
+	return invalid("unknown scope %q", scope)
 }
 
 func turnOf(p *uint32) uint32 {
@@ -139,16 +139,16 @@ func (v *App) needGit(ctx context.Context, id string) error {
 		return fmt.Errorf("%w: %s", host.ErrSessionNotFound, id)
 	}
 	if !v.gitScope() {
-		return Errorf(wire.CodeUnsupported, "没有 git 或工作区不在 git 仓库里")
+		return Errorf(wire.CodeUnsupported, "git is unavailable or the workspace is not a git repository")
 	}
 	return nil
 }
 
 // filesConflict 文件还原有冲突：conflict（details.reason=files，details.conflicts）。
 func filesConflict(cs []wire.ChangeConflict) *Error {
-	msg := "有文件不能直接还原"
+	msg := "some files cannot be reverted directly"
 	if len(cs) > 0 {
-		msg = fmt.Sprintf("有 %d 个文件不能直接还原（%s：%s）", len(cs), cs[0].Path, cs[0].Message)
+		msg = fmt.Sprintf("%d file(s) cannot be reverted directly (%s: %s)", len(cs), cs[0].Path, cs[0].Message)
 	}
 	e := conflict(wire.ConflictFiles, "%s", msg)
 	e.Details["conflicts"] = cs
@@ -158,7 +158,7 @@ func filesConflict(cs []wire.ChangeConflict) *Error {
 // notInTurn 会话没有进行中的回合（已打开且在回合中返回 not_idle）。
 func (v *App) notInTurn(id string) error {
 	if hd, ok := v.o.Host.Get(id); ok && hd.InTurn() {
-		return fmt.Errorf("%w: 会话 %s 有进行中的回合", session.ErrNotIdle, id)
+		return fmt.Errorf("%w: session %s has a turn in progress", session.ErrNotIdle, id)
 	}
 	return nil
 }
@@ -209,7 +209,7 @@ func (v *App) ChangesDiff(ctx context.Context, in wire.ChangesDiffArgs) (wire.Ch
 		return wire.ChangesDiffResult{}, err
 	}
 	if strings.TrimSpace(in.Path) == "" {
-		return wire.ChangesDiffResult{}, invalid("缺少 path")
+		return wire.ChangesDiffResult{}, invalid("missing path")
 	}
 	if in.Scope == wire.ChangeScopeGit {
 		if err := v.needGit(ctx, in.Session); err != nil {
@@ -272,7 +272,7 @@ func (v *App) rewindRestore(ctx context.Context, hd host.Handle, in wire.RewindA
 	}
 	cur := l.Cursor
 	if in.IfCursor != nil && *in.IfCursor != cur {
-		return wire.RewindResult{}, fmt.Errorf("%w: 期望 %d，当前 %d", host.ErrStale, *in.IfCursor, cur)
+		return wire.RewindResult{}, fmt.Errorf("%w: expected %d, current %d", host.ErrStale, *in.IfCursor, cur)
 	}
 	// Live 用截断前的日志：第 to_turn 回合及之后的调用还在日志里，要还原；更早 rewind 截掉的调用（回合号可能被重用）不算。
 	live, err := v.liveCalls(ctx, in.Session)
@@ -300,7 +300,7 @@ func (v *App) rewindRestore(ctx context.Context, hd host.Handle, in wire.RewindA
 	if err := rewindDo(hd, host.Command{Kind: host.Rewind, ToTurn: in.ToTurn, IfCursor: &cur, RewoundTo: &to}); err != nil {
 		if done.Undo != nil {
 			if uerr := done.Undo(ctx); uerr != nil {
-				return wire.RewindResult{}, errors.Join(err, fmt.Errorf("文件写回失败：%w", uerr))
+				return wire.RewindResult{}, errors.Join(err, fmt.Errorf("failed to restore files: %w", uerr))
 			}
 		}
 		return wire.RewindResult{}, err

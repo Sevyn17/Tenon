@@ -2,7 +2,7 @@ package mcp
 
 // 按工作区启用 MCP 服务的记录（Mortise 客户端改进 M11，配置T14；docs/50 5.1「使用分开」）。
 //
-// 记录放在用户级目录的 mcp-enabled.toml（appid.Home()，Mortise 为 ~/.mortise/mcp-enabled.toml），不写进项目仓库，
+// 记录放在用户级目录的 mcp-enabled.toml（appid.Home()，如 ~/.<app>/mcp-enabled.toml），不写进项目仓库，
 // 结构与技能的 skills.toml 相同（管理页、协议两边按同一套规则处理）：
 //
 //	[global]

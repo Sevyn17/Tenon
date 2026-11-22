@@ -24,7 +24,7 @@ type plug struct{ sh *Shell }
 func init() { component.Register("shell", func() component.Component { return &plug{} }) }
 
 func (*plug) Meta() component.Meta {
-	return component.Meta{Name: "shell", Version: "0.1.0", Description: "命令工具：执行命令行命令，长任务转到后台，可查看输出或终止", Default: true, Effects: []string{component.EffectTools, component.EffectExec},
+	return component.Meta{Name: "shell", Version: "0.1.0", Description: "Shell tool: run commands, move long tasks to the background, read output or stop them", Default: true, Effects: []string{component.EffectTools, component.EffectExec},
 		Config:   &Config{},
 		Requires: []string{assemble.ServiceWorkdir, toolhub.KeySandbox.Maybe(), toolhub.KeySandboxPolicy.Maybe(), tasks.Key.Maybe()}}
 }

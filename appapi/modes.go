@@ -135,7 +135,7 @@ type Workspaces interface {
 }
 
 // Reloader Workspaces 的可选扩展（workspace.reload，客户端改进 M3）：在当前目录上重建运行时，重读 profile、
-// 插件包和插件读的外部配置（BYOK、登录令牌等）。和 Open 一样先关旧的再开新的，换上后调用方断开旧连接。
+// 插件包和插件读的外部配置（自定义模型、登录令牌等）。和 Open 一样先关旧的再开新的，换上后调用方断开旧连接。
 // 新配置起不来时回到上一次成功的配置，返回 *ReloadReverted；回也回不去时返回别的错误，这时没有当前工作区。
 // 实现了它，hello 才报 reload 能力（CLI 没有工作区管理器，不报）。
 type Reloader interface {
@@ -146,7 +146,7 @@ type Reloader interface {
 type ReloadReverted struct{ Err error }
 
 func (e *ReloadReverted) Error() string {
-	return "新配置没能生效，已回到原来的配置：" + e.Err.Error()
+	return "new configuration failed; reverted to the previous one: " + e.Err.Error()
 }
 func (e *ReloadReverted) Unwrap() error { return e.Err }
 

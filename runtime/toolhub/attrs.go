@@ -24,6 +24,12 @@ const (
 	// AttrReadOnly 工具自己声明只读（MCP 的 readOnlyHint、trust = readonly 的服务），值为 true。
 	// Plan 模式据此保留它（docs/50 5.2：没声明副作用的工具当作会写）。
 	AttrReadOnly = "read_only_hint"
+	// AttrCommandArg 本工具在工作区执行参数里某个字段的命令行：值为该字段名（如 "command"）。
+	// 文件检查点据此把能保守判定为只读的命令免去前后扫描（回合末补扫兜底）。只和 AttrMayWrite 一起用。
+	AttrCommandArg = "command_arg"
+	// AttrBackgroundTask 本工具读取或控制已在后台运行的工作（后台 job 的输出、终止等），
+	// 那些工作可能在调用返回后还在写文件；值为 true。文件检查点据此在回合末补扫工作区。
+	AttrBackgroundTask = "background_task"
 )
 
 // 效果类别（06 - 工具权限设计方案 §二）：权限项的 Item.Class 取这些值，权限插件按它查封顶表。

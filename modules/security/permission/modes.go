@@ -28,10 +28,10 @@ const ItemSandbox = "sandbox.level"
 
 // builtinMeta 内置档位的显示名与说明。
 var builtinMeta = map[Mode][2]string{
-	ReadOnly:  {"仅可查看", "读文件、搜索直接执行；写工作区、协作写拒绝；命令、联网、MCP 询问"},
-	Ask:       {"每次询问", "读文件、搜索直接执行；写文件、执行命令、联网、MCP 每次询问"},
-	Workspace: {"工作区允许", "工作区内读写、命令直接执行；联网、MCP 询问"},
-	Full:      {"完全权限", "全部直接执行，命令不套沙箱"},
+	ReadOnly:  {"Read only", "Read and search run directly; workspace and collaboration writes are denied; commands, network and MCP ask"},
+	Ask:       {"Ask every time", "Read and search run directly; writes, commands, network and MCP ask every time"},
+	Workspace: {"Workspace", "Workspace reads, writes and commands run directly; network and MCP ask"},
+	Full:      {"Full access", "Everything runs directly; commands are not sandboxed"},
 }
 
 // builtinSandbox 内置档位的沙箱级别建议（sandbox.level 项的 SuggestLevel）。
@@ -48,7 +48,7 @@ func SandboxItem() toolhub.Item {
 	for m, v := range builtinSandbox {
 		sl[string(m)] = string(v)
 	}
-	return toolhub.Item{ID: ItemSandbox, Title: "命令沙箱级别", Type: toolhub.ItemLevel, Class: toolhub.EffectExec,
+	return toolhub.Item{ID: ItemSandbox, Title: "Command sandbox level", Type: toolhub.ItemLevel, Class: toolhub.EffectExec,
 		Levels:       []string{string(toolhub.SandboxReadOnly), string(toolhub.SandboxWorkspaceWrite), string(toolhub.SandboxFull)},
 		SuggestLevel: sl, Owner: "permission"}
 }

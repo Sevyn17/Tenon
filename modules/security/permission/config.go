@@ -296,8 +296,25 @@ func (s *Sessions) SetMode(id string, m Mode) error {
 	return nil
 }
 
+// 档位变化提示的稳定键（ModeNotice.Key，供产品翻译；Text 是英文兜底）。
+const (
+	NoticeModeReadFailed = "permission.mode_read_failed" // 参数 error
+	NoticeModeGone       = "permission.mode_gone"        // 参数 mode
+	NoticeModeUpdated    = "permission.mode_updated"     // 参数 mode
+)
+
+// ModeNotice 一条档位变化提示：Key 稳定键（空 = 无提示），Args 键的参数，Text 英文短句。
+type ModeNotice struct {
+	Key  string
+	Args map[string]string
+	Text string
+}
+
 // Notice 每回合开始调用：自定义档位文件有变化时重读，若本会话档位受影响返回一条提示（否则空）。
-func (s *Sessions) Notice(id string) string {
+func (s *Sessions) Notice(id string) string { return s.NoticeOf(id).Text }
+
+// NoticeOf 同 Notice，另带稳定键与参数。
+func (s *Sessions) NoticeOf(id string) ModeNotice {
 	changed, err := s.reg().Refresh()
 	s.mu.Lock()
 	if s.gen == nil {
@@ -311,16 +328,20 @@ func (s *Sessions) Notice(id string) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if err != nil {
-		return fmt.Sprintf("[权限] 档位配置读取失败，沿用旧配置：%v", err)
+		return ModeNotice{Key: NoticeModeReadFailed, Args: map[string]string{"error": err.Error()},
+			Text: fmt.Sprintf("[permission] failed to read mode files, keeping previous config: %v", err)}
 	}
 	if st.gen == s.gen[st.mode] {
-		return ""
+		return ModeNotice{}
 	}
 	st.gen = s.gen[st.mode]
+	args := map[string]string{"mode": string(st.mode)}
 	if _, ok := s.reg().Get(st.mode); !ok {
-		return fmt.Sprintf("[权限] 档位 %s 已不存在，本回合起按“每次询问”处理", st.mode)
+		return ModeNotice{Key: NoticeModeGone, Args: args,
+			Text: fmt.Sprintf("[permission] mode %s no longer exists; using ask from this turn", st.mode)}
 	}
-	return fmt.Sprintf("[权限] 档位 %s 的配置已更新，本回合起生效", st.mode)
+	return ModeNotice{Key: NoticeModeUpdated, Args: args,
+		Text: fmt.Sprintf("[permission] mode %s was updated; applies from this turn", st.mode)}
 }
 
 // AllowForSession 追加一条会话规则，返回全部会话规则的字符串（供持久化 ExtRules）。

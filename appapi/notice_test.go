@@ -176,9 +176,50 @@ func TestModeNoticeReachesConn(t *testing.T) {
 	if got[0].Session != "s" || n.Source != "permission" || n.Level != wire.NoticeInfo || n.Replay {
 		t.Fatalf("档位提示：%+v %+v", got[0], n)
 	}
-	if modeNoticeLevel("[权限] 档位配置读取失败，沿用旧配置：x") != wire.NoticeWarn ||
-		modeNoticeLevel("[权限] 档位 x 已不存在，本回合起按“每次询问”处理") != wire.NoticeWarn {
-		t.Fatal("读取失败、档位不存在应是 warn")
+	if modeNoticeLevel("", "[permission] failed to read mode files, keeping previous config: x") != wire.NoticeWarn ||
+		modeNoticeLevel("", "[permission] mode x no longer exists; using ask from this turn") != wire.NoticeWarn ||
+		modeNoticeLevel(NoticeKeyModeGone, "") != wire.NoticeWarn || modeNoticeLevel(NoticeKeyModeUpdated, "failed") != wire.NoticeInfo {
+		t.Fatal("读取失败、档位不存在应是 warn；有键时按键判断")
+	}
+}
+
+// keyedModes 实现 ModeNoticer：档位提示带稳定键与参数。
+type keyedModes struct{ fakeModes }
+
+func (m *keyedModes) NoticeOf(string) (string, map[string]string, string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	n := m.next
+	m.next = ""
+	if n == "" {
+		return "", nil, ""
+	}
+	return NoticeKeyModeGone, map[string]string{"mode": "x"}, n
+}
+
+// 档位提示带 key / args 上线（T3：产品按键翻译，text 是英文兜底）。
+func TestModeNoticeKey(t *testing.T) {
+	km := &keyedModes{}
+	app2 := newAppOpts(t, func(o *Options) { o.Modes = km })
+	c := app2.NewConn(context.Background(), LocalPrincipal)
+	defer c.Close()
+	if _, err := c.Call(context.Background(), "hello", nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, e := call2(t, app2, "session.create", `{"session":"s"}`); e != nil {
+		t.Fatal(e)
+	}
+	km.mu.Lock()
+	km.next = "[permission] mode x no longer exists; using ask from this turn"
+	km.mu.Unlock()
+	sendWait(t, app2, "s", "hi", "c1")
+	got := noticesOf(t, c, 300*time.Millisecond)
+	if len(got) != 1 {
+		t.Fatalf("应收到 1 条档位提示：%+v", got)
+	}
+	n := got[0].Data.(wire.Notice)
+	if n.Key != NoticeKeyModeGone || n.Args["mode"] != "x" || n.Level != wire.NoticeWarn || n.Text == "" {
+		t.Fatalf("档位提示应带键与参数：%+v", n)
 	}
 }
 

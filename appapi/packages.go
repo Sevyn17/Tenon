@@ -58,7 +58,7 @@ func (v *App) packageManager() (PackageManager, Reloader, error) {
 	pm, ok := v.o.Workspaces.(PackageManager)
 	rl, ok2 := v.o.Workspaces.(Reloader)
 	if v.o.Workspaces == nil || !ok || !ok2 {
-		return nil, nil, Errorf(wire.CodeUnsupported, "这个应用不支持在界面里管理插件包（把包放进用户级 plugins 目录后重启）")
+		return nil, nil, Errorf(wire.CodeUnsupported, "this app does not support managing packages (put them in the user plugins directory and restart)")
 	}
 	return pm, rl, nil
 }
@@ -100,9 +100,9 @@ func (v *App) PackagesList(ctx context.Context, _ wire.Empty) (wire.PackagesList
 		}
 		if u.Enabled && u.Error == "" {
 			if loaded[u.Name] == pkgs.ScopeProject {
-				u.Error = "被同名项目插件包覆盖，未加载"
+				u.Error = "shadowed by a project package with the same name; not loaded"
 			} else {
-				u.Error = "未加载（重建运行时后生效）"
+				u.Error = "not loaded (takes effect after a runtime rebuild)"
 			}
 		}
 		if u.Error != "" {
@@ -120,7 +120,7 @@ func (v *App) PackagesPreview(ctx context.Context, in wire.PackagesPreviewArgs) 
 		return wire.PackagesPreviewResult{}, err
 	}
 	if strings.TrimSpace(in.Source) == "" {
-		return wire.PackagesPreviewResult{}, invalid("缺少 source")
+		return wire.PackagesPreviewResult{}, invalid("missing source")
 	}
 	r, err := pm.PreviewPackage(ctx, strings.TrimSpace(in.Source))
 	if err != nil {
@@ -159,7 +159,7 @@ func (v *App) PackagesInstall(ctx context.Context, in wire.PackagesInstallArgs) 
 	}
 	src := strings.TrimSpace(in.Source)
 	if src == "" {
-		return wire.PackagesEditResult{}, invalid("缺少 source")
+		return wire.PackagesEditResult{}, invalid("missing source")
 	}
 	if _, err := pm.PreviewPackage(ctx, src); err != nil {
 		return wire.PackagesEditResult{}, AsError(err)
@@ -175,7 +175,7 @@ func (v *App) PackagesRemove(ctx context.Context, in wire.PackagesRemoveArgs) (w
 	}
 	name := strings.TrimSpace(in.Name)
 	if name == "" {
-		return wire.PackagesEditResult{}, invalid("缺少 name")
+		return wire.PackagesEditResult{}, invalid("missing name")
 	}
 	return v.packagesApply(ctx, rl, in.Force, func() (PackageWrite, error) { return pm.RemovePackage(ctx, name) })
 }
@@ -188,7 +188,7 @@ func (v *App) PackagesSetEnabled(ctx context.Context, in wire.PackagesSetEnabled
 	}
 	name := strings.TrimSpace(in.Name)
 	if name == "" {
-		return wire.PackagesEditResult{}, invalid("缺少 name")
+		return wire.PackagesEditResult{}, invalid("missing name")
 	}
 	return v.packagesApply(ctx, rl, in.Force, func() (PackageWrite, error) { return pm.SetPackageEnabled(ctx, name, in.Enabled) })
 }
@@ -202,7 +202,7 @@ func (v *App) packagesApply(ctx context.Context, rl Reloader, force bool, write 
 	}
 	if len(ids) > 0 {
 		if !force {
-			e := Errorf(wire.CodeNotIdle, "还有 %d 个会话正在运行：改插件包要重建运行时，会中断它们（带 force 先取消再重建）", len(ids))
+			e := Errorf(wire.CodeNotIdle, "%d session(s) running: changing packages rebuilds the runtime and interrupts them (use force to cancel and rebuild)", len(ids))
 			e.Details = map[string]any{"running": len(ids), "sessions": ids}
 			return wire.PackagesEditResult{}, e
 		}
@@ -220,7 +220,7 @@ func (v *App) packagesApply(ctx context.Context, rl Reloader, force bool, write 
 	undo := func(e *Error) *Error {
 		if w.Undo != nil {
 			if err := w.Undo(); err != nil {
-				e.Message += "；插件包目录也没能改回：" + err.Error()
+				e.Message += "; the packages directory could not be restored either: " + err.Error()
 			}
 		}
 		return e
@@ -233,7 +233,7 @@ func (v *App) packagesApply(ctx context.Context, rl Reloader, force bool, write 
 			e.Details = map[string]any{"reverted": true}
 			return wire.PackagesEditResult{}, undo(e)
 		}
-		return wire.PackagesEditResult{}, undo(Errorf(wire.CodeInternal, "重建运行时失败：%v", err))
+		return wire.PackagesEditResult{}, undo(Errorf(wire.CodeInternal, "failed to rebuild runtime: %v", err))
 	}
 	res.Reloaded, res.Workspace = true, ws
 	return res, nil

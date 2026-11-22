@@ -3,7 +3,7 @@
 // 缺省模型怎么定（客户端改进 M3，配置T3）：
 //   - 没有组件填 slot:model_sources（框架自己的装配都是这样）：和以前完全一样，Setup 里定下 cfg.Model
 //     （缺省 deepseek-chat），解析不了装配失败。
-//   - 填了：插槽给的插件层目录（如 BYOK）在 Setup 里合入目录；缺省模型挪到 Start 再定——这时所有组件都
+//   - 填了：插槽给的插件层目录（如用户自定义模型）在 Setup 里合入目录；缺省模型挪到 Start 再定——这时所有组件都
 //     Setup 完了，别的组件（如平台网关）注册的模型也在目录里。顺序：配置里写了 model / base_url → 用它；
 //     没写 → 插槽的 DefaultModel；再空 → deepseek-chat。配置写的模型解析不了时不让装配失败，回落到后两项并
 //     在 Models.Notice 里说明（桌面端起不来比用错模型更糟）。
@@ -46,7 +46,7 @@ type modelsPlugin struct {
 func init() { component.Register("models", func() component.Component { return &modelsPlugin{} }) }
 
 func (*modelsPlugin) Meta() component.Meta {
-	return component.Meta{Name: "models", Version: "0.1.0", Description: "模型目录：决定用哪个模型，把请求交给对应的协议适配器", Default: true, Effects: []string{component.EffectNetwork}, Config: &Config{},
+	return component.Meta{Name: "models", Version: "0.1.0", Description: "Model catalog: pick the model and route requests to its protocol adapter", Default: true, Effects: []string{component.EffectNetwork}, Config: &Config{},
 		Requires: []string{assemble.SlotSecrets, component.Optional + assemble.SlotModelSources}, Provides: []string{assemble.ServiceModelhub}}
 }
 

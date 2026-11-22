@@ -29,7 +29,7 @@ import (
 
 // Extension 产品扩展：一组带命名空间的命令、能力与事件。
 type Extension interface {
-	Namespace() string               // 如 "mortise"；命令名与事件 kind 的前缀
+	Namespace() string               // 如 "acme"；命令名与事件 kind 的前缀
 	Commands() map[string]ExtCommand // 键是完整命令名
 	Capabilities() []string          // 并进 hello.capabilities
 }
@@ -118,20 +118,20 @@ func buildExt(exts []Extension) (*extTable, error) {
 		}
 		ns := e.Namespace()
 		if ns == "" || strings.ContainsAny(ns, ". \t\n") {
-			return nil, fmt.Errorf("appapi: 扩展命名空间 %q 不合法（不能为空、不能含点或空白）", ns)
+			return nil, fmt.Errorf("appapi: invalid extension namespace %q (must be non-empty, without dots or spaces)", ns)
 		}
 		for _, r := range reservedRoots {
 			if hasRoot(ns+".", r) || strings.TrimSuffix(r, ".") == ns {
-				return nil, fmt.Errorf("appapi: 扩展命名空间 %q 是 tenon 保留根", ns)
+				return nil, fmt.Errorf("appapi: extension namespace %q is a reserved root", ns)
 			}
 		}
 		for _, r := range legacyRoots {
 			if strings.TrimSuffix(r, ".") == ns || strings.HasPrefix(r, ns+".") {
-				return nil, fmt.Errorf("appapi: 扩展命名空间 %q 与历史产品根冲突", ns)
+				return nil, fmt.Errorf("appapi: extension namespace %q conflicts with a legacy root", ns)
 			}
 		}
 		if slices.Contains(t.ns, ns) {
-			return nil, fmt.Errorf("appapi: 扩展命名空间 %q 重复注册", ns)
+			return nil, fmt.Errorf("appapi: extension namespace %q registered twice", ns)
 		}
 		t.ns = append(t.ns, ns)
 		names := make([]string, 0)
@@ -143,7 +143,7 @@ func buildExt(exts []Extension) (*extTable, error) {
 		for _, name := range names {
 			c := cmds[name]
 			if c.Handler == nil {
-				return nil, fmt.Errorf("appapi: 扩展 %s 的命令 %s 没有处理函数", ns, name)
+				return nil, fmt.Errorf("appapi: extension %s command %s has no handler", ns, name)
 			}
 			legacy := false
 			for _, r := range legacyRoots {
@@ -153,19 +153,19 @@ func buildExt(exts []Extension) (*extTable, error) {
 			}
 			if !legacy {
 				if !strings.HasPrefix(name, ns+".") || len(name) == len(ns)+1 {
-					return nil, fmt.Errorf("appapi: 扩展 %s 的命令 %s 必须以 %s. 开头", ns, name, ns)
+					return nil, fmt.Errorf("appapi: extension %s command %s must start with %s.", ns, name, ns)
 				}
 				for _, r := range reservedRoots {
 					if hasRoot(name, r) {
-						return nil, fmt.Errorf("appapi: 扩展 %s 的命令 %s 落在 tenon 保留根 %s 下", ns, name, r)
+						return nil, fmt.Errorf("appapi: extension %s command %s is under reserved root %s", ns, name, r)
 					}
 				}
 			}
 			if core[name] {
-				return nil, fmt.Errorf("appapi: 扩展 %s 的命令 %s 与核心命令同名", ns, name)
+				return nil, fmt.Errorf("appapi: extension %s command %s collides with a core command", ns, name)
 			}
 			if o, dup := owner[name]; dup {
-				return nil, fmt.Errorf("appapi: 命令 %s 被扩展 %s 与 %s 重复注册", name, o, ns)
+				return nil, fmt.Errorf("appapi: command %s registered by both %s and %s", name, o, ns)
 			}
 			owner[name] = ns
 			t.cmds[name] = c
@@ -239,9 +239,9 @@ type extEvent struct {
 }
 
 // ErrExtKind Emit 的 kind 没有带已注册扩展的命名空间前缀。
-var ErrExtKind = errors.New("appapi: 事件 kind 必须以已注册扩展的命名空间加点开头")
+var ErrExtKind = errors.New("appapi: event kind must start with a registered extension namespace and a dot")
 
-// Emit 发产品事件（易失，不进事件表）。kind 必须以某个已注册扩展的命名空间加点开头（如 mortise.automation.run），
+// Emit 发产品事件（易失，不进事件表）。kind 必须以某个已注册扩展的命名空间加点开头（如 acme.automation.run），
 // 否则返回 ErrExtKind。session 非空：推给订阅了这个会话（或它的顶层会话）的连接；空：推给所有连接。
 func (a *App) Emit(session, kind string, data any) error {
 	if !a.extKindOK(kind) {
@@ -277,7 +277,7 @@ func (a *App) extKindOK(kind string) bool {
 }
 
 // Service 取当前装配里登记的服务 / 插槽最终实现（docs/62 K1，即 component.Assembly.Value）：
-// 扩展命令经 c.App.Service("service:mortise.terminal") 找到当前装配的对象。切工作区或重建后
+// 扩展命令经 c.App.Service("service:acme.terminal") 找到当前装配的对象。切工作区或重建后
 // 新 App 对应新装配，旧 App 上取到的是旧装配的值。没有这个键、或 App 没接装配（Options.Services 为空）时返回 nil, false。
 func (a *App) Service(key string) (any, bool) {
 	if a == nil || a.o.Services == nil {
@@ -288,7 +288,7 @@ func (a *App) Service(key string) (any, bool) {
 
 // watchExt 连接级产品事件：全局的都推，会话的只推订阅了的。只有装了扩展的 App 才起。
 func (c *Conn) watchExt(sub *bus.Sub) {
-	defer guard.Recover("appapi扩展事件 watcher", func() { c.Close() })
+	defer guard.Recover("appapi extension event watcher", func() { c.Close() })
 	for e := range sub.C() {
 		ev, ok := e.Data.(extEvent)
 		if !ok || !c.a.extKindOK(ev.Kind) { // EmitOn 不校验命名空间，推送前在这里拒
@@ -389,7 +389,7 @@ func (a *App) Subscribe(ctx context.Context, session string, kinds ...string) *E
 	go func() {
 		defer close(s.ch)
 		defer src.Close()
-		defer guard.Recover("appapi进程内订阅", nil)
+		defer guard.Recover("appapi in-process subscription", nil)
 		for {
 			select {
 			case <-sctx.Done():

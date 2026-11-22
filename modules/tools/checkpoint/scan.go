@@ -53,7 +53,7 @@ type scanSnap struct {
 	owned   bool
 	dirty   map[string]bool // 不能用 HEAD 当基线的文件（path_key）：调用前已改或之后被改过
 	gitOK   bool
-	pending bool // 本回合有 may_write 或 job_* 调用，回合末要补扫
+	pending bool // 本回合有 may_write_files 或 background_task 调用，回合末要补扫
 	turn    int
 }
 
@@ -213,7 +213,7 @@ func (e *Engine) preDirty(ctx context.Context, gen uint64) (map[string]bool, boo
 	return d, true
 }
 
-// markPending job_* 调用：回合末补扫。
+// markPending 后台任务类调用（AttrBackgroundTask）或只读命令：回合末补扫。
 func (e *Engine) markPending(session string, turn int) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -227,13 +227,18 @@ func mayWrite(attrs map[string]any) bool {
 	return v
 }
 
-func isJobTool(name string) bool { return strings.HasPrefix(name, "job_") }
+// backgroundTask 工具声明了 toolhub.AttrBackgroundTask（读取 / 控制后台工作，如 job_output、job_kill）：
+// 后台工作可能在调用返回后还在写文件，回合末补扫。不认工具名。
+func backgroundTask(attrs map[string]any) bool {
+	v, _ := attrs[toolhub.AttrBackgroundTask].(bool)
+	return v
+}
 
-// scanCall may_write_files 调用：前后各扫一次（增量快照，见 wsfs.Tree）。能保守判定为只读的 shell 命令
+// scanCall may_write_files 调用：前后各扫一次（增量快照，见 wsfs.Tree）。能保守判定为只读的命令（AttrCommandArg）
 // 前后都不扫，只标记回合末补扫（兜底，见 readonly.go）。
 func (e *Engine) scanCall(ctx context.Context, req component.ToolCallReq,
 	next func(context.Context, component.ToolCallReq) (component.ToolCallResp, error)) (component.ToolCallResp, error) {
-	if readOnlyShell(req.Tool, req.Args) {
+	if readOnlyCall(req.Attrs, req.Args) {
 		e.markPending(req.SessionID, TurnOf(req.Scope))
 		return next(ctx, req)
 	}
@@ -358,7 +363,7 @@ func stateOf(b []byte, max int64) fileState {
 	return st
 }
 
-// rescan 回合末补扫（本回合有 may_write 或 job_* 调用时）：和最近一次扫描比，后台 job 在调用返回后
+// rescan 回合末补扫（本回合有 may_write_files 或 background_task 调用时）：和最近一次扫描比，后台 job 在调用返回后
 // 写的文件记进该回合（CallID "turn-<n>/scan"）。已被别的记录覆盖的（内容和最后一条记录相同）不重复记。
 func (e *Engine) rescan(ctx context.Context, session string) {
 	e.mu.Lock()

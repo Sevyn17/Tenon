@@ -61,14 +61,14 @@ func (v *App) Unqueue(ctx context.Context, in wire.UnqueueArgs) (wire.UnqueueRes
 		return wire.UnqueueResult{}, err
 	}
 	if in.ID == "" {
-		return wire.UnqueueResult{}, Errorf(wire.CodeBadRequest, "缺少 id")
+		return wire.UnqueueResult{}, Errorf(wire.CodeBadRequest, "missing id")
 	}
 	if !v.queueOK() {
-		return wire.UnqueueResult{}, Errorf(wire.CodeUnsupported, "存储不支持排队")
+		return wire.UnqueueResult{}, Errorf(wire.CodeUnsupported, "store does not support queueing")
 	}
 	ok, err := v.o.Host.Unqueue(ctx, in.Session, in.ID)
 	if errors.Is(err, host.ErrQueueUnsupported) {
-		return wire.UnqueueResult{}, Errorf(wire.CodeUnsupported, "存储不支持排队")
+		return wire.UnqueueResult{}, Errorf(wire.CodeUnsupported, "store does not support queueing")
 	}
 	if err != nil {
 		return wire.UnqueueResult{}, err

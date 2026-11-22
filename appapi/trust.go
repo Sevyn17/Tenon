@@ -43,12 +43,12 @@ type TrustChange struct {
 
 func (v *App) truster() (Truster, Reloader, error) {
 	if v.o.Workspaces == nil {
-		return nil, nil, Errorf(wire.CodeUnsupported, "这个应用没有工作区管理器，不能在界面里信任项目")
+		return nil, nil, Errorf(wire.CodeUnsupported, "this app has no workspace manager; cannot trust projects")
 	}
 	t, ok := v.o.Workspaces.(Truster)
 	rl, ok2 := v.o.Workspaces.(Reloader)
 	if !ok || !ok2 {
-		return nil, nil, Errorf(wire.CodeUnsupported, "这个应用不支持在界面里信任项目")
+		return nil, nil, Errorf(wire.CodeUnsupported, "this app does not support trusting projects")
 	}
 	return t, rl, nil
 }
@@ -61,7 +61,7 @@ func (v *App) WorkspaceTrustPreview(ctx context.Context, _ wire.Empty) (wire.Wor
 	}
 	out, err := t.TrustPreview(ctx)
 	if err != nil {
-		return wire.WorkspaceTrustPreviewResult{}, Errorf(wire.CodeInternal, "读项目配置失败：%v", err)
+		return wire.WorkspaceTrustPreviewResult{}, Errorf(wire.CodeInternal, "failed to read project config: %v", err)
 	}
 	// 列表字段总是数组（前端不用判空）。
 	if out.Files == nil {
@@ -95,11 +95,11 @@ func (v *App) WorkspaceTrust(ctx context.Context, in wire.WorkspaceTrustArgs) (w
 	switch in.Level {
 	case wire.TrustTrusted, wire.TrustUntrusted, "":
 	default:
-		return wire.WorkspaceTrustResult{}, invalid("level 应为 trusted / untrusted 或空（撤销记录），得到 %q", in.Level)
+		return wire.WorkspaceTrustResult{}, invalid("level must be trusted, untrusted or empty (clear the record), got %q", in.Level)
 	}
 	ch, err := t.SetTrust(ctx, in.Level)
 	if err != nil {
-		return wire.WorkspaceTrustResult{}, Errorf(wire.CodeInternal, "保存信任记录失败：%v", err)
+		return wire.WorkspaceTrustResult{}, Errorf(wire.CodeInternal, "failed to save trust record: %v", err)
 	}
 	res := wire.WorkspaceTrustResult{Key: ch.Key, Level: in.Level}
 	if ch.Before == ch.After { // 生效的信任没变（如启动参数强制受信）：只写记录
@@ -108,7 +108,7 @@ func (v *App) WorkspaceTrust(ctx context.Context, in wire.WorkspaceTrustArgs) (w
 	}
 	undo := func(e *Error) *Error {
 		if _, err := t.SetTrust(ctx, ch.Prev); err != nil {
-			e.Message += "；信任记录也没能改回：" + err.Error()
+			e.Message += "; the trust record could not be restored either: " + err.Error()
 		}
 		return e
 	}
@@ -118,7 +118,7 @@ func (v *App) WorkspaceTrust(ctx context.Context, in wire.WorkspaceTrustArgs) (w
 	}
 	if len(ids) > 0 {
 		if !in.Force {
-			e := Errorf(wire.CodeNotIdle, "还有 %d 个会话正在运行：改信任要重建运行时，会中断它们（带 force 先取消再重建）", len(ids))
+			e := Errorf(wire.CodeNotIdle, "%d session(s) running: changing trust rebuilds the runtime and interrupts them (use force to cancel and rebuild)", len(ids))
 			e.Details = map[string]any{"running": len(ids), "sessions": ids}
 			return wire.WorkspaceTrustResult{}, undo(e)
 		}
@@ -132,7 +132,7 @@ func (v *App) WorkspaceTrust(ctx context.Context, in wire.WorkspaceTrustArgs) (w
 			e.Details = map[string]any{"reverted": true}
 			return wire.WorkspaceTrustResult{}, undo(e)
 		}
-		return wire.WorkspaceTrustResult{}, undo(Errorf(wire.CodeInternal, "重建运行时失败：%v", err))
+		return wire.WorkspaceTrustResult{}, undo(Errorf(wire.CodeInternal, "failed to rebuild runtime: %v", err))
 	}
 	res.Workspace, res.Reloaded = ws, true
 	return res, nil

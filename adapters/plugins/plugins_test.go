@@ -106,12 +106,12 @@ func TestLoadValidatesUIView(t *testing.T) {
 	}{
 		{"好视图", `[{"type":"text","text":"hi"},{"type":"code","code":"x"}]`, ""},
 		{"未知节点放行", `{"type":"future","x":1}`, ""},
-		{"code 缺 code", `{"type":"code"}`, "缺必填字段"},
-		{"code 用历史错误字段", `{"type":"code","text":"x"}`, "缺必填字段"},
-		{"keyValue 缺 rows", `{"type":"keyValue"}`, "缺必填字段"},
-		{"button 缺 label", `{"type":"button","action":{"kind":"insert","text":"x"}}`, "缺必填字段"},
+		{"code 缺 code", `{"type":"code"}`, "missing required field"},
+		{"code 用历史错误字段", `{"type":"code","text":"x"}`, "missing required field"},
+		{"keyValue 缺 rows", `{"type":"keyValue"}`, "missing required field"},
+		{"button 缺 label", `{"type":"button","action":{"kind":"insert","text":"x"}}`, "missing required field"},
 		{"action.kind 不合法", `{"type":"button","label":"点","action":{"kind":"bogus"}}`, "action.kind"},
-		{"嵌套节点缺必填", `{"type":"stack","children":[{"type":"text"}]}`, "缺必填字段"},
+		{"嵌套节点缺必填", `{"type":"stack","children":[{"type":"text"}]}`, "missing required field"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

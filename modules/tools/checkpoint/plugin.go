@@ -36,7 +36,7 @@ type plug struct{ e *Engine }
 func init() { component.Register(Name, func() component.Component { return &plug{} }) }
 
 func (*plug) Meta() component.Meta {
-	return component.Meta{Name: Name, Version: "0.1.0", Description: "文件检查点：工具改文件前后留快照，可以查看改动并还原", Default: true, Config: &Config{},
+	return component.Meta{Name: Name, Version: "0.1.0", Description: "File checkpoints: snapshot files around tool edits to review and revert changes", Default: true, Config: &Config{},
 		Requires: []string{assemble.ServiceWorkdir, assemble.ServiceDB, "?" + assemble.ServiceUI, "?service:hooks"},
 		Provides: []string{ServiceName}}
 }

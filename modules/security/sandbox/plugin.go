@@ -34,7 +34,7 @@ type plug struct {
 func init() { component.Register("sandbox", func() component.Component { return &plug{} }) }
 
 func (*plug) Meta() component.Meta {
-	return component.Meta{Name: "sandbox", Version: "0.1.0", Description: "命令沙箱：用操作系统机制限制子进程能读写的文件和能否联网", Default: false, // 独立开关，缺省关闭（§9.9）
+	return component.Meta{Name: "sandbox", Version: "0.1.0", Description: "Command sandbox: OS-level limits on child process file access and network", Default: false, // 独立开关，缺省关闭（§9.9）
 		Config:   &Config{},
 		Requires: []string{assemble.ServiceWorkdir, PolicyService, "?" + assemble.ServiceUI}, Provides: []string{Service}}
 }

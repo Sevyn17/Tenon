@@ -21,7 +21,7 @@ type plug struct{}
 func init() { component.Register(Name, func() component.Component { return &plug{} }) }
 
 func (*plug) Meta() component.Meta {
-	return component.Meta{Name: Name, Version: "0.1.0", Description: "Plan 模式：先调查、提交计划，用户批准后再执行",
+	return component.Meta{Name: Name, Version: "0.1.0", Description: "Plan mode: investigate and submit a plan, execute after approval",
 		Default: true, Effects: []string{component.EffectTools},
 		Requires: []string{assemble.ServiceUI, "?" + assemble.ServiceHost}}
 }

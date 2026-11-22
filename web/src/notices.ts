@@ -18,6 +18,10 @@ export interface NoticeEvent {
   level: NoticeLevel;
   text: string;
   source?: string;
+  /** Stable notice key for product translation (wire Notice.key); text is the English fallback. */
+  key?: string;
+  /** Parameters of key. */
+  args?: Record<string, string>;
   /** 为空：全局（不属于任何会话）。 */
   session: string;
   /** hello 后补发的旧通知（不该再弹提示）。 */
@@ -40,7 +44,7 @@ export function noticeOf(e: Envelope): NoticeEvent | null {
   const d = e.data as Partial<Notice> | null;
   if (!d || typeof d.text !== "string") return null;
   const level: NoticeLevel = d.level === "warn" || d.level === "error" ? d.level : "info";
-  return { level, text: d.text, source: d.source || undefined, session: e.session ?? "", replay: !!d.replay, at: e.at };
+  return { level, text: d.text, source: d.source || undefined, key: d.key || undefined, args: d.args || undefined, session: e.session ?? "", replay: !!d.replay, at: e.at };
 }
 
 export function createNoticeFeed(conn: Connection): NoticeFeed {

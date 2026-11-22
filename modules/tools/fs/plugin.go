@@ -13,7 +13,7 @@ type plug struct{}
 func init() { component.Register("fs", func() component.Component { return &plug{} }) }
 
 func (*plug) Meta() component.Meta {
-	return component.Meta{Name: "fs", Version: "0.1.0", Description: "文件工具：读写和编辑工作区文件，按内容或文件名搜索，列目录", Default: true, Effects: []string{component.EffectTools}, Requires: []string{assemble.ServiceWorkdir}}
+	return component.Meta{Name: "fs", Version: "0.1.0", Description: "File tools: read, write and edit workspace files, search, list directories", Default: true, Effects: []string{component.EffectTools}, Requires: []string{assemble.ServiceWorkdir}}
 }
 
 func (*plug) Setup(cx *component.Registrar) error {

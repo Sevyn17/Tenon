@@ -30,22 +30,22 @@ func (v *App) UploadHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			w.Header().Set("Allow", "POST")
-			writeErr(w, http.StatusMethodNotAllowed, Errorf(wire.CodeBadRequest, "只支持 POST"))
+			writeErr(w, http.StatusMethodNotAllowed, Errorf(wire.CodeBadRequest, "only POST is supported"))
 			return
 		}
 		if v.o.Artifacts == nil {
-			writeErr(w, http.StatusNotImplemented, Errorf(wire.CodeUnsupported, "没有工件存储"))
+			writeErr(w, http.StatusNotImplemented, Errorf(wire.CodeUnsupported, "no artifact store"))
 			return
 		}
 		mt, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
 		if mt != "multipart/form-data" {
-			writeErr(w, http.StatusUnsupportedMediaType, Errorf(wire.CodeBadRequest, "需要 multipart/form-data"))
+			writeErr(w, http.StatusUnsupportedMediaType, Errorf(wire.CodeBadRequest, "multipart/form-data required"))
 			return
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, MaxUpload+1<<20) // 留出表单头部
 		mr, err := r.MultipartReader()
 		if err != nil {
-			writeErr(w, http.StatusBadRequest, Errorf(wire.CodeBadRequest, "表单解析失败：%v", err))
+			writeErr(w, http.StatusBadRequest, Errorf(wire.CodeBadRequest, "failed to parse form: %v", err))
 			return
 		}
 		var sess, typ string
@@ -56,27 +56,27 @@ func (v *App) UploadHandler() http.Handler {
 				break
 			}
 			if err != nil {
-				writeErr(w, tooLarge(err), Errorf(wire.CodeInvalid, "上传失败：%v", err))
+				writeErr(w, tooLarge(err), Errorf(wire.CodeInvalid, "upload failed: %v", err))
 				return
 			}
 			switch p.FormName() {
 			case "session":
 				b, _ := io.ReadAll(io.LimitReader(p, maxUploadField+1))
 				if len(b) > maxUploadField {
-					writeErr(w, http.StatusBadRequest, Errorf(wire.CodeBadRequest, "session字段超过 %d字节", maxUploadField))
+					writeErr(w, http.StatusBadRequest, Errorf(wire.CodeBadRequest, "session field exceeds %d bytes", maxUploadField))
 					return
 				}
 				sess = strings.TrimSpace(string(b))
 			case "mime":
 				b, _ := io.ReadAll(io.LimitReader(p, maxUploadField+1))
 				if len(b) > maxUploadField {
-					writeErr(w, http.StatusBadRequest, Errorf(wire.CodeBadRequest, "mime字段超过 %d字节", maxUploadField))
+					writeErr(w, http.StatusBadRequest, Errorf(wire.CodeBadRequest, "mime field exceeds %d bytes", maxUploadField))
 					return
 				}
 				typ = strings.TrimSpace(string(b))
 			case "file":
 				if data != nil {
-					writeErr(w, http.StatusBadRequest, Errorf(wire.CodeBadRequest, "一次只能传一个文件"))
+					writeErr(w, http.StatusBadRequest, Errorf(wire.CodeBadRequest, "only one file per upload"))
 					return
 				}
 				if typ == "" {
@@ -84,7 +84,7 @@ func (v *App) UploadHandler() http.Handler {
 				}
 				data, err = io.ReadAll(io.LimitReader(p, MaxUpload+1))
 				if err != nil {
-					writeErr(w, tooLarge(err), Errorf(wire.CodeInvalid, "读取文件失败：%v", err))
+					writeErr(w, tooLarge(err), Errorf(wire.CodeInvalid, "failed to read file: %v", err))
 					return
 				}
 			}
@@ -104,11 +104,11 @@ func (v *App) UploadHandler() http.Handler {
 			return
 		}
 		if len(data) == 0 || len(data) > MaxUpload {
-			writeErr(w, http.StatusRequestEntityTooLarge, invalid("文件大小 %d 字节，须在 1 到 %d 之间", len(data), MaxUpload))
+			writeErr(w, http.StatusRequestEntityTooLarge, invalid("file size %d bytes must be between 1 and %d", len(data), MaxUpload))
 			return
 		}
 		if len(typ) > 255 {
-			writeErr(w, http.StatusBadRequest, Errorf(wire.CodeBadRequest, "mime超过255字节"))
+			writeErr(w, http.StatusBadRequest, Errorf(wire.CodeBadRequest, "mime exceeds 255 bytes"))
 			return
 		}
 		if typ == "" {

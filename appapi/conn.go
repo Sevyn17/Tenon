@@ -159,19 +159,19 @@ func (c *Conn) Close() {
 
 // Call 执行一条 protocol 2 命令：订阅命令在这里处理，其余交给 App.Call；viewer 只能查询和订阅（forbidden）。
 func (c *Conn) Call(ctx context.Context, cmd string, args json.RawMessage) (result any, err error) {
-	defer guard.Recover("appapi命令 "+cmd, func() {
+	defer guard.Recover("appapi command "+cmd, func() {
 		result = nil
-		err = Errorf(wire.CodeInternal, "命令 %s执行发生内部错误", cmd)
+		err = Errorf(wire.CodeInternal, "internal error while running command %s", cmd)
 	})
 	if ec, ok := c.a.ext.lookup(cmd); ok { // 产品扩展命令（ext.go）：缺省只给 operator，Viewer 打开 viewer
 		if c.p.Role != wire.RoleOperator && !ec.Viewer {
-			return nil, Errorf(wire.CodeForbidden, "身份 %s（%s）不能执行 %s", c.p.ID, c.p.Role, cmd)
+			return nil, Errorf(wire.CodeForbidden, "principal %s (%s) may not run %s", c.p.ID, c.p.Role, cmd)
 		}
 		out, _, err := c.a.callExt(ctx, c.p, cmd, args)
 		return out, err
 	}
 	if c.p.Role != wire.RoleOperator && !viewerCommands[cmd] {
-		return nil, Errorf(wire.CodeForbidden, "身份 %s（%s）不能执行 %s", c.p.ID, c.p.Role, cmd)
+		return nil, Errorf(wire.CodeForbidden, "principal %s (%s) may not run %s", c.p.ID, c.p.Role, cmd)
 	}
 	switch cmd {
 	case "session.subscribe":
@@ -250,7 +250,7 @@ func (c *Conn) Subscribe(ctx context.Context, in wire.SubscribeArgs) error {
 	if c.closed {
 		c.mu.Unlock()
 		cancel()
-		return fmt.Errorf("%w: 连接已关闭", host.ErrClosed)
+		return fmt.Errorf("%w: connection closed", host.ErrClosed)
 	}
 	if old := c.subs[in.Session]; old != nil {
 		old.cancel()
@@ -275,7 +275,7 @@ func (c *Conn) Unsubscribe(id string) {
 
 // run 一个订阅的主循环（一个协程：持久与易失按到达顺序处理）。
 func (c *Conn) run(ctx context.Context, id string, live *bus.Sub, replay []bus.Envelope, last int64) {
-	defer guard.Recover("appapi会话事件 "+id, func() { c.Close() })
+	defer guard.Recover("appapi session events "+id, func() { c.Close() })
 	defer live.Close()
 	for _, e := range replay {
 		if !c.pushWait(ctx, c.translate(e)) {
@@ -453,17 +453,19 @@ func (c *Conn) translate(e bus.Envelope) []wire.Envelope {
 		text, _ := m["text"].(string)
 		level, _ := m["level"].(string)
 		source, _ := m["source"].(string)
+		key, _ := m["key"].(string)
+		args, _ := m["args"].(map[string]string)
 		if level == "" {
 			level = wire.NoticeInfo
 		}
-		return []wire.Envelope{c.envelope(e.Session, wire.EvNotice, 0, 0, wire.Notice{Level: level, Source: source, Text: text})}
+		return []wire.Envelope{c.envelope(e.Session, wire.EvNotice, 0, 0, wire.Notice{Level: level, Source: source, Text: text, Key: key, Args: args})}
 	}
 	return nil
 }
 
 // watchNotices 连接级 notice（客户端改进 M10 T19）：任一会话的和全局的提示都推；编号不超过分界的由 hello 后补发，这里丢掉。
 func (c *Conn) watchNotices(sub *bus.Sub) {
-	defer guard.Recover("appapi提示 watcher", func() { c.Close() })
+	defer guard.Recover("appapi notice watcher", func() { c.Close() })
 	for e := range sub.C() {
 		if seq := int64(intOf(dataMap(e.Data)[noticeSeqKey])); seq > 0 && seq <= c.noticeFloor {
 			continue
@@ -511,7 +513,7 @@ func (c *Conn) modeOf(id string, m map[string]any) *wire.Mode {
 // watchSessions 连接级 sessions.changed：本进程任一会话的运行状态、标题与置顶变化或删除时刷新列表里的一行
 // （易失，重连后重新查列表）。
 func (c *Conn) watchSessions(sub *bus.Sub) {
-	defer guard.Recover("appapi会话列表 watcher", func() { c.Close() })
+	defer guard.Recover("appapi session list watcher", func() { c.Close() })
 	for e := range sub.C() {
 		var row wire.SessionsChanged
 		switch {
@@ -668,7 +670,7 @@ func (c *Conn) Next(ctx context.Context) ([]wire.Envelope, error) {
 		closed := c.closed
 		c.mu.Unlock()
 		if closed {
-			return nil, fmt.Errorf("%w: 连接已关闭", host.ErrClosed)
+			return nil, fmt.Errorf("%w: connection closed", host.ErrClosed)
 		}
 		select {
 		case <-c.wake:

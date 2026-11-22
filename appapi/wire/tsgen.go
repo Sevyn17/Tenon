@@ -178,7 +178,7 @@ func Generate(types []any, consts map[string]any, opts GenOptions) string {
 	for _, k := range names {
 		vs, ok := consts[k].([]string)
 		if !ok {
-			panic(fmt.Sprintf("wire.Generate: 常量组 %s 的值必须是 []string", k))
+			panic(fmt.Sprintf("wire.Generate: const group %s must be []string", k))
 		}
 		writeConst(&body, k, vs)
 	}

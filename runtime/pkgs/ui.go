@@ -4,7 +4,7 @@ package pkgs
 // 视图可以写在清单里（view，TOML 内联表）或单独的 JSON 文件（view_file，相对包目录）。
 // data 可选：一条只读协议命令，结果用来替换视图里的 {{路径}} 占位（{{session}} 是插槽所在的会话）。
 // 本包只校验清单层的东西：大小、顶层 type、id/slot、view 与 view_file 二选一、data.cmd 只读。
-// 渲染器不在框架：界面层属应用（如 Mortise 的 client/web/src/ui/declarative.tsx）。
+// 渲染器不在框架：界面层属应用（由产品自己实现）。
 //
 // 节点形状（有哪些节点、每种要哪些字段）的**权威定义在 `appapi/wire/declarative.go`**
 // （`wire.DeclNode` / `wire.declKinds`），由协议边界校验（`wire.ValidateView`，

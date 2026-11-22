@@ -90,7 +90,7 @@ type App struct {
 // Host.Hooks 里应用已设的 BeforeTurn / AfterTurn 保留并在包装里调用，须在 New 之前设置。
 func New(o Options) (*App, error) {
 	if o.Host == nil || o.Bus == nil || o.DB == nil {
-		return nil, errors.New("appapi: Host / Bus / DB 必填")
+		return nil, errors.New("appapi: Host, Bus and DB are required")
 	}
 	if o.Host.DB == nil {
 		o.Host.DB = o.DB
@@ -112,8 +112,12 @@ func New(o Options) (*App, error) {
 	before, after := o.Host.Hooks.BeforeTurn, o.Host.Hooks.AfterTurn
 	o.Host.Hooks.BeforeTurn = func(id string, in session.Content, untrusted bool) (session.Content, host.Decision, error) {
 		if o.Modes != nil { // 自定义档位文件有变化时重读并提示
-			if n := o.Modes.Notice(id); n != "" {
-				a.NoticeFrom(id, modeNoticeLevel(n), "permission", n)
+			if mk, ok := o.Modes.(ModeNoticer); ok {
+				if key, args, text := mk.NoticeOf(id); text != "" {
+					a.NoticeKey(id, modeNoticeLevel(key, text), "permission", key, args, text)
+				}
+			} else if n := o.Modes.Notice(id); n != "" {
+				a.NoticeFrom(id, modeNoticeLevel("", n), "permission", n)
 			}
 		}
 		if before != nil {
@@ -153,7 +157,7 @@ func (a *App) Events(ctx context.Context, f bus.Filter) *bus.Sub { return a.o.Bu
 // Follow 可靠订阅会话的持久事件 entry / rewind：回放 seq > after → synced → 实时，不漏不重。
 func (a *App) Follow(ctx context.Context, sessionID string, after int64) (*bus.Sub, error) {
 	if sessionID == "" {
-		return nil, Errorf(CodeBadRequest, "Follow 必须指定会话")
+		return nil, Errorf(CodeBadRequest, "Follow requires a session")
 	}
 	s, err := a.o.Bus.Follow(ctx, a.o.DB, bus.Filter{Session: sessionID}, after)
 	return s, wrap(err)

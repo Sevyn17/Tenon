@@ -4,7 +4,7 @@ package checkpoint
 // 回合末补扫照旧（作为兜底）。拿不准一律当作可能写文件。
 //
 // 规则：
-//   - 只认 shell 工具（MCP、扩展进程不判定），且只认一条简单命令：出现 ; & | < > $ ` ( ) { } @ 或换行一律不算
+//   - 只认声明了 toolhub.AttrCommandArg 的工具（shell 等；MCP、扩展进程不声明，不判定），且只认一条简单命令：出现 ; & | < > $ ` ( ) { } @ 或换行一律不算
 //     （覆盖 bash 的管道、重定向、命令替换、后台、进程替换、花括号展开，以及 PowerShell 的子表达式、脚本块、
 //     splat；Windows 上 shell 工具用 PowerShell 执行）。引号必须配对。
 //   - 第一个词是白名单里的命令名（不带路径；Windows 上不分大小写、可带 .exe），并排除会写文件或执行别的程序的参数。
@@ -13,6 +13,8 @@ import (
 	"encoding/json"
 	"runtime"
 	"strings"
+
+	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
 // readOnlyCmds 白名单：命令名 → 参数检查（nil = 任何参数都只读）。
@@ -36,18 +38,22 @@ var readOnlyCmds = map[string]func(args []string) bool{
 // shellMeta 出现即不算简单命令的字符。
 const shellMeta = ";&|<>$`(){}@\n\r"
 
-// readOnlyShell 这次调用是否是能保守判定为只读的 shell 命令。
-func readOnlyShell(tool string, args json.RawMessage) bool {
-	if tool != "shell" {
+// readOnlyCall 这次调用是否是能保守判定为只读的命令：只认声明了 toolhub.AttrCommandArg 的工具
+// （shell 及产品层同类工具），按该属性指定的参数字段取命令文本。不认工具名。
+func readOnlyCall(attrs map[string]any, args json.RawMessage) bool {
+	field, _ := attrs[toolhub.AttrCommandArg].(string)
+	if field == "" {
 		return false
 	}
-	var a struct {
-		Command string `json:"command"`
-	}
-	if json.Unmarshal(args, &a) != nil {
+	var m map[string]json.RawMessage
+	if json.Unmarshal(args, &m) != nil {
 		return false
 	}
-	return readOnlyCommand(a.Command, runtime.GOOS == "windows")
+	var cmd string
+	if json.Unmarshal(m[field], &cmd) != nil {
+		return false
+	}
+	return readOnlyCommand(cmd, runtime.GOOS == "windows")
 }
 
 // readOnlyCommand 判定一条命令文本；windows = 命令名不分大小写、可带 .exe。

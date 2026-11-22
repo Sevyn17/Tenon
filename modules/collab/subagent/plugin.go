@@ -60,7 +60,7 @@ type plug struct{}
 func init() { component.Register("subagent", func() component.Component { return &plug{} }) }
 
 func (*plug) Meta() component.Meta {
-	return component.Meta{Name: "subagent", Version: "0.1.0", Description: "委派工具：把一段任务交给子智能体，在独立的子会话里完成", Effects: []string{component.EffectTools}, Requires: []string{assemble.ServiceHost, tasks.Key.Maybe()}, Config: &PluginConfig{}}
+	return component.Meta{Name: "subagent", Version: "0.1.0", Description: "Delegate a task to a subagent in its own child session", Effects: []string{component.EffectTools}, Requires: []string{assemble.ServiceHost, tasks.Key.Maybe()}, Config: &PluginConfig{}}
 }
 
 func (*plug) Setup(cx *component.Registrar) error {

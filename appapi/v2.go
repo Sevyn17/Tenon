@@ -62,7 +62,7 @@ func bind[In, Out any](f func(*App, context.Context, In) (Out, error)) handler {
 		var in In
 		if t := bytes.TrimSpace(raw); len(t) > 0 && !bytes.Equal(t, []byte("null")) {
 			if err := json.Unmarshal(t, &in); err != nil {
-				return nil, Errorf(wire.CodeBadRequest, "参数解析失败：%v", err)
+				return nil, Errorf(wire.CodeBadRequest, "invalid arguments: %v", err)
 			}
 		}
 		out, err := f(a, ctx, in)
@@ -80,7 +80,7 @@ var commands = map[string]handler{}
 func registerCommands(m map[string]handler) {
 	for k, h := range m {
 		if _, dup := commands[k]; dup {
-			panic("appapi: 命令重复登记 " + k)
+			panic("appapi: command registered twice: " + k)
 		}
 		commands[k] = h
 	}
@@ -144,7 +144,7 @@ func (a *App) Call(ctx context.Context, cmd string, args json.RawMessage) (any, 
 		if out, ok, err := a.callExt(ctx, LocalPrincipal, cmd, args); ok { // 产品扩展命令（ext.go），进程内按本机身份
 			return out, err
 		}
-		return nil, Errorf(wire.CodeUnsupported, "未知命令 %q", cmd)
+		return nil, Errorf(wire.CodeUnsupported, "unknown command %q", cmd)
 	}
 	return h(ctx, a, args)
 }
@@ -215,7 +215,7 @@ func (v *App) Hello(_ context.Context, in wire.HelloArgs) (wire.HelloResult, err
 		lo, hi = wire.Protocol, wire.Protocol
 	}
 	if lo > wire.Protocol || hi < wire.Protocol {
-		return wire.HelloResult{}, Errorf(wire.CodeUnsupported, "协议区间 [%d, %d] 不含服务端支持的 %d", lo, hi, wire.Protocol)
+		return wire.HelloResult{}, Errorf(wire.CodeUnsupported, "protocol range [%d, %d] does not include server protocol %d", lo, hi, wire.Protocol)
 	}
 	o := v.o
 	ws := "" // 当前工作区的键（客户端改进 M7）：与 SessionInfo.workspace 同值，客户端据此判断 sessions.changed 的行属不属于缺省列表
@@ -357,24 +357,24 @@ func (v *App) SessionsList(ctx context.Context, in wire.ListArgs) (wire.ListResu
 	}
 	query := strings.TrimSpace(in.Query)
 	if len(query) > MaxQuery {
-		return wire.ListResult{}, invalid("query 超过 %d 字节", MaxQuery)
+		return wire.ListResult{}, invalid("query exceeds %d bytes", MaxQuery)
 	}
 	qs, canQuery := v.o.DB.(store.SessionQueryStore)
 	if (query != "" || in.Parent != "" || in.Archived != "") && !canQuery {
-		return wire.ListResult{}, Errorf(wire.CodeUnsupported, "存储不支持搜索、按父会话列或按归档筛选")
+		return wire.ListResult{}, Errorf(wire.CodeUnsupported, "store does not support search, parent or archive filters")
 	}
 	if in.Pinned && (query != "" || in.Parent != "") {
-		return wire.ListResult{}, invalid("pinned 不能和 query、parent 同用")
+		return wire.ListResult{}, invalid("pinned cannot be combined with query or parent")
 	}
 	if in.Parent != "" && in.Unassigned {
-		return wire.ListResult{}, invalid("parent 不能和 unassigned 同用")
+		return wire.ListResult{}, invalid("parent cannot be combined with unassigned")
 	}
 	// unassigned：只列没有工作区的会话（客户端改进 M6 决定 10，左栏「未归属」分组）。
 	var ul store.UnassignedLister
 	if in.Unassigned {
 		var ok bool
 		if ul, ok = v.o.DB.(store.UnassignedLister); !ok {
-			return wire.ListResult{}, Errorf(wire.CodeUnsupported, "存储不支持列没有工作区的会话")
+			return wire.ListResult{}, Errorf(wire.CodeUnsupported, "store does not support listing sessions without a workspace")
 		}
 	}
 	inWS := func(s store.SessionInfo) bool {
@@ -466,7 +466,7 @@ func archivedFilter(s string) (store.ArchivedFilter, error) {
 	case wire.ArchivedInclude:
 		return store.ArchivedInclude, nil
 	}
-	return 0, invalid("archived 只能是空、%q 或 %q", wire.ArchivedOnly, wire.ArchivedInclude)
+	return 0, invalid("archived must be empty, %q or %q", wire.ArchivedOnly, wire.ArchivedInclude)
 }
 
 // keepArchived 按筛选决定要不要这一行（置顶列表在这里筛，它不走 QuerySessions）。
@@ -499,17 +499,17 @@ func (v *App) Update(ctx context.Context, in wire.UpdateArgs) (wire.SessionSnaps
 	}
 	ms, ok := v.o.DB.(store.SessionMetaStore)
 	if !ok {
-		return wire.SessionSnapshot{}, Errorf(wire.CodeUnsupported, "存储不支持改会话元数据")
+		return wire.SessionSnapshot{}, Errorf(wire.CodeUnsupported, "store does not support updating session metadata")
 	}
 	var title *string
 	if in.Title != nil {
 		t := strings.TrimSpace(*in.Title)
 		if len(t) > MaxTitle {
-			return wire.SessionSnapshot{}, invalid("标题超过 %d 字节", MaxTitle)
+			return wire.SessionSnapshot{}, invalid("title exceeds %d bytes", MaxTitle)
 		}
 		for _, r := range t {
 			if r < 0x20 || r == 0x7f {
-				return wire.SessionSnapshot{}, invalid("标题不能含换行或控制字符")
+				return wire.SessionSnapshot{}, invalid("title must not contain newlines or control characters")
 			}
 		}
 		title = &t
@@ -525,11 +525,11 @@ func (v *App) Update(ctx context.Context, in wire.UpdateArgs) (wire.SessionSnaps
 	// 归档（客户端改进 M7 协议T13）：要能力 sessions.query（存储能把已归档的从缺省列表里排除，才允许归档）。
 	if in.Archived != nil {
 		if _, ok := v.o.DB.(store.SessionQueryStore); !ok {
-			return wire.SessionSnapshot{}, Errorf(wire.CodeUnsupported, "存储不支持归档")
+			return wire.SessionSnapshot{}, Errorf(wire.CodeUnsupported, "store does not support archiving")
 		}
 		if *in.Archived {
 			if in.Pinned != nil && *in.Pinned {
-				return wire.SessionSnapshot{}, invalid("archived:true 不能和 pinned:true 同用")
+				return wire.SessionSnapshot{}, invalid("archived:true cannot be combined with pinned:true")
 			}
 			set[store.MetaArchived] = true
 			set[metaPinned] = nil // 归档同时取消置顶（spike 第 4 节待拍板的推荐）
@@ -543,7 +543,7 @@ func (v *App) Update(ctx context.Context, in wire.UpdateArgs) (wire.SessionSnaps
 			return wire.SessionSnapshot{}, err
 		}
 		if store.ArchivedOf(l.Meta.Meta) {
-			return wire.SessionSnapshot{}, conflict("archived", "会话已归档，先恢复再置顶")
+			return wire.SessionSnapshot{}, conflict("archived", "session is archived; restore it before pinning")
 		}
 	}
 	if title == nil && len(set) == 0 {
@@ -581,7 +581,7 @@ func (c *followupCache) put(k string, v []string) {
 // 回合还没结束或没有正文时返回空。结果按（会话, 回合, 日志长度）缓存。
 func (v *App) SessionFollowups(ctx context.Context, in wire.FollowupsArgs) (wire.FollowupsResult, error) {
 	if v.o.Followups == nil {
-		return wire.FollowupsResult{}, Errorf(wire.CodeUnsupported, "未提供建议追问")
+		return wire.FollowupsResult{}, Errorf(wire.CodeUnsupported, "follow-up suggestions not available")
 	}
 	if err := need(in.Session); err != nil {
 		return wire.FollowupsResult{}, err
@@ -681,16 +681,16 @@ func (v *App) FeedbackSet(ctx context.Context, in wire.FeedbackArgs, by string) 
 	}
 	ms, ok := v.o.DB.(store.SessionMetaStore)
 	if !ok {
-		return wire.Feedback{}, Errorf(wire.CodeUnsupported, "存储不支持会话元数据")
+		return wire.Feedback{}, Errorf(wire.CodeUnsupported, "store does not support session metadata")
 	}
 	if in.Entry == "" || len(in.Entry) > 128 {
-		return wire.Feedback{}, Errorf(wire.CodeBadRequest, "缺少 entry 或超过 128 字节")
+		return wire.Feedback{}, Errorf(wire.CodeBadRequest, "entry missing or exceeds 128 bytes")
 	}
 	if in.Vote != "" && in.Vote != "up" && in.Vote != "down" {
-		return wire.Feedback{}, invalid("vote 只能是 up / down / 空，得到 %q", in.Vote)
+		return wire.Feedback{}, invalid("vote must be up, down or empty, got %q", in.Vote)
 	}
 	if len(in.Note) > MaxFeedbackNote {
-		return wire.Feedback{}, invalid("附言超过 %d 字节", MaxFeedbackNote)
+		return wire.Feedback{}, invalid("note exceeds %d bytes", MaxFeedbackNote)
 	}
 	l, err := host.LoadHead(ctx, v.o.DB, in.Session)
 	if err != nil {
@@ -756,7 +756,7 @@ func (v *App) Delete(ctx context.Context, in wire.SessionArgs) (wire.Empty, erro
 		return wire.Empty{}, err
 	}
 	if strings.Contains(in.Session, "/") {
-		return wire.Empty{}, invalid("子会话随顶层会话一起删除")
+		return wire.Empty{}, invalid("child sessions are deleted with their top-level session")
 	}
 	ids, err := v.tree(ctx, in.Session)
 	if err != nil {
@@ -764,7 +764,7 @@ func (v *App) Delete(ctx context.Context, in wire.SessionArgs) (wire.Empty, erro
 	}
 	for _, id := range ids {
 		if hd, ok := v.o.Host.Get(id); ok && hd.InTurn() {
-			return wire.Empty{}, fmt.Errorf("%w: 会话 %s 有进行中的回合", session.ErrNotIdle, id)
+			return wire.Empty{}, fmt.Errorf("%w: session %s has a turn in progress", session.ErrNotIdle, id)
 		}
 	}
 	// 子会话先删：顶层删到一半失败时，重试还能找到剩下的子会话。
@@ -819,7 +819,7 @@ func wireRun(s string) string {
 // 同一 client_id 重发返回已建会话的快照。
 func (v *App) Create(ctx context.Context, in wire.CreateArgs) (wire.SessionSnapshot, error) {
 	if v.o.Host.New == nil {
-		return wire.SessionSnapshot{}, Errorf(wire.CodeInternal, "appapi: 未设置会话构造器")
+		return wire.SessionSnapshot{}, Errorf(wire.CodeInternal, "appapi: session builder not set")
 	}
 	id := in.Session
 	switch {
@@ -847,7 +847,7 @@ func (v *App) Create(ctx context.Context, in wire.CreateArgs) (wire.SessionSnaps
 		if in.ClientID != "" && v.createdBy(ctx, id, in.ClientID) {
 			return v.snapshot(ctx, id)
 		}
-		return wire.SessionSnapshot{}, conflict(wire.ConflictExists, "会话 %s 已存在", id)
+		return wire.SessionSnapshot{}, conflict(wire.ConflictExists, "session %s already exists", id)
 	}
 	if title != "" { // 初始标题（docs/57 4.2 钩子 3）：有标题后 autoTitle 不再改它
 		if ms, ok := v.o.DB.(store.SessionMetaStore); ok {
@@ -884,21 +884,21 @@ func createMeta(in wire.CreateArgs) map[string]string {
 func createTitle(in wire.CreateArgs) (string, error) {
 	for name, s := range map[string]string{"source": in.Source, "ref": in.Ref} {
 		if len(s) > 128 {
-			return "", invalid("%s 超过 128 字节", name)
+			return "", invalid("%s exceeds 128 bytes", name)
 		}
 		for _, r := range s {
 			if r < 0x20 || r == 0x7f {
-				return "", invalid("%s 不能含控制字符", name)
+				return "", invalid("%s must not contain control characters", name)
 			}
 		}
 	}
 	t := strings.TrimSpace(in.Title)
 	if len(t) > MaxTitle {
-		return "", invalid("标题超过 %d 字节", MaxTitle)
+		return "", invalid("title exceeds %d bytes", MaxTitle)
 	}
 	for _, r := range t {
 		if r < 0x20 || r == 0x7f {
-			return "", invalid("标题不能含换行或控制字符")
+			return "", invalid("title must not contain newlines or control characters")
 		}
 	}
 	return t, nil
@@ -925,11 +925,11 @@ func derivedID(prefix, key string) string {
 // validID 客户端给的会话 id：不能带 /（子会话 id 形如 "<顶层>/<子>"，由内核分配）、控制字符，不超过 128 字节。
 func validID(id string) error {
 	if len(id) > 128 || strings.ContainsAny(id, `/\`) {
-		return invalid("会话 id %q 不合法：不能含 / 或 \\，不超过 128 字节", id)
+		return invalid("invalid session id %q: must not contain / or \\ and must be at most 128 bytes", id)
 	}
 	for _, r := range id {
 		if r < 0x20 || r == 0x7f {
-			return invalid("会话 id 不能含控制字符")
+			return invalid("session id must not contain control characters")
 		}
 	}
 	return nil
@@ -1027,14 +1027,14 @@ func (v *App) Entries(ctx context.Context, in wire.EntriesArgs) (wire.EntriesRes
 	from, to := h.CompactionBase, h.LogLen
 	if in.Turn != nil { // 客户端改进 M8 协议T15：只取这个回合
 		if in.From != nil || in.To != nil || in.Tail > 0 {
-			return wire.EntriesResult{}, invalid("turn 与 from / to / tail 互斥")
+			return wire.EntriesResult{}, invalid("turn is mutually exclusive with from, to and tail")
 		}
 		lo, hi, ok, err := v.turnRange(ctx, in.Session, *in.Turn)
 		if err != nil {
 			return wire.EntriesResult{}, err
 		}
 		if !ok {
-			return wire.EntriesResult{}, invalid("回合 %d 不存在", *in.Turn)
+			return wire.EntriesResult{}, invalid("turn %d does not exist", *in.Turn)
 		}
 		from, to = lo, hi
 	}
@@ -1048,7 +1048,7 @@ func (v *App) Entries(ctx context.Context, in wire.EntriesArgs) (wire.EntriesRes
 		from, to = max(h.LogLen-in.Tail, 0), h.LogLen
 	}
 	if from < 0 || to < from {
-		return wire.EntriesResult{}, invalid("区间 [%d, %d) 不合法", from, to)
+		return wire.EntriesResult{}, invalid("invalid range [%d, %d)", from, to)
 	}
 	es, err := v.o.DB.Entries(ctx, in.Session, from, to)
 	if err != nil {
@@ -1108,10 +1108,10 @@ func (v *App) Send(ctx context.Context, in wire.SendArgs) (wire.SendResult, erro
 
 func needClientID(id string) error {
 	if id == "" {
-		return Errorf(wire.CodeBadRequest, "缺少 client_id")
+		return Errorf(wire.CodeBadRequest, "missing client_id")
 	}
 	if len(id) > 128 {
-		return invalid("client_id 超过 128 字节")
+		return invalid("client_id exceeds 128 bytes")
 	}
 	return nil
 }
@@ -1119,7 +1119,7 @@ func needClientID(id string) error {
 // content 输入部件 → 内核内容。只收文本与媒体；媒体必须引用本服务的工件（先 artifact.put 再引用）。
 func (v *App) content(parts []wire.Part, text string) (session.Content, error) {
 	if (len(parts) > 0) == (text != "") {
-		return nil, Errorf(wire.CodeBadRequest, "content 与 text 必须给且只给一个")
+		return nil, Errorf(wire.CodeBadRequest, "exactly one of content and text is required")
 	}
 	if text != "" {
 		return session.Content{session.NewTextPart(text)}, nil
@@ -1132,25 +1132,25 @@ func (v *App) content(parts []wire.Part, text string) (session.Content, error) {
 		case "media":
 			m := p.Media
 			if m == nil || m.MIME == "" {
-				return nil, invalid("第 %d 个部件：media 须带 ref 与 mime", i+1)
+				return nil, invalid("part %d: media requires ref and mime", i+1)
 			}
 			hash, ok := artifactHash(m.Ref)
 			if !ok {
-				return nil, invalid("第 %d 个部件：ref 须是 %s<sha256>", i+1, toolhub.ArtifactPrefix)
+				return nil, invalid("part %d: ref must be %s<sha256>", i+1, toolhub.ArtifactPrefix)
 			}
 			art := v.o.Artifacts
 			if art == nil { // 没有工件存储就核对不了引用，也取不回内容
-				return nil, Errorf(wire.CodeUnsupported, "没有工件存储，不能发送媒体")
+				return nil, Errorf(wire.CodeUnsupported, "no artifact store; cannot send media")
 			}
 			data, err := art.Get(hash)
 			if err != nil {
-				return nil, invalid("第 %d 个部件：工件 %s 不存在", i+1, m.Ref)
+				return nil, invalid("part %d: artifact %s does not exist", i+1, m.Ref)
 			}
 			// 大小以实际内容为准，不信客户端报的；引用统一成小写哈希。
 			out = append(out, session.Part{Kind: "media", Media: &session.MediaRef{URI: toolhub.ArtifactPrefix + hash,
 				MIME: m.MIME, Bytes: uint64(len(data)), SHA256: hash}})
 		default:
-			return nil, invalid("第 %d 个部件：不支持的种类 %q（只收 text / media）", i+1, p.Kind)
+			return nil, invalid("part %d: unsupported kind %q (only text and media)", i+1, p.Kind)
 		}
 	}
 	return out, nil
@@ -1177,7 +1177,7 @@ func (v *App) Steer(ctx context.Context, in wire.SteerArgs) (wire.Empty, error) 
 		return wire.Empty{}, err
 	}
 	if in.Text == "" {
-		return wire.Empty{}, Errorf(wire.CodeBadRequest, "缺少 text")
+		return wire.Empty{}, Errorf(wire.CodeBadRequest, "missing text")
 	}
 	hd, err := v.running(ctx, in.Session)
 	if err != nil {
@@ -1224,7 +1224,7 @@ func (v *App) idleHandle(ctx context.Context, id string) (host.Handle, error) {
 		return host.Handle{}, err
 	}
 	if hd.InTurn() {
-		return host.Handle{}, fmt.Errorf("%w: 会话 %s 有进行中的回合", session.ErrNotIdle, id)
+		return host.Handle{}, fmt.Errorf("%w: session %s has a turn in progress", session.ErrNotIdle, id)
 	}
 	return hd, nil
 }
@@ -1238,10 +1238,10 @@ func (v *App) Rewind(ctx context.Context, in wire.RewindArgs) (wire.RewindResult
 		return wire.RewindResult{}, err
 	}
 	if in.ToTurn == 0 {
-		return wire.RewindResult{}, invalid("to_turn 须 ≥ 1")
+		return wire.RewindResult{}, invalid("to_turn must be >= 1")
 	}
 	if in.RestoreFiles && v.o.Changes == nil {
-		return wire.RewindResult{}, Errorf(wire.CodeUnsupported, "未装文件检查点插件（checkpoint），不能同时还原文件")
+		return wire.RewindResult{}, Errorf(wire.CodeUnsupported, "checkpoint plugin not installed; cannot revert files")
 	}
 	hd, err := v.idleHandle(ctx, in.Session)
 	if err != nil {
@@ -1263,7 +1263,7 @@ func (v *App) Compact(ctx context.Context, in wire.CompactArgs) (wire.CompactRes
 		return wire.CompactResult{}, err
 	}
 	if v.o.Compactor == nil {
-		return wire.CompactResult{}, Errorf(wire.CodeUnsupported, "未装配 compact-basic 插件")
+		return wire.CompactResult{}, Errorf(wire.CodeUnsupported, "compact-basic plugin not installed")
 	}
 	hd, err := v.idleHandle(ctx, in.Session)
 	if err != nil {
@@ -1274,7 +1274,7 @@ func (v *App) Compact(ctx context.Context, in wire.CompactArgs) (wire.CompactRes
 		return wire.CompactResult{}, err
 	}
 	if in.IfCursor != nil && l.Cursor != *in.IfCursor { // 先拒掉，免得白花一次总结；actor 执行前还会再核对
-		return wire.CompactResult{}, fmt.Errorf("%w: 期望 %d，当前 %d", host.ErrStale, *in.IfCursor, l.Cursor)
+		return wire.CompactResult{}, fmt.Errorf("%w: expected %d, current %d", host.ErrStale, *in.IfCursor, l.Cursor)
 	}
 	h := l.Snapshot.Header
 	if in.Upto != nil && *in.Upto == h.CompactionBase && h.CompactionBase > 0 {
@@ -1289,7 +1289,7 @@ func (v *App) Compact(ctx context.Context, in wire.CompactArgs) (wire.CompactRes
 	var meta map[string]any
 	if in.Upto != nil {
 		if !core.CanCompact(*in.Upto) {
-			return wire.CompactResult{}, invalid("upto=%d 不是合法的压缩点（不能拆开工具调用与结果，不能早于当前压缩点 %d）", *in.Upto, h.CompactionBase)
+			return wire.CompactResult{}, invalid("upto=%d is not a valid compaction point (cannot split a tool call from its result or precede the current point %d)", *in.Upto, h.CompactionBase)
 		}
 		view, meta, err = c.At(ctx, in.Session, core, *in.Upto)
 	} else if view, meta, err = c.Plan(ctx, in.Session, core, true); err == nil && view == nil {
@@ -1299,7 +1299,7 @@ func (v *App) Compact(ctx context.Context, in wire.CompactArgs) (wire.CompactRes
 		return wire.CompactResult{}, err
 	}
 	if view == nil {
-		return wire.CompactResult{}, invalid("没有可压缩的内容")
+		return wire.CompactResult{}, invalid("nothing to compact")
 	}
 	sum := ""
 	for _, p := range view.Summary {
@@ -1333,7 +1333,7 @@ func (v *App) Fork(ctx context.Context, in wire.ForkArgs) (wire.SessionSnapshot,
 		return wire.SessionSnapshot{}, err
 	}
 	if in.Origin != "" && in.Origin != "fork" && in.Origin != "side" {
-		return wire.SessionSnapshot{}, invalid("origin 只能是 fork / side，得到 %q", in.Origin)
+		return wire.SessionSnapshot{}, invalid("origin must be fork or side, got %q", in.Origin)
 	}
 	to := in.To
 	switch {
@@ -1347,12 +1347,12 @@ func (v *App) Fork(ctx context.Context, in wire.ForkArgs) (wire.SessionSnapshot,
 		return wire.SessionSnapshot{}, err
 	}
 	if hd, ok := v.o.Host.Get(in.Session); ok && hd.InTurn() {
-		return wire.SessionSnapshot{}, fmt.Errorf("%w: 来源会话 %s 有进行中的回合", session.ErrNotIdle, in.Session)
+		return wire.SessionSnapshot{}, fmt.Errorf("%w: source session %s has a turn in progress", session.ErrNotIdle, in.Session)
 	}
 	upto := -1
 	if in.Upto != nil {
 		if in.UptoTurn != nil {
-			return wire.SessionSnapshot{}, invalid("upto 与 upto_turn 互斥")
+			return wire.SessionSnapshot{}, invalid("upto and upto_turn are mutually exclusive")
 		}
 		upto = *in.Upto
 	}
@@ -1372,7 +1372,7 @@ func (v *App) Fork(ctx context.Context, in wire.ForkArgs) (wire.SessionSnapshot,
 				return v.snapshot(ctx, to)
 			}
 		}
-		return wire.SessionSnapshot{}, conflict(wire.ConflictExists, "会话 %s 已存在", to)
+		return wire.SessionSnapshot{}, conflict(wire.ConflictExists, "session %s already exists", to)
 	}
 	return v.snapshot(ctx, to)
 }
@@ -1418,7 +1418,7 @@ func (v *App) uptoTurn(ctx context.Context, id string, n uint32) (int, error) {
 		}
 	}
 	if n < 1 || n > last+1 {
-		return 0, invalid("upto_turn=%d 超出范围 [1, %d]", n, last+1)
+		return 0, invalid("upto_turn=%d out of range [1, %d]", n, last+1)
 	}
 	if n == last+1 {
 		return -1, nil
@@ -1428,7 +1428,7 @@ func (v *App) uptoTurn(ctx context.Context, id string, n uint32) (int, error) {
 		return 0, err
 	}
 	if !ok {
-		return 0, invalid("回合 %d 不存在", n)
+		return 0, invalid("turn %d does not exist", n)
 	}
 	return from, nil
 }
@@ -1483,14 +1483,14 @@ func (v *App) Settings(ctx context.Context, in wire.SettingsArgs) (wire.Settings
 		return wire.SettingsResult{Settings: cur, Committed: true}, nil
 	}
 	if in.WorkMode != nil && *in.WorkMode != "" && !workmode.Valid(*in.WorkMode) {
-		return wire.SettingsResult{}, invalid("工作方式 %q 不认识（可选：execute / plan）", *in.WorkMode)
+		return wire.SettingsResult{}, invalid("unknown work mode %q (execute or plan)", *in.WorkMode)
 	}
 	if in.Model != nil {
 		if v.o.Models == nil {
-			return wire.SettingsResult{}, Errorf(wire.CodeUnsupported, "没有可选的模型目录")
+			return wire.SettingsResult{}, Errorf(wire.CodeUnsupported, "no model catalog")
 		}
 		if err := v.o.Models.Check(*in.Model); err != nil {
-			return wire.SettingsResult{}, invalid("模型 %q 不可用：%v", *in.Model, err)
+			return wire.SettingsResult{}, invalid("model %q unavailable: %v", *in.Model, err)
 		}
 	}
 	hd, err := v.o.Host.OpenExisting(ctx, in.Session)
@@ -1498,7 +1498,7 @@ func (v *App) Settings(ctx context.Context, in wire.SettingsArgs) (wire.Settings
 		return wire.SettingsResult{}, err
 	}
 	if in.Reasoning != nil && *in.Reasoning != "" && !wire.ValidReasoning(*in.Reasoning) {
-		return wire.SettingsResult{}, invalid("推理强度 %q 不认识（可选：%s）", *in.Reasoning, strings.Join(wire.ReasoningEfforts, " / "))
+		return wire.SettingsResult{}, invalid("unknown reasoning effort %q (one of %s)", *in.Reasoning, strings.Join(wire.ReasoningEfforts, " / "))
 	}
 	ok := true
 	if in.MaxSteps != nil || in.Model != nil || in.Reasoning != nil {
@@ -1544,19 +1544,19 @@ func (v *App) WorkspaceList(_ context.Context, _ wire.Empty) (wire.WorkspaceList
 // WorkspaceOpen 切换工作区。有会话正在跑回合时拒绝（not_idle）：切换会关掉本工作区的运行时，进行中的回合会被打断。
 func (v *App) WorkspaceOpen(ctx context.Context, in wire.WorkspaceOpenArgs) (wire.WorkspaceOpenResult, error) {
 	if v.o.Workspaces == nil {
-		return wire.WorkspaceOpenResult{}, Errorf(wire.CodeUnsupported, "这个应用不支持切换工作区")
+		return wire.WorkspaceOpenResult{}, Errorf(wire.CodeUnsupported, "this app does not support switching workspaces")
 	}
 	if strings.TrimSpace(in.Path) == "" {
-		return wire.WorkspaceOpenResult{}, invalid("path 不能为空")
+		return wire.WorkspaceOpenResult{}, invalid("path must not be empty")
 	}
 	if n, err := v.runningSessions(ctx); err != nil {
 		return wire.WorkspaceOpenResult{}, err
 	} else if n > 0 {
-		return wire.WorkspaceOpenResult{}, Errorf(wire.CodeNotIdle, "还有 %d 个会话正在运行：先停止或等它们结束再切换工作区", n)
+		return wire.WorkspaceOpenResult{}, Errorf(wire.CodeNotIdle, "%d session(s) running: stop them or wait before switching workspaces", n)
 	}
 	ws, err := v.o.Workspaces.Open(ctx, in.Path)
 	if err != nil {
-		return wire.WorkspaceOpenResult{}, invalid("打不开工作区：%v", err)
+		return wire.WorkspaceOpenResult{}, invalid("cannot open workspace: %v", err)
 	}
 	return wire.WorkspaceOpenResult{Workspace: ws}, nil
 }
@@ -1591,13 +1591,13 @@ func (v *App) runningIDs(ctx context.Context) ([]string, error) {
 // 下次打开时按恢复机制处理）。测试调小。
 var reloadCancelWait = 5 * time.Second
 
-// WorkspaceReload 在当前目录上重建运行时（客户端改进 M3：改 BYOK、默认模型、登录退出、插件开关后生效，不用重启进程）。
+// WorkspaceReload 在当前目录上重建运行时（客户端改进 M3：改自定义模型、默认模型、登录退出、插件开关后生效，不用重启进程）。
 // 有回合在跑时返回 not_idle（details.sessions 列出会话）；force 时先取消这些回合再重建。新配置起不来、回到了原来的
 // 配置时返回 invalid，details.reverted = true（运行时照常可用）。成功后旧连接随后断开，客户端重连并重新 hello。
 func (v *App) WorkspaceReload(ctx context.Context, in wire.WorkspaceReloadArgs) (wire.WorkspaceReloadResult, error) {
 	rl, ok := v.o.Workspaces.(Reloader)
 	if v.o.Workspaces == nil || !ok {
-		return wire.WorkspaceReloadResult{}, Errorf(wire.CodeUnsupported, "这个应用不支持重建运行时（命令行：退出后重新运行）")
+		return wire.WorkspaceReloadResult{}, Errorf(wire.CodeUnsupported, "this app does not support rebuilding the runtime (CLI: exit and run again)")
 	}
 	ids, err := v.runningIDs(ctx)
 	if err != nil {
@@ -1605,7 +1605,7 @@ func (v *App) WorkspaceReload(ctx context.Context, in wire.WorkspaceReloadArgs) 
 	}
 	if len(ids) > 0 {
 		if !in.Force {
-			e := Errorf(wire.CodeNotIdle, "还有 %d 个会话正在运行：重建会中断它们（带 force 先取消再重建）", len(ids))
+			e := Errorf(wire.CodeNotIdle, "%d session(s) running: rebuilding interrupts them (use force to cancel and rebuild)", len(ids))
 			e.Details = map[string]any{"running": len(ids), "sessions": ids}
 			return wire.WorkspaceReloadResult{}, e
 		}
@@ -1619,7 +1619,7 @@ func (v *App) WorkspaceReload(ctx context.Context, in wire.WorkspaceReloadArgs) 
 			e.Details = map[string]any{"reverted": true}
 			return wire.WorkspaceReloadResult{}, e
 		}
-		return wire.WorkspaceReloadResult{}, Errorf(wire.CodeInternal, "重建运行时失败：%v", err)
+		return wire.WorkspaceReloadResult{}, Errorf(wire.CodeInternal, "failed to rebuild runtime: %v", err)
 	}
 	return wire.WorkspaceReloadResult{Workspace: ws}, nil
 }
@@ -1647,7 +1647,7 @@ func (v *App) cancelAll(ctx context.Context, ids []string) {
 // ModelsList 可选模型（别名在前）与新会话的缺省模型。没有装配目录时返回 unsupported。
 func (v *App) ModelsList(_ context.Context, _ wire.Empty) (wire.ModelsListResult, error) {
 	if v.o.Models == nil {
-		return wire.ModelsListResult{}, Errorf(wire.CodeUnsupported, "没有可选的模型目录")
+		return wire.ModelsListResult{}, Errorf(wire.CodeUnsupported, "no model catalog")
 	}
 	r := v.o.Models.List()
 	if r.Models == nil {
@@ -1669,7 +1669,8 @@ func (v *App) apply(id string, hd host.Handle, c host.Command) (bool, error) {
 	case <-time.After(applyWait):
 		go func() {
 			if err := <-done; err != nil {
-				v.NoticeFrom(id, wire.NoticeError, "settings", fmt.Sprintf("[设置未能保存：%v]", err))
+				v.NoticeKey(id, wire.NoticeError, "settings", NoticeKeySettingsSaveFailed, map[string]string{"error": err.Error()},
+					fmt.Sprintf("[settings not saved: %v]", err))
 			}
 		}()
 		return false, nil
@@ -1733,7 +1734,7 @@ func (v *App) ModeSet(ctx context.Context, in wire.ModeSetArgs) (wire.ModeSetRes
 		return wire.ModeSetResult{}, err
 	}
 	if in.Mode == "" {
-		return wire.ModeSetResult{}, Errorf(wire.CodeBadRequest, "缺少 mode")
+		return wire.ModeSetResult{}, Errorf(wire.CodeBadRequest, "missing mode")
 	}
 	if err := v.exists(ctx, in.Session); err != nil { // 先查会话，再改内存档位
 		return wire.ModeSetResult{}, err
@@ -1761,7 +1762,7 @@ func (v *App) ModeShow(ctx context.Context, in wire.ModeShowArgs) (wire.ModeShow
 		return wire.ModeShowResult{}, err
 	}
 	if in.Session == "" && in.Mode == "" {
-		return wire.ModeShowResult{}, Errorf(wire.CodeBadRequest, "缺少 session 或 mode")
+		return wire.ModeShowResult{}, Errorf(wire.CodeBadRequest, "missing session or mode")
 	}
 	mode := in.Mode
 	if in.Session != "" {
@@ -1793,21 +1794,21 @@ func (v *App) ModeShow(ctx context.Context, in wire.ModeShowArgs) (wire.ModeShow
 func (v *App) ArtifactGet(ctx context.Context, in wire.ArtifactGetArgs) (wire.ArtifactGetResult, error) {
 	art := v.o.Artifacts
 	if art == nil {
-		return wire.ArtifactGetResult{}, Errorf(wire.CodeUnsupported, "没有工件存储")
+		return wire.ArtifactGetResult{}, Errorf(wire.CodeUnsupported, "no artifact store")
 	}
 	if err := v.exists(ctx, in.Session); err != nil {
 		return wire.ArtifactGetResult{}, err
 	}
 	hash, ok := artifactHash(in.Ref)
 	if !ok {
-		return wire.ArtifactGetResult{}, invalid("ref 须是 %s<sha256>", toolhub.ArtifactPrefix)
+		return wire.ArtifactGetResult{}, invalid("ref must be %s<sha256>", toolhub.ArtifactPrefix)
 	}
 	data, err := art.Get(hash)
 	if err != nil {
-		return wire.ArtifactGetResult{}, Errorf(wire.CodeNotFound, "工件 %s 不存在", in.Ref)
+		return wire.ArtifactGetResult{}, Errorf(wire.CodeNotFound, "artifact %s does not exist", in.Ref)
 	}
 	if in.Offset < 0 || in.Length < 0 || in.Offset > len(data) {
-		return wire.ArtifactGetResult{}, invalid("区间不合法：offset=%d length=%d，工件共 %d 字节", in.Offset, in.Length, len(data))
+		return wire.ArtifactGetResult{}, invalid("invalid range: offset=%d length=%d, artifact is %d bytes", in.Offset, in.Length, len(data))
 	}
 	n := in.Length
 	if n == 0 || n > MaxArtifactChunk {
@@ -1827,20 +1828,20 @@ func (v *App) ArtifactGet(ctx context.Context, in wire.ArtifactGetArgs) (wire.Ar
 func (v *App) ArtifactPut(ctx context.Context, in wire.ArtifactPutArgs) (wire.ArtifactPutResult, error) {
 	art := v.o.Artifacts
 	if art == nil {
-		return wire.ArtifactPutResult{}, Errorf(wire.CodeUnsupported, "没有工件存储")
+		return wire.ArtifactPutResult{}, Errorf(wire.CodeUnsupported, "no artifact store")
 	}
 	if err := v.exists(ctx, in.Session); err != nil {
 		return wire.ArtifactPutResult{}, err
 	}
 	if in.MIME == "" || len(in.MIME) > 255 {
-		return wire.ArtifactPutResult{}, Errorf(wire.CodeBadRequest, "缺少 mime 或超过 255 字节")
+		return wire.ArtifactPutResult{}, Errorf(wire.CodeBadRequest, "mime missing or exceeds 255 bytes")
 	}
 	data, err := base64.StdEncoding.DecodeString(in.Base64)
 	if err != nil {
-		return wire.ArtifactPutResult{}, Errorf(wire.CodeBadRequest, "base64 解码失败：%v", err)
+		return wire.ArtifactPutResult{}, Errorf(wire.CodeBadRequest, "base64 decode failed: %v", err)
 	}
 	if len(data) == 0 || len(data) > MaxArtifactPut {
-		return wire.ArtifactPutResult{}, invalid("工件大小 %d 字节，须在 1 到 %d 之间", len(data), MaxArtifactPut)
+		return wire.ArtifactPutResult{}, invalid("artifact size %d bytes must be between 1 and %d", len(data), MaxArtifactPut)
 	}
 	h, err := art.Put(ctx, in.Session, in.MIME, data)
 	if err != nil {
@@ -1852,7 +1853,7 @@ func (v *App) ArtifactPut(ctx context.Context, in wire.ArtifactPutArgs) (wire.Ar
 // Trace 渲染一次任务经过的会话、信封、工具与拒绝原因。
 func (v *App) Trace(ctx context.Context, in wire.TraceArgs) (wire.TraceResult, error) {
 	if in.Trace == "" {
-		return wire.TraceResult{}, Errorf(wire.CodeBadRequest, "缺少 trace")
+		return wire.TraceResult{}, Errorf(wire.CodeBadRequest, "missing trace")
 	}
 	out, err := RenderTrace(ctx, v.o.DB, in.Trace)
 	return wire.TraceResult{Text: out}, err
@@ -1864,7 +1865,7 @@ func (v *App) Trace(ctx context.Context, in wire.TraceArgs) (wire.TraceResult, e
 // 以及改过、重启后才生效的状态（pending）。
 func (v *App) PluginsList(_ context.Context, _ wire.Empty) (wire.PluginsListResult, error) {
 	if v.o.Profile == nil {
-		return wire.PluginsListResult{}, Errorf(wire.CodeUnsupported, "未提供插件信息")
+		return wire.PluginsListResult{}, Errorf(wire.CodeUnsupported, "plugin information not available")
 	}
 	var next *component.Profile
 	out := wire.PluginsListResult{Plugins: []wire.PluginInfo{}, Scopes: []wire.ProfileScope{}}
@@ -1932,7 +1933,7 @@ func jsonEqual(a, b any) bool {
 func (v *App) PluginsSet(_ context.Context, in wire.PluginsSetArgs) (wire.PluginsSetResult, error) {
 	pr := v.o.Profiles
 	if pr == nil || v.o.Profile == nil {
-		return wire.PluginsSetResult{}, Errorf(wire.CodeUnsupported, "plugins.set 未提供：请编辑 profile.toml 后重启")
+		return wire.PluginsSetResult{}, Errorf(wire.CodeUnsupported, "plugins.set not available: edit profile.toml and restart")
 	}
 	var scope *wire.ProfileScope
 	for _, s := range pr.Scopes() {
@@ -1941,21 +1942,21 @@ func (v *App) PluginsSet(_ context.Context, in wire.PluginsSetArgs) (wire.Plugin
 		}
 	}
 	if scope == nil {
-		return wire.PluginsSetResult{}, invalid("scope 只能是 user / project，得到 %q", in.Scope)
+		return wire.PluginsSetResult{}, invalid("scope must be user or project, got %q", in.Scope)
 	}
 	if !scope.Writable {
 		return wire.PluginsSetResult{}, Errorf(wire.CodeDenied, "%s", scope.Reason)
 	}
 	if _, ok := component.MetaOf(in.Name); !ok {
-		return wire.PluginsSetResult{}, Errorf(wire.CodeNotFound, "插件 %s 未登记", in.Name)
+		return wire.PluginsSetResult{}, Errorf(wire.CodeNotFound, "plugin %s is not registered", in.Name)
 	}
 	if in.Enabled != nil && !*in.Enabled && slices.Contains(v.o.Profile.Mandatory, in.Name) {
-		return wire.PluginsSetResult{}, invalid("%s 是强制插件，不能停用", in.Name)
+		return wire.PluginsSetResult{}, invalid("%s is mandatory and cannot be disabled", in.Name)
 	}
 	if in.Scope == "project" {
 		for _, k := range pr.Denied()[in.Name] {
 			if _, ok := in.Config[k]; ok {
-				return wire.PluginsSetResult{}, Errorf(wire.CodeDenied, "项目 profile 不能设 %s.%s（端点、凭据、存储位置只能写在用户级）", in.Name, k)
+				return wire.PluginsSetResult{}, Errorf(wire.CodeDenied, "project profile cannot set %s.%s (endpoints, credentials and storage locations are user-level only)", in.Name, k)
 			}
 		}
 	}
@@ -1967,7 +1968,7 @@ func (v *App) PluginsSet(_ context.Context, in wire.PluginsSetArgs) (wire.Plugin
 	}
 	set, err := component.CheckConfig(in.Name, set)
 	if err != nil {
-		return wire.PluginsSetResult{}, invalid("%s 的配置不合法：%v", in.Name, err)
+		return wire.PluginsSetResult{}, invalid("invalid config for %s: %v", in.Name, err)
 	}
 	edit := map[string]any{}
 	for k, val := range in.Config {
@@ -1981,7 +1982,7 @@ func (v *App) PluginsSet(_ context.Context, in wire.PluginsSetArgs) (wire.Plugin
 	existed := backup != nil
 	rev, err := pr.Edit(in.Scope, component.PluginEdit{Name: in.Name, Enabled: in.Enabled, Config: edit}, in.IfRevision)
 	if errors.Is(err, component.ErrRevision) {
-		return wire.PluginsSetResult{}, conflict(wire.ConflictStale, "%s 已被别处修改，请刷新后再改", scope.Path)
+		return wire.PluginsSetResult{}, conflict(wire.ConflictStale, "%s was modified elsewhere; refresh and retry", scope.Path)
 	}
 	if err != nil {
 		return wire.PluginsSetResult{}, err
@@ -1993,7 +1994,7 @@ func (v *App) PluginsSet(_ context.Context, in wire.PluginsSetArgs) (wire.Plugin
 		} else {
 			_ = os.Remove(scope.Path)
 		}
-		return wire.PluginsSetResult{}, invalid("改完后 profile 合并失败，已还原：%v", err)
+		return wire.PluginsSetResult{}, invalid("profile merge failed after the edit; reverted: %v", err)
 	}
 	out := wire.PluginsSetResult{Revision: rev, Restart: true}
 	for _, st := range v.o.Profile.States() {
@@ -2010,14 +2011,14 @@ const MaxFiles = 200
 // WorkspaceFiles 列工作区文件（界面 @ 文件的候选）。没有装配时返回 unsupported。
 func (v *App) WorkspaceFiles(ctx context.Context, in wire.FilesArgs) (wire.FilesResult, error) {
 	if v.o.Files == nil {
-		return wire.FilesResult{}, Errorf(wire.CodeUnsupported, "未提供工作区文件列表")
+		return wire.FilesResult{}, Errorf(wire.CodeUnsupported, "workspace file list not available")
 	}
 	limit := in.Limit
 	if limit <= 0 || limit > MaxFiles {
 		limit = 50
 	}
 	if len(in.Query) > 256 {
-		return wire.FilesResult{}, invalid("query 超过 256 字节")
+		return wire.FilesResult{}, invalid("query exceeds 256 bytes")
 	}
 	fs, trunc, err := v.o.Files(ctx, in.Query, limit)
 	if err != nil {
@@ -2032,7 +2033,7 @@ func (v *App) WorkspaceFiles(ctx context.Context, in wire.FilesArgs) (wire.Files
 // need 会话 id 必填。
 func need(id string) error {
 	if id == "" {
-		return Errorf(wire.CodeBadRequest, "缺少 session")
+		return Errorf(wire.CodeBadRequest, "missing session")
 	}
 	return nil
 }
@@ -2040,7 +2041,7 @@ func need(id string) error {
 // modes 权限档位；未装权限插件返回 unsupported。
 func (a *App) modes() (Modes, error) {
 	if a.o.Modes == nil {
-		return nil, Errorf(wire.CodeUnsupported, "未装权限插件")
+		return nil, Errorf(wire.CodeUnsupported, "permission plugin not installed")
 	}
 	return a.o.Modes, nil
 }

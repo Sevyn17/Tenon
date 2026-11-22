@@ -47,7 +47,7 @@ func (l ModelList) List() wire.ModelsListResult {
 	return out
 }
 
-// credOf 提供方的凭据说明。Secrets 实现了 assemble.CredentialDescriber 时听它的（产品知道 byok:、平台账号这类引用），
+// credOf 提供方的凭据说明。Secrets 实现了 assemble.CredentialDescriber 时听它的（产品知道自己的凭据引用格式），
 // 否则按缺省规则：空 key 不需要凭据，env: 是环境变量；可用性看 Secrets.Resolve 能否解析（与以前一样）。
 func (l ModelList) credOf(cat *modelhub.Catalog, name string) cred {
 	p, ok := cat.Provider(name)

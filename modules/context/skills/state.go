@@ -2,7 +2,7 @@ package skills
 
 // 单个技能的启停记录（Mortise 客户端改进 M11，配置T18；docs/50 5.1「全局一份定义 + 按范围记录启用」）。
 //
-// 记录放在用户级目录的 skills.toml（appid.Home()，Mortise 为 ~/.mortise/skills.toml），不写进项目仓库：
+// 记录放在用户级目录的 skills.toml（appid.Home()，如 ~/.<app>/skills.toml），不写进项目仓库：
 //
 //	[global]
 //	disabled = ["pdf"]

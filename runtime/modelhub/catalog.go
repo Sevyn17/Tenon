@@ -107,8 +107,8 @@ func (c *Catalog) Resolve(alias string) (Plan, error) {
 }
 
 // bare 裸模型名 → 目录键。命中多个时取层级最低的（内置目录胜过插件、用户层同名的模型）：裸名指大家熟知的
-// 那个模型，插件或用户加的同名模型要写全 provider/model（客户端改进 M3：BYOK、平台网关常有与内置同名的模型，
-// 否则 deepseek-chat 这类缺省名一配 BYOK 就解析不了，或被同名的网关模型悄悄抢走）。
+// 那个模型，插件或用户加的同名模型要写全 provider/model（客户端改进 M3：用户自定义模型、网关常有与内置同名的模型，
+// 否则 deepseek-chat 这类缺省名一配自定义模型就解析不了，或被同名的网关模型悄悄抢走）。
 // unique = 最低层只有一个命中；否则 k 是最低层里键最小的（Lookup 用，结果确定），Resolve 仍按未知处理。
 // 调用方持读锁。
 func (c *Catalog) bare(name string) (k string, unique bool) {

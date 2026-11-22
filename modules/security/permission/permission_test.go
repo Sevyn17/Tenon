@@ -501,7 +501,7 @@ func TestSessionsNotice(t *testing.T) {
 	later := time.Now().Add(2 * time.Second)
 	os.WriteFile(f, []byte("base = \"workspace\"\n"), 0o644)
 	os.Chtimes(f, later, later)
-	if n := s.Notice("x"); !strings.Contains(n, "已更新") {
+	if n := s.Notice("x"); !strings.Contains(n, "was updated") {
 		t.Fatalf("应提示更新: %q", n)
 	}
 	if s.Policy("x").Decide(wr, nil).Action != Allow {
@@ -511,7 +511,7 @@ func TestSessionsNotice(t *testing.T) {
 		t.Fatal("子会话跟随顶层")
 	}
 	os.Remove(f)
-	if n := s.Notice("x"); !strings.Contains(n, "不存在") || s.Def("x").ID != Ask {
+	if n := s.Notice("x"); !strings.Contains(n, "no longer exists") || s.Def("x").ID != Ask {
 		t.Fatalf("档位删除后按 ask: %q", n)
 	}
 }
@@ -523,10 +523,10 @@ func TestShortLabel(t *testing.T) {
 	}
 	// 内置档位：简称用显示名（中文短名）；完整标签是 "id 显示名"
 	for id, want := range map[Mode]string{
-		ReadOnly:  "仅可查看",
-		Ask:       "每次询问",
-		Workspace: "工作区允许",
-		Full:      "完全权限",
+		ReadOnly:  "Read only",
+		Ask:       "Ask every time",
+		Workspace: "Workspace",
+		Full:      "Full access",
 	} {
 		d, ok := r.Get(id)
 		if !ok {

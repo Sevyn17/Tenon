@@ -16,7 +16,7 @@ type plug struct{}
 func init() { component.Register("ask-user", func() component.Component { return &plug{} }) }
 
 func (*plug) Meta() component.Meta {
-	return component.Meta{Name: "ask-user", Version: "0.1.0", Description: "提问工具：模型拿不准时向人提问并等回答", Default: true, Effects: []string{component.EffectTools}, Requires: []string{assemble.ServiceUI}}
+	return component.Meta{Name: "ask-user", Version: "0.1.0", Description: "Ask tool: the model asks a person and waits for the answer", Default: true, Effects: []string{component.EffectTools}, Requires: []string{assemble.ServiceUI}}
 }
 
 func (*plug) Setup(cx *component.Registrar) error {

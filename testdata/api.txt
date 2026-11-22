@@ -260,6 +260,7 @@ github.com/Sevyn17/tenon/std: method (PermModes) ExtKeys() (mode string, rules s
 github.com/Sevyn17/tenon/std: method (PermModes) Get(id string) github.com/Sevyn17/tenon/appapi.ModeState
 github.com/Sevyn17/tenon/std: method (PermModes) List() []github.com/Sevyn17/tenon/appapi.ModeInfo
 github.com/Sevyn17/tenon/std: method (PermModes) Notice(id string) string
+github.com/Sevyn17/tenon/std: method (PermModes) NoticeOf(id string) (string, map[string]string, string)
 github.com/Sevyn17/tenon/std: method (PermModes) RemoveMode(id string, revision string) (string, bool, error)
 github.com/Sevyn17/tenon/std: method (PermModes) SaveMode(in github.com/Sevyn17/tenon/appapi/wire.ModeDraft, revision string, create bool) (github.com/Sevyn17/tenon/appapi.ModeInfo, string, error)
 github.com/Sevyn17/tenon/std: method (PermModes) SessionAllow(tool string, args encoding/json.RawMessage) (rules []string, blocked []string)
@@ -510,7 +511,7 @@ github.com/Sevyn17/tenon/appapi/wire: type ModeShowResult struct{Mode string; It
 github.com/Sevyn17/tenon/appapi/wire: type ModelInfo struct{ID string; Alias bool; Provider string; Name string; Label string; ContextWindow int; Images bool; Reasoning bool; Efforts []string; Available bool; Reason string}
 github.com/Sevyn17/tenon/appapi/wire: type ModelRetrying struct{Attempt int; Max int; WaitMs int64; Reason string}
 github.com/Sevyn17/tenon/appapi/wire: type ModelsListResult struct{Models []ModelInfo; Default string; Effective *EffectiveModel}
-github.com/Sevyn17/tenon/appapi/wire: type Notice struct{Level string; Source string; Text string; Replay bool}
+github.com/Sevyn17/tenon/appapi/wire: type Notice struct{Level string; Source string; Text string; Key string; Args map[string]string; Replay bool}
 github.com/Sevyn17/tenon/appapi/wire: const NoticeError untyped string
 github.com/Sevyn17/tenon/appapi/wire: const NoticeInfo untyped string
 github.com/Sevyn17/tenon/appapi/wire: const NoticeKeep untyped int

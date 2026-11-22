@@ -59,7 +59,7 @@ func writePathOf(attrs map[string]any, args json.RawMessage) (string, bool) {
 func (e *Engine) Middleware() component.ToolCallMw {
 	return func(ctx context.Context, req component.ToolCallReq,
 		next func(context.Context, component.ToolCallReq) (component.ToolCallResp, error)) (component.ToolCallResp, error) {
-		if isJobTool(req.Tool) { // job_output / job_kill：后台 job 可能还在写，回合末补扫
+		if backgroundTask(req.Attrs) { // job_output / job_kill 等：后台工作可能还在写，回合末补扫
 			e.markPending(req.SessionID, TurnOf(req.Scope))
 		}
 		if req.Risk == toolhub.Read {
@@ -162,7 +162,7 @@ func (e *Engine) touch(session, key, rel string) {
 
 // AfterTurn 回合末对账（assemble.AfterTurn 点位）：对本回合碰过的文件重读一次，
 // 和最后一条记录不一致就补 drift（如后台钩子在调用返回后才改了文件）。
-// 本回合有 may_write_files 或 job_* 调用时先补扫一次（后台 job 在调用返回后写的文件，见 scan.go）。
+// 本回合有 may_write_files 或 background_task 调用时先补扫一次（后台 job 在调用返回后写的文件，见 scan.go）。
 func (e *Engine) AfterTurn(id string, _ session.EndReason) {
 	e.rescan(context.Background(), id)
 	e.Reconcile(context.Background(), id, 0)

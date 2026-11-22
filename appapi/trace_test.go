@@ -26,12 +26,12 @@ func TestRenderTrace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"trace tr", "会话：s1", "信封", "工具", "echo", "拒绝", "hop"} {
+	for _, want := range []string{"trace tr", "sessions: s1", "env", "tool", "echo", "deny", "hop"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("缺少 %q：\n%s", want, out)
 		}
 	}
-	if out, _ := RenderTrace(ctx, db, "none"); !strings.Contains(out, "没有记录") {
+	if out, _ := RenderTrace(ctx, db, "none"); !strings.Contains(out, "no records") {
 		t.Fatalf("没有事件时应说明：%s", out)
 	}
 }

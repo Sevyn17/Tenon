@@ -120,7 +120,7 @@ func (u *UI) Answer(askID, text string) error {
 			return nil
 		}
 	}
-	return Errorf(CodeNotFound, "没有待回答的问题 %s", askID)
+	return Errorf(CodeNotFound, "no pending question %s", askID)
 }
 
 // bindHost App.New 调用：之后的提问登记成交互。

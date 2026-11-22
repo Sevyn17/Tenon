@@ -240,6 +240,10 @@ type Notice struct {
 	Level  string `json:"level"`            // NoticeInfo / NoticeWarn / NoticeError
 	Source string `json:"source,omitempty"` // 来源：插件名或 permission、settings、ready、startup、workspace；空 = 没写
 	Text   string `json:"text"`
+	// Key 稳定的提示键（如 permission.mode_updated），供产品翻译；空 = 没有键，界面原样显示 Text。
+	// Text 是英文短句兜底。Args 是键的参数（如 mode、error），值都是字符串。
+	Key  string            `json:"key,omitempty"`
+	Args map[string]string `json:"args,omitempty"`
 	// Replay 这条是 hello 之后补发的旧提示（不是刚发生的）。
 	Replay bool `json:"replay,omitempty"`
 }
