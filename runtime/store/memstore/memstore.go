@@ -1070,6 +1070,30 @@ func (s *Store) GetDefinition(ctx context.Context, kind, id string, version int)
 	return vs[version-1].body, version, nil
 }
 
+// DefinitionByHash 实现 store.DefinitionHashLookup：按 id 升序、版本升序找第一个哈希相等的版本。
+func (s *Store) DefinitionByHash(ctx context.Context, kind, hash string) (string, string, int, error) {
+	if err := s.lock(); err != nil {
+		return "", "", 0, err
+	}
+	defer s.mu.Unlock()
+	prefix := kind + "\x00"
+	var keys []string
+	for k := range s.defs {
+		if strings.HasPrefix(k, prefix) {
+			keys = append(keys, k)
+		}
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		for i, d := range s.defs[k] {
+			if d.hash == hash {
+				return strings.TrimPrefix(k, prefix), d.body, i + 1, nil
+			}
+		}
+	}
+	return "", "", 0, store.ErrNotFound
+}
+
 // ListDefinitions 列出 kind 下出现过的定义 id（每个 id 一次，按 id 升序）。
 func (s *Store) ListDefinitions(ctx context.Context, kind string) ([]string, error) {
 	if err := s.lock(); err != nil {

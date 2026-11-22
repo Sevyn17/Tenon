@@ -255,6 +255,13 @@ type DefinitionStore interface {
 	ListDefinitions(ctx context.Context, kind string) ([]string, error)
 }
 
+// DefinitionHashLookup 可选：按内容哈希找定义版本（审计还原、按版本回滚用）。
+type DefinitionHashLookup interface {
+	// DefinitionByHash 返回 kind 下哈希等于 hash 的最早一个版本的 id、body 与版本号；没有返回 ErrNotFound。
+	// 同一内容可能出现在多个 id 或多个版本里，body 都相同，取最早的即可。
+	DefinitionByHash(ctx context.Context, kind, hash string) (id, body string, version int, err error)
+}
+
 // SessionMetaStore 可选：改会话行的标题与业务键（protocol 2 session.update，会话重命名、置顶）。
 // 不碰头部与日志，回合进行中也能改；变化同事务写一条 EventMeta 持久事件。
 type SessionMetaStore interface {

@@ -591,6 +591,20 @@ func testDefinitions(t *testing.T, st store.Store) {
 	if ids, err := db.ListDefinitions(ctx, "nope"); err != nil || len(ids) != 0 {
 		t.Fatalf("空定义类: %v %v", ids, err)
 	}
+	// 可选：按哈希查（DefinitionHashLookup）。
+	hl, ok := st.(store.DefinitionHashLookup)
+	if !ok {
+		return
+	}
+	if id, body, v, err := hl.DefinitionByHash(ctx, "agent", h1); err != nil || id != "a" || body != "one" || v != 1 {
+		t.Fatalf("按哈希查旧版本: %q %q %d %v", id, body, v, err)
+	}
+	if _, _, _, err := hl.DefinitionByHash(ctx, "agent", "nope"); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("不存在的哈希应 ErrNotFound: %v", err)
+	}
+	if _, _, _, err := hl.DefinitionByHash(ctx, "tool", h1); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("哈希按 kind 隔离: %v", err)
+	}
 }
 
 // —— inbox ——//

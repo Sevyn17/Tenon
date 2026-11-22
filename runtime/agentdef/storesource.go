@@ -71,7 +71,30 @@ func (s *StoreSource) key(r Ref) (string, error) {
 	}
 }
 
+// IsTombstone 报告存储里的一个版本是不是墓碑（空串）。
+//
+// 墓碑表示"这一层从此不再提供该定义"：最新版本是墓碑时，Load 按不存在处理、List 跳过，
+// 名字解析因此回落到下一层（如租户层副本删除后回到平台层的内置定义）。旧版本照样保留可查。
+// 空串不可能是合法定义：Encode 至少含 agent.toml。
+func IsTombstone(body string) bool { return body == "" }
+
+// latest 读某个存储键的最新版本；最新是墓碑时返回包裹 ErrNotFound 的错误。
+func (s *StoreSource) latest(ctx context.Context, key string) (string, error) {
+	body, _, err := s.Reader.GetDefinition(ctx, s.kind(), key, 0)
+	if errors.Is(err, store.ErrNotFound) {
+		return "", ErrNotFound
+	}
+	if err != nil {
+		return "", err
+	}
+	if IsTombstone(body) {
+		return "", ErrNotFound
+	}
+	return body, nil
+}
+
 // List 实现 Source：平台层全部、scope.Tenant 的租户层、scope.User 非空时该用户的用户层。
+// 最新版本是墓碑的定义不列出。
 func (s *StoreSource) List(ctx context.Context, scope Scope) ([]Ref, error) {
 	if s.Reader == nil {
 		return nil, errors.New("agentdef: StoreSource 未配置读取器")
@@ -83,24 +106,35 @@ func (s *StoreSource) List(ctx context.Context, scope Scope) ([]Ref, error) {
 	ownTenant := scope.Tenant != "" && scope.Tenant == s.Tenant
 	var out []Ref
 	for _, id := range ids {
+		var ref Ref
 		switch {
 		case strings.HasPrefix(id, "platform/"):
-			if name := strings.TrimPrefix(id, "platform/"); ValidName(name) {
-				out = append(out, Ref{Namespace: Platform, Name: name})
-			}
-		case strings.HasPrefix(id, "tenant/"):
-			if name := strings.TrimPrefix(id, "tenant/"); ownTenant && ValidName(name) {
-				out = append(out, Ref{Namespace: Tenant, Tenant: scope.Tenant, Name: name})
-			}
-		case strings.HasPrefix(id, UserPrefix):
-			u, n, ok := strings.Cut(strings.TrimPrefix(id, UserPrefix), "/")
-			if !ok || !ValidName(u) || !ValidName(n) {
+			name := strings.TrimPrefix(id, "platform/")
+			if !ValidName(name) {
 				continue
 			}
-			if ownTenant && scope.User != "" && u == scope.User {
-				out = append(out, Ref{Namespace: User, Tenant: scope.Tenant, User: u, Name: n})
+			ref = Ref{Namespace: Platform, Name: name}
+		case strings.HasPrefix(id, "tenant/"):
+			name := strings.TrimPrefix(id, "tenant/")
+			if !ownTenant || !ValidName(name) {
+				continue
 			}
+			ref = Ref{Namespace: Tenant, Tenant: scope.Tenant, Name: name}
+		case strings.HasPrefix(id, UserPrefix):
+			u, n, ok := strings.Cut(strings.TrimPrefix(id, UserPrefix), "/")
+			if !ok || !ValidName(u) || !ValidName(n) || !ownTenant || scope.User == "" || u != scope.User {
+				continue
+			}
+			ref = Ref{Namespace: User, Tenant: scope.Tenant, User: u, Name: n}
+		default:
+			continue
 		}
+		if _, err := s.latest(ctx, id); errors.Is(err, ErrNotFound) {
+			continue
+		} else if err != nil {
+			return nil, fmt.Errorf("agentdef: 读定义 %s：%w", ref, err)
+		}
+		out = append(out, ref)
 	}
 	sortRefs(out)
 	return out, nil
@@ -115,10 +149,7 @@ func (s *StoreSource) Load(ctx context.Context, ref Ref) (Agent, error) {
 	if err != nil {
 		return Agent{}, err
 	}
-	body, _, err := s.Reader.GetDefinition(ctx, s.kind(), key, 0)
-	if errors.Is(err, store.ErrNotFound) {
-		return Agent{}, fmt.Errorf("定义 %s：%w", ref, ErrNotFound)
-	}
+	body, err := s.latest(ctx, key)
 	if err != nil {
 		return Agent{}, fmt.Errorf("定义 %s：%w", ref, err)
 	}
@@ -155,4 +186,43 @@ func (s *StoreSource) Save(ctx context.Context, ref Ref, files Files) (int, stri
 		return 0, "", err
 	}
 	return s.Reader.PutDefinition(ctx, s.kind(), key, string(Encode(files)))
+}
+
+// Delete 给一份定义写墓碑版本（不删历史），返回墓碑的版本号。之后 Load 按不存在处理，
+// 名字解析回落到下一层。定义本来不存在或已是墓碑时返回 ErrNotFound，不重复写。
+func (s *StoreSource) Delete(ctx context.Context, ref Ref) (int, error) {
+	if s.Reader == nil {
+		return 0, errors.New("agentdef: StoreSource 未配置读取器")
+	}
+	key, err := s.key(ref)
+	if err != nil {
+		return 0, err
+	}
+	if _, err := s.latest(ctx, key); err != nil {
+		return 0, fmt.Errorf("定义 %s：%w", ref, err)
+	}
+	v, _, err := s.Reader.PutDefinition(ctx, s.kind(), key, "")
+	return v, err
+}
+
+// ByHash 按内容哈希（Agent.Version）取存储里的一份定义，用于审计还原"某会话当时用的定义"。
+// 存储没实现 store.DefinitionHashLookup 时返回 ErrUnsupported；找不到或命中墓碑返回 ErrNotFound。
+// 返回的定义按它所在的存储键解析，Agent.Version 恒等于 hash。
+func (s *StoreSource) ByHash(ctx context.Context, hash string) (Agent, error) {
+	hl, ok := s.Reader.(store.DefinitionHashLookup)
+	if !ok {
+		return Agent{}, errors.ErrUnsupported
+	}
+	id, body, _, err := hl.DefinitionByHash(ctx, s.kind(), hash)
+	if errors.Is(err, store.ErrNotFound) || (err == nil && IsTombstone(body)) {
+		return Agent{}, fmt.Errorf("定义哈希 %s：%w", hash, ErrNotFound)
+	}
+	if err != nil {
+		return Agent{}, err
+	}
+	files, err := Decode([]byte(body))
+	if err != nil {
+		return Agent{}, fmt.Errorf("定义哈希 %s：%w", hash, err)
+	}
+	return Parse(id, files)
 }
