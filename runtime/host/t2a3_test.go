@@ -161,6 +161,49 @@ func TestSuspendStopsTurnsUntilResume(t *testing.T) {
 	}
 }
 
+// T-5：Host.Resume 解除挂起后处理保留的信件；没挂起时是空操作；会话不存在报 ErrSessionNotFound。
+func TestHostResume(t *testing.T) {
+	ctx := context.Background()
+	r := newT2Rig(t, nil, &scriptedModel{}, 0, nil)
+	hd := mustOpen(t, r.h, "s1")
+	if err := hd.Do(Command{Kind: Send, ItemID: NewItemID(), Text: "一", Source: "user", Trust: "trusted"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := hd.Wait(); err != nil {
+		t.Fatal(err)
+	}
+	// 没挂起：空操作，不开回合。
+	before := len(messages(t, hd))
+	if err := r.h.Resume(ctx, "s1"); err != nil {
+		t.Fatalf("未挂起时 Resume: %v", err)
+	}
+	if err := hd.Wait(); err != nil {
+		t.Fatal(err)
+	}
+	if n := len(messages(t, hd)); n != before {
+		t.Fatalf("未挂起时 Resume 不应开回合：消息 %d → %d", before, n)
+	}
+	if err := r.h.Suspend(ctx, "s1", "budget"); err != nil {
+		t.Fatal(err)
+	}
+	if err := hd.Do(Command{Kind: Send, ItemID: NewItemID(), Text: "二", Source: "user", Trust: "trusted"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := hd.Wait(); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.h.Resume(ctx, "s1"); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, func() bool { return strings.Contains(textOf(messages(t, hd)), "二") })
+	if st, _ := r.db.SessionStatus(ctx, "s1"); st != store.StatusActive {
+		t.Fatalf("Resume 后状态 = %q，期望 active", st)
+	}
+	if err := r.h.Resume(ctx, "nope"); !errors.Is(err, ErrSessionNotFound) {
+		t.Fatalf("不存在的会话 Resume = %v，期望 ErrSessionNotFound", err)
+	}
+}
+
 // C1：Suspend 在会话自己的 actor 里执行（不在调用方 goroutine 里改会话核心）；
 // 回合进行中调用时等回合结束后再挂起。用 -race 跑能看出旧实现的数据竞争。
 func TestSuspendRunsInActor(t *testing.T) {

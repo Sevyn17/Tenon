@@ -300,6 +300,31 @@ func (h *Host) Suspend(ctx context.Context, id, reason string) error {
 	}
 }
 
+// resumeSuspendedOnly 标记 Host.Resume 发出的 Resume 命令：只解除挂起，不续跑中断的回合。
+const resumeSuspendedOnly = "suspended_only"
+
+// Resume 解除预算挂起（与 Suspend 对称，02 2.2）：会话回到活跃，信箱里保留的信件由主循环处理。
+// 会话没打开时先打开（挂起的会话打开后不开回合）；会话不存在返回 ErrSessionNotFound；
+// 没有挂起时什么都不做、返回 nil（不会续跑中断的回合，那是 Command{Kind: Resume} 的另一种用法）。
+func (h *Host) Resume(ctx context.Context, id string) error {
+	hd, err := h.OpenExisting(ctx, id)
+	if err != nil {
+		return err
+	}
+	c := Command{Kind: Resume, Text: resumeSuspendedOnly, done: make(chan error, 1)}
+	if err := hd.a.enqueue(c); err != nil {
+		return err
+	}
+	select {
+	case err := <-c.done:
+		return err
+	case <-hd.a.exit:
+		return ErrClosed
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
 // suspend 在 actor 里执行挂起（见 Host.Suspend）。
 func (a *actor) suspend(ctx context.Context, reason string) error {
 	if err := a.h.DB.SetSessionStatus(ctx, a.id, store.StatusActive, store.StatusSuspended, a.epoch); err != nil {
@@ -358,6 +383,9 @@ func (a *actor) idle(ctx context.Context, c Command) (bool, error) {
 				return false, err
 			}
 			a.h.publish(a.id, "session.resumed", nil)
+			return false, nil
+		}
+		if c.Text == resumeSuspendedOnly { // Host.Resume：只解除挂起，没挂起就什么都不做
 			return false, nil
 		}
 		need, err := core.Resume()
