@@ -38,23 +38,28 @@ func (m *Mailer) From() mail.Address { return m.from }
 
 // Send 以组件身份发一封信封（内核写入 origin=agent）。
 func (m *Mailer) Send(ctx context.Context, to mail.Address, body string) error {
+	_, err := m.SendEnvelope(ctx, mail.Envelope{To: to, Kind: mail.KindRequest, Mode: mail.ModeWake, Body: body})
+	return err
+}
+
+// SendEnvelope 以组件身份发一封调用方填写的信封，可设 Key、BudgetRef、Kind、Mode、Corr 等。
+// 发送者不能伪造：From 与 Via 一律改写为本组件；Origin 只能是 agent 或 external（human 改为 agent，
+// 组件不能冒充鉴权后的用户）。Hop、Trace、Caps 由内核投递时按自己的规则处理。
+// 返回补齐后（含 id）的信封。
+func (m *Mailer) SendEnvelope(ctx context.Context, env mail.Envelope) (mail.Envelope, error) {
 	if m.host == nil {
-		return errors.New("plugin: 没有内核投递服务，无法发信")
+		return mail.Envelope{}, errors.New("plugin: 没有内核投递服务，无法发信")
 	}
-	env := mail.Envelope{
-		From:   m.from,
-		Via:    m.from.ID,
-		To:     to,
-		Kind:   mail.KindRequest,
-		Mode:   mail.ModeWake,
-		Origin: mail.OriginAgent,
-		Body:   body,
+	env.From = m.from
+	env.Via = m.from.ID
+	if env.Origin != mail.OriginExternal {
+		env.Origin = mail.OriginAgent
 	}
 	if err := env.Normalize(); err != nil {
-		return err
+		return mail.Envelope{}, err
 	}
 	if err := m.host.Deliver(ctx, env); err != nil {
-		return fmt.Errorf("plugin: 发信给 %s：%w", to, err)
+		return mail.Envelope{}, fmt.Errorf("plugin: 发信给 %s：%w", env.To, err)
 	}
-	return nil
+	return env, nil
 }
