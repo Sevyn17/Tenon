@@ -87,7 +87,7 @@ func registerCommands(m map[string]handler) {
 }
 
 // 握手、会话、档位、工件、插件、工作区等基础命令（实现在本文件）。其余模块的命令在各自文件的 init 里登记：
-// interact.go、queue.go、mode_edit.go、packages.go、changes.go、skills.go、mcp.go、providers.go、platform.go、trust.go。
+// interact.go、queue.go、mode_edit.go、packages.go、changes.go、skills.go、mcp.go、providers.go、trust.go。
 func init() {
 	registerCommands(map[string]handler{
 		"hello":             bind((*App).Hello),
@@ -265,24 +265,9 @@ func (v *App) capabilities() []string {
 			}
 		}
 	}
-	// **platform 能力**（2026-11-16 补）：此前漏了这条，导致 `client.can("platform")`
-	// 恒为 false——所有依赖它的界面（账号页、API 密钥页）都显示「未接入平台」，
-	// 即使应用注入了 Platform 实现。
-	if o.Platform != nil {
-		out = append(out, "platform")
-		// 客户端改进 M3（配置T6、T8）：平台实现了可选扩展才报，界面按能力显示「测试连接」「编辑」「设置地址」。
-		if _, ok := o.Platform.(BYOKTester); ok {
-			out = append(out, "byok_test")
-		}
-		if _, ok := o.Platform.(BYOKEditor); ok {
-			out = append(out, "byok_edit")
-		}
-		if _, ok := o.Platform.(PlatformConfigurer); ok {
-			out = append(out, "platform_configure")
-		}
-		if _, ok := o.Platform.(ModelProviders); ok { // docs/51 第 4 节：models.providers.*（providers.go）
-			out = append(out, CapProviders)
-		}
+	// 平台账号相关能力（platform 等）由产品扩展经 Extension.Capabilities 报（docs/61 T1）。
+	if o.Providers != nil { // docs/51 第 4 节：models.providers.*（providers.go）；T1 桥接，T2 迁出
+		out = append(out, CapProviders)
 	}
 	if o.Followups != nil {
 		out = append(out, "followups")
@@ -336,8 +321,17 @@ func (v *App) capabilities() []string {
 	if o.MCP != nil {
 		out = append(out, CapMCP)
 	}
-	// work_mode（M12 Plan 模式）：session.settings {work_mode}、Settings.work_mode、plan 交互。框架内置，总是报。
-	out = append(out, CapWorkMode)
+	// work_mode（M12 Plan 模式）：session.settings {work_mode}、Settings.work_mode、plan 交互。随 plan-mode 插件报
+	// （它提供 exit_plan；关掉后界面不给计划入口，docs/52 R3、对齐报告 P2-1）；没装配 Profile 时照旧总是报。
+	planOn := o.Profile == nil
+	if o.Profile != nil {
+		for _, st := range o.Profile.States() {
+			planOn = planOn || (st.Name == "plan-mode" && st.On)
+		}
+	}
+	if planOn {
+		out = append(out, CapWorkMode)
+	}
 	// 产品扩展的能力（docs/61 3.2，ext.go）：照常并进来，不重复。
 	if v.ext != nil {
 		for _, c := range v.ext.caps {

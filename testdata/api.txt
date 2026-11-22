@@ -260,7 +260,7 @@ github.com/Sevyn17/tenon/adapters: type Skills struct{S *github.com/Sevyn17/teno
 github.com/Sevyn17/tenon/adapters: method (Skills) List(context.Context) (github.com/Sevyn17/tenon/appapi/wire.SkillsListResult, error)
 github.com/Sevyn17/tenon/adapters: method (Skills) SetEnabled(_ context.Context, in github.com/Sevyn17/tenon/appapi/wire.SkillsSetEnabledArgs) (github.com/Sevyn17/tenon/appapi/wire.SkillsSetEnabledResult, error)
 github.com/Sevyn17/tenon/adapters: func TitlerFrom(m *github.com/Sevyn17/tenon/runtime/assemble.Models) func(ctx context.Context, model string, input string) (string, error)
-github.com/Sevyn17/tenon/apphost: type AppOptions struct{MaxSteps int; Hooks func(*github.com/Sevyn17/tenon/runtime/assemble.SessionCx) github.com/Sevyn17/tenon/runtime/agent.Hooks; ModesWorkdir string; Upload bool; Workspaces github.com/Sevyn17/tenon/appapi.Workspaces; Platform github.com/Sevyn17/tenon/appapi.Platform; Extensions []github.com/Sevyn17/tenon/appapi.Extension}
+github.com/Sevyn17/tenon/apphost: type AppOptions struct{MaxSteps int; Hooks func(*github.com/Sevyn17/tenon/runtime/assemble.SessionCx) github.com/Sevyn17/tenon/runtime/agent.Hooks; ModesWorkdir string; Upload bool; Workspaces github.com/Sevyn17/tenon/appapi.Workspaces; Providers github.com/Sevyn17/tenon/appapi.ModelProviders; Extensions []github.com/Sevyn17/tenon/appapi.Extension}
 github.com/Sevyn17/tenon/apphost: func ApproveMode(root string, mode string, widened string) error
 github.com/Sevyn17/tenon/apphost: type Assembled struct{Asm *github.com/Sevyn17/tenon/runtime/component.Assembly; Store github.com/Sevyn17/tenon/runtime/assemble.DBHandle; Models *github.com/Sevyn17/tenon/runtime/assemble.Models; Compact *github.com/Sevyn17/tenon/modules/context/compact-basic.Compactor; Defs github.com/Sevyn17/tenon/runtime/agentdef.Source}
 github.com/Sevyn17/tenon/apphost: type Built struct{API *github.com/Sevyn17/tenon/appapi.App; DB github.com/Sevyn17/tenon/runtime/store.Store; Model string; Perms *github.com/Sevyn17/tenon/modules/security/permission.Sessions; Builder *github.com/Sevyn17/tenon/runtime/assemble.Builder}
@@ -328,22 +328,7 @@ github.com/Sevyn17/tenon/apphost: method (WorkspaceManager) SetPackageEnabled(_ 
 github.com/Sevyn17/tenon/apphost: method (WorkspaceManager) SetTrust(_ context.Context, level string) (github.com/Sevyn17/tenon/appapi.TrustChange, error)
 github.com/Sevyn17/tenon/apphost: method (WorkspaceManager) TrustPreview(context.Context) (github.com/Sevyn17/tenon/appapi/wire.WorkspaceTrustPreviewResult, error)
 github.com/Sevyn17/tenon/apphost: method (WorkspaceManager) UserPackages(context.Context) ([]github.com/Sevyn17/tenon/appapi/wire.PackageInfo, error)
-github.com/Sevyn17/tenon/apphost: type WorkspaceOptions struct{Flags Flags; SleepAfter time.Duration; Upload bool; OnSwitch func(api *github.com/Sevyn17/tenon/appapi.App); RecentPath string; Platform github.com/Sevyn17/tenon/appapi.Platform; Extensions []github.com/Sevyn17/tenon/appapi.Extension; ResourceIdle time.Duration; ResourceMax int}
-github.com/Sevyn17/tenon/appapi/wire: type APIKey struct{ID string; Name string; Prefix string; CreatedAt string; LastUsedAt string; ExpiresAt string; Revoked bool}
-github.com/Sevyn17/tenon/appapi/wire: type APIKeyCreateArgs struct{Name string; ExpiresIn int64}
-github.com/Sevyn17/tenon/appapi/wire: type APIKeyCreateResult struct{ID string; Name string; Prefix string; CreatedAt string; LastUsedAt string; ExpiresAt string; Revoked bool; Key string}
-github.com/Sevyn17/tenon/appapi/wire: type APIKeyListResult struct{Configured bool; Keys []APIKey}
-github.com/Sevyn17/tenon/appapi/wire: type APIKeyRevokeArgs struct{ID string}
-github.com/Sevyn17/tenon/appapi/wire: type APIKeyRevokeResult struct{}
-github.com/Sevyn17/tenon/appapi/wire: type AccountEntitlements struct{Configured bool; Cached bool; Features map[string]bool; Limits map[string]int64; Aliases []string; TTL int; Offline int; Version int64}
-github.com/Sevyn17/tenon/appapi/wire: type AccountLoginArgs struct{Step string; DeviceCode string}
-github.com/Sevyn17/tenon/appapi/wire: type AccountLoginResult struct{Done bool; UserCode string; VerificationURI string; ExpiresIn int; Interval int; DeviceCode string; Pending bool; Status *AccountStatus}
-github.com/Sevyn17/tenon/appapi/wire: type AccountStatus struct{Configured bool; ServerURL string; ServerSource string; LoggedIn bool; Tenant string; Subject string; Product string; Channel string; Version string; Operator bool}
-github.com/Sevyn17/tenon/appapi/wire: type AdminAlias struct{Alias string; Kind string; PlanID string; Visible bool; StepCount int}
-github.com/Sevyn17/tenon/appapi/wire: type AdminModel struct{ID string; ProviderKey string; VendorModel string; Kind string}
-github.com/Sevyn17/tenon/appapi/wire: type AdminModelProvider struct{ID string; Key string; Name string; Protocol string; BaseURL string; Status string; KeyCount int}
-github.com/Sevyn17/tenon/appapi/wire: type AdminModelsResult struct{Providers []AdminModelProvider; Models []AdminModel; Aliases []AdminAlias; RateCards []AdminRateCard; ReadOnly bool}
-github.com/Sevyn17/tenon/appapi/wire: type AdminRateCard struct{ID string; Version int64; Status string; Rates string}
+github.com/Sevyn17/tenon/apphost: type WorkspaceOptions struct{Flags Flags; SleepAfter time.Duration; Upload bool; OnSwitch func(api *github.com/Sevyn17/tenon/appapi.App); RecentPath string; Providers github.com/Sevyn17/tenon/appapi.ModelProviders; Extensions []github.com/Sevyn17/tenon/appapi.Extension; ResourceIdle time.Duration; ResourceMax int}
 github.com/Sevyn17/tenon/appapi/wire: type Approval struct{Tool string; CallID string; Args encoding/json.RawMessage; Reason string; SessionRules []string; Blocked []string}
 github.com/Sevyn17/tenon/appapi/wire: const ArchivedInclude untyped string
 github.com/Sevyn17/tenon/appapi/wire: const ArchivedOnly untyped string
@@ -351,15 +336,6 @@ github.com/Sevyn17/tenon/appapi/wire: type ArtifactGetArgs struct{Session string
 github.com/Sevyn17/tenon/appapi/wire: type ArtifactGetResult struct{MIME string; Size int; Text string; Base64 string}
 github.com/Sevyn17/tenon/appapi/wire: type ArtifactPutArgs struct{Session string; MIME string; Base64 string}
 github.com/Sevyn17/tenon/appapi/wire: type ArtifactPutResult struct{Ref string}
-github.com/Sevyn17/tenon/appapi/wire: type BYOKListResult struct{Profiles []BYOKProfile; Path string}
-github.com/Sevyn17/tenon/appapi/wire: type BYOKProfile struct{ID string; Name string; Protocol string; BaseURL string; Model string; MaskedKey string; CreatedAt string; IsDefault bool}
-github.com/Sevyn17/tenon/appapi/wire: type BYOKRemoveArgs struct{ID string}
-github.com/Sevyn17/tenon/appapi/wire: type BYOKRemoveResult struct{}
-github.com/Sevyn17/tenon/appapi/wire: type BYOKSaveArgs struct{ID string; Name string; Protocol string; BaseURL string; Model string; APIKey string}
-github.com/Sevyn17/tenon/appapi/wire: type BYOKSaveResult struct{Profile BYOKProfile}
-github.com/Sevyn17/tenon/appapi/wire: type BYOKSetDefaultArgs struct{ID string}
-github.com/Sevyn17/tenon/appapi/wire: type BYOKSetDefaultResult struct{}
-github.com/Sevyn17/tenon/appapi/wire: type BYOKTestArgs struct{ID string; Protocol string; BaseURL string; Model string; APIKey string}
 github.com/Sevyn17/tenon/appapi/wire: type BYOKTestResult struct{OK bool; LatencyMS int64; Method string; ModelFound *bool; Models []string; ErrorKind string; Status int; Message string}
 github.com/Sevyn17/tenon/appapi/wire: type ChangeConflict struct{Path string; Reason string; Message string; By string; Forceable bool}
 github.com/Sevyn17/tenon/appapi/wire: type ChangeFile struct{Path string; Status string; Added int; Removed int; Binary bool; Sources []string; Turns []uint32; Untracked bool; Rewound bool; Revertible bool; Why string; Conflict string}
@@ -556,15 +532,12 @@ github.com/Sevyn17/tenon/appapi/wire: type PackagesPreviewResult struct{Name str
 github.com/Sevyn17/tenon/appapi/wire: type PackagesRemoveArgs struct{Name string; Force bool}
 github.com/Sevyn17/tenon/appapi/wire: type PackagesSetEnabledArgs struct{Name string; Enabled bool; Force bool}
 github.com/Sevyn17/tenon/appapi/wire: type Part struct{Kind string; Text string; Media *MediaRef; Data any; Schema string}
-github.com/Sevyn17/tenon/appapi/wire: type PasswordAuthArgs struct{Email string; Password string; Name string}
 github.com/Sevyn17/tenon/appapi/wire: type PlanAnswer struct{Choice string; Feedback string}
 github.com/Sevyn17/tenon/appapi/wire: const PlanApprove untyped string
 github.com/Sevyn17/tenon/appapi/wire: var PlanChoices []string
 github.com/Sevyn17/tenon/appapi/wire: const PlanContinue untyped string
 github.com/Sevyn17/tenon/appapi/wire: type PlanPrompt struct{Plan string; Steps []string}
 github.com/Sevyn17/tenon/appapi/wire: const PlanRevise untyped string
-github.com/Sevyn17/tenon/appapi/wire: type PlatformConfigureArgs struct{ServerURL string; Test bool; DryRun bool}
-github.com/Sevyn17/tenon/appapi/wire: type PlatformConfigureResult struct{Saved bool; LoggedOut bool; Test *BYOKTestResult; Status AccountStatus}
 github.com/Sevyn17/tenon/appapi/wire: type PluginInfo struct{Name string; Version string; Description string; On bool; Default bool; Source string; Effects []string; Schema []ConfigField; Config map[string]any; Mandatory bool; Pending *PluginPending; Risks []string}
 github.com/Sevyn17/tenon/appapi/wire: type PluginPending struct{On bool; Config map[string]any}
 github.com/Sevyn17/tenon/appapi/wire: type PluginsListResult struct{Plugins []PluginInfo; Scopes []ProfileScope; Denied map[string][]string}

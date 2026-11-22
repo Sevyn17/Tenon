@@ -22,8 +22,10 @@ export interface Transport {
   close(): void;
 }
 
-const WAILS_METHOD = "main.Service.Call";
-const WAILS_EVENT = "tenon:event";
+/** Wails 绑定方法的缺省名（Go 端 transport/bind 的 Service.Call）。 */
+export const WAILS_METHOD = "main.Service.Call";
+/** 装 Envelope 的 Wails 事件缺省名（Go 端 bind 的事件名）。 */
+export const WAILS_EVENT = "tenon:event";
 
 export function toApiError(err: unknown): ApiError {
   if (err instanceof ApiError) return err;
@@ -56,11 +58,24 @@ export interface WailsRuntime {
  */
 export const WAILS_RECONNECTED_EVENT = "tenon:reconnected";
 
+/** Wails 传输用到的名字；缺省与 Go 端 transport/bind 一致，后端改了登记名时才需要传。 */
+export interface WailsNames {
+  /** 绑定方法名，缺省 WAILS_METHOD。 */
+  method?: string;
+  /** 事件名，缺省 WAILS_EVENT。 */
+  event?: string;
+  /** 换运行时通知的事件名，缺省 WAILS_RECONNECTED_EVENT。 */
+  reconnectedEvent?: string;
+}
+
 /**
  * Wails 传输。运行时由 Wails 资源服务器在 /wails/runtime.js 提供；不打包、不引 npm 依赖。
- * 参数可以是运行时地址，也可以直接给运行时（测试用）。
+ * 参数可以是运行时地址，也可以直接给运行时（测试用）；names 覆盖方法与事件名。
  */
-export function wailsTransport(runtime: string | Promise<WailsRuntime> = "/wails/runtime.js"): Transport {
+export function wailsTransport(runtime: string | Promise<WailsRuntime> = "/wails/runtime.js", names: WailsNames = {}): Transport {
+  const WAILS_METHOD_NAME = names.method ?? WAILS_METHOD;
+  const WAILS_EVENT_NAME = names.event ?? WAILS_EVENT;
+  const WAILS_RECONNECTED_NAME = names.reconnectedEvent ?? WAILS_RECONNECTED_EVENT;
   const rt = typeof runtime === "string" ? (import(/* @vite-ignore */ runtime) as Promise<WailsRuntime>) : runtime;
   let off: (() => void) | null = null;
   let closed = false;
@@ -69,7 +84,7 @@ export function wailsTransport(runtime: string | Promise<WailsRuntime> = "/wails
       const r = await rt;
       let out: unknown;
       try {
-        out = await r.Call.ByName(WAILS_METHOD, cmd, args === undefined ? "" : JSON.stringify(args));
+        out = await r.Call.ByName(WAILS_METHOD_NAME, cmd, args === undefined ? "" : JSON.stringify(args));
       } catch (e) {
         throw toApiError(e);
       }
@@ -80,13 +95,13 @@ export function wailsTransport(runtime: string | Promise<WailsRuntime> = "/wails
       rt.then(
         (r) => {
           if (closed) return;
-          const offEvent = r.Events.On(WAILS_EVENT, (ev) => {
+          const offEvent = r.Events.On(WAILS_EVENT_NAME, (ev) => {
             const d = ev?.data;
             if (d && typeof d === "object") emit(d as Envelope);
           });
           // 与 wsTransport 断线重连同一条路径（onclose → reconnecting，onopen → open + local.reconnected）：
           // 后端已在新连接上，没有订阅；订阅方从最后收到的游标重新订阅，外壳据此重新 hello。
-          const offReconnected = r.Events.On(WAILS_RECONNECTED_EVENT, () => {
+          const offReconnected = r.Events.On(WAILS_RECONNECTED_NAME, () => {
             state("reconnecting");
             state("open");
             emit(local(LOCAL_RECONNECTED));
@@ -157,7 +172,7 @@ export function wsTransport(url: string, opts: { heartbeatMs?: number; heartbeat
   };
 
   const connect = (): Promise<WebSocket> => {
-    if (closed) return Promise.reject(new ApiError({ code: "internal", message: "连接已关闭", retry: false }));
+    if (closed) return Promise.reject(new ApiError({ code: "internal", message: "connection closed", retry: false }));
     if (open) return open;
     open = new Promise((resolve, reject) => {
       const s = new WebSocket(url);
@@ -170,12 +185,12 @@ export function wsTransport(url: string, opts: { heartbeatMs?: number; heartbeat
         if (everOpen) emit(local(LOCAL_RECONNECTED)); // 新连接上没有订阅：通知订阅方重新订阅
         everOpen = true;
       };
-      s.onerror = () => reject(new ApiError({ code: "internal", message: "WebSocket 连接失败", retry: true }));
+      s.onerror = () => reject(new ApiError({ code: "internal", message: "websocket connect failed", retry: true }));
       s.onclose = () => {
         stopBeat();
         ws = null;
         open = null;
-        for (const p of pending.values()) p.reject(new ApiError({ code: "internal", message: "连接已断开", retry: true }));
+        for (const p of pending.values()) p.reject(new ApiError({ code: "internal", message: "connection lost", retry: true }));
         pending.clear();
         if (closed) {
           setState("closed");
@@ -202,7 +217,7 @@ export function wsTransport(url: string, opts: { heartbeatMs?: number; heartbeat
         if (!p) return;
         pending.delete(f.id);
         if (f.ok) p.resolve(f.result);
-        else p.reject(new ApiError(f.error ?? { code: "internal", message: "未知错误", retry: false }));
+        else p.reject(new ApiError(f.error ?? { code: "internal", message: "unknown error", retry: false }));
       };
     });
     return open;

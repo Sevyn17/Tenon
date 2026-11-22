@@ -40,14 +40,10 @@ var tsTypes = []any{
 	ConfigField{}, PluginInfo{},
 	PluginPending{}, ProfileScope{}, PluginsListResult{}, PluginsSetArgs{}, PluginsSetResult{}, PackageInfo{}, UISlot{}, UIData{}, PackagesListResult{},
 	PackagesPreviewArgs{}, PackagesPreviewResult{}, PackageConfig{}, PackageInstalled{}, PackagesInstallArgs{}, PackagesRemoveArgs{}, PackagesSetEnabledArgs{}, PackagesEditResult{},
-	AccountStatus{}, AccountLoginArgs{}, AccountLoginResult{}, AccountEntitlements{},
-	APIKey{}, APIKeyListResult{}, APIKeyCreateArgs{}, APIKeyCreateResult{}, APIKeyRevokeArgs{}, APIKeyRevokeResult{},
-	BYOKProfile{}, BYOKListResult{}, BYOKSaveArgs{}, BYOKSaveResult{}, BYOKRemoveArgs{}, BYOKRemoveResult{}, BYOKSetDefaultArgs{}, BYOKSetDefaultResult{},
-	BYOKTestArgs{}, BYOKTestResult{}, PlatformConfigureArgs{}, PlatformConfigureResult{},
+	BYOKTestResult{}, // T1 桥接：models.providers.test 的结果，随 T2 迁出
 	ProviderKind{}, ProviderKey{}, ProviderModel{}, ModelProviderInfo{}, ModelProvidersListResult{}, ProviderKeyDraft{}, ProviderModelDraft{}, ModelProviderDraft{},
 	ModelProvidersSaveArgs{}, ModelProvidersRemoveArgs{}, ModelProvidersSetModelEnabledArgs{}, ModelProvidersEditResult{}, ModelProvidersTestArgs{}, ModelProvidersFetchArgs{}, ModelProvidersFetchResult{},
-	AdminModelProvider{}, AdminModel{}, AdminAlias{}, AdminRateCard{}, AdminModelsResult{},
-	PasswordAuthArgs{}, Empty{}, Error{},
+	Empty{}, Error{},
 }
 
 // tsConsts 要生成的常量组：名字 → 取值（顺序即输出顺序）。

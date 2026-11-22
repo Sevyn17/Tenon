@@ -1287,135 +1287,6 @@ export interface PackagesEditResult {
   workspace: WorkspaceInfo;
 }
 
-export interface AccountStatus {
-  configured: boolean;
-  server_url?: string;
-  server_source?: string;
-  logged_in?: boolean;
-  tenant?: string;
-  subject?: string;
-  product?: string;
-  channel?: string;
-  version?: string;
-  operator?: boolean;
-}
-
-export interface AccountLoginArgs {
-  step: string;
-  device_code?: string;
-}
-
-export interface AccountLoginResult {
-  done?: boolean;
-  user_code?: string;
-  verification_uri?: string;
-  expires_in?: number;
-  interval?: number;
-  device_code?: string;
-  pending?: boolean;
-  status?: AccountStatus;
-}
-
-export interface AccountEntitlements {
-  configured: boolean;
-  cached?: boolean;
-  features?: Record<string, boolean>;
-  limits?: Record<string, number>;
-  aliases?: string[];
-  ttl?: number;
-  offline_grace?: number;
-  version?: number;
-}
-
-export interface APIKey {
-  id: string;
-  name: string;
-  prefix: string;
-  created_at: string;
-  last_used_at?: string;
-  expires_at?: string;
-  revoked: boolean;
-}
-
-export interface APIKeyListResult {
-  configured: boolean;
-  keys: APIKey[];
-}
-
-export interface APIKeyCreateArgs {
-  name: string;
-  expires_in?: number;
-}
-
-export interface APIKeyCreateResult {
-  id: string;
-  name: string;
-  prefix: string;
-  created_at: string;
-  last_used_at?: string;
-  expires_at?: string;
-  revoked: boolean;
-  key: string;
-}
-
-export interface APIKeyRevokeArgs {
-  id: string;
-}
-
-export interface APIKeyRevokeResult {
-}
-
-export interface BYOKProfile {
-  id: string;
-  name: string;
-  protocol: string;
-  base_url: string;
-  model: string;
-  masked_key: string;
-  created_at: string;
-  is_default: boolean;
-}
-
-export interface BYOKListResult {
-  profiles: BYOKProfile[];
-  path?: string;
-}
-
-export interface BYOKSaveArgs {
-  id?: string;
-  name: string;
-  protocol: string;
-  base_url: string;
-  model: string;
-  api_key: string;
-}
-
-export interface BYOKSaveResult {
-  profile: BYOKProfile;
-}
-
-export interface BYOKRemoveArgs {
-  id: string;
-}
-
-export interface BYOKRemoveResult {
-}
-
-export interface BYOKSetDefaultArgs {
-  id: string;
-}
-
-export interface BYOKSetDefaultResult {
-}
-
-export interface BYOKTestArgs {
-  id?: string;
-  protocol?: string;
-  base_url?: string;
-  model?: string;
-  api_key?: string;
-}
-
 export interface BYOKTestResult {
   ok: boolean;
   latency_ms?: number;
@@ -1425,19 +1296,6 @@ export interface BYOKTestResult {
   error_kind?: string;
   status?: number;
   message: string;
-}
-
-export interface PlatformConfigureArgs {
-  server_url: string;
-  test?: boolean;
-  dry_run?: boolean;
-}
-
-export interface PlatformConfigureResult {
-  saved: boolean;
-  logged_out?: boolean;
-  test?: BYOKTestResult;
-  status: AccountStatus;
 }
 
 export interface ProviderKind {
@@ -1572,52 +1430,6 @@ export interface ModelProvidersFetchResult {
   message: string;
   revision?: string;
   provider?: ModelProviderInfo;
-}
-
-export interface AdminModelProvider {
-  id: string;
-  key: string;
-  name: string;
-  protocol: string;
-  base_url: string;
-  status: string;
-  key_count: number;
-}
-
-export interface AdminModel {
-  id: string;
-  provider_key: string;
-  vendor_model: string;
-  kind: string;
-}
-
-export interface AdminAlias {
-  alias: string;
-  kind: string;
-  plan_id: string;
-  visible: boolean;
-  step_count: number;
-}
-
-export interface AdminRateCard {
-  id: string;
-  version: number;
-  status: string;
-  rates: string;
-}
-
-export interface AdminModelsResult {
-  providers: AdminModelProvider[];
-  models: AdminModel[];
-  aliases: AdminAlias[];
-  rate_cards: AdminRateCard[];
-  read_only: boolean;
-}
-
-export interface PasswordAuthArgs {
-  email: string;
-  password: string;
-  name?: string;
 }
 
 export interface Empty {

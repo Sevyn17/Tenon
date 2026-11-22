@@ -65,22 +65,6 @@ export const COMMANDS = [
   "models.providers.setModelEnabled",
   "models.providers.test",
   "models.providers.fetchModels",
-  "platform.status",
-  "platform.login",
-  "platform.logout",
-  "platform.entitlements",
-  "platform.apikey.list",
-  "platform.apikey.create",
-  "platform.apikey.revoke",
-  "platform.byok.list",
-  "platform.byok.save",
-  "platform.byok.remove",
-  "platform.byok.setDefault",
-  "platform.byok.test",
-  "platform.configure",
-  "platform.adminModels",
-  "platform.passwordRegister",
-  "platform.passwordLogin",
   "artifact.get",
   "artifact.put",
   "trace.explain",
@@ -157,22 +141,6 @@ export interface CoreCommandMap {
   "models.providers.setModelEnabled": [W.ModelProvidersSetModelEnabledArgs, W.ModelProvidersEditResult];
   "models.providers.test": [W.ModelProvidersTestArgs, W.BYOKTestResult];
   "models.providers.fetchModels": [W.ModelProvidersFetchArgs, W.ModelProvidersFetchResult];
-  "platform.status": [W.Empty, W.AccountStatus];
-  "platform.login": [W.AccountLoginArgs, W.AccountLoginResult];
-  "platform.logout": [W.Empty, W.AccountStatus];
-  "platform.entitlements": [W.Empty, W.AccountEntitlements];
-  "platform.apikey.list": [W.Empty, W.APIKeyListResult];
-  "platform.apikey.create": [W.APIKeyCreateArgs, W.APIKeyCreateResult];
-  "platform.apikey.revoke": [W.APIKeyRevokeArgs, W.APIKeyRevokeResult];
-  "platform.byok.list": [W.Empty, W.BYOKListResult];
-  "platform.byok.save": [W.BYOKSaveArgs, W.BYOKSaveResult];
-  "platform.byok.remove": [W.BYOKRemoveArgs, W.BYOKRemoveResult];
-  "platform.byok.setDefault": [W.BYOKSetDefaultArgs, W.BYOKSetDefaultResult];
-  "platform.byok.test": [W.BYOKTestArgs, W.BYOKTestResult];
-  "platform.configure": [W.PlatformConfigureArgs, W.PlatformConfigureResult];
-  "platform.adminModels": [W.Empty, W.AdminModelsResult];
-  "platform.passwordRegister": [W.PasswordAuthArgs, W.AccountStatus];
-  "platform.passwordLogin": [W.PasswordAuthArgs, W.AccountStatus];
   "artifact.get": [W.ArtifactGetArgs, W.ArtifactGetResult];
   "artifact.put": [W.ArtifactPutArgs, W.ArtifactPutResult];
   "trace.explain": [W.TraceArgs, W.TraceResult];

@@ -321,10 +321,27 @@ func (s *Server) handleConn(ws *websocket.Conn) {
 	defer s.untrack(c)
 	// protocol 2（06 10.8、10.9）：每个连接一个 appapi.Conn，身份由本服务的令牌鉴权得出（单机固定 local / operator）；
 	// 事件只推这个连接订阅了的会话。
-	ac := s.API().NewConn(ctx, appapi.LocalPrincipal)
+	api := s.API()
+	ac := api.NewConn(ctx, appapi.LocalPrincipal)
 	// reconnect_event（客户端改进 M5）：SwapAPI 会关掉这条连接，前端 wsTransport 重连后发 local.reconnected。
 	ac.AddCapabilities(appapi.CapReconnectEvent)
 	defer ac.Close()
+	// callConn 执行命令用的连接。SwapAPI 换上新 App 后约 200ms 才断开旧连接（让发起切换的应答写回去），
+	// 这段时间里客户端在旧连接上发的命令不能落到旧 App 上：旧运行时已经关了，存储也关了（2026-11-22
+	// 「单独启停模型」报 sql: database is closed）。换过就在新 App 上补建一个连接执行命令；它的事件不转发
+	// （连接马上断开，客户端重连后重新订阅），随 ctx 结束关闭。
+	var amu sync.Mutex
+	cmdConn, cmdFor := ac, api
+	callConn := func() *appapi.Conn {
+		now := s.API()
+		amu.Lock()
+		defer amu.Unlock()
+		if now != nil && now != cmdFor {
+			cmdConn, cmdFor = now.NewConn(ctx, appapi.LocalPrincipal), now
+			cmdConn.AddCapabilities(appapi.CapReconnectEvent)
+		}
+		return cmdConn
+	}
 	var wg sync.WaitGroup
 	wg.Add(2)
 	go func() {
@@ -368,7 +385,7 @@ func (s *Server) handleConn(ws *websocket.Conn) {
 			defer guard.Recover("web命令 "+f.Cmd, func() {
 				c.send(response{ID: f.ID, Error: appapi.Errorf(appapi.CodeInternal, "命令 %s执行发生内部错误", f.Cmd)})
 			})
-			res, err := ac.Call(ctx, f.Cmd, f.Args)
+			res, err := callConn().Call(ctx, f.Cmd, f.Args)
 			if err != nil {
 				c.send(response{ID: f.ID, Error: appapi.AsError(err)})
 				return

@@ -37,8 +37,8 @@ type WorkspaceOptions struct {
 	OnSwitch func(api *appapi.App)
 	// RecentPath 最近列表文件；空 = 用户级目录（Home）的 workspaces.json（取不到用户目录时不记）。
 	RecentPath string
-	// Platform 平台账号（platform.* 命令）；nil = 不接平台。切换工作区后新 App 沿用同一个。
-	Platform appapi.Platform
+	// Providers 同 AppOptions.Providers；切换工作区后新 App 沿用同一个。T1 桥接，T2 迁出。
+	Providers appapi.ModelProviders
 	// Extensions 产品扩展（appapi.Options.Extensions）；切换工作区后新 App 沿用同一组。
 	Extensions []appapi.Extension
 	// ResourceIdle 统一资源管理器里没有引用的实例（如 MCP 进程）多久回收；0 = resmgr.DefaultIdle（5 分钟），<0 = 立即回收。
@@ -130,7 +130,7 @@ func (m *WorkspaceManager) startWith(dir string, pre *loaded) (*Workspace, error
 	}
 	// 网页端、桌面端都没有终端可问：无信任记录的项目按不受信（同启动时）；界面走协议（UI 为 nil）。
 	rt, err := start(StartOptions{Flags: f, SleepAfter: m.o.SleepAfter,
-		App:       AppOptions{MaxSteps: f.MaxSteps, Upload: m.o.Upload, Workspaces: m, Platform: m.o.Platform, Extensions: m.o.Extensions},
+		App:       AppOptions{MaxSteps: f.MaxSteps, Upload: m.o.Upload, Workspaces: m, Providers: m.o.Providers, Extensions: m.o.Extensions},
 		resources: bound}, pre)
 	if err != nil {
 		if bound != nil {

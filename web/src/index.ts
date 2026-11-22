@@ -56,6 +56,13 @@ export interface Client {
 /** HTTP 上传的路径（appapi.UploadPath）。 */
 export const UPLOAD_PATH = "/api/artifacts";
 
+/**
+ * 客户端自己产生的上传失败（服务端没给错误体时）放在 ApiError.details.reason，供界面按码翻译；
+ * message 只是英文短句。network：请求没发出去或没有应答；http：应答不是 200 且没有协议错误体（details.status 为 HTTP 状态码）。
+ */
+export const UPLOAD_ERR_NETWORK = "upload_network";
+export const UPLOAD_ERR_HTTP = "upload_http";
+
 /** POST multipart 上传：凭同源 cookie（网页服务）或资源服务器（桌面端）鉴权；返回 artifact:// 引用。 */
 function uploadFile(url: string, session: string, file: File, onProgress?: (p: number) => void): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -68,11 +75,12 @@ function uploadFile(url: string, session: string, file: File, onProgress?: (p: n
     x.withCredentials = true;
     x.responseType = "json";
     if (onProgress) x.upload.onprogress = (e) => e.lengthComputable && onProgress(e.loaded / e.total);
-    x.onerror = () => reject(new ApiError({ code: "internal", message: "上传失败：网络错误", retry: true }));
+    x.onerror = () => reject(new ApiError({ code: "internal", message: "upload failed: network error", retry: true, details: { reason: UPLOAD_ERR_NETWORK } }));
     x.onload = () => {
       const b = x.response as { ref?: string; code?: string; message?: string; retry?: boolean } | null;
       if (x.status === 200 && b?.ref) resolve(b.ref);
-      else reject(new ApiError({ code: b?.code ?? "internal", message: b?.message ?? `上传失败（HTTP ${x.status}）`, retry: !!b?.retry }));
+      else if (b?.code) reject(new ApiError({ code: b.code, message: b.message ?? `upload failed: HTTP ${x.status}`, retry: !!b.retry }));
+      else reject(new ApiError({ code: "internal", message: `upload failed: HTTP ${x.status}`, retry: !!b?.retry, details: { reason: UPLOAD_ERR_HTTP, status: x.status } }));
     };
     x.send(fd);
   });

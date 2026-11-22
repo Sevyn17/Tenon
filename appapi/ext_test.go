@@ -114,8 +114,8 @@ func TestExtensionRules(t *testing.T) {
 			t.Errorf("第 %d 组应被拒绝", i)
 		}
 	}
-	// 核心命令同名（platform.status 当前仍是核心命令，T1 迁出后由扩展注册）
-	if _, err := buildExt([]Extension{one("x", "platform.status")}); err == nil {
+	// 核心命令同名（models.providers.list 当前仍是核心命令，T2 迁出后由扩展注册）
+	if _, err := buildExt([]Extension{one("x", "models.providers.list")}); err == nil {
 		t.Error("与核心命令同名应被拒绝")
 	}
 	good := []Extension{one("mortise", "mortise.system.storage"), one("y", "platform.newThing"), one("z", "models.providers.extra")}

@@ -498,21 +498,3 @@ function dedupe<T extends { id: string }>(xs: T[]): T[] {
 function sortByUpdated<T extends { updated_at: number }>(xs: T[]): T[] {
   return [...xs].sort((a, b) => b.updated_at - a.updated_at);
 }
-
-/** 按更新时间分组（今天 / 昨天 / 近 7 天 / 更早）。now 可注入，便于测试。 */
-export type DateBucket = "today" | "yesterday" | "week" | "older";
-
-export function groupByDate<T extends SessionInfo>(items: T[], now = Date.now()): { bucket: DateBucket; items: T[] }[] {
-  const d = new Date(now);
-  const startToday = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  const day = 86_400_000;
-  const of = (t: number): DateBucket =>
-    t >= startToday ? "today" : t >= startToday - day ? "yesterday" : t >= startToday - 6 * day ? "week" : "older";
-  const order: DateBucket[] = ["today", "yesterday", "week", "older"];
-  const m = new Map<DateBucket, T[]>();
-  for (const it of items) {
-    const b = of(it.updated_at);
-    m.set(b, [...(m.get(b) ?? []), it]);
-  }
-  return order.filter((b) => m.has(b)).map((b) => ({ bucket: b, items: m.get(b)! }));
-}

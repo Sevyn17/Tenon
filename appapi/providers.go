@@ -1,8 +1,8 @@
 package appapi
 
 // 自定义模型「厂商 → 密钥 → 模型」的协议命令（Mortise docs/51 第 4 节）：models.providers.list / save / remove /
-// setModelEnabled / test / fetchModels。由 Platform 的可选扩展 ModelProviders 实现（与 BYOKTester 同一模式）；
-// 没实现时全部 unsupported，hello 不报能力 providers。
+// setModelEnabled / test / fetchModels。由应用经 Options.Providers 注入 ModelProviders 实现（T1 桥接，T2 迁出）；
+// 没注入时全部 unsupported，hello 不报能力 providers。
 //
 // 写命令的规则参照 mcp.save：revision 并发校验（实现方比对，不一致返回 StaleRevision 的 conflict）；密钥值不回显，
 // 保存时 value 为 null = 保留原值。改动影响模型目录（实现方在 ProvidersWrite.Reload 里说明）时重建运行时：
@@ -32,7 +32,7 @@ func init() {
 // CapProviders hello 能力：models.providers.* 可用。
 const CapProviders = "providers"
 
-// ModelProviders Platform 的可选扩展：按厂商分组管理自定义模型。
+// ModelProviders 按厂商分组管理自定义模型（Options.Providers）。
 // 实现方保证结果、错误、日志里没有明文密钥。错误是 *Error 时原样交给客户端（invalid / not_found / conflict）。
 type ModelProviders interface {
 	ProvidersList(ctx context.Context) (wire.ModelProvidersListResult, error)
@@ -64,10 +64,8 @@ func StaleRevision(current string) *Error {
 }
 
 func (v *App) providers() (ModelProviders, error) {
-	if v.o.Platform != nil {
-		if m, ok := v.o.Platform.(ModelProviders); ok {
-			return m, nil
-		}
+	if v.o.Providers != nil {
+		return v.o.Providers, nil
 	}
 	return nil, Errorf(wire.CodeUnsupported, "这个应用不支持按厂商管理自定义模型")
 }

@@ -11,10 +11,44 @@ import (
 
 	"github.com/Sevyn17/tenon/appapi"
 	"github.com/Sevyn17/tenon/appapi/wire"
+	"github.com/Sevyn17/tenon/runtime/bus"
+	"github.com/Sevyn17/tenon/runtime/host"
+	"github.com/Sevyn17/tenon/runtime/store/memstore"
 )
 
+// newApp 造一个最小可用 App（不需要完整装配）；p 为 nil = 没注入 Options.Providers。
+func newApp(t *testing.T, p appapi.ModelProviders) *appapi.App {
+	t.Helper()
+	db := memstore.New()
+	b := bus.New(0)
+	h := &host.Host{DB: db, Bus: b}
+	t.Cleanup(func() { h.Close(); b.Close(); db.Close() })
+	o := appapi.Options{Host: h, DB: db, Bus: b, Workdir: t.TempDir()}
+	if p != nil {
+		o.Providers = p
+	}
+	app, err := appapi.New(o)
+	if err != nil {
+		t.Fatalf("appapi.New: %v", err)
+	}
+	return app
+}
+
+func caps(t *testing.T, app *appapi.App) []string {
+	t.Helper()
+	h, err := app.Hello(context.Background(), wire.HelloArgs{})
+	if err != nil {
+		t.Fatalf("hello: %v", err)
+	}
+	return h.Capabilities
+}
+
+func isUnsupported(err error) bool {
+	var ae *appapi.Error
+	return errors.As(err, &ae) && ae.Code == wire.CodeUnsupported
+}
+
 type provPlatform struct {
-	fakePlatform
 	saved   []wire.ModelProviderDraft
 	removed []string
 	toggled []wire.ModelProvidersSetModelEnabledArgs
@@ -61,13 +95,13 @@ func wantErrCode(t *testing.T, err error, code string) *appapi.Error {
 }
 
 func TestProvidersCapability(t *testing.T) {
-	if slices.Contains(caps(t, newApp(t, &fakePlatform{})), appapi.CapProviders) {
-		t.Fatal("没实现 ModelProviders 不该报 providers")
+	if slices.Contains(caps(t, newApp(t, nil)), appapi.CapProviders) {
+		t.Fatal("没注入 ModelProviders 不该报 providers")
 	}
 	if !slices.Contains(caps(t, newApp(t, &provPlatform{})), appapi.CapProviders) {
-		t.Fatal("实现了应报 providers")
+		t.Fatal("注入了应报 providers")
 	}
-	app := newApp(t, &fakePlatform{})
+	app := newApp(t, nil)
 	_, err := app.ModelProvidersList(context.Background(), wire.Empty{})
 	if !isUnsupported(err) {
 		t.Fatalf("没实现应 unsupported：%v", err)
