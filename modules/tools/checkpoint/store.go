@@ -446,6 +446,23 @@ func (e *Engine) lastFor(ctx context.Context, session, key string) (*Change, err
 	return nil, nil
 }
 
+// LastByPath 本工作区（e.Root）某个文件跨会话的最后一条记录（按 Seq），没有返回 nil。
+// key 是 PathKey(相对路径)。用于会后判断文件是否被人改过：拿返回记录的 After 与磁盘内容哈希比较。
+// 注意 Seq 只在进程内单调，跨进程靠时钟。
+func (e *Engine) LastByPath(ctx context.Context, key string) (*Change, error) {
+	cs, _, err := e.query(ctx, "path_key", key)
+	if err != nil {
+		return nil, err
+	}
+	for i := len(cs) - 1; i >= 0; i-- {
+		if SameRoot(cs[i].Root, e.Root) {
+			c := cs[i]
+			return &c, nil
+		}
+	}
+	return nil, nil
+}
+
 // DeleteSession 删会话时清掉本会话的全部记录（OnSessionDelete 点位，store.Cleaner）。
 // 内容的工件引用由存储随会话删除，GC 回收。
 func (e *Engine) DeleteSession(ctx context.Context, session string) error {
