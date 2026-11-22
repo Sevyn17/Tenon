@@ -4,7 +4,7 @@ package apphost
 
 // 项目信任（plugin-switch-plan §3.3，参照 Codex projects.trust_level）。
 // ~/.tenon/trust.toml：[projects."<路径>"] trust = "trusted" | "untrusted"；键 = git 根目录，找不到用工作目录；
-// 子目录继承最近的上级记录。不受信：不读项目 .tenon 下的 profile / permissions / hooks / mcp（AGENTS.md 照读）。
+// 子目录继承最近的上级记录。不受信：不读项目 .tenon 下的 profile / permissions / hooks / mcp / skills，项目里的 AGENTS.md 也不读，只读用户全局的那份（modules/context/instructions）。
 // 原在 apps/tenon/trust.go，桌面端与 CLI 共用后移到这里；CLI 只保留终端交互部分。
 
 import (

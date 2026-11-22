@@ -130,14 +130,20 @@ func (*plug) Setup(cx *component.Registrar) error {
 						_ = sc.Ctx.Config("permission", &u)
 					}
 				}
-				if u.Mode == "" && sc.Def != nil {
-					u.Mode, _ = sc.Def.Use["permission"]["mode"].(string)
-				}
 				var out []*ModeDef
-				if d := lookup(u.Mode); d != nil {
+				if d := lookup(u.Mode); d != nil { // 会话算好的（冻结或按触发者重解）
 					out = append(out, d)
 				}
-				if v, ok := sc.Parent.UseValue("permission", "mode"); ok {
+				// 定义当前的 [use.permission] 也作为一层（Mortise docs/63 F1）：没装重解能力时上面只有冻结值，
+				// 定义后来收紧了老会话也要跟着收紧；定义放宽时冻结值仍在，老会话不放宽。
+				if sc.Def != nil {
+					if m, _ := sc.Def.Use["permission"]["mode"].(string); m != "" && m != u.Mode {
+						if d := lookup(m); d != nil {
+							out = append(out, d)
+						}
+					}
+				}
+				for _, v := range sc.Parent.UseValues("permission", "mode") { // 父会话冻结值与父定义当前值各一层
 					m, _ := v.(string)
 					if d := lookup(m); d != nil {
 						out = append(out, d)

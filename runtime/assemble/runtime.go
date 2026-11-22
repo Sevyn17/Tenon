@@ -468,6 +468,25 @@ func (p *ParentLimits) UseValue(component, key string) (any, bool) {
 	return nil, false
 }
 
+// UseValues 父会话给某组件某项的全部取值：会话行里冻结的 use_config 与父定义当前的 [use.*] 各一份（有才给）。
+// 上限类配置要两层都判、取更严（Mortise docs/63 F1）：只看冻结值时父定义后来收紧管不到子会话，
+// 只看当前值时定义放宽会连带放宽已有会话。
+func (p *ParentLimits) UseValues(component, key string) []any {
+	if p == nil {
+		return nil
+	}
+	var out []any
+	if v, ok := p.Use[component][key]; ok {
+		out = append(out, v)
+	}
+	if p.Def != nil {
+		if v, ok := p.Def.Use[component][key]; ok {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
 // parentLimits 读子会话 id 的父会话（会话行有 ParentID 就用它；新建时会话行还不存在，按 id 约定
 // "<父 id>/<子名>" 取，subagent 与 workgroup 都这样拼）。父会话不存在返回 nil。
 func (b *Builder) parentLimits(id string) (*ParentLimits, error) {
