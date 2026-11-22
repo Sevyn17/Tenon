@@ -128,6 +128,8 @@ type AppOptions struct {
 	Workspaces appapi.Workspaces
 	// Platform 平台账号（platform.* 命令）；nil = 这个应用不接平台，界面隐藏登录入口。
 	Platform appapi.Platform
+	// Extensions 产品扩展（appapi.Options.Extensions，docs/61 第 3 节）；可空。
+	Extensions []appapi.Extension
 }
 
 // Start 读信任与 profile，用 SDK 按 profile 装配（tenon.WithProfile）并启动组件（打开存储）。
@@ -188,6 +190,7 @@ func start(o StartOptions, pre *loaded) (*Runtime, error) {
 			ao.Profiles = Profiles{Base: o.Flags.BaseProfile, Extra: o.Flags.Profile, Root: root, Trusted: trusted}
 			ao.Upload, ao.Workspaces = o.App.Upload, o.App.Workspaces
 			ao.Platform = o.App.Platform
+			ao.Extensions = o.App.Extensions
 		}),
 	}
 	for name, kv := range Overrides(o.Flags, root) { // 命令行参数：叠在 profile 的组件配置上

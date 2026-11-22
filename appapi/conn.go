@@ -108,6 +108,9 @@ func (a *App) NewConn(ctx context.Context, p wire.Principal) *Conn {
 	ns := a.o.Bus.Subscribe(cctx, bus.Filter{Kinds: []string{EventNotice}})
 	c.noticeFloor = a.notices.last()
 	go c.watchNotices(ns)
+	if !a.ext.empty() { // 产品事件（ext.go）：装了扩展才挂
+		go c.watchExt(a.o.Bus.Subscribe(cctx, bus.Filter{Kinds: []string{extBusKind}}))
+	}
 	context.AfterFunc(cctx, c.Close)
 	return c
 }
@@ -160,6 +163,13 @@ func (c *Conn) Call(ctx context.Context, cmd string, args json.RawMessage) (resu
 		result = nil
 		err = Errorf(wire.CodeInternal, "命令 %s执行发生内部错误", cmd)
 	})
+	if ec, ok := c.a.ext.lookup(cmd); ok { // 产品扩展命令（ext.go）：缺省只给 operator，Viewer 打开 viewer
+		if c.p.Role != wire.RoleOperator && !ec.Viewer {
+			return nil, Errorf(wire.CodeForbidden, "身份 %s（%s）不能执行 %s", c.p.ID, c.p.Role, cmd)
+		}
+		out, _, err := c.a.callExt(ctx, c.p, cmd, args)
+		return out, err
+	}
 	if c.p.Role != wire.RoleOperator && !viewerCommands[cmd] {
 		return nil, Errorf(wire.CodeForbidden, "身份 %s（%s）不能执行 %s", c.p.ID, c.p.Role, cmd)
 	}

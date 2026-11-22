@@ -82,10 +82,7 @@ func (e *Enabled) path() string {
 	if e.Path != "" {
 		return e.Path
 	}
-	if h := appid.Home(); h != "" {
-		return filepath.Join(h, EnabledFile)
-	}
-	return ""
+	return appid.UserPath(EnabledFile) // 宿主可改位置（apphost.Paths.MCPEnabled）
 }
 
 func (e *Enabled) read() (enabledFile, error) {

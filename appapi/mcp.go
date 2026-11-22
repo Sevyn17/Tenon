@@ -15,6 +15,17 @@ import (
 	"github.com/Sevyn17/tenon/appapi/wire"
 )
 
+// 本文件的命令（按文件登记，v2.go 的 registerCommands）。
+func init() {
+	registerCommands(map[string]handler{
+		"mcp.list":       bind((*App).MCPList),
+		"mcp.test":       bind((*App).MCPTest),
+		"mcp.save":       bind((*App).MCPSave),
+		"mcp.remove":     bind((*App).MCPRemove),
+		"mcp.setEnabled": bind((*App).MCPSetEnabled),
+	})
+}
+
 // CapMCP hello 能力：mcp.* 命令可用（mcp.save / remove 是否可用看 mcp.list 的 editable）。
 const CapMCP = "mcp"
 

@@ -17,6 +17,18 @@ import (
 	"github.com/Sevyn17/tenon/appapi/wire"
 )
 
+// 本文件的命令（按文件登记，v2.go 的 registerCommands）。
+func init() {
+	registerCommands(map[string]handler{
+		"models.providers.list":            bind((*App).ModelProvidersList),
+		"models.providers.save":            bind((*App).ModelProvidersSave),
+		"models.providers.remove":          bind((*App).ModelProvidersRemove),
+		"models.providers.setModelEnabled": bind((*App).ModelProvidersSetModelEnabled),
+		"models.providers.test":            bind((*App).ModelProvidersTest),
+		"models.providers.fetchModels":     bind((*App).ModelProvidersFetchModels),
+	})
+}
+
 // CapProviders hello 能力：models.providers.* 可用。
 const CapProviders = "providers"
 

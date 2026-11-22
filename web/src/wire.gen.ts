@@ -251,6 +251,8 @@ export interface SessionSnapshot {
   cursor: number;
   last_end?: TurnEnded;
   queued?: QueuedInput[];
+  source?: string;
+  ref?: string;
 }
 
 export interface SessionInfo {
@@ -265,6 +267,8 @@ export interface SessionInfo {
   workspace?: string;
   archived?: boolean;
   last_end?: TurnEnded;
+  source?: string;
+  ref?: string;
 }
 
 export interface Principal {
@@ -459,6 +463,12 @@ export interface HelloResult {
   trusted: boolean;
   max_output: number;
   workspace?: string;
+  extensions?: ExtensionInfo[];
+}
+
+export interface ExtensionInfo {
+  namespace: string;
+  version?: string;
 }
 
 export interface SessionArgs {
@@ -522,6 +532,9 @@ export interface CreateArgs {
   session?: string;
   definition?: string;
   client_id?: string;
+  source?: string;
+  ref?: string;
+  title?: string;
 }
 
 export interface SubscribeArgs {

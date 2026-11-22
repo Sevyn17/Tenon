@@ -154,7 +154,7 @@ func describe(home string, p *pkgs.Package, prof *component.Profile) wire.Packag
 	sort.Strings(names)
 	for _, n := range names {
 		denied := map[string]bool{}
-		for _, k := range projectDenied[n] {
+		for _, k := range deniedKeys(n) {
 			denied[k] = true
 		}
 		keys := make([]string, 0, len(p.Config[n]))

@@ -106,3 +106,44 @@ func Home() string { return Get().Home() }
 
 // Project 当前项目级目录。
 func Project(root string) string { return Get().Project(root) }
+
+// 用户级目录下由框架读写的文件与目录（UserPath 的 name）。宿主可经 SetUserPaths 改到别处。
+const (
+	FileTrust          = "trust.toml"           // 项目信任与档位放宽确认
+	FileRecent         = "workspaces.json"      // 最近工作区
+	FileSkills         = "skills.toml"          // 技能启停记录
+	FileMCPEnabled     = "mcp-enabled.toml"     // MCP 服务启用记录
+	FilePluginsEnabled = "plugins-enabled.toml" // 插件包启停记录
+	FilePermissions    = "permissions.toml"     // 用户级权限配置
+	DirModes           = "modes"                // 用户级自定义档位目录
+)
+
+var userPaths atomic.Pointer[map[string]string]
+
+// SetUserPaths 设置本进程的用户级路径覆盖：键是上面的 File* / Dir* 名，值是绝对路径；空值与 nil = 用缺省
+// （<用户级目录>/<名>）。整体替换上一次的设置。进程级，与 Set 一样应在装配前调用。
+func SetUserPaths(m map[string]string) {
+	c := map[string]string{}
+	for k, v := range m {
+		if v != "" {
+			c[k] = v
+		}
+	}
+	userPaths.Store(&c)
+}
+
+// UserPathIn 用户级文件 name 的位置：有覆盖用覆盖，否则 <home>/<name>；都没有（home 为空）返回空。
+func UserPathIn(home, name string) string {
+	if p := userPaths.Load(); p != nil {
+		if v := (*p)[name]; v != "" {
+			return v
+		}
+	}
+	if home == "" {
+		return ""
+	}
+	return filepath.Join(home, name)
+}
+
+// UserPath 当前用户级目录下 name 的位置（见 UserPathIn）。
+func UserPath(name string) string { return UserPathIn(Home(), name) }

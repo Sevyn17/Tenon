@@ -27,6 +27,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 
+	"github.com/Sevyn17/tenon/runtime/appid"
 	"github.com/Sevyn17/tenon/runtime/pkgs"
 )
 
@@ -62,7 +63,8 @@ type enabledFile struct {
 	Disabled []string `toml:"disabled"`
 }
 
-func enabledPath(home string) string { return filepath.Join(home, EnabledFile) }
+// enabledPath 启停记录位置：缺省 <home>/plugins-enabled.toml，宿主可改（apphost.Paths.PluginsEnabled）。
+func enabledPath(home string) string { return appid.UserPathIn(home, EnabledFile) }
 
 // Disabled 用户停用的插件包名（记录文件不存在 = 没有）。
 func Disabled(home string) (map[string]bool, error) {

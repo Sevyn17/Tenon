@@ -15,6 +15,28 @@ import (
 	"github.com/Sevyn17/tenon/appapi/wire"
 )
 
+// 本文件的命令（按文件登记，v2.go 的 registerCommands）。
+func init() {
+	registerCommands(map[string]handler{
+		"platform.status":           bind((*App).PlatformStatus),
+		"platform.login":            bind((*App).PlatformLogin),
+		"platform.logout":           bind((*App).PlatformLogout),
+		"platform.entitlements":     bind((*App).PlatformEntitlements),
+		"platform.apikey.list":      bind((*App).PlatformAPIKeyList),
+		"platform.apikey.create":    bind((*App).PlatformAPIKeyCreate),
+		"platform.apikey.revoke":    bind((*App).PlatformAPIKeyRevoke),
+		"platform.byok.list":        bind((*App).PlatformBYOKList),
+		"platform.byok.save":        bind((*App).PlatformBYOKSave),
+		"platform.byok.remove":      bind((*App).PlatformBYOKRemove),
+		"platform.byok.setDefault":  bind((*App).PlatformBYOKSetDefault),
+		"platform.byok.test":        bind((*App).PlatformBYOKTest),
+		"platform.configure":        bind((*App).PlatformConfigure),
+		"platform.adminModels":      bind((*App).PlatformAdminModels),
+		"platform.passwordRegister": bind((*App).PlatformPasswordRegister),
+		"platform.passwordLogin":    bind((*App).PlatformPasswordLogin),
+	})
+}
+
 // Platform 平台账号能力。由应用实现并注入；nil = 这个应用不接平台。
 //
 // 四个方法对应四条命令，语义见各命令的注释。

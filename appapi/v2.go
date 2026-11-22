@@ -73,88 +73,58 @@ func bind[In, Out any](f func(*App, context.Context, In) (Out, error)) handler {
 	}
 }
 
-var commands = map[string]handler{
-	"hello":             bind((*App).Hello),
-	"sessions.list":     bind((*App).SessionsList),
-	"session.create":    bind((*App).Create),
-	"session.update":    bind((*App).Update),
-	"session.delete":    bind((*App).Delete),
-	"feedback.list":     bind((*App).FeedbackList),
-	"session.followups": bind((*App).SessionFollowups),
-	"feedback.set": bind(func(v *App, ctx context.Context, in wire.FeedbackArgs) (wire.Feedback, error) {
-		return v.FeedbackSet(ctx, in, LocalPrincipal.ID) // 进程内调用按本机身份；连接上按连接身份（conn.go）
-	}),
-	"session.get":         bind((*App).Get),
-	"session.entries":     bind((*App).Entries),
-	"session.send":        bind((*App).Send),
-	"session.steer":       bind((*App).Steer),
-	"session.unqueue":     bind((*App).Unqueue),
-	"session.cancel":      bind((*App).Cancel),
-	"session.rewind":      bind((*App).Rewind),
-	"session.compact":     bind((*App).Compact),
-	"session.fork":        bind((*App).Fork),
-	"session.stats":       bind((*App).Stats),
-	"session.settings":    bind((*App).Settings),
-	"mode.list":           bind((*App).ModeList),
-	"mode.get":            bind((*App).ModeGet),
-	"mode.set":            bind((*App).ModeSet),
-	"mode.show":           bind((*App).ModeShow),
-	"mode.save":           bind((*App).ModeSave), // docs/51 第 6 节（mode_edit.go）
-	"mode.remove":         bind((*App).ModeRemove),
-	"mode.setDefault":     bind((*App).ModeSetDefault),
-	"artifact.get":        bind((*App).ArtifactGet),
-	"artifact.put":        bind((*App).ArtifactPut),
-	"trace.explain":       bind((*App).Trace),
-	"interaction.respond": bind((*App).Respond),
-	"interactions.list":   bind((*App).Interactions),
-	"plugins.list":        bind((*App).PluginsList),
-	"packages.list":       bind((*App).PackagesList),
-	"packages.preview":    bind((*App).PackagesPreview), // 客户端改进 M11 配置T22（packages.go）
-	"packages.install":    bind((*App).PackagesInstall),
-	"packages.remove":     bind((*App).PackagesRemove),
-	"packages.setEnabled": bind((*App).PackagesSetEnabled),
-	"plugins.set":         bind((*App).PluginsSet),
-	"workspace.files":     bind((*App).WorkspaceFiles),
-	"changes.list":        bind((*App).ChangesList),
-	"changes.diff":        bind((*App).ChangesDiff),
-	"changes.revert":      bind((*App).ChangesRevert),
-	"skills.list":         bind((*App).SkillsList),
-	"skills.setEnabled":   bind((*App).SkillsSetEnabled),
-	"mcp.list":            bind((*App).MCPList), // 客户端改进 M11（mcp.go）
-	"mcp.test":            bind((*App).MCPTest),
-	"mcp.save":            bind((*App).MCPSave),
-	"mcp.remove":          bind((*App).MCPRemove),
-	"mcp.setEnabled":      bind((*App).MCPSetEnabled),
-	"models.list":         bind((*App).ModelsList),
-	// 自定义模型：厂商 → 密钥 → 模型（docs/51 第 4 节，providers.go）
-	"models.providers.list":            bind((*App).ModelProvidersList),
-	"models.providers.save":            bind((*App).ModelProvidersSave),
-	"models.providers.remove":          bind((*App).ModelProvidersRemove),
-	"models.providers.setModelEnabled": bind((*App).ModelProvidersSetModelEnabled),
-	"models.providers.test":            bind((*App).ModelProvidersTest),
-	"models.providers.fetchModels":     bind((*App).ModelProvidersFetchModels),
-	// 平台账号（可选能力；应用没接平台时返回 Configured=false，不报错）
-	"platform.status":           bind((*App).PlatformStatus),
-	"platform.login":            bind((*App).PlatformLogin),
-	"platform.logout":           bind((*App).PlatformLogout),
-	"platform.entitlements":     bind((*App).PlatformEntitlements),
-	"platform.apikey.list":      bind((*App).PlatformAPIKeyList),
-	"platform.apikey.create":    bind((*App).PlatformAPIKeyCreate),
-	"platform.apikey.revoke":    bind((*App).PlatformAPIKeyRevoke),
-	"platform.byok.list":        bind((*App).PlatformBYOKList),
-	"platform.byok.save":        bind((*App).PlatformBYOKSave),
-	"platform.byok.remove":      bind((*App).PlatformBYOKRemove),
-	"platform.byok.setDefault":  bind((*App).PlatformBYOKSetDefault),
-	"platform.byok.test":        bind((*App).PlatformBYOKTest),
-	"platform.configure":        bind((*App).PlatformConfigure),
-	"platform.adminModels":      bind((*App).PlatformAdminModels),
-	"platform.passwordRegister": bind((*App).PlatformPasswordRegister),
-	"platform.passwordLogin":    bind((*App).PlatformPasswordLogin),
-	"workspace.list":            bind((*App).WorkspaceList),
-	"workspace.open":            bind((*App).WorkspaceOpen),
-	"workspace.reload":          bind((*App).WorkspaceReload),
-	"workspace.trustPreview":    bind((*App).WorkspaceTrustPreview), // 客户端改进 M11（trust.go）
-	"workspace.trust":           bind((*App).WorkspaceTrust),
+// commands 核心命令表：各模块文件在自己的 init 里用 registerCommands 登记（docs/61 T0：按文件登记，新命令写在 appapi/<mod>.go）。
+var commands = map[string]handler{}
+
+// registerCommands 登记核心命令；同名重复登记 panic（启动即失败）。
+func registerCommands(m map[string]handler) {
+	for k, h := range m {
+		if _, dup := commands[k]; dup {
+			panic("appapi: 命令重复登记 " + k)
+		}
+		commands[k] = h
+	}
+}
+
+// 握手、会话、档位、工件、插件、工作区等基础命令（实现在本文件）。其余模块的命令在各自文件的 init 里登记：
+// interact.go、queue.go、mode_edit.go、packages.go、changes.go、skills.go、mcp.go、providers.go、platform.go、trust.go。
+func init() {
+	registerCommands(map[string]handler{
+		"hello":             bind((*App).Hello),
+		"sessions.list":     bind((*App).SessionsList),
+		"session.create":    bind((*App).Create),
+		"session.update":    bind((*App).Update),
+		"session.delete":    bind((*App).Delete),
+		"feedback.list":     bind((*App).FeedbackList),
+		"session.followups": bind((*App).SessionFollowups),
+		"feedback.set": bind(func(v *App, ctx context.Context, in wire.FeedbackArgs) (wire.Feedback, error) {
+			return v.FeedbackSet(ctx, in, LocalPrincipal.ID) // 进程内调用按本机身份；连接上按连接身份（conn.go）
+		}),
+		"session.get":      bind((*App).Get),
+		"session.entries":  bind((*App).Entries),
+		"session.send":     bind((*App).Send),
+		"session.steer":    bind((*App).Steer),
+		"session.cancel":   bind((*App).Cancel),
+		"session.rewind":   bind((*App).Rewind),
+		"session.compact":  bind((*App).Compact),
+		"session.fork":     bind((*App).Fork),
+		"session.stats":    bind((*App).Stats),
+		"session.settings": bind((*App).Settings),
+		"mode.list":        bind((*App).ModeList),
+		"mode.get":         bind((*App).ModeGet),
+		"mode.set":         bind((*App).ModeSet),
+		"mode.show":        bind((*App).ModeShow),
+		"artifact.get":     bind((*App).ArtifactGet),
+		"artifact.put":     bind((*App).ArtifactPut),
+		"trace.explain":    bind((*App).Trace),
+		"plugins.list":     bind((*App).PluginsList),
+		"plugins.set":      bind((*App).PluginsSet),
+		"workspace.files":  bind((*App).WorkspaceFiles),
+		"models.list":      bind((*App).ModelsList),
+		"workspace.list":   bind((*App).WorkspaceList),
+		"workspace.open":   bind((*App).WorkspaceOpen),
+		"workspace.reload": bind((*App).WorkspaceReload),
+	})
 }
 
 // Commands protocol 2 支持的命令名（排序后）。
@@ -171,6 +141,9 @@ func Commands() []string {
 func (a *App) Call(ctx context.Context, cmd string, args json.RawMessage) (any, error) {
 	h, ok := commands[cmd]
 	if !ok {
+		if out, ok, err := a.callExt(ctx, LocalPrincipal, cmd, args); ok { // 产品扩展命令（ext.go），进程内按本机身份
+			return out, err
+		}
 		return nil, Errorf(wire.CodeUnsupported, "未知命令 %q", cmd)
 	}
 	return h(ctx, a, args)
@@ -251,7 +224,7 @@ func (v *App) Hello(_ context.Context, in wire.HelloArgs) (wire.HelloResult, err
 	}
 	return wire.HelloResult{Protocol: wire.Protocol, Server: appid.Name(), Principal: LocalPrincipal,
 		Capabilities: v.capabilities(), Model: o.Model, Workdir: o.Workdir, Trusted: o.Trusted, MaxOutput: MaxWireText,
-		Workspace: ws}, nil
+		Workspace: ws, Extensions: v.extInfos()}, nil
 }
 
 // capabilities 按装配了哪些部件列出可选功能，界面据此决定显示哪些入口。
@@ -365,6 +338,14 @@ func (v *App) capabilities() []string {
 	}
 	// work_mode（M12 Plan 模式）：session.settings {work_mode}、Settings.work_mode、plan 交互。框架内置，总是报。
 	out = append(out, CapWorkMode)
+	// 产品扩展的能力（docs/61 3.2，ext.go）：照常并进来，不重复。
+	if v.ext != nil {
+		for _, c := range v.ext.caps {
+			if !slices.Contains(out, c) {
+				out = append(out, c)
+			}
+		}
+	}
 	return out
 }
 
@@ -465,10 +446,20 @@ func pinnedOf(meta json.RawMessage) bool {
 	return m[metaPinned] == true
 }
 
+// sourceOf 业务键里的来源与引用（session.create {source, ref}）。
+func sourceOf(meta json.RawMessage) (source, ref string) {
+	var m map[string]any
+	_ = json.Unmarshal(meta, &m)
+	source, _ = m[metaSource].(string)
+	ref, _ = m[metaRef].(string)
+	return source, ref
+}
+
 func wireInfo(s store.SessionInfo) wire.SessionInfo {
+	src, ref := sourceOf(s.Meta)
 	return wire.SessionInfo{ID: s.ID, Title: s.Title, Preview: s.Preview, RunState: wireRun(s.RunState),
 		Origin: s.Origin, Parent: s.ParentID, UpdatedAt: s.UpdatedAt, Pinned: pinnedOf(s.Meta), Workspace: s.Workspace,
-		Archived: store.ArchivedOf(s.Meta), LastEnd: WireLastEnd(s.LastEnd)}
+		Archived: store.ArchivedOf(s.Meta), LastEnd: WireLastEnd(s.LastEnd), Source: src, Ref: ref}
 }
 
 // MaxQuery sessions.list {query} 的上限（字节）。用户消息只比较前 200 字，再长也搜不到。
@@ -850,9 +841,13 @@ func (v *App) Create(ctx context.Context, in wire.CreateArgs) (wire.SessionSnaps
 	if err := validID(id); err != nil {
 		return wire.SessionSnapshot{}, err
 	}
+	title, err := createTitle(in)
+	if err != nil {
+		return wire.SessionSnapshot{}, err
+	}
 	var meta json.RawMessage
-	if in.ClientID != "" {
-		meta, _ = json.Marshal(map[string]string{metaClientID: in.ClientID})
+	if bm := createMeta(in); len(bm) > 0 {
+		meta, _ = json.Marshal(bm)
 	}
 	if _, err := v.o.Host.Create(ctx, id, in.Definition, meta); err != nil {
 		if !errors.Is(err, store.ErrConflict) {
@@ -863,7 +858,59 @@ func (v *App) Create(ctx context.Context, in wire.CreateArgs) (wire.SessionSnaps
 		}
 		return wire.SessionSnapshot{}, conflict(wire.ConflictExists, "会话 %s 已存在", id)
 	}
+	if title != "" { // 初始标题（docs/57 4.2 钩子 3）：有标题后 autoTitle 不再改它
+		if ms, ok := v.o.DB.(store.SessionMetaStore); ok {
+			if err := ms.UpdateSessionMeta(ctx, id, &title, nil); err != nil {
+				return wire.SessionSnapshot{}, err
+			}
+		}
+	}
 	return v.snapshot(ctx, id)
+}
+
+// 会话行业务键里的来源与引用（session.create {source, ref}）。
+const (
+	metaSource = "source"
+	metaRef    = "ref"
+)
+
+// createMeta session.create 记在会话行业务键里的项（client_id、source、ref）。
+func createMeta(in wire.CreateArgs) map[string]string {
+	m := map[string]string{}
+	if in.ClientID != "" {
+		m[metaClientID] = in.ClientID
+	}
+	if in.Source != "" {
+		m[metaSource] = in.Source
+	}
+	if in.Ref != "" {
+		m[metaRef] = in.Ref
+	}
+	return m
+}
+
+// createTitle 校验 session.create 的 source / ref / title，返回整理后的标题。
+func createTitle(in wire.CreateArgs) (string, error) {
+	for name, s := range map[string]string{"source": in.Source, "ref": in.Ref} {
+		if len(s) > 128 {
+			return "", invalid("%s 超过 128 字节", name)
+		}
+		for _, r := range s {
+			if r < 0x20 || r == 0x7f {
+				return "", invalid("%s 不能含控制字符", name)
+			}
+		}
+	}
+	t := strings.TrimSpace(in.Title)
+	if len(t) > MaxTitle {
+		return "", invalid("标题超过 %d 字节", MaxTitle)
+	}
+	for _, r := range t {
+		if r < 0x20 || r == 0x7f {
+			return "", invalid("标题不能含换行或控制字符")
+		}
+	}
+	return t, nil
 }
 
 // createdBy 会话是否由带这个 client_id 的 session.create 建的。
@@ -923,7 +970,9 @@ func (v *App) snapshot(ctx context.Context, id string) (wire.SessionSnapshot, er
 	if h.Status == session.StatusIdle { // 运行中不给：上一回合的结束原因已经过期
 		lastEnd = WireLastEnd(l.LastEnd)
 	}
+	src, ref := sourceOf(l.Meta.Meta)
 	return wire.SessionSnapshot{ID: id, Parent: l.Meta.ParentID, Origin: l.Meta.Origin, Title: l.Meta.Title, Pinned: pinnedOf(l.Meta.Meta),
+		Source: src, Ref: ref,
 		Archived: store.ArchivedOf(l.Meta.Meta), RunState: WireRunState(h.Status), Mode: v.committedMode(id, modeHdr), Settings: settingsOf(h),
 		Log: wire.LogPos{Base: h.CompactionBase, Len: h.LogLen}, Interactions: v.openInteractions(ctx, id), Cursor: l.Cursor,
 		Live: v.live(id, h), LastEnd: lastEnd, Queued: v.queuedOf(ctx, id)}, nil

@@ -250,7 +250,7 @@ func previewProfile(path string, note func(string)) []wire.TrustPluginSetting {
 	for _, e := range q.Plugins {
 		s := wire.TrustPluginSetting{Name: e.Name, Enabled: e.Enabled}
 		denied := map[string]bool{}
-		for _, k := range projectDenied[e.Name] {
+		for _, k := range deniedKeys(e.Name) {
 			denied[k] = true
 		}
 		for k := range e.Config {

@@ -89,10 +89,7 @@ func (s *State) path() string {
 	if s.Path != "" {
 		return s.Path
 	}
-	if h := appid.Home(); h != "" {
-		return filepath.Join(h, StateFile)
-	}
-	return ""
+	return appid.UserPath(StateFile) // 宿主可改位置（apphost.Paths.Skills）
 }
 
 func (s *State) read() (stateFile, error) {

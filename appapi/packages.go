@@ -17,6 +17,17 @@ import (
 	"github.com/Sevyn17/tenon/runtime/pkgs"
 )
 
+// 本文件的命令（按文件登记，v2.go 的 registerCommands）。
+func init() {
+	registerCommands(map[string]handler{
+		"packages.list":       bind((*App).PackagesList),
+		"packages.preview":    bind((*App).PackagesPreview),
+		"packages.install":    bind((*App).PackagesInstall),
+		"packages.remove":     bind((*App).PackagesRemove),
+		"packages.setEnabled": bind((*App).PackagesSetEnabled),
+	})
+}
+
 // CapPackagesManage hello 能力：packages.preview / install / remove / setEnabled 可用，packages.list 带 enabled 等字段。
 const CapPackagesManage = "packages.manage"
 

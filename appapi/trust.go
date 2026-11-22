@@ -14,6 +14,14 @@ import (
 	"github.com/Sevyn17/tenon/appapi/wire"
 )
 
+// 本文件的命令（按文件登记，v2.go 的 registerCommands）。
+func init() {
+	registerCommands(map[string]handler{
+		"workspace.trustPreview": bind((*App).WorkspaceTrustPreview),
+		"workspace.trust":        bind((*App).WorkspaceTrust),
+	})
+}
+
 // CapWorkspaceTrust hello 能力：workspace.trustPreview / workspace.trust 可用。
 const CapWorkspaceTrust = "workspace.trust"
 

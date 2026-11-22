@@ -155,14 +155,16 @@ func TestPluginsSetKeepsAStore(t *testing.T) {
 }
 
 // 受信项目的 profile 也不能设端点、凭据、存储位置：读的时候剥离并提示，其余键照常生效。
-// gateway-adapter 是产品侧的插件（框架里没登记），剥离只看名字，不要求插件已登记。
+// 产品插件的禁设键经 DenyProjectKeys 登记（框架只自带 models）；剥离只看名字，不要求插件已登记。
 func TestProjectProfileDeniedKeys(t *testing.T) {
+	DenyProjectKeys("demo-gateway", "server_url", "token")
+	DenyProjectKeys("demo-gateway", "token") // 重复登记去重
 	t.Setenv("TENON_HOME", t.TempDir())
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, ".tenon"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	body := "[[plugin]]\nname = \"gateway-adapter\"\nconfig = { server_url = \"http://evil\", token = \"x\", model = \"m\" }\n" +
+	body := "[[plugin]]\nname = \"demo-gateway\"\nconfig = { server_url = \"http://evil\", token = \"x\", model = \"m\" }\n" +
 		"[[plugin]]\nname = \"models\"\nconfig = { base_url = \"http://evil\", model = \"m\" }\n"
 	if err := os.WriteFile(filepath.Join(root, ".tenon", "profile.toml"), []byte(body), 0o644); err != nil {
 		t.Fatal(err)
@@ -172,7 +174,7 @@ func TestProjectProfileDeniedKeys(t *testing.T) {
 		t.Fatal(err)
 	}
 	all := strings.Join(notes, "\n")
-	for _, k := range []string{"gateway-adapter.server_url", "gateway-adapter.token", "models.base_url"} {
+	for _, k := range []string{"demo-gateway.server_url", "demo-gateway.token", "models.base_url"} {
 		if !strings.Contains(all, "项目 profile 不能设 "+k) {
 			t.Errorf("应提示 %s 被忽略：\n%s", k, all)
 		}
@@ -180,16 +182,16 @@ func TestProjectProfileDeniedKeys(t *testing.T) {
 	seen := false
 	for _, e := range p.Plugins {
 		switch e.Name {
-		case "gateway-adapter":
+		case "demo-gateway":
 			seen = true
 			if _, ok := e.Config["server_url"]; ok {
-				t.Error("gateway-adapter.server_url 应被剥离")
+				t.Error("demo-gateway.server_url 应被剥离")
 			}
 			if _, ok := e.Config["token"]; ok {
-				t.Error("gateway-adapter.token 应被剥离")
+				t.Error("demo-gateway.token 应被剥离")
 			}
 			if e.Config["model"] != "m" {
-				t.Errorf("gateway-adapter.model 应保留：%+v", e.Config)
+				t.Errorf("demo-gateway.model 应保留：%+v", e.Config)
 			}
 		case "models":
 			if _, ok := e.Config["base_url"]; ok {
@@ -198,11 +200,11 @@ func TestProjectProfileDeniedKeys(t *testing.T) {
 		}
 	}
 	if !seen {
-		t.Fatal("项目 profile 里的 gateway-adapter 行应保留（只剥离禁设的键）")
+		t.Fatal("项目 profile 里的 demo-gateway 行应保留（只剥离禁设的键）")
 	}
 	// plugins.set 用的同一份名单
-	if d := (Profiles{}).Denied()["gateway-adapter"]; strings.Join(d, ",") != "server_url,token" {
-		t.Fatalf("Denied()[gateway-adapter] = %v", d)
+	if d := (Profiles{}).Denied()["demo-gateway"]; strings.Join(d, ",") != "server_url,token" {
+		t.Fatalf("Denied()[demo-gateway] = %v", d)
 	}
 }
 

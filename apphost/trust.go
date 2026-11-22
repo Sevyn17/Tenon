@@ -148,13 +148,8 @@ func PackageNotices(p *component.Profile, ps []*pkgs.Package) []string {
 	return out
 }
 
-// TrustPath trust.toml 位置：用户级目录（Home）下的 trust.toml；取不到用户目录返回空。
-func TrustPath() string {
-	if h := Home(); h != "" {
-		return filepath.Join(h, "trust.toml")
-	}
-	return ""
-}
+// TrustPath trust.toml 位置：Paths.Trust，缺省用户级目录（Home）下的 trust.toml；取不到用户目录返回空。
+func TrustPath() string { return appid.UserPath(appid.FileTrust) }
 
 // ProjectKey 信任记录的键：向上找 .git，找不到用工作目录本身。
 func ProjectKey(root string) string {
@@ -277,25 +272,6 @@ func ResolveTrust(force bool, root string, ask func(key string) bool) (bool, str
 	return ok, "首次询问", nil
 }
 
-// projectDenied 受信项目也不能设的键（端点 / 凭据 / 存储位置）。插件包（用户级与项目级）同样不能设，见 LoadAll。
-// store-sqlite 是产品侧存储插件的名字（框架不再自带，见 20 篇），dir 决定库文件位置。
-// gateway-adapter 是产品侧的平台网关插件：server_url 能把用户的平台令牌带到别处，token 是凭据。
-var projectDenied = map[string][]string{
-	"models":          {"base_url", "catalog"},
-	"store-sqlite":    {"dir"},
-	"gateway-adapter": {"server_url", "token"},
-}
-
-// deniedPlugins projectDenied 的插件名（排序，提示顺序固定）。
-func deniedPlugins() []string {
-	out := make([]string, 0, len(projectDenied))
-	for n := range projectDenied {
-		out = append(out, n)
-	}
-	sort.Strings(out)
-	return out
-}
-
 // LoadProfiles 同 LoadAll，不要插件包列表。
 func LoadProfiles(base, extra, root string, trusted bool) (*component.Profile, []string, error) {
 	p, _, notes, err := LoadAll(base, extra, root, trusted)
@@ -330,7 +306,7 @@ func LoadAll(base, extra, root string, trusted bool) (*component.Profile, []*pkg
 			label = "项目插件包"
 		}
 		for _, name := range deniedPlugins() {
-			for _, key := range q.Strip(name, projectDenied[name]...) {
+			for _, key := range q.Strip(name, deniedKeys(name)...) {
 				notes = append(notes, fmt.Sprintf("%s %s 不能设 %s，已忽略", label, k.Name, key))
 			}
 		}
@@ -347,16 +323,16 @@ func LoadAll(base, extra, root string, trusted bool) (*component.Profile, []*pkg
 			return err
 		}
 		if project {
-			for name, keys := range projectDenied {
-				for _, k := range q.Strip(name, keys...) {
+			for _, name := range deniedPlugins() {
+				for _, k := range q.Strip(name, deniedKeys(name)...) {
 					notes = append(notes, fmt.Sprintf("项目 profile 不能设 %s，已忽略", k))
 				}
 			}
 		}
 		return p.Overlay(q)
 	}
-	if tp := TrustPath(); tp != "" {
-		if err := layer(filepath.Join(filepath.Dir(tp), "profile.toml"), false); err != nil {
+	if h := Home(); h != "" {
+		if err := layer(filepath.Join(h, "profile.toml"), false); err != nil {
 			return nil, nil, nil, err
 		}
 	}

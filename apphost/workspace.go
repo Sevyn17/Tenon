@@ -20,6 +20,7 @@ import (
 
 	"github.com/Sevyn17/tenon/appapi"
 	"github.com/Sevyn17/tenon/appapi/wire"
+	"github.com/Sevyn17/tenon/runtime/appid"
 	"github.com/Sevyn17/tenon/runtime/resmgr"
 )
 
@@ -38,6 +39,8 @@ type WorkspaceOptions struct {
 	RecentPath string
 	// Platform 平台账号（platform.* 命令）；nil = 不接平台。切换工作区后新 App 沿用同一个。
 	Platform appapi.Platform
+	// Extensions 产品扩展（appapi.Options.Extensions）；切换工作区后新 App 沿用同一组。
+	Extensions []appapi.Extension
 	// ResourceIdle 统一资源管理器里没有引用的实例（如 MCP 进程）多久回收；0 = resmgr.DefaultIdle（5 分钟），<0 = 立即回收。
 	ResourceIdle time.Duration
 	// ResourceMax 资源管理器的实例数上限；0 = 不限。
@@ -127,7 +130,7 @@ func (m *WorkspaceManager) startWith(dir string, pre *loaded) (*Workspace, error
 	}
 	// 网页端、桌面端都没有终端可问：无信任记录的项目按不受信（同启动时）；界面走协议（UI 为 nil）。
 	rt, err := start(StartOptions{Flags: f, SleepAfter: m.o.SleepAfter,
-		App:       AppOptions{MaxSteps: f.MaxSteps, Upload: m.o.Upload, Workspaces: m, Platform: m.o.Platform},
+		App:       AppOptions{MaxSteps: f.MaxSteps, Upload: m.o.Upload, Workspaces: m, Platform: m.o.Platform, Extensions: m.o.Extensions},
 		resources: bound}, pre)
 	if err != nil {
 		if bound != nil {
@@ -280,10 +283,7 @@ func recentFile(path string) string {
 	if path != "" {
 		return path
 	}
-	if h := Home(); h != "" {
-		return filepath.Join(h, "workspaces.json")
-	}
-	return ""
+	return appid.UserPath(appid.FileRecent)
 }
 
 // RecentWorkspaces 最近打开的工作区目录，最近的在前（与 WorkspaceManager.List 同一份记录）。

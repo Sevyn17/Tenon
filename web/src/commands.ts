@@ -88,8 +88,15 @@ export const COMMANDS = [
 
 export type Command = (typeof COMMANDS)[number];
 
-/** 命令名 → [参数, 结果]。 */
-export interface CommandMap {
+/**
+ * 命令名 → [参数, 结果]（可声明合并，docs/61 3.3）。产品扩展命令这样加：
+ * `declare module "@tenon/client" { interface CommandMap { "mortise.system.storage": [Empty, StorageResult] } }`
+ * 合并后 `call<K extends keyof CommandMap>` 直接认新命令。COMMANDS 只列核心命令。
+ */
+export interface CommandMap extends CoreCommandMap {}
+
+/** 核心命令表（tenon 自己的命令，与 COMMANDS 一一对应）。 */
+export interface CoreCommandMap {
   hello: [W.HelloArgs, W.HelloResult];
   "sessions.list": [W.ListArgs, W.ListResult];
   "session.create": [W.CreateArgs, W.SessionSnapshot];
@@ -171,9 +178,9 @@ export interface CommandMap {
   "trace.explain": [W.TraceArgs, W.TraceResult];
 }
 
-// 编译期核对：COMMANDS 与 CommandMap 的键一一对应。
-type _Missing = Exclude<Command, keyof CommandMap>;
-type _Extra = Exclude<keyof CommandMap, Command>;
+// 编译期核对：COMMANDS 与 CoreCommandMap 的键一一对应（产品合并进 CommandMap 的命令不在核对范围）。
+type _Missing = Exclude<Command, keyof CoreCommandMap>;
+type _Extra = Exclude<keyof CoreCommandMap, Command>;
 const _check: [_Missing, _Extra] extends [never, never] ? true : never = true;
 void _check;
 

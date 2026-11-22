@@ -74,6 +74,14 @@ type HelloResult struct {
 	// Workspace 当前工作区的键（与 SessionInfo.workspace 同一个值，客户端改进 M7）：缺省列表只列这个工作区的会话。
 	// 空 = 宿主不按工作区分（CLI 等），列表不过滤。
 	Workspace string `json:"workspace,omitempty"`
+	// Extensions 装配的产品扩展（docs/61 3.2）；没有扩展时不给，旧客户端忽略。
+	Extensions []ExtensionInfo `json:"extensions,omitempty"`
+}
+
+// ExtensionInfo hello.extensions 的一项：产品扩展的命名空间与版本。
+type ExtensionInfo struct {
+	Namespace string `json:"namespace"`
+	Version   string `json:"version,omitempty"`
 }
 
 // SessionArgs 只带一个会话 id 的命令参数（session.get / stats / delete 等）。
@@ -168,6 +176,12 @@ type CreateArgs struct {
 	Session    string `json:"session,omitempty"`
 	Definition string `json:"definition,omitempty"`
 	ClientID   string `json:"client_id,omitempty"`
+	// Source / Ref 会话来源与来源内的引用（如 automation 与任务 id，docs/57 4.2 钩子 3）：记在会话元数据里，
+	// 快照与列表行带回。各不超过 128 字节、不含控制字符。
+	Source string `json:"source,omitempty"`
+	Ref    string `json:"ref,omitempty"`
+	// Title 初始标题（同 session.update 的规则）；给了就不再用第一条消息兜底起标题。
+	Title string `json:"title,omitempty"`
 }
 
 // SubscribeArgs session.subscribe：订阅某会话的事件（可含子会话）。

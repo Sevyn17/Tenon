@@ -13,6 +13,14 @@ import (
 	"github.com/Sevyn17/tenon/appapi/wire"
 )
 
+// 本文件的命令（按文件登记，v2.go 的 registerCommands）。
+func init() {
+	registerCommands(map[string]handler{
+		"skills.list":       bind((*App).SkillsList),
+		"skills.setEnabled": bind((*App).SkillsSetEnabled),
+	})
+}
+
 // Skills 技能目录与启停记录（skills 插件适配，见 adapters.Skills）。
 type Skills interface {
 	List(ctx context.Context) (wire.SkillsListResult, error)

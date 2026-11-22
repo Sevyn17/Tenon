@@ -18,6 +18,15 @@ import (
 	"github.com/Sevyn17/tenon/runtime/session"
 )
 
+// 本文件的命令（按文件登记，v2.go 的 registerCommands）。
+func init() {
+	registerCommands(map[string]handler{
+		"changes.list":   bind((*App).ChangesList),
+		"changes.diff":   bind((*App).ChangesDiff),
+		"changes.revert": bind((*App).ChangesRevert),
+	})
+}
+
 // Changes 文件改动的查询与还原（checkpoint 插件适配，见 adapters.Changes）。
 // live 报告一个工具调用 id 是否还在当前日志里（rewind 截掉的调用返回 false）；nil = 全部有效。
 type Changes interface {

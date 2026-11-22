@@ -256,11 +256,12 @@ func applyUse(u *UseConfig, v any) {
 // userHome 用户全局目录：应用的用户级目录（appid.Home）；取不到返回空。
 func userHome() string { return appid.Home() }
 
-// ModeDirs 自定义档位目录：用户级 <home>/modes，项目受信时再加 <project>/<数据目录>/modes（同名覆盖用户级）。
+// ModeDirs 自定义档位目录：用户级 <home>/modes（宿主可经 appid.SetUserPaths 改位置），
+// 项目受信时再加 <project>/<数据目录>/modes（同名覆盖用户级）。
 func ModeDirs(project string) []string {
 	var dirs []string
-	if h := userHome(); h != "" {
-		dirs = append(dirs, filepath.Join(h, "modes"))
+	if d := appid.UserPathIn(userHome(), appid.DirModes); d != "" {
+		dirs = append(dirs, d)
 	}
 	if project != "" {
 		dirs = append(dirs, filepath.Join(appid.Project(project), "modes"))

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -23,7 +24,7 @@ var tsTypes = []any{
 	InteractionResolved{}, SessionClosed{}, SessionForked{}, SessionUpdated{}, TurnStarted{}, TurnEnded{}, TurnRejected{},
 	MessageStarted{}, ModelRetrying{}, MessageDelta{}, StreamRef{}, ToolStarted{}, ToolArgsDelta{}, ToolRunning{}, ToolProgress{},
 	ToolEnded{}, Notice{}, CursorRef{}, SessionsChanged{},
-	ProtocolRange{}, HelloArgs{}, HelloResult{}, SessionArgs{}, ListArgs{}, ListResult{}, UpdateArgs{}, FeedbackArgs{}, Feedback{}, FeedbackListResult{}, FollowupsArgs{}, FollowupsResult{}, CreateArgs{},
+	ProtocolRange{}, HelloArgs{}, HelloResult{}, ExtensionInfo{}, SessionArgs{}, ListArgs{}, ListResult{}, UpdateArgs{}, FeedbackArgs{}, Feedback{}, FeedbackListResult{}, FollowupsArgs{}, FollowupsResult{}, CreateArgs{},
 	SubscribeArgs{}, EntriesArgs{}, EntriesResult{}, SendArgs{}, SendResult{}, SteerArgs{}, RewindArgs{},
 	QueuedInput{}, QueueChanged{}, UnqueueArgs{}, UnqueueResult{},
 	RewindResult{}, CompactArgs{}, CompactResult{}, ForkArgs{}, SettingsArgs{}, SettingsResult{}, ModelInfo{}, ModelsListResult{}, EffectiveModel{}, WorkspaceInfo{}, WorkspaceListResult{}, WorkspaceOpenArgs{}, WorkspaceOpenResult{}, WorkspaceReloadArgs{}, WorkspaceReloadResult{}, Response{},
@@ -123,26 +124,120 @@ func TypeScript() string {
 	b.WriteString("// 由 kernel/appapi/wire 生成，不要手改。重新生成：cd kernel && go test ./appapi/wire -run TestTypeScript -update\n\n")
 	fmt.Fprintf(&b, "export const PROTOCOL = %d;\n\n", Version)
 	for _, c := range tsConsts {
-		qs := make([]string, len(c.Values))
-		for i, v := range c.Values {
-			qs[i] = fmt.Sprintf("%q", v)
-		}
-		fmt.Fprintf(&b, "export const %s = [%s] as const;\n", c.Name, strings.Join(qs, ", "))
-		fmt.Fprintf(&b, "export type %s = (typeof %s)[number];\n\n", strings.TrimSuffix(c.Name, "s"), c.Name)
+		writeConst(&b, c.Name, c.Values)
 	}
-	for _, v := range tsTypes {
-		t := reflect.TypeOf(v)
-		fmt.Fprintf(&b, "export interface %s {\n", tsName(t))
-		for _, f := range fields(t) {
-			fmt.Fprintf(&b, "  %s%s: %s;\n", f.name, map[bool]string{true: "?", false: ""}[f.optional], tsFieldType(tsName(t), f, named))
-		}
-		b.WriteString("}\n\n")
-	}
+	writeTypes(&b, tsTypes, named)
 	// 声明式视图的节点是**可辨识联合**（按 type 分派），不是普通 interface：
 	// 渲染器要能靠 type 收窄，所以单独生成，形状由 declKinds 表驱动（declarative.go）。
 	b.WriteString(declActionTS() + "\n\n")
 	b.WriteString(declNodeTS() + "\n")
 	return strings.TrimRight(b.String(), "\n") + "\n"
+}
+
+func writeConst(b *strings.Builder, name string, values []string) {
+	qs := make([]string, len(values))
+	for i, v := range values {
+		qs[i] = fmt.Sprintf("%q", v)
+	}
+	fmt.Fprintf(b, "export const %s = [%s] as const;\n", name, strings.Join(qs, ", "))
+	fmt.Fprintf(b, "export type %s = (typeof %s)[number];\n\n", strings.TrimSuffix(name, "s"), name)
+}
+
+func writeTypes(b *strings.Builder, types []any, named map[reflect.Type]bool) {
+	for _, v := range types {
+		t := reflect.TypeOf(v)
+		fmt.Fprintf(b, "export interface %s {\n", tsName(t))
+		for _, f := range fields(t) {
+			fmt.Fprintf(b, "  %s%s: %s;\n", f.name, map[bool]string{true: "?", false: ""}[f.optional], tsFieldType(tsName(t), f, named))
+		}
+		b.WriteString("}\n\n")
+	}
+}
+
+// GenOptions Generate 的选项。
+type GenOptions struct {
+	// Header 文件头注释（不含 "// "，可多行）；空 = 一行「生成，不要手改」。
+	Header string
+	// Import 基础类型所在的 TS 模块（如 "@tenon/client"）；Base 里被引用到的类型从这里 import type。
+	Import string
+	// Base 已在 Import 模块里生成过的类型（如 wire.Empty{}、wire.Part{}）：字段引用它们时按名字引用、不内联。
+	Base []any
+}
+
+// Generate 按 Go 类型生成 TS 声明（产品扩展自己的 wire 类型用，docs/61 3.3）：每个类型一个 interface，
+// 字段规则与 wire.gen.ts 相同（omitempty 或指针 = 可选，json.RawMessage = unknown）。consts 的值须是 []string，
+// 每组生成 `export const X = [...] as const` 与 `export type X去掉末尾s`；按名字排序输出。
+// types 里没有、Base 里也没有的结构体内联成对象类型。
+func Generate(types []any, consts map[string]any, opts GenOptions) string {
+	named := map[reflect.Type]bool{}
+	for _, v := range types {
+		named[reflect.TypeOf(v)] = true
+	}
+	for _, v := range opts.Base {
+		named[reflect.TypeOf(v)] = true
+	}
+	var body strings.Builder
+	names := make([]string, 0, len(consts))
+	for k := range consts {
+		names = append(names, k)
+	}
+	sort.Strings(names)
+	for _, k := range names {
+		vs, ok := consts[k].([]string)
+		if !ok {
+			panic(fmt.Sprintf("wire.Generate: 常量组 %s 的值必须是 []string", k))
+		}
+		writeConst(&body, k, vs)
+	}
+	writeTypes(&body, types, named)
+	text := body.String()
+
+	var b strings.Builder
+	header := opts.Header
+	if header == "" {
+		header = "生成的文件，不要手改。"
+	}
+	for _, l := range strings.Split(strings.TrimRight(header, "\n"), "\n") {
+		b.WriteString("// " + l + "\n")
+	}
+	b.WriteString("\n")
+	if opts.Import != "" {
+		var used []string
+		for _, v := range opts.Base {
+			n := tsName(reflect.TypeOf(v))
+			if tsRefers(text, n) && !slices.Contains(used, n) {
+				used = append(used, n)
+			}
+		}
+		sort.Strings(used)
+		if len(used) > 0 {
+			fmt.Fprintf(&b, "import type { %s } from %q;\n\n", strings.Join(used, ", "), opts.Import)
+		}
+	}
+	b.WriteString(text)
+	return strings.TrimRight(b.String(), "\n") + "\n"
+}
+
+// tsRefers 生成的 TS 里是否以类型名引用了 name（按标识符边界）。
+func tsRefers(text, name string) bool {
+	for i := 0; ; {
+		j := strings.Index(text[i:], name)
+		if j < 0 {
+			return false
+		}
+		s, e := i+j, i+j+len(name)
+		before := s == 0 || !isIdent(text[s-1])
+		after := e == len(text) || !isIdent(text[e])
+		// 字段名后面跟 ":" 或 "?:"，不是类型引用
+		if before && after && !(e < len(text) && (text[e] == ':' || text[e] == '?')) {
+			return true
+		}
+		i = e
+	}
+}
+
+func isIdent(c byte) bool {
+	return c == '_' || c == '$' || c >= '0' && c <= '9' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z'
 }
 
 type tsField struct {

@@ -284,6 +284,9 @@ type SessionSnapshot struct {
 	// Queued 还在排队、没开始处理的输入（hello 能力 send.queue，客户端改进 M12 协议T20），按发送顺序；
 	// 没有排队时不给。读的是存储里的信箱，与 cursor 不保证一致，之后的变化看 queue.changed。
 	Queued []QueuedInput `json:"queued,omitempty"`
+	// Source / Ref 会话来源与引用（session.create {source, ref}，docs/57 4.2）；没给时不给。
+	Source string `json:"source,omitempty"`
+	Ref    string `json:"ref,omitempty"`
 }
 
 // QueuedInput 一条排队中的输入（session.send {queue:true}）。
@@ -337,6 +340,9 @@ type SessionInfo struct {
 	// LastEnd 最近一个回合的结束原因（客户端改进 M7，未读与通知用 last_end.at / kind）。与快照不同，
 	// 运行中也给（是上一回合的）；没有记录（旧会话、还没跑完过回合、已被回退清掉）时不给。
 	LastEnd *TurnEnded `json:"last_end,omitempty"`
+	// Source / Ref 会话来源与引用（session.create {source, ref}，docs/57 4.2）；没给时不给。
+	Source string `json:"source,omitempty"`
+	Ref    string `json:"ref,omitempty"`
 }
 
 // Principal 连接身份（10.8）。

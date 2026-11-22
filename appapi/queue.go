@@ -13,6 +13,13 @@ import (
 	"github.com/Sevyn17/tenon/runtime/store"
 )
 
+// 本文件的命令（按文件登记，v2.go 的 registerCommands）。
+func init() {
+	registerCommands(map[string]handler{
+		"session.unqueue": bind((*App).Unqueue),
+	})
+}
+
 // CapSendQueue hello 能力：存储支持排队（实现了 store.QueueStore）。
 const CapSendQueue = "send.queue"
 

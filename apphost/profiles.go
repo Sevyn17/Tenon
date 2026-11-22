@@ -94,9 +94,5 @@ func (p Profiles) Reload() (*component.Profile, error) {
 }
 
 func (p Profiles) Denied() map[string][]string {
-	out := map[string][]string{}
-	for k, v := range projectDenied {
-		out[k] = append([]string(nil), v...)
-	}
-	return out
+	return deniedAll()
 }

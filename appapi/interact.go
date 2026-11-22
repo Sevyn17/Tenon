@@ -17,6 +17,14 @@ import (
 	"github.com/Sevyn17/tenon/runtime/store"
 )
 
+// 本文件的命令（按文件登记，v2.go 的 registerCommands）。
+func init() {
+	registerCommands(map[string]handler{
+		"interaction.respond": bind((*App).Respond),
+		"interactions.list":   bind((*App).Interactions),
+	})
+}
+
 // Respond 以本机身份回答交互（进程内调用；连接上的调用经 Conn.Call 带连接身份）。
 func (v *App) Respond(ctx context.Context, in wire.RespondArgs) (wire.RespondResult, error) {
 	return v.respondAs(ctx, in, LocalPrincipal)

@@ -81,8 +81,8 @@ func modelOrigin(f Flags, ps []*pkgs.Package, root string, trusted bool) (kind, 
 			return originProfile, proj
 		}
 	}
-	if tp := TrustPath(); tp != "" {
-		if user := filepath.Join(filepath.Dir(tp), "profile.toml"); file(user, "model", "base_url") {
+	if h := Home(); h != "" {
+		if user := filepath.Join(h, "profile.toml"); file(user, "model", "base_url") {
 			return originProfile, user
 		}
 	}

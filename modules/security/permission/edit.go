@@ -19,6 +19,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 
+	"github.com/Sevyn17/tenon/runtime/appid"
 	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
@@ -78,7 +79,7 @@ func (s *Sessions) UserModeDir() string {
 	if !s.Editable() {
 		return ""
 	}
-	return filepath.Join(s.UserHome, "modes")
+	return appid.UserPathIn(s.UserHome, appid.DirModes)
 }
 
 // UserConfigPath 用户级 permissions.toml；不可编辑时为空。
@@ -86,7 +87,7 @@ func (s *Sessions) UserConfigPath() string {
 	if !s.Editable() {
 		return ""
 	}
-	return filepath.Join(s.UserHome, "permissions.toml")
+	return appid.UserPathIn(s.UserHome, appid.FilePermissions)
 }
 
 // ModePath 用户级档位文件的路径（不论存在与否）。

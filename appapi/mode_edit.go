@@ -11,6 +11,15 @@ import (
 	"github.com/Sevyn17/tenon/appapi/wire"
 )
 
+// 本文件的命令（按文件登记，v2.go 的 registerCommands）。
+func init() {
+	registerCommands(map[string]handler{
+		"mode.save":       bind((*App).ModeSave),
+		"mode.remove":     bind((*App).ModeRemove),
+		"mode.setDefault": bind((*App).ModeSetDefault),
+	})
+}
+
 func (v *App) modeEditor() (ModeEditor, error) {
 	m, err := v.modes()
 	if err != nil {

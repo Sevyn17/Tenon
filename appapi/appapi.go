@@ -71,6 +71,8 @@ type Options struct {
 	Platform Platform
 	// Cleaners 删除会话时依次调用的插件清理回调（on_session_delete 点位）；可空。
 	Cleaners []store.Cleaner
+	// Extensions 产品扩展（docs/61 第 3 节，ext.go）：带命名空间的命令、能力与事件；命令名冲突或越过保留根时 New 失败。
+	Extensions []Extension
 }
 
 // App 一个进程一个：持有装配结果，对外提供命令与事件。方法并发安全。
@@ -80,6 +82,7 @@ type App struct {
 	lives     sync.Map // 会话 id → *liveState（protocol 2 分段流式与快照 live，stream2.go）
 	followups followupCache
 	notices   *noticeLog // 最近的提示（客户端改进 M10 T19，notice.go）
+	ext       *extTable  // 产品扩展的命令表（ext.go）；没有扩展时为空表
 }
 
 // New 构造 App：把 DB 的提交事件接到总线（Follow 的实时部分）；包一层 Host.Hooks
@@ -95,7 +98,11 @@ func New(o Options) (*App, error) {
 	if o.Host.Bus == nil {
 		o.Host.Bus = o.Bus
 	}
-	a := &App{o: o, notices: &noticeLog{}}
+	ext, err := buildExt(o.Extensions)
+	if err != nil {
+		return nil, err
+	}
+	a := &App{o: o, notices: &noticeLog{}, ext: ext}
 	if o.UI != nil {
 		o.UI.bindHost(o.Host)
 		a.notices = o.UI.log // 装配期插件的告警记在 UI 上：共用一份，hello 后才补发得到
