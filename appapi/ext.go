@@ -244,19 +244,46 @@ var ErrExtKind = errors.New("appapi: 事件 kind 必须以已注册扩展的命�
 // Emit 发产品事件（易失，不进事件表）。kind 必须以某个已注册扩展的命名空间加点开头（如 mortise.automation.run），
 // 否则返回 ErrExtKind。session 非空：推给订阅了这个会话（或它的顶层会话）的连接；空：推给所有连接。
 func (a *App) Emit(session, kind string, data any) error {
-	ok := false
-	if a.ext != nil {
-		for _, ns := range a.ext.ns {
-			if strings.HasPrefix(kind, ns+".") && len(kind) > len(ns)+1 {
-				ok = true
-			}
-		}
-	}
-	if !ok {
+	if !a.extKindOK(kind) {
 		return fmt.Errorf("%w: %q", ErrExtKind, kind)
 	}
-	a.o.Bus.Publish(bus.Envelope{Session: session, Kind: extBusKind, Data: extEvent{Kind: kind, Payload: data}})
+	EmitOn(a.o.Bus, session, kind, data)
 	return nil
+}
+
+// EmitOn 不经 App 发产品事件（docs/62 K1）：给不持有 App 的组件插件用，总线取自 component.Use(cx, assemble.ServiceHost) 的 host.Bus。
+// 语义同 App.Emit：易失、不进事件表；session 非空只推订阅了这个会话（或它的顶层会话）的连接，空推所有连接。
+// 这里不知道装了哪些扩展，命名空间校验在连接推送前（与进程内 App.Subscribe 转换时）做：kind 不带已注册扩展的
+// 命名空间前缀的事件被丢弃，不会到任何连接。data 须可 JSON 序列化（线上 data 原样编码；以后映射到 extproc 消息）。
+// b 为 nil 时什么也不做。
+func EmitOn(b *bus.Bus, session, kind string, data any) {
+	if b == nil {
+		return
+	}
+	b.Publish(bus.Envelope{Session: session, Kind: extBusKind, Data: extEvent{Kind: kind, Payload: data}})
+}
+
+// extKindOK kind 是否以某个已注册扩展的命名空间加点开头（且点后非空）。
+func (a *App) extKindOK(kind string) bool {
+	if a == nil || a.ext == nil {
+		return false
+	}
+	for _, ns := range a.ext.ns {
+		if strings.HasPrefix(kind, ns+".") && len(kind) > len(ns)+1 {
+			return true
+		}
+	}
+	return false
+}
+
+// Service 取当前装配里登记的服务 / 插槽最终实现（docs/62 K1，即 component.Assembly.Value）：
+// 扩展命令经 c.App.Service("service:mortise.terminal") 找到当前装配的对象。切工作区或重建后
+// 新 App 对应新装配，旧 App 上取到的是旧装配的值。没有这个键、或 App 没接装配（Options.Services 为空）时返回 nil, false。
+func (a *App) Service(key string) (any, bool) {
+	if a == nil || a.o.Services == nil {
+		return nil, false
+	}
+	return a.o.Services(key)
 }
 
 // watchExt 连接级产品事件：全局的都推，会话的只推订阅了的。只有装了扩展的 App 才起。
@@ -264,7 +291,7 @@ func (c *Conn) watchExt(sub *bus.Sub) {
 	defer guard.Recover("appapi扩展事件 watcher", func() { c.Close() })
 	for e := range sub.C() {
 		ev, ok := e.Data.(extEvent)
-		if !ok {
+		if !ok || !c.a.extKindOK(ev.Kind) { // EmitOn 不校验命名空间，推送前在这里拒
 			continue
 		}
 		if e.Session != "" {
@@ -382,6 +409,9 @@ func (a *App) Subscribe(ctx context.Context, session string, kinds ...string) *E
 				}
 				var out []wire.Envelope
 				if ev, ok := e.Data.(extEvent); ok {
+					if !a.extKindOK(ev.Kind) { // 与连接同一条校验（EmitOn 发出的未登记命名空间）
+						continue
+					}
 					out = []wire.Envelope{tr.envelope(e.Session, ev.Kind, 0, 0, ev.Payload)}
 				} else {
 					out = tr.translate(e)

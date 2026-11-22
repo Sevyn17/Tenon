@@ -61,6 +61,9 @@ func Fill(o *appapi.Options, p Parts) (*permission.Sessions, error) {
 	if p.Asm == nil {
 		return nil, nil
 	}
+	if o.Services == nil { // 扩展命令取当前装配的服务（App.Service，docs/62 K1）
+		o.Services = p.Asm.Value
+	}
 	for _, it := range p.Asm.Items(assemble.PointOnSessionDelete) { // 删除会话时的插件清理回调（session.delete）
 		c, ok := it.Impl.(store.Cleaner)
 		if !ok {

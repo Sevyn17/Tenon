@@ -73,6 +73,8 @@ type Options struct {
 	Cleaners []store.Cleaner
 	// Extensions 产品扩展（docs/61 第 3 节，ext.go）：带命名空间的命令、能力与事件；命令名冲突或越过保留根时 New 失败。
 	Extensions []Extension
+	// Services 取当前装配的服务 / 插槽实现（App.Service，docs/62 K1）；adapters.Fill 用 Assembly.Value 填。nil = 取不到。
+	Services func(key string) (any, bool)
 }
 
 // App 一个进程一个：持有装配结果，对外提供命令与事件。方法并发安全。
