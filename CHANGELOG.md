@@ -8,6 +8,40 @@
 
 ---
 
+## [未发版] - 2026-11-22（按需导入与委派参数：Mortise docs/62 K6、K5）
+
+### 破坏性变更（K6：`tenon/std` 套装与按需导入）
+
+只 import 根包 `tenon` 时**不再登记任何标准模块**，也不再链接它们。要用标准模块就导入 `github.com/Sevyn17/tenon/std`
+（一次空导入全部 28 个标准模块并登记它们的协议适配），或逐个空导入 `modules/<x>`。线上协议不变（protocol 仍是 2）。
+
+- `tenon.Default()`、`tenon.Minimal()` 移到 `std.Default()`、`std.Minimal()`，**根包不留别名**。迁移：
+  `tenon.New(tenon.Default(), …)` → `tenon.New(std.Default(), …)`，加 `import "github.com/Sevyn17/tenon/std"`。
+- 新增 `tenon.WithComponents(names ...string)`：按名字装配已登记组件（std.Default / Minimal 就是它）。
+  组件名没登记时 New 报错，写明「未导入 tenon/std 或 modules/<名>」。
+- `adapters.Fill` 签名改为 `Fill(o *appapi.Options, p Parts) error`（原先多返回 `*permission.Sessions`），只填通用部分
+  （模型、追问、标题、工件、压缩、删除清理、扩展取服务）。权限档位、技能、MCP、文件检查点、工作区文件列表的适配搬到 std，
+  在 std 的 `init` 里经新增的 `adapters.Register(adapters.Adapter)` 登记；不导入 std 时 hello 不报 modes、skills、mcp、changes、files。
+- 从 `adapters` 移到 `std`（名字不变）：`PermModes`、`Skills`、`MCP`、`Changes`、`DraftServer`、`Files`、`MaxScanFiles`、
+  `MaxDiffBytes`、`MaxDiffLines`。`adapters.ModeApprovals`、`Parts` 留在 adapters。
+- `apphost` 归标准层：`apphost/assemble.go` 改为空导入 `tenon/std`（原先逐个空导入 22 个模块）。经 apphost 的应用不用改代码。
+- 装配期提前校验权限项引用：`assemble.Wire` 对全部已登记工具跑一次「引用的权限项都已登记」（新增 `assemble.CheckItemRefs`），
+  被引用项所属插件关掉时启动即报错（原先第一次打开会话才报）。
+
+### 新增（K5：委派参数覆盖）
+
+- `host.SpawnOptions{SystemPrompt, Model, Mode, Tools, OnNarrow}`、`Host.SpawnWith(ctx, parent, id, origin, def, f, task, untrusted, o)`、
+  `Host.SpawnOptionsFor(id)`、常量 `host.MetaSpawn`；`SpawnAs` 等于 `SpawnWith(…, SpawnOptions{})`，签名不变。
+- `assemble.Builder.BuildWith(id, def, child, *host.SpawnOptions)`、`SessionCx.Spawn` 与 `SessionCx.Narrowed(note)`：
+  覆盖与父会话上限求交集，`mode`、`tools` 只能收窄；更宽的按主会话水平收窄，委派结果里写「已收窄为 …」，不报错。
+  选项记进子会话行业务键 `spawn`，重开 / 休眠唤醒后仍按同一组设置构造。
+- subagent 插件配置 `param_system_prompt`（缺省开）、`param_model`（关）、`param_mode`（开）、`param_tools`（开）：
+  开着的参数才出现在 `subagent` 工具 schema 里；`task` 必有。新增 `subagent.ToolWithParams(h, f, sink, Params)`；
+  `Tool`、`ToolWithTasks` 签名不变（不开放按次参数）。不做 `goal` 参数。
+- 能否委派仍看主会话档位下 `subagent.spawn` 的判定；不传 `mode` 时子会话继承主会话档位。
+
+---
+
 ## [未发版] - 2026-11-22（产品段迁出：Mortise docs/61 T1、T2）
 
 ### 破坏性变更

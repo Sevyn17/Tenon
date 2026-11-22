@@ -143,7 +143,22 @@ func (*plug) Setup(cx *component.Registrar) error {
 						out = append(out, d)
 					}
 				}
+				// 委派参数 mode（Mortise docs/62 K5、docs/56 第 3 节）：子会话档位跟随主会话（Top），
+				// 传的 mode 只作为一层上限叠加——更严就收窄，更宽等于没传（按主会话水平）。
+				if sc.Spawn != nil {
+					if d := lookup(sc.Spawn.Mode); d != nil {
+						out = append(out, d)
+					}
+				}
 				return out
+			}
+			if sc.Spawn != nil && sc.Spawn.Mode != "" {
+				cur := s.Mode(id)
+				if want, ok := s.reg().Get(Mode(sc.Spawn.Mode)); !ok {
+					sc.Narrowed(fmt.Sprintf("mode 已收窄为 %s（没有档位 %s）", ReadOnly, sc.Spawn.Mode))
+				} else if d, ok := s.reg().Get(cur); ok && want.ID != d.ID && rank(want.Root) > rank(d.Root) {
+					sc.Narrowed(fmt.Sprintf("mode 已收窄为 %s（主会话当前档位）", cur))
+				}
 			}
 			if err := hub.SetVisible(func(n string) bool {
 				t, ok := hub.Get(n)

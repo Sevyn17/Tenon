@@ -1,4 +1,4 @@
-package adapters
+package std
 
 // 改动审阅与还原（客户端改进 M9）：把 checkpoint 插件的引擎接成 appapi.Changes。
 // 内容哈希一律从本会话的记录里取：changes.diff 只收路径（查找键），不收哈希，

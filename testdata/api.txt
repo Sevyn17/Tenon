@@ -25,7 +25,6 @@ github.com/Sevyn17/tenon: func CallInfoFrom(ctx context.Context) (CallInfo, bool
 github.com/Sevyn17/tenon: type Component interface{Name() string; Setup(cx *Registrar) error; Start(sc *Scope) error}
 github.com/Sevyn17/tenon: type ComponentInfo struct{Config any; Provides []string; Requires []string}
 github.com/Sevyn17/tenon: func CurrentAppID() AppID
-github.com/Sevyn17/tenon: func Default() Option
 github.com/Sevyn17/tenon: const DefaultAgent untyped string
 github.com/Sevyn17/tenon: const Deny github.com/Sevyn17/tenon/runtime/component.Verdict
 github.com/Sevyn17/tenon: func Dir(root string) AgentSource
@@ -66,7 +65,6 @@ github.com/Sevyn17/tenon: type KeyRef string
 github.com/Sevyn17/tenon: const LocalTenant untyped string
 github.com/Sevyn17/tenon: const LocalUser untyped string
 github.com/Sevyn17/tenon: type Meta map[string]any
-github.com/Sevyn17/tenon: func Minimal() Option
 github.com/Sevyn17/tenon: type ModelHub = github.com/Sevyn17/tenon/runtime/modelhub.Hub struct{OnSpan func(github.com/Sevyn17/tenon/runtime/modelhub.AttemptSpan)}
 github.com/Sevyn17/tenon: method (ModelHub) Call(ctx context.Context, r *github.com/Sevyn17/tenon/runtime/modelhub.Request) <-chan github.com/Sevyn17/tenon/runtime/modelhub.Event
 github.com/Sevyn17/tenon: method (ModelHub) Catalog() *github.com/Sevyn17/tenon/runtime/modelhub.Catalog
@@ -119,7 +117,8 @@ github.com/Sevyn17/tenon: method (Session) History(ctx context.Context) ([]*Entr
 github.com/Sevyn17/tenon: method (Session) ID() string
 github.com/Sevyn17/tenon: method (Session) Send(ctx context.Context, text string) (*Reply, error)
 github.com/Sevyn17/tenon: method (Session) Stream(ctx context.Context, text string) iter.Seq[Event]
-github.com/Sevyn17/tenon: type SessionCx = github.com/Sevyn17/tenon/runtime/assemble.SessionCx struct{ID string; Workdir string; Hub *github.com/Sevyn17/tenon/runtime/toolhub.Hub; Agent *github.com/Sevyn17/tenon/runtime/agent.Agent; Ctx *github.com/Sevyn17/tenon/runtime/callctx.Ctx; Child bool; Def *github.com/Sevyn17/tenon/runtime/agentdef.Agent; Parent *github.com/Sevyn17/tenon/runtime/assemble.ParentLimits; Values map[string]any}
+github.com/Sevyn17/tenon: type SessionCx = github.com/Sevyn17/tenon/runtime/assemble.SessionCx struct{ID string; Workdir string; Hub *github.com/Sevyn17/tenon/runtime/toolhub.Hub; Agent *github.com/Sevyn17/tenon/runtime/agent.Agent; Ctx *github.com/Sevyn17/tenon/runtime/callctx.Ctx; Child bool; Def *github.com/Sevyn17/tenon/runtime/agentdef.Agent; Parent *github.com/Sevyn17/tenon/runtime/assemble.ParentLimits; Spawn *github.com/Sevyn17/tenon/runtime/host.SpawnOptions; Values map[string]any}
+github.com/Sevyn17/tenon: method (SessionCx) Narrowed(note string)
 github.com/Sevyn17/tenon: func SetAppID(id AppID)
 github.com/Sevyn17/tenon: type Store = github.com/Sevyn17/tenon/runtime/store.Store
 github.com/Sevyn17/tenon: type SystemBlock = github.com/Sevyn17/tenon/runtime/session.SystemBlock struct{Text string; Breakpoint bool; Source string}
@@ -138,6 +137,7 @@ github.com/Sevyn17/tenon: func With(cs ...Component) Option
 github.com/Sevyn17/tenon: func WithAgent(as ...Agent) Option
 github.com/Sevyn17/tenon: func WithAgents(srcs ...AgentSource) Option
 github.com/Sevyn17/tenon: func WithAnthropic(model string, key KeyRef) Option
+github.com/Sevyn17/tenon: func WithComponents(names ...string) Option
 github.com/Sevyn17/tenon: func WithConfig(component string, kv map[string]any) Option
 github.com/Sevyn17/tenon: func WithConfigSource(src github.com/Sevyn17/tenon/runtime/useconf.Source) Option
 github.com/Sevyn17/tenon: func WithDefaultAgent(name string) Option
@@ -218,48 +218,55 @@ github.com/Sevyn17/tenon/transport/bind: method (Service) Call(cmd string, args 
 github.com/Sevyn17/tenon/transport/bind: method (Service) StartEvents()
 github.com/Sevyn17/tenon/transport/bind: method (Service) StopEvents()
 github.com/Sevyn17/tenon/transport/bind: method (Service) SwapAPI(api *github.com/Sevyn17/tenon/appapi.App)
-github.com/Sevyn17/tenon/adapters: type Changes struct{E *github.com/Sevyn17/tenon/modules/tools/checkpoint.Engine}
-github.com/Sevyn17/tenon/adapters: method (Changes) Diff(ctx context.Context, in github.com/Sevyn17/tenon/appapi/wire.ChangesDiffArgs, live func(string) bool) (github.com/Sevyn17/tenon/appapi/wire.ChangesDiffResult, error)
-github.com/Sevyn17/tenon/adapters: method (Changes) GitAvailable() bool
-github.com/Sevyn17/tenon/adapters: method (Changes) List(ctx context.Context, in github.com/Sevyn17/tenon/appapi/wire.ChangesArgs, live func(string) bool) (github.com/Sevyn17/tenon/appapi/wire.ChangesResult, error)
-github.com/Sevyn17/tenon/adapters: method (Changes) Revert(ctx context.Context, r github.com/Sevyn17/tenon/appapi.ChangeRevert) (github.com/Sevyn17/tenon/appapi.ChangeReverted, error)
-github.com/Sevyn17/tenon/adapters: func DraftServer(d github.com/Sevyn17/tenon/appapi/wire.MCPServerDraft) (github.com/Sevyn17/tenon/modules/tools/mcp.Server, error)
-github.com/Sevyn17/tenon/adapters: func Files(root string) github.com/Sevyn17/tenon/appapi.Files
-github.com/Sevyn17/tenon/adapters: func Fill(o *github.com/Sevyn17/tenon/appapi.Options, p Parts) (*github.com/Sevyn17/tenon/modules/security/permission.Sessions, error)
+github.com/Sevyn17/tenon/adapters: type Adapter func(o *github.com/Sevyn17/tenon/appapi.Options, p Parts) error
+github.com/Sevyn17/tenon/adapters: func Fill(o *github.com/Sevyn17/tenon/appapi.Options, p Parts) error
 github.com/Sevyn17/tenon/adapters: var FollowupTimeout time.Duration
 github.com/Sevyn17/tenon/adapters: func FollowupsFrom(m *github.com/Sevyn17/tenon/runtime/assemble.Models) func(ctx context.Context, model string, input string, answer string) ([]string, error)
-github.com/Sevyn17/tenon/adapters: type MCP struct{S *github.com/Sevyn17/tenon/modules/tools/mcp.ServiceAPI}
-github.com/Sevyn17/tenon/adapters: method (MCP) List(context.Context) (github.com/Sevyn17/tenon/appapi/wire.MCPListResult, error)
-github.com/Sevyn17/tenon/adapters: method (MCP) SetEnabled(_ context.Context, name string, enabled bool, scope string) error
-github.com/Sevyn17/tenon/adapters: method (MCP) Test(ctx context.Context, d github.com/Sevyn17/tenon/appapi/wire.MCPServerDraft) ([]github.com/Sevyn17/tenon/appapi/wire.MCPTool, error)
-github.com/Sevyn17/tenon/adapters: const MaxDiffBytes untyped int
-github.com/Sevyn17/tenon/adapters: const MaxDiffLines untyped int
-github.com/Sevyn17/tenon/adapters: const MaxScanFiles untyped int
 github.com/Sevyn17/tenon/adapters: type ModeApprovals interface{Approve(mode string, widened string) error; Approved(mode string, widened string) bool}
 github.com/Sevyn17/tenon/adapters: type ModelList struct{M *github.com/Sevyn17/tenon/runtime/assemble.Models}
 github.com/Sevyn17/tenon/adapters: method (ModelList) Check(id string) error
 github.com/Sevyn17/tenon/adapters: method (ModelList) List() github.com/Sevyn17/tenon/appapi/wire.ModelsListResult
 github.com/Sevyn17/tenon/adapters: type Parts struct{Asm *github.com/Sevyn17/tenon/runtime/component.Assembly; Models *github.com/Sevyn17/tenon/runtime/assemble.Models; Blobs github.com/Sevyn17/tenon/runtime/toolhub.Artifacts; Workdir string; Approvals ModeApprovals}
-github.com/Sevyn17/tenon/adapters: type PermModes struct{P *github.com/Sevyn17/tenon/modules/security/permission.Sessions; Approvals ModeApprovals}
-github.com/Sevyn17/tenon/adapters: method (PermModes) AllowForSession(id string, tool string, args encoding/json.RawMessage) (added []string, all []string)
-github.com/Sevyn17/tenon/adapters: method (PermModes) DefaultMode() string
-github.com/Sevyn17/tenon/adapters: method (PermModes) Detail(mode string) (github.com/Sevyn17/tenon/appapi.ModeDetail, error)
-github.com/Sevyn17/tenon/adapters: method (PermModes) Editable() bool
-github.com/Sevyn17/tenon/adapters: method (PermModes) ExtKeys() (mode string, rules string)
-github.com/Sevyn17/tenon/adapters: method (PermModes) Get(id string) github.com/Sevyn17/tenon/appapi.ModeState
-github.com/Sevyn17/tenon/adapters: method (PermModes) List() []github.com/Sevyn17/tenon/appapi.ModeInfo
-github.com/Sevyn17/tenon/adapters: method (PermModes) Notice(id string) string
-github.com/Sevyn17/tenon/adapters: method (PermModes) RemoveMode(id string, revision string) (string, bool, error)
-github.com/Sevyn17/tenon/adapters: method (PermModes) SaveMode(in github.com/Sevyn17/tenon/appapi/wire.ModeDraft, revision string, create bool) (github.com/Sevyn17/tenon/appapi.ModeInfo, string, error)
-github.com/Sevyn17/tenon/adapters: method (PermModes) SessionAllow(tool string, args encoding/json.RawMessage) (rules []string, blocked []string)
-github.com/Sevyn17/tenon/adapters: method (PermModes) SessionRules(id string) []string
-github.com/Sevyn17/tenon/adapters: method (PermModes) Set(id string, mode string, confirm bool) (github.com/Sevyn17/tenon/appapi.ModeState, error)
-github.com/Sevyn17/tenon/adapters: method (PermModes) SetDefaultMode(id string) (string, string, error)
-github.com/Sevyn17/tenon/adapters: method (PermModes) Show(id string, mode string) ([]github.com/Sevyn17/tenon/appapi.ModeItem, error)
-github.com/Sevyn17/tenon/adapters: type Skills struct{S *github.com/Sevyn17/tenon/modules/context/skills.Skills}
-github.com/Sevyn17/tenon/adapters: method (Skills) List(context.Context) (github.com/Sevyn17/tenon/appapi/wire.SkillsListResult, error)
-github.com/Sevyn17/tenon/adapters: method (Skills) SetEnabled(_ context.Context, in github.com/Sevyn17/tenon/appapi/wire.SkillsSetEnabledArgs) (github.com/Sevyn17/tenon/appapi/wire.SkillsSetEnabledResult, error)
+github.com/Sevyn17/tenon/adapters: func Register(f Adapter)
 github.com/Sevyn17/tenon/adapters: func TitlerFrom(m *github.com/Sevyn17/tenon/runtime/assemble.Models) func(ctx context.Context, model string, input string) (string, error)
+github.com/Sevyn17/tenon/std: func Adapters(o *github.com/Sevyn17/tenon/appapi.Options, p github.com/Sevyn17/tenon/adapters.Parts) error
+github.com/Sevyn17/tenon/std: type Changes struct{E *github.com/Sevyn17/tenon/modules/tools/checkpoint.Engine}
+github.com/Sevyn17/tenon/std: method (Changes) Diff(ctx context.Context, in github.com/Sevyn17/tenon/appapi/wire.ChangesDiffArgs, live func(string) bool) (github.com/Sevyn17/tenon/appapi/wire.ChangesDiffResult, error)
+github.com/Sevyn17/tenon/std: method (Changes) GitAvailable() bool
+github.com/Sevyn17/tenon/std: method (Changes) List(ctx context.Context, in github.com/Sevyn17/tenon/appapi/wire.ChangesArgs, live func(string) bool) (github.com/Sevyn17/tenon/appapi/wire.ChangesResult, error)
+github.com/Sevyn17/tenon/std: method (Changes) Revert(ctx context.Context, r github.com/Sevyn17/tenon/appapi.ChangeRevert) (github.com/Sevyn17/tenon/appapi.ChangeReverted, error)
+github.com/Sevyn17/tenon/std: func Default() github.com/Sevyn17/tenon.Option
+github.com/Sevyn17/tenon/std: func DefaultNames() []string
+github.com/Sevyn17/tenon/std: func DraftServer(d github.com/Sevyn17/tenon/appapi/wire.MCPServerDraft) (github.com/Sevyn17/tenon/modules/tools/mcp.Server, error)
+github.com/Sevyn17/tenon/std: func Files(root string) github.com/Sevyn17/tenon/appapi.Files
+github.com/Sevyn17/tenon/std: type MCP struct{S *github.com/Sevyn17/tenon/modules/tools/mcp.ServiceAPI}
+github.com/Sevyn17/tenon/std: method (MCP) List(context.Context) (github.com/Sevyn17/tenon/appapi/wire.MCPListResult, error)
+github.com/Sevyn17/tenon/std: method (MCP) SetEnabled(_ context.Context, name string, enabled bool, scope string) error
+github.com/Sevyn17/tenon/std: method (MCP) Test(ctx context.Context, d github.com/Sevyn17/tenon/appapi/wire.MCPServerDraft) ([]github.com/Sevyn17/tenon/appapi/wire.MCPTool, error)
+github.com/Sevyn17/tenon/std: const MaxDiffBytes untyped int
+github.com/Sevyn17/tenon/std: const MaxDiffLines untyped int
+github.com/Sevyn17/tenon/std: const MaxScanFiles untyped int
+github.com/Sevyn17/tenon/std: func Minimal() github.com/Sevyn17/tenon.Option
+github.com/Sevyn17/tenon/std: func MinimalNames() []string
+github.com/Sevyn17/tenon/std: type PermModes struct{P *github.com/Sevyn17/tenon/modules/security/permission.Sessions; Approvals github.com/Sevyn17/tenon/adapters.ModeApprovals}
+github.com/Sevyn17/tenon/std: method (PermModes) AllowForSession(id string, tool string, args encoding/json.RawMessage) (added []string, all []string)
+github.com/Sevyn17/tenon/std: method (PermModes) DefaultMode() string
+github.com/Sevyn17/tenon/std: method (PermModes) Detail(mode string) (github.com/Sevyn17/tenon/appapi.ModeDetail, error)
+github.com/Sevyn17/tenon/std: method (PermModes) Editable() bool
+github.com/Sevyn17/tenon/std: method (PermModes) ExtKeys() (mode string, rules string)
+github.com/Sevyn17/tenon/std: method (PermModes) Get(id string) github.com/Sevyn17/tenon/appapi.ModeState
+github.com/Sevyn17/tenon/std: method (PermModes) List() []github.com/Sevyn17/tenon/appapi.ModeInfo
+github.com/Sevyn17/tenon/std: method (PermModes) Notice(id string) string
+github.com/Sevyn17/tenon/std: method (PermModes) RemoveMode(id string, revision string) (string, bool, error)
+github.com/Sevyn17/tenon/std: method (PermModes) SaveMode(in github.com/Sevyn17/tenon/appapi/wire.ModeDraft, revision string, create bool) (github.com/Sevyn17/tenon/appapi.ModeInfo, string, error)
+github.com/Sevyn17/tenon/std: method (PermModes) SessionAllow(tool string, args encoding/json.RawMessage) (rules []string, blocked []string)
+github.com/Sevyn17/tenon/std: method (PermModes) SessionRules(id string) []string
+github.com/Sevyn17/tenon/std: method (PermModes) Set(id string, mode string, confirm bool) (github.com/Sevyn17/tenon/appapi.ModeState, error)
+github.com/Sevyn17/tenon/std: method (PermModes) SetDefaultMode(id string) (string, string, error)
+github.com/Sevyn17/tenon/std: method (PermModes) Show(id string, mode string) ([]github.com/Sevyn17/tenon/appapi.ModeItem, error)
+github.com/Sevyn17/tenon/std: type Skills struct{S *github.com/Sevyn17/tenon/modules/context/skills.Skills}
+github.com/Sevyn17/tenon/std: method (Skills) List(context.Context) (github.com/Sevyn17/tenon/appapi/wire.SkillsListResult, error)
+github.com/Sevyn17/tenon/std: method (Skills) SetEnabled(_ context.Context, in github.com/Sevyn17/tenon/appapi/wire.SkillsSetEnabledArgs) (github.com/Sevyn17/tenon/appapi/wire.SkillsSetEnabledResult, error)
 github.com/Sevyn17/tenon/apphost: type AppOptions struct{MaxSteps int; Hooks func(*github.com/Sevyn17/tenon/runtime/assemble.SessionCx) github.com/Sevyn17/tenon/runtime/agent.Hooks; ModesWorkdir string; Upload bool; Workspaces github.com/Sevyn17/tenon/appapi.Workspaces; Extensions []github.com/Sevyn17/tenon/appapi.Extension}
 github.com/Sevyn17/tenon/apphost: func ApproveMode(root string, mode string, widened string) error
 github.com/Sevyn17/tenon/apphost: type Assembled struct{Asm *github.com/Sevyn17/tenon/runtime/component.Assembly; Store github.com/Sevyn17/tenon/runtime/assemble.DBHandle; Models *github.com/Sevyn17/tenon/runtime/assemble.Models; Compact *github.com/Sevyn17/tenon/modules/context/compact-basic.Compactor; Defs github.com/Sevyn17/tenon/runtime/agentdef.Source}

@@ -1,4 +1,4 @@
-package adapters
+package std
 
 // 客户端改进 M10：PermModes.List 带档位说明（四个内置档位都有），DefaultMode 给新会话的缺省档位。
 

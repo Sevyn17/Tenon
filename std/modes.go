@@ -1,4 +1,4 @@
-package adapters
+package std
 
 // 权限档位：permission 插件 → appapi.Modes。
 
@@ -7,23 +7,17 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/Sevyn17/tenon/adapters"
 	"github.com/Sevyn17/tenon/appapi"
 	"github.com/Sevyn17/tenon/appapi/wire"
 	"github.com/Sevyn17/tenon/modules/security/permission"
 	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
-// ModeApprovals 项目档位放宽权限的确认记录：记在哪由应用决定（apphost 记在 ~/.tenon/trust.toml，按项目）。
-// widened 是放宽清单（顿号连接）；清单变了要重新确认。
-type ModeApprovals interface {
-	Approved(mode, widened string) bool
-	Approve(mode, widened string) error
-}
-
 // PermModes 用 permission 插件的会话服务实现 appapi.Modes。Approvals 为 nil 时不记确认：每次选用放宽了的项目档位都要确认。
 type PermModes struct {
 	P         *permission.Sessions
-	Approvals ModeApprovals
+	Approvals adapters.ModeApprovals
 }
 
 var _ appapi.Modes = PermModes{}

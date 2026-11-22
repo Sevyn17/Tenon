@@ -1,4 +1,4 @@
-package adapters
+package std
 
 // 本地技能列表与启停（客户端改进 M11，配置T18）：把 skills 插件的 *skills.Skills 接成 appapi.Skills。
 

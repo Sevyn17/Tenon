@@ -31,7 +31,7 @@ var public = map[string]bool{"pkg/proc": true, "pkg/cmdline": true}
 // 前端嵌入包：装配层，可以 import
 // 任何包；运行时、标准模块、应用接口层都不得反过来 import 它们（计划/07）。
 func assembler(p string) bool {
-	return p == "" || p == "tenontest" || p == "web" || p == "apphost" || p == "adapters" || strings.HasPrefix(p, "adapters/") || strings.HasPrefix(p, "transport/") ||
+	return p == "" || p == "tenontest" || p == "web" || p == "apphost" || p == "std" || p == "adapters" || strings.HasPrefix(p, "adapters/") || strings.HasPrefix(p, "transport/") ||
 		strings.HasPrefix(p, "examples/")
 }
 

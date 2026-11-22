@@ -6,6 +6,7 @@ package host
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -44,11 +45,51 @@ func (h *Host) Untrusted(id string) bool {
 // 不可信回合派出的任务按不可信投给子会话，只降不升（2026-11-04 审查 P1-3：原先一律可信，
 // 网页内容可借子会话"洗白"成可信回合）。返回子回合结束时是否含不可信输入，供调用方回投结果时沿用。
 func (h *Host) SpawnAs(ctx context.Context, parent, id, origin, def string, f Factory, task string, untrusted bool) (string, bool, error) {
-	out, err := h.spawn(ctx, parent, id, origin, def, f, task, untrusted)
+	return h.SpawnWith(ctx, parent, id, origin, def, f, task, untrusted, SpawnOptions{})
+}
+
+// SpawnOptions 按次覆盖子会话的设置（Mortise docs/62 K5、docs/56 第 2-3 节）。
+// 会话构造方（assemble.Builder）把它与父会话上限求交集：Mode、Tools 只能收窄，
+// 更宽的按父会话水平收窄并经 OnNarrow 说明，不报错。零值 = 不覆盖。
+// 只在新建子会话时生效：创建时记进子会话行业务键 MetaSpawn，休眠后重开仍按同一组设置构造；
+// 续用已有子会话时忽略（沿用创建时的设置）。
+type SpawnOptions struct {
+	// SystemPrompt 追加在系统块最后（基础提示词之后）。
+	SystemPrompt string `json:"system_prompt,omitempty"`
+	// Model 子会话用的模型（模型 id 或别名）；空 = 跟随缺省。
+	Model string `json:"model,omitempty"`
+	// Mode 子会话的权限上限档位；空 = 继承父会话档位。
+	Mode string `json:"mode,omitempty"`
+	// Tools 子会话可用工具白名单（支持 `*` `?`）；nil = 不收窄。
+	Tools []string `json:"tools,omitempty"`
+	// OnNarrow 构造时发生收窄的说明（如「mode 已收窄为 workspace」）；可空。不持久化。
+	OnNarrow func(note string) `json:"-"`
+}
+
+// IsZero 没有任何覆盖。
+func (o SpawnOptions) IsZero() bool {
+	return o.SystemPrompt == "" && o.Model == "" && o.Mode == "" && o.Tools == nil
+}
+
+// MetaSpawn 子会话行业务键：创建时的 SpawnOptions（JSON）。
+const MetaSpawn = "spawn"
+
+// SpawnOptionsFor 正在新建的子会话 id 的按次覆盖（SpawnWith 投递前登记，构造完即清）。
+// 会话构造（Host.Child）用它取本次的设置；取不到时由构造方从会话行 MetaSpawn 读回。
+func (h *Host) SpawnOptionsFor(id string) (SpawnOptions, bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	o, ok := h.spawnOpts[id]
+	return o, ok
+}
+
+// SpawnWith 同 SpawnAs，另带按次覆盖 o（见 SpawnOptions）。
+func (h *Host) SpawnWith(ctx context.Context, parent, id, origin, def string, f Factory, task string, untrusted bool, o SpawnOptions) (string, bool, error) {
+	out, err := h.spawn(ctx, parent, id, origin, def, f, task, untrusted, o)
 	return out, untrusted || h.Untrusted(id), err
 }
 
-func (h *Host) spawn(ctx context.Context, parent, id, origin, def string, f Factory, task string, untrusted bool) (string, error) {
+func (h *Host) spawn(ctx context.Context, parent, id, origin, def string, f Factory, task string, untrusted bool, o SpawnOptions) (string, error) {
 	existed, err := h.DB.Exists(ctx, id)
 	if err != nil {
 		return "", err
@@ -70,8 +111,25 @@ func (h *Host) spawn(ctx context.Context, parent, id, origin, def string, f Fact
 			return "", err
 		}
 	} else {
+		var raw json.RawMessage
+		if !o.IsZero() {
+			if raw, err = store.MergeMeta(nil, map[string]any{MetaSpawn: o}); err != nil {
+				return "", err
+			}
+			h.mu.Lock()
+			if h.spawnOpts == nil {
+				h.spawnOpts = map[string]SpawnOptions{}
+			}
+			h.spawnOpts[id] = o
+			h.mu.Unlock()
+			defer func() {
+				h.mu.Lock()
+				delete(h.spawnOpts, id)
+				h.mu.Unlock()
+			}()
+		}
 		hd, err = h.open(ctx, id, def, f, func(ag *agent.Agent, cfg *session.Config) error {
-			meta := store.SessionMeta{ParentID: parent, Origin: origin}
+			meta := store.SessionMeta{ParentID: parent, Origin: origin, Meta: raw}
 			if ag.Def != nil {
 				meta.AgentID, meta.AgentHash = ag.Def.ID, ag.Def.Version
 			}

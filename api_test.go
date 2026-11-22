@@ -12,6 +12,7 @@ import (
 	"github.com/Sevyn17/tenon/appapi"
 	"github.com/Sevyn17/tenon/appapi/wire"
 	"github.com/Sevyn17/tenon/runtime/store/memstore"
+	"github.com/Sevyn17/tenon/std"
 	"github.com/Sevyn17/tenon/tenontest"
 )
 
@@ -33,7 +34,7 @@ func protoCall[T any](t *testing.T, c *appapi.Conn, cmd string, args any) T {
 // SDK 装配的应用能直接提供应用协议：Start 之前 API() 为 nil；之后 hello 报出经 adapters 接上的能力
 // （模型列表、权限档位、文件、追问、压缩），协议上建会话、发消息、等到回合结束。
 func TestAPIServesProtocol(t *testing.T) {
-	app, err := tenon.New(tenon.Default(), tenon.WithStore(memstore.New()), tenon.WithWorkdir(t.TempDir()),
+	app, err := tenon.New(std.Default(), tenon.WithStore(memstore.New()), tenon.WithWorkdir(t.TempDir()),
 		tenontest.Model(tenontest.Reply("你好")), tenon.WithProtocolUI())
 	if err != nil {
 		t.Fatal(err)
@@ -88,7 +89,7 @@ func TestAPIServesProtocol(t *testing.T) {
 }
 
 func TestProtocolUIConflictsWithUI(t *testing.T) {
-	_, err := tenon.New(tenon.Default(), tenon.WithStore(memstore.New()), tenontest.Model(),
+	_, err := tenon.New(std.Default(), tenon.WithStore(memstore.New()), tenontest.Model(),
 		tenon.WithProtocolUI(), tenon.WithUI(nopTestUI{}))
 	if !errors.Is(err, tenon.ErrInvalid) {
 		t.Fatalf("WithUI 与 WithProtocolUI 同时给应报 ErrInvalid：%v", err)
@@ -105,11 +106,11 @@ func (nopTestUI) Ask(context.Context, string, []string) (string, error) {
 
 // WithConfig 等同 profile 的 [plugin.<名>]：配置生效；组件不在装配里报 ErrInvalid。
 func TestWithConfig(t *testing.T) {
-	if _, err := tenon.New(tenon.Default(), tenon.WithStore(memstore.New()), tenontest.Model(),
+	if _, err := tenon.New(std.Default(), tenon.WithStore(memstore.New()), tenontest.Model(),
 		tenon.WithConfig("nope", map[string]any{"x": 1})); !errors.Is(err, tenon.ErrInvalid) {
 		t.Fatalf("不在装配里的组件应报 ErrInvalid：%v", err)
 	}
-	app, err := tenon.New(tenon.Default(), tenon.WithStore(memstore.New()), tenon.WithWorkdir(t.TempDir()),
+	app, err := tenon.New(std.Default(), tenon.WithStore(memstore.New()), tenon.WithWorkdir(t.TempDir()),
 		tenon.WithConfig("models", map[string]any{"model": "deepseek-reasoner"}))
 	if err != nil {
 		t.Fatal(err)

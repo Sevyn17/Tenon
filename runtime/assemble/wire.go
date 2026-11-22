@@ -59,6 +59,11 @@ func Wire(o WireOptions) (*Wired, error) {
 	if err != nil {
 		return nil, err
 	}
+	// 装配期提前校验（Mortise docs/62 §4.7、K6）：工具引用的权限项必须已登记。原先要到第一次构造会话
+	// （hub.Validate）才报错；被引用项所属插件关掉时，现在启动即失败。
+	if err := CheckItemRefs(col); err != nil {
+		return nil, err
+	}
 	h := o.Host
 	if h.DB == nil {
 		h.DB = o.DB
@@ -135,7 +140,13 @@ func Wire(o WireOptions) (*Wired, error) {
 	}
 	// 顶层会话带委派 / 领导工具；子会话与工作组成员按 child 构造（深度 1）。
 	h.New = func(id, def string) (*agent.Agent, *session.Config, error) { return rb.Build(id, def, false) }
-	h.Child = func(id, def string) (*agent.Agent, *session.Config, error) { return rb.Build(id, def, true) }
+	// 子会话的按次覆盖（K5）：新建时取 SpawnWith 登记的那份；取不到（重开）时 Builder 从会话行读回。
+	h.Child = func(id, def string) (*agent.Agent, *session.Config, error) {
+		if o, ok := h.SpawnOptionsFor(id); ok {
+			return rb.BuildWith(id, def, true, &o)
+		}
+		return rb.Build(id, def, true)
+	}
 	return &Wired{Builder: rb, host: h, db: o.DB, gc: blobGC, ready: col.Ready, retain: k.Retain}, nil
 }
 

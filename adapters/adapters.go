@@ -1,5 +1,9 @@
-// Package adapters 把插件的能力接成应用协议（appapi）的可选能力：模型列表与切换、权限档位、建议追问、
-// 自动标题、工作区文件列表、手动压缩、工件、删除会话时的清理。
+// Package adapters 把装配结果接成应用协议（appapi）的可选能力。本包只做与具体插件无关的通用部分：
+// 模型列表与切换、建议追问、自动标题、手动压缩、工件、删除会话时的清理、扩展取装配服务。
+//
+// 依赖具体标准模块的适配（权限档位、技能、MCP、文件检查点、工作区文件列表）在 tenon/std 里，
+// 由 std 的 init 经 [Register] 登记（Mortise docs/62 K6）。只 import 根包、不导入 std 的应用拿到的就是
+// 「只有会话」的协议面，能力表里不报 modes、skills、mcp、changes。
 //
 // appapi 属于框架核心，不能 import 插件包，所以这一层放在核心之外。SDK（tenon.App）与应用宿主（apphost）
 // 都用它：用 SDK 自己装配的应用，Start 之后 App.API() 拿到的协议层已经接好这些能力，可以直接交给
@@ -7,40 +11,61 @@
 package adapters
 
 import (
-	"context"
 	"fmt"
-	"strings"
+	"sync"
 
 	"github.com/Sevyn17/tenon/appapi"
-	"github.com/Sevyn17/tenon/appapi/wire"
-	"github.com/Sevyn17/tenon/modules/context/skills"
-	"github.com/Sevyn17/tenon/modules/security/permission"
-	"github.com/Sevyn17/tenon/modules/tools/checkpoint"
-	"github.com/Sevyn17/tenon/modules/tools/fs"
-	"github.com/Sevyn17/tenon/modules/tools/mcp"
 	"github.com/Sevyn17/tenon/runtime/assemble"
 	"github.com/Sevyn17/tenon/runtime/component"
 	"github.com/Sevyn17/tenon/runtime/store"
 	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
-// MaxScanFiles workspace.files 最多遍历的文件数（大仓库里 @ 文件只看前这么多个）。
-const MaxScanFiles = 20000
-
 // Parts 装配结果里接协议要用的部分。
 type Parts struct {
 	Asm    *component.Assembly
 	Models *assemble.Models  // 可空：没有就不提供模型列表、追问、标题
 	Blobs  toolhub.Artifacts // 可空：工件存储
-	// Workdir workspace.files 遍历的目录；空 = 不提供文件列表。
+	// Workdir 工作目录（登记的适配用，如 std 的 workspace.files）；空 = 不提供文件列表。
 	Workdir string
 	// Approvals 项目档位放宽权限的确认记录；nil = 不记，每次都要确认。
 	Approvals ModeApprovals
 }
 
+// ModeApprovals 项目档位放宽权限的确认记录：记在哪由应用决定（apphost 记在 ~/.tenon/trust.toml，按项目）。
+// widened 是放宽清单（顿号连接）；清单变了要重新确认。
+type ModeApprovals interface {
+	Approved(mode, widened string) bool
+	Approve(mode, widened string) error
+}
+
+// Adapter 登记的协议适配：按装配结果填 o 里还没设的能力。
+type Adapter func(o *appapi.Options, p Parts) error
+
+var (
+	regMu sync.Mutex
+	regs  []Adapter
+)
+
+// Register 登记一个协议适配（通常在 init 里调用，如 tenon/std）。[Fill] 在通用部分之后按登记顺序调用。
+func Register(f Adapter) {
+	if f == nil {
+		panic("adapters: Register(nil)")
+	}
+	regMu.Lock()
+	defer regMu.Unlock()
+	regs = append(regs, f)
+}
+
+func registered() []Adapter {
+	regMu.Lock()
+	defer regMu.Unlock()
+	return append([]Adapter(nil), regs...)
+}
+
 // Fill 按装配结果填 o 的可选能力；o 里已经设了的字段不动（应用可以先换成自己的实现）。
-// 返回装配里的 permission 会话服务（没装 permission 时为 nil），应用还要用它时不必再查一次。
-func Fill(o *appapi.Options, p Parts) (*permission.Sessions, error) {
+// 先填通用部分，再跑 [Register] 登记的适配。
+func Fill(o *appapi.Options, p Parts) error {
 	if m := p.Models; m != nil {
 		if o.Models == nil {
 			o.Models = ModelList{M: m}
@@ -55,75 +80,29 @@ func Fill(o *appapi.Options, p Parts) (*permission.Sessions, error) {
 	if o.Artifacts == nil && p.Blobs != nil {
 		o.Artifacts = p.Blobs
 	}
-	if o.Files == nil && p.Workdir != "" {
-		o.Files = Files(p.Workdir)
-	}
-	if p.Asm == nil {
-		return nil, nil
-	}
-	if o.Services == nil { // 扩展命令取当前装配的服务（App.Service，docs/62 K1）
-		o.Services = p.Asm.Value
-	}
-	for _, it := range p.Asm.Items(assemble.PointOnSessionDelete) { // 删除会话时的插件清理回调（session.delete）
-		c, ok := it.Impl.(store.Cleaner)
-		if !ok {
-			return nil, fmt.Errorf("插件 %s 的 %s 类型不符（%T）", it.Plugin, assemble.PointOnSessionDelete, it.Impl)
+	if p.Asm != nil {
+		if o.Services == nil { // 扩展命令取当前装配的服务（App.Service，docs/62 K1）
+			o.Services = p.Asm.Value
 		}
-		o.Cleaners = append(o.Cleaners, c)
-	}
-	if o.Compactor == nil {
-		if v, ok := p.Asm.Value(assemble.ServiceCompactor); ok {
-			if c, ok := v.(appapi.Compactor); ok {
-				o.Compactor = c
+		for _, it := range p.Asm.Items(assemble.PointOnSessionDelete) { // 删除会话时的插件清理回调（session.delete）
+			c, ok := it.Impl.(store.Cleaner)
+			if !ok {
+				return fmt.Errorf("插件 %s 的 %s 类型不符（%T）", it.Plugin, assemble.PointOnSessionDelete, it.Impl)
+			}
+			o.Cleaners = append(o.Cleaners, c)
+		}
+		if o.Compactor == nil {
+			if v, ok := p.Asm.Value(assemble.ServiceCompactor); ok {
+				if c, ok := v.(appapi.Compactor); ok {
+					o.Compactor = c
+				}
 			}
 		}
 	}
-	if o.Changes == nil { // 文件检查点（客户端改进 M9）：changes.* 与 session.rewind {restore_files}
-		if v, ok := p.Asm.Value(checkpoint.ServiceName); ok {
-			if e, ok := v.(*checkpoint.Engine); ok && e != nil {
-				o.Changes = Changes{E: e}
-			}
+	for _, f := range registered() {
+		if err := f(o, p); err != nil {
+			return err
 		}
 	}
-	if o.Skills == nil { // 本地技能（客户端改进 M11 配置T18）：skills.list / skills.setEnabled
-		if v, ok := p.Asm.Value(skills.ServiceName); ok {
-			if s, ok := v.(*skills.Skills); ok && s != nil {
-				o.Skills = Skills{S: s}
-			}
-		}
-	}
-	if o.MCP == nil { // MCP 管理页（客户端改进 M11 配置T14）：mcp.list / test / setEnabled（save / remove 另要 MCPEditor）
-		if v, ok := p.Asm.Value(mcp.Service); ok {
-			if s, ok := v.(*mcp.ServiceAPI); ok && s != nil {
-				o.MCP = MCP{S: s}
-			}
-		}
-	}
-	var perms *permission.Sessions
-	if v, ok := p.Asm.Value(permission.Service); ok {
-		perms, _ = v.(*permission.Sessions)
-	}
-	if perms != nil {
-		if o.Modes == nil {
-			o.Modes = PermModes{P: perms, Approvals: p.Approvals}
-		}
-		// 项目档位当新会话缺省时，也要用户确认过放宽（与 mode.set 切换共用同一份确认记录）。
-		ap := p.Approvals
-		perms.ModeApproved = func(m permission.Mode, widened []string) bool {
-			return ap != nil && ap.Approved(string(m), strings.Join(widened, "、"))
-		}
-	}
-	return perms, nil
-}
-
-// Files workspace.files 的实现：按 fs 插件的规则（遵守 .gitignore、不出目录）列 root 下的文件。
-func Files(root string) appapi.Files {
-	return func(ctx context.Context, q string, limit int) ([]wire.FileInfo, bool, error) {
-		hits, trunc, err := fs.ListFiles(ctx, root, q, limit, MaxScanFiles)
-		out := make([]wire.FileInfo, len(hits))
-		for i, h := range hits {
-			out[i] = wire.FileInfo{Path: h.Path, Size: h.Size, MTime: h.MTime}
-		}
-		return out, trunc, err
-	}
+	return nil
 }

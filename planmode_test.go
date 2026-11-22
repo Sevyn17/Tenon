@@ -21,6 +21,7 @@ import (
 	"github.com/Sevyn17/tenon/runtime/session"
 	"github.com/Sevyn17/tenon/runtime/store/memstore"
 	"github.com/Sevyn17/tenon/runtime/workmode"
+	"github.com/Sevyn17/tenon/std"
 )
 
 type planStep struct {
@@ -151,7 +152,7 @@ func TestPlanModeFlow(t *testing.T) {
 	}}
 	undeclared := tenon.Raw("deploy", "没有声明权限项的写工具", `{"type":"object"}`,
 		func(context.Context, json.RawMessage) (any, error) { return "ok", nil }).Writes()
-	app, err := tenon.New(tenon.Default(), tenon.WithStore(memstore.New()), tenon.WithWorkdir(t.TempDir()),
+	app, err := tenon.New(std.Default(), tenon.WithStore(memstore.New()), tenon.WithWorkdir(t.TempDir()),
 		recModels(m), tenon.WithProtocolUI(), tenon.WithTools(undeclared), allTools)
 	if err != nil {
 		t.Fatal(err)
@@ -263,7 +264,7 @@ func TestPlanModeFlow(t *testing.T) {
 // 没进过 Plan 模式的会话：exit_plan 不显露，也没有 Plan 模式指令（和原来一样）。
 func TestPlanModeAbsentByDefault(t *testing.T) {
 	m := &recModel{steps: []planStep{{text: "你好"}}}
-	app, err := tenon.New(tenon.Default(), tenon.WithStore(memstore.New()), tenon.WithWorkdir(t.TempDir()),
+	app, err := tenon.New(std.Default(), tenon.WithStore(memstore.New()), tenon.WithWorkdir(t.TempDir()),
 		recModels(m), tenon.WithProtocolUI(), allTools)
 	if err != nil {
 		t.Fatal(err)

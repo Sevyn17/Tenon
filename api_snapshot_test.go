@@ -28,6 +28,7 @@ var promised = []string{
 	"github.com/Sevyn17/tenon/transport/web",
 	"github.com/Sevyn17/tenon/transport/bind",
 	"github.com/Sevyn17/tenon/adapters",
+	"github.com/Sevyn17/tenon/std",
 	"github.com/Sevyn17/tenon/apphost",
 	"github.com/Sevyn17/tenon/appapi/wire",
 }

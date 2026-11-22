@@ -8,6 +8,7 @@ import (
 
 	"github.com/Sevyn17/tenon"
 	"github.com/Sevyn17/tenon/runtime/store/memstore"
+	"github.com/Sevyn17/tenon/std"
 	"github.com/Sevyn17/tenon/tenontest"
 )
 
@@ -27,7 +28,7 @@ func TestLLMMatcherRegistered(t *testing.T) {
 
 // 不装 modelmatch 时（Minimal 预设不含它）没有 llm 匹配器——证明模型匹配器不是内核内置。
 func TestNoLLMMatcherWithoutComponent(t *testing.T) {
-	app, err := tenon.New(tenon.Minimal(), tenon.WithStore(memstore.MemoryStore()), tenon.WithWorkdir(t.TempDir()),
+	app, err := tenon.New(std.Minimal(), tenon.WithStore(memstore.MemoryStore()), tenon.WithWorkdir(t.TempDir()),
 		tenontest.Model())
 	if err != nil {
 		t.Fatal(err)

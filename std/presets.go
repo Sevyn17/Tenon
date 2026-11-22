@@ -1,4 +1,4 @@
-package tenon
+package std
 
 // 预设组件清单（10 10.2）。名字与 plugin.Register 一致；装配顺序由 Requires 拓扑排序决定。
 //
@@ -6,6 +6,8 @@ package tenon
 // 存储不在预设里：存储由 WithStore 提供，或由产品登记的存储组件提供。
 
 import (
+	"github.com/Sevyn17/tenon"
+
 	_ "github.com/Sevyn17/tenon/modules/collab/group"
 	_ "github.com/Sevyn17/tenon/modules/collab/subagent"
 	_ "github.com/Sevyn17/tenon/modules/collab/workgroup"
@@ -80,3 +82,16 @@ var minimalComponents = []string{
 	"skills",
 	"compact-basic",
 }
+
+// Default 标准组件预设（10 10.2）：内核、上下文、模型、工具、权限、沙箱、协作。
+// 不含存储：存储由 tenon.WithStore 提供。原 tenon.Default（Mortise docs/62 K6 迁到这里）。
+func Default() tenon.Option { return tenon.WithComponents(defaultComponents...) }
+
+// Minimal 最小预设（10 10.2）：内核 + 上下文（含压缩所需的模型组件）。原 tenon.Minimal。
+func Minimal() tenon.Option { return tenon.WithComponents(minimalComponents...) }
+
+// DefaultNames / MinimalNames 两组预设的组件名（副本）。
+func DefaultNames() []string { return append([]string(nil), defaultComponents...) }
+
+// MinimalNames 见 DefaultNames。
+func MinimalNames() []string { return append([]string(nil), minimalComponents...) }

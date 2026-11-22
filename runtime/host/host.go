@@ -209,7 +209,9 @@ type Host struct {
 
 	mu     sync.Mutex
 	actors map[string]*actor
-	sem    chan struct{} // Limit 的许可池，首次使用时按 Limit 建
+	// spawnOpts 正在新建的子会话的按次覆盖（SpawnWith → SpawnOptionsFor，K5）。同受 mu 保护。
+	spawnOpts map[string]SpawnOptions
+	sem       chan struct{} // Limit 的许可池，首次使用时按 Limit 建
 
 	// 发件箱派发（08 9.6）：同一时刻只有一个派发者（读未发行 → 投递 → 标记之间不能交错，
 	// 否则同一条会投递多次）；回合结束只「踢一下」后台派发，不在 actor 协程里投递

@@ -37,7 +37,7 @@ func TestMemArtifactsGC(t *testing.T) {
 
 // SDK 的工件存储可回收：assemble.Wire 按 store.BlobGC 接线，store.Maintain 定期调用。
 func TestSDKWiresArtifactGC(t *testing.T) {
-	a, err := New(Minimal(), WithStore(memstore.New()), WithWorkdir(t.TempDir()), WithModels(testHub(), "m"))
+	a, err := New(testMinimal(), WithStore(memstore.New()), WithWorkdir(t.TempDir()), WithModels(testHub(), "m"))
 	if err != nil {
 		t.Fatal(err)
 	}

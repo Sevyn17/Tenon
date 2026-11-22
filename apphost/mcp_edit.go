@@ -24,10 +24,10 @@ import (
 
 	"github.com/BurntSushi/toml"
 
-	"github.com/Sevyn17/tenon/adapters"
 	"github.com/Sevyn17/tenon/appapi"
 	"github.com/Sevyn17/tenon/appapi/wire"
 	"github.com/Sevyn17/tenon/modules/tools/mcp"
+	"github.com/Sevyn17/tenon/std"
 )
 
 var _ appapi.MCPEditor = (*WorkspaceManager)(nil)
@@ -113,7 +113,7 @@ func (m *WorkspaceManager) resolveDraft(d wire.MCPServerDraft) (wire.MCPServerDr
 		return d, mcp.Server{}, err
 	}
 	d.EnvRemove, d.HeaderRemove = nil, nil
-	s, err := adapters.DraftServer(d)
+	s, err := std.DraftServer(d)
 	if err != nil {
 		return d, mcp.Server{}, err
 	}

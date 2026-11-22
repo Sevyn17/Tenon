@@ -1,4 +1,4 @@
-package adapters
+package std
 
 // MCP 管理页（客户端改进 M11，配置T14）：把 mcp 插件的 service:mcp（*mcp.ServiceAPI）接成 appapi.MCP。
 // 写定义文件不在这里：apphost.WorkspaceManager 实现 appapi.MCPEditor。

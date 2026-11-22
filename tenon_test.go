@@ -10,6 +10,7 @@ import (
 
 	"github.com/Sevyn17/tenon"
 	"github.com/Sevyn17/tenon/runtime/store/memstore"
+	"github.com/Sevyn17/tenon/std"
 	"github.com/Sevyn17/tenon/tenontest"
 )
 
@@ -17,7 +18,7 @@ import (
 func base(t *testing.T) []tenon.Option {
 	t.Helper()
 	return []tenon.Option{
-		tenon.Minimal(),
+		std.Minimal(),
 		tenon.WithStore(memstore.New()),
 		tenon.WithWorkdir(t.TempDir()),
 		tenontest.Model(tenontest.Reply("ok")),
@@ -25,7 +26,7 @@ func base(t *testing.T) []tenon.Option {
 }
 
 func TestNewNeedsStore(t *testing.T) {
-	_, err := tenon.New(tenon.Default())
+	_, err := tenon.New(std.Default())
 	if !errors.Is(err, tenon.ErrInvalid) || !strings.Contains(err.Error(), "WithStore") {
 		t.Fatalf("err = %v，要 ErrInvalid + WithStore", err)
 	}
@@ -47,7 +48,7 @@ func TestWithoutUnknown(t *testing.T) {
 }
 
 func TestDuplicatePreset(t *testing.T) {
-	opts := append(base(t), tenon.Default())
+	opts := append(base(t), std.Default())
 	_, err := tenon.New(opts...)
 	if !errors.Is(err, tenon.ErrInvalid) || !strings.Contains(err.Error(), "重复") {
 		t.Fatalf("err = %v，要 ErrInvalid + 重复", err)

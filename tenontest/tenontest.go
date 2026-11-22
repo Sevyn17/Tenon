@@ -21,6 +21,7 @@ import (
 	"github.com/Sevyn17/tenon/runtime/session"
 	"github.com/Sevyn17/tenon/runtime/store"
 	"github.com/Sevyn17/tenon/runtime/store/memstore"
+	"github.com/Sevyn17/tenon/std"
 )
 
 const (
@@ -98,7 +99,7 @@ func Stores() []Backend {
 func NewOn(t *testing.T, st store.Store, opts ...tenon.Option) *App {
 	t.Helper()
 	all := []tenon.Option{
-		tenon.Default(),
+		std.Default(),
 		tenon.WithStore(st),
 		tenon.WithWorkdir(t.TempDir()),
 		Model(), // 缺省空脚本：没写 Model(...) 时调用即失败

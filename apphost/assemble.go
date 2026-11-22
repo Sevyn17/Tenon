@@ -10,33 +10,10 @@ import (
 	"github.com/Sevyn17/tenon/runtime/assemble"
 	"github.com/Sevyn17/tenon/runtime/component"
 
-	// 核心插件：模型、协议适配器、压缩。
-	// 存储插件不在这里登记：它是产品的选择（SQLite、PostgreSQL 或别的），
+	// 标准层（Mortise docs/62 §3.2、K6）：apphost 归标准层，经 tenon/std 登记全部标准模块与它们的协议适配；
+	// 装配哪些由 profile 决定。存储插件不在这里登记：它是产品的选择（SQLite、PostgreSQL 或别的），
 	// 由调用方在自己的 main 包里空导入。装配时没有组件提供 service:db 会报错。
-	_ "github.com/Sevyn17/tenon/modules/model/adapter-anthropic"
-	_ "github.com/Sevyn17/tenon/modules/model/adapter-openai-chat"
-	_ "github.com/Sevyn17/tenon/modules/model/adapter-openai-responses"
-	_ "github.com/Sevyn17/tenon/modules/model/models"
-
-	// 插件登记（init 里 component.Register）；装配哪些由 profile 决定
-	_ "github.com/Sevyn17/tenon/modules/collab/subagent"
-	_ "github.com/Sevyn17/tenon/modules/collab/workgroup"
-	_ "github.com/Sevyn17/tenon/modules/context/instructions"
-	_ "github.com/Sevyn17/tenon/modules/context/prompt"
-	_ "github.com/Sevyn17/tenon/modules/context/redact"
-	_ "github.com/Sevyn17/tenon/modules/context/skills"
-	_ "github.com/Sevyn17/tenon/modules/extend/hooks"
-	_ "github.com/Sevyn17/tenon/modules/security/permission"
-	_ "github.com/Sevyn17/tenon/modules/security/sandbox"
-	_ "github.com/Sevyn17/tenon/modules/tools/ask-user"
-	_ "github.com/Sevyn17/tenon/modules/tools/checkpoint"
-	_ "github.com/Sevyn17/tenon/modules/tools/codemode"
-	_ "github.com/Sevyn17/tenon/modules/tools/fs"
-	_ "github.com/Sevyn17/tenon/modules/tools/mcp"
-	_ "github.com/Sevyn17/tenon/modules/tools/planmode"
-	_ "github.com/Sevyn17/tenon/modules/tools/shell"
-	_ "github.com/Sevyn17/tenon/modules/tools/todo"
-	_ "github.com/Sevyn17/tenon/modules/tools/web"
+	_ "github.com/Sevyn17/tenon/std"
 )
 
 // Assembled 装配结果里内核循环要用的部分。

@@ -95,7 +95,7 @@ func (a *App) Start(ctx context.Context) (err error) {
 	for _, f := range a.protocol {
 		f(&ao)
 	}
-	if _, err := adapters.Fill(&ao, adapters.Parts{Asm: a.asm, Models: a.models, Blobs: a.handle.Blobs(),
+	if err := adapters.Fill(&ao, adapters.Parts{Asm: a.asm, Models: a.models, Blobs: a.handle.Blobs(),
 		Workdir: a.workdir, Approvals: a.approvals}); err != nil {
 		return fmt.Errorf("tenon: 应用接口: %w", err)
 	}

@@ -15,10 +15,11 @@ go get github.com/Sevyn17/tenon
 ```go
 import (
     "github.com/Sevyn17/tenon"
+    "github.com/Sevyn17/tenon/std" // 标准模块套装：std.Default() / std.Minimal()
     "github.com/Sevyn17/tenon/runtime/store/memstore"
 )
 
-app, err := tenon.New(tenon.Default(),
+app, err := tenon.New(std.Default(),
     tenon.WithStore(memstore.MemoryStore()),
     tenon.WithTools(lookup),
     tenon.WithOpenAI(baseURL, model, tenon.Env("TENON_API_KEY")))

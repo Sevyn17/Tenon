@@ -15,7 +15,7 @@ func TestProjectTrustDefaultsFalse(t *testing.T) {
 		want bool
 	}{{nil, false}, {[]Option{WithProjectTrust(true)}, true}} {
 		c := &config{}
-		for _, o := range append([]Option{Minimal(), WithStore(memstore.New()), WithWorkdir(t.TempDir())}, tc.opts...) {
+		for _, o := range append([]Option{testMinimal(), WithStore(memstore.New()), WithWorkdir(t.TempDir())}, tc.opts...) {
 			if err := o(c); err != nil {
 				t.Fatal(err)
 			}

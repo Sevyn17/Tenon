@@ -6,7 +6,7 @@
 //
 // 一个应用 = 组件预设 + 存储 + 模型 + 智能体定义：
 //
-//	app, err := tenon.New(tenon.Default(),
+//	app, err := tenon.New(std.Default(),
 //	    tenon.WithStore(memstore.MemoryStore()),
 //	    tenon.WithOpenAI(baseURL, model, tenon.Env("TENON_API_KEY")))
 //	if err != nil { ... }

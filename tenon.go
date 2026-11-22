@@ -94,19 +94,17 @@ type config struct {
 	layers component.LayeredConfig
 }
 
-// Default 标准组件预设（10 10.2）：内核、上下文、模型、工具、权限、沙箱、协作。
-// 不含存储：存储由 WithStore 提供。
-func Default() Option {
+// WithComponents 按名字装配已登记的组件（Mortise docs/62 K6）。根包不登记任何标准模块：
+// 要用的模块先空导入（tenon/std 一次导入全部，并提供 std.Default / std.Minimal 两组名字），
+// 名字没登记时 New 报错并写明要导入什么。与 WithProfile 二选一。
+func WithComponents(names ...string) Option {
 	return func(c *config) error {
-		c.components = append(c.components, defaultComponents...)
-		return nil
-	}
-}
-
-// Minimal 最小预设（10 10.2）：内核 + 上下文（含压缩所需的模型组件）。
-func Minimal() Option {
-	return func(c *config) error {
-		c.components = append(c.components, minimalComponents...)
+		for _, n := range names {
+			if strings.TrimSpace(n) == "" {
+				return fmt.Errorf("%w: WithComponents 里组件名不能为空", ErrInvalid)
+			}
+		}
+		c.components = append(c.components, names...)
 		return nil
 	}
 }
@@ -329,14 +327,14 @@ func checkConfig(c *config) error {
 	var errs []error
 	if c.profile != nil {
 		if len(c.components) > 0 || len(c.without) > 0 {
-			errs = append(errs, fmt.Errorf("%w: WithProfile 与 Default() / Minimal() / Without 二选一", ErrInvalid))
+			errs = append(errs, fmt.Errorf("%w: WithProfile 与 WithComponents（std.Default() / std.Minimal()）/ Without 二选一", ErrInvalid))
 		}
 	} else {
 		if c.store == nil {
 			errs = append(errs, fmt.Errorf("%w: 需要 WithStore（预设不含存储）", ErrInvalid))
 		}
 		if len(c.components) == 0 {
-			errs = append(errs, fmt.Errorf("%w: 没有组件（先选 Default() 或 Minimal()）", ErrInvalid))
+			errs = append(errs, fmt.Errorf("%w: 没有组件（WithComponents，或导入 tenon/std 用 std.Default() / std.Minimal()）", ErrInvalid))
 		}
 	}
 	if len(errs) > 0 {
@@ -459,6 +457,10 @@ func resolveComponents(c *config) ([]string, []error, error) {
 			continue
 		}
 		seen[n] = true
+		if _, ok := component.MetaOf(n); !ok {
+			errs = append(errs, fmt.Errorf("%w: 组件 %s 未登记（未导入 tenon/std 或 modules/<名>）", ErrInvalid, n))
+			continue
+		}
 		preset = append(preset, n)
 	}
 	for _, n := range c.without {

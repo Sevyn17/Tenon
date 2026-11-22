@@ -1,35 +1,22 @@
 package tenon
 
-import (
-	"slices"
-	"sort"
-	"testing"
+// 内部测试（package tenon）不能 import tenon/std（std 依赖根包，会成环）：
+// 这里空导入最小预设要用的模块，按名字装配（Mortise docs/62 §3.3）。
 
-	"github.com/Sevyn17/tenon/runtime/assemble"
-	"github.com/Sevyn17/tenon/runtime/component"
+import (
+	_ "github.com/Sevyn17/tenon/modules/context/compact-basic"
+	_ "github.com/Sevyn17/tenon/modules/context/instructions"
+	_ "github.com/Sevyn17/tenon/modules/context/prompt"
+	_ "github.com/Sevyn17/tenon/modules/context/redact"
+	_ "github.com/Sevyn17/tenon/modules/context/skills"
+	_ "github.com/Sevyn17/tenon/modules/model/adapter-anthropic"
+	_ "github.com/Sevyn17/tenon/modules/model/adapter-openai-chat"
+	_ "github.com/Sevyn17/tenon/modules/model/adapter-openai-responses"
+	_ "github.com/Sevyn17/tenon/modules/model/models"
 )
 
-// 两种入口的插件缺省（计划/07 阶段三）：按 profile 装配（WithProfile，apphost 走这条）时按各插件的 Meta.Default；
-// Default() 预设是"全部标准组件、存储除外"——存储由 WithStore 给，或 profile 模式下由存储插件给。
-// 新增标准组件要么进 Default()，要么在这里说明为什么不进；这条测试防止两边悄悄分叉。
-func TestDefaultIsEveryStandardComponent(t *testing.T) {
-	var want []string
-	for _, n := range component.Registered() {
-		m, ok := component.MetaOf(n)
-		if !ok || slices.Contains(m.Provides, assemble.ServiceDB) {
-			continue
-		}
-		want = append(want, n)
-	}
-	got := append([]string(nil), defaultComponents...)
-	sort.Strings(want)
-	sort.Strings(got)
-	if !slices.Equal(got, want) {
-		t.Fatalf("Default() = %v\n已登记的标准组件（除存储）= %v", got, want)
-	}
-	for _, n := range minimalComponents {
-		if !slices.Contains(defaultComponents, n) {
-			t.Errorf("Minimal() 的 %s 不在 Default() 里", n)
-		}
-	}
+// testMinimal 同 std.Minimal()。
+func testMinimal() Option {
+	return WithComponents("models", "adapter-anthropic", "adapter-openai-chat", "adapter-openai-responses",
+		"instructions", "prompt", "redact", "skills", "compact-basic")
 }

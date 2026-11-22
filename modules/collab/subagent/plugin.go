@@ -33,12 +33,34 @@ func TemplateSource() (agentdef.Source, error) {
 	return m, nil
 }
 
+// PluginConfig 插件配置 [use.subagent] 的参数开关（Mortise docs/62 K5、docs/56 第 2 节）：
+// 每个按次参数一个开关，开着的才出现在委派工具 schema 里。task 必有，不可关。
+//
+//	[[plugin]]
+//	name = "subagent"
+//	[plugin.config]
+//	param_model = true
+type PluginConfig struct {
+	SystemPrompt bool `cfg:"param_system_prompt" default:"true" title:"开放 system_prompt" widget:"switch" description:"委派时可追加子智能体的系统提示（接在基础提示词之后）"`
+	Model        bool `cfg:"param_model" default:"false" title:"开放 model" widget:"switch" description:"委派时可指定子智能体的模型；关着时跟随主会话"`
+	Mode         bool `cfg:"param_mode" default:"true" title:"开放 mode" widget:"switch" description:"委派时可指定子智能体的权限档位；只能收窄，最多与主会话一样宽"`
+	Tools        bool `cfg:"param_tools" default:"true" title:"开放 tools" widget:"switch" description:"委派时可给子智能体工具白名单；只能是主会话有的工具"`
+}
+
+// Params 配置对应的参数开关。
+func (c *PluginConfig) Params() Params {
+	if c == nil {
+		return Params{SystemPrompt: true, Mode: true, Tools: true}
+	}
+	return Params{SystemPrompt: c.SystemPrompt, Model: c.Model, Mode: c.Mode, Tools: c.Tools}
+}
+
 type plug struct{}
 
 func init() { component.Register("subagent", func() component.Component { return &plug{} }) }
 
 func (*plug) Meta() component.Meta {
-	return component.Meta{Name: "subagent", Version: "0.1.0", Description: "委派工具：把一段任务交给子智能体，在独立的子会话里完成", Effects: []string{component.EffectTools}, Requires: []string{assemble.ServiceHost, tasks.Key.Maybe()}}
+	return component.Meta{Name: "subagent", Version: "0.1.0", Description: "委派工具：把一段任务交给子智能体，在独立的子会话里完成", Effects: []string{component.EffectTools}, Requires: []string{assemble.ServiceHost, tasks.Key.Maybe()}, Config: &PluginConfig{}}
 }
 
 func (*plug) Setup(cx *component.Registrar) error {
@@ -59,7 +81,8 @@ func (*plug) Setup(cx *component.Registrar) error {
 	if err != nil {
 		return err
 	}
-	t := ToolWithTasks(h, h.ChildFactory(), sink).WithItems(ItemSpawn)
+	cfg, _ := cx.Config().(*PluginConfig)
+	t := ToolWithParams(h, h.ChildFactory(), sink, cfg.Params()).WithItems(ItemSpawn)
 	for _, it := range Items() {
 		component.RegisterAt(cx, assemble.PermItems, it.ID, it)
 	}

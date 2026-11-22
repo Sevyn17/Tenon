@@ -18,6 +18,7 @@ import (
 	"github.com/Sevyn17/tenon/runtime/agentdef"
 	"github.com/Sevyn17/tenon/runtime/callctx"
 	"github.com/Sevyn17/tenon/runtime/component"
+	"github.com/Sevyn17/tenon/runtime/host"
 	"github.com/Sevyn17/tenon/runtime/inject"
 	"github.com/Sevyn17/tenon/runtime/modelhub"
 	"github.com/Sevyn17/tenon/runtime/session"
@@ -43,6 +44,9 @@ type SessionCx struct {
 	// 收窄子会话的可用工具，父会话的使用配置（如 [use.permission] 上限档位）由各组件叠加到子会话上
 	// （2026-11-04 审查 P2：原先子会话用内置定义，父会话的限制一样都不继承）。
 	Parent *ParentLimits
+	// Spawn 子会话的按次覆盖（Mortise docs/62 K5，host.SpawnWith 传入）；nil = 没有覆盖。
+	// 组件只能用它收窄（如 permission 把 Spawn.Mode 当一层上限），收窄时调 Narrowed 说明。
+	Spawn *host.SpawnOptions
 	// Values 同一会话内贡献函数之间共享的状态（如指令层与指令系统块共用一份已装载集合）。
 	Values map[string]any
 }
@@ -118,9 +122,24 @@ func (b *Builder) modelFor(def *agentdef.Agent) (string, error) {
 // defName 是要用的定义名（空 = 无定义；恢复已有会话时从会话行 meta 里取，见 loadDefinition），
 // child 见 SessionCx.Child。
 func (b *Builder) Build(id, defName string, child bool) (*agent.Agent, *session.Config, error) {
+	return b.BuildWith(id, defName, child, nil)
+}
+
+// BuildWith 同 Build，另带子会话的按次覆盖 o（Mortise docs/62 K5，见 host.SpawnOptions）。
+// o 为 nil 且是子会话时，从会话行业务键 host.MetaSpawn 读回创建时的设置（重开 / 休眠唤醒后不丢收窄）。
+// 覆盖与父会话上限求交集，只能收窄：tools 与父会话可用工具取交集，mode 由 permission 组件作为一层上限叠加，
+// 收窄时经 o.OnNarrow 说明。顶层会话忽略 o。
+func (b *Builder) BuildWith(id, defName string, child bool, o *host.SpawnOptions) (*agent.Agent, *session.Config, error) {
 	def, err := b.loadDefinition(id, defName)
 	if err != nil {
 		return nil, nil, err
+	}
+	if !child {
+		o = nil
+	} else if o == nil {
+		if o, err = b.storedSpawn(id); err != nil {
+			return nil, nil, err
+		}
 	}
 	// 调用上下文：会话身份在 agent.Open 时由会话行填全（runtime/agent/ctx.go）。
 	kctx := callctx.New(callctx.Options{Tenant: store.Tenant, Workdir: b.Workdir, SessionID: id, Child: child})
@@ -148,7 +167,7 @@ func (b *Builder) Build(id, defName string, child bool) (*agent.Agent, *session.
 	if ms, ok := a.Model.(*modelhub.Session); ok && b.Artifacts != nil {
 		ms.Media = hub.ReadArtifact // 工具结果里的图片按工件引用取回，发给支持图片的模型
 	}
-	cx := &SessionCx{ID: id, Workdir: b.Workdir, Hub: hub, Agent: a, Child: child, Values: map[string]any{}, Ctx: kctx, Def: def}
+	cx := &SessionCx{ID: id, Workdir: b.Workdir, Hub: hub, Agent: a, Child: child, Values: map[string]any{}, Ctx: kctx, Def: def, Spawn: o}
 	// 04 4.3.1：把会话作用域挂到 kctx，中间件经 ToolCallReq.Scope 拿到「每会话一份」的状态。
 	kctx.SetScope(&sessionScope{cx: cx})
 	if child {
@@ -240,6 +259,12 @@ func (b *Builder) Build(id, defName string, child bool) (*agent.Agent, *session.
 		}
 		allow = intersectAllow(allow, pa)
 	}
+	if o != nil && o.Tools != nil {
+		allow, err = cx.spawnTools(allow, hub.Names())
+		if err != nil {
+			return nil, nil, err
+		}
+	}
 	ts := hub.SpecsFor(allow)
 	a.Hub, a.Toolset = hub, ts
 	if b.Hooks != nil {
@@ -256,6 +281,14 @@ func (b *Builder) Build(id, defName string, child bool) (*agent.Agent, *session.
 	if err != nil {
 		return nil, nil, err
 	}
+	if o != nil && o.Model != "" {
+		if b.Models != nil {
+			if _, err := b.Models.Catalog().Resolve(o.Model); err != nil {
+				return nil, nil, fmt.Errorf("runtime: 委派参数 model %q：%w", o.Model, err)
+			}
+		}
+		model = o.Model
+	}
 	cfg := &session.Config{Model: model, Tools: hub.Exposed(ts), Policy: pol}
 	for _, f := range b.Blocks {
 		blk, err := f(cx)
@@ -266,7 +299,80 @@ func (b *Builder) Build(id, defName string, child bool) (*agent.Agent, *session.
 			cfg.System = append(cfg.System, *blk)
 		}
 	}
+	// 委派参数 system_prompt（docs/56 第 2 节）：接在全部系统块之后，基础提示词与定义提示词都保留。
+	if o != nil && strings.TrimSpace(o.SystemPrompt) != "" {
+		cfg.System = append(cfg.System, session.SystemBlock{Text: o.SystemPrompt, Source: "spawn"})
+	}
 	return a, cfg, nil
+}
+
+// Narrowed 报告一处按次覆盖被收窄（经 SpawnOptions.OnNarrow；没有覆盖或没人听时不做事）。
+func (cx *SessionCx) Narrowed(note string) {
+	if cx != nil && cx.Spawn != nil && cx.Spawn.OnNarrow != nil {
+		cx.Spawn.OnNarrow(note)
+	}
+}
+
+// spawnTools 委派参数 tools 与本会话可用工具（allow；nil = 全部已登记）取交集。
+// 匹配不到的项（父会话没有、子会话不带委派工具等）去掉并说明，不报错；写法不合法才报错。
+func (cx *SessionCx) spawnTools(allow, registered []string) ([]string, error) {
+	base := registered
+	if allow != nil {
+		base = allow
+	}
+	out := []string{}
+	seen := map[string]bool{}
+	var dropped []string
+	for _, pat := range cx.Spawn.Tools {
+		hit := false
+		for _, n := range base {
+			ok, err := path.Match(pat, n)
+			if err != nil {
+				return nil, fmt.Errorf("runtime: 委派参数 tools 项 %q 不合法：%w", pat, err)
+			}
+			if ok {
+				hit = true
+				if !seen[n] {
+					seen[n] = true
+					out = append(out, n)
+				}
+			}
+		}
+		if !hit {
+			dropped = append(dropped, pat)
+		}
+	}
+	if len(dropped) > 0 {
+		got := "（无）"
+		if len(out) > 0 {
+			got = strings.Join(out, "、")
+		}
+		cx.Narrowed(fmt.Sprintf("tools 已收窄为 %s（去掉主会话没有的：%s）", got, strings.Join(dropped, "、")))
+	}
+	return out, nil
+}
+
+// storedSpawn 子会话行业务键里记的创建时覆盖（host.MetaSpawn）；会话不存在或没记返回 nil。
+func (b *Builder) storedSpawn(id string) (*host.SpawnOptions, error) {
+	if b.DB == nil {
+		return nil, nil
+	}
+	l, err := host.LoadHead(context.Background(), b.DB, id)
+	if errors.Is(err, store.ErrNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("runtime: 读子会话 %s：%w", id, err)
+	}
+	var m struct {
+		Spawn *host.SpawnOptions `json:"spawn"`
+	}
+	if len(l.Meta.Meta) > 0 {
+		if err := json.Unmarshal(l.Meta.Meta, &m); err != nil {
+			return nil, fmt.Errorf("runtime: 子会话 %s 的业务键：%w", id, err)
+		}
+	}
+	return m.Spawn, nil
 }
 
 // defTools 把定义的 tools 白名单（支持 `*` / `?` 通配，03 3.2）展开成本会话的可用工具集合

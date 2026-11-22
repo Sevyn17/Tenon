@@ -13,7 +13,7 @@ import (
 // WithKernel 的宿主参数接到 Host 上：SDK 与应用走同一份接线（assemble.Wire，2026-11-04 审查 P1-51：
 // 原先 SDK 不设并发上限 / 所属树策略 / 保留期，也没有入口设）。
 func TestWithKernelWiresHost(t *testing.T) {
-	a, err := New(Minimal(), WithStore(memstore.New()), WithWorkdir(t.TempDir()),
+	a, err := New(testMinimal(), WithStore(memstore.New()), WithWorkdir(t.TempDir()),
 		WithModels(testHub(), "m"),
 		WithKernel(map[string]any{"concurrency": 3, "tree_policy": "restart", "tree_restarts": 2}),
 		WithSleepAfter(time.Minute))
@@ -35,7 +35,7 @@ func TestWithKernelWiresHost(t *testing.T) {
 }
 
 func TestWithKernelRejectsUnknownKey(t *testing.T) {
-	_, err := New(Minimal(), WithStore(memstore.New()), WithWorkdir(t.TempDir()), WithModels(testHub(), "m"),
+	_, err := New(testMinimal(), WithStore(memstore.New()), WithWorkdir(t.TempDir()), WithModels(testHub(), "m"),
 		WithKernel(map[string]any{"no_such_key": 1}))
 	if !errors.Is(err, ErrInvalid) {
 		t.Fatalf("未知 [kernel] 键应报 ErrInvalid：%v", err)

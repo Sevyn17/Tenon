@@ -7,6 +7,7 @@ import (
 
 	"github.com/Sevyn17/tenon"
 	"github.com/Sevyn17/tenon/runtime/component"
+	"github.com/Sevyn17/tenon/std"
 	"github.com/Sevyn17/tenon/tenontest"
 )
 
@@ -96,7 +97,7 @@ func TestAppComponentInfo(t *testing.T) {
 
 // 未知配置键在 New 里报错（按 Info().Config 校验）。
 func TestAppComponentUnknownConfig(t *testing.T) {
-	_, err := tenon.New(tenon.Minimal(), tenon.With(provider{}), tenon.WithConfig("greet-provider", map[string]any{"nope": 1}),
+	_, err := tenon.New(std.Minimal(), tenon.With(provider{}), tenon.WithConfig("greet-provider", map[string]any{"nope": 1}),
 		tenontest.Model())
 	if err == nil {
 		t.Fatal("未知键应报错")

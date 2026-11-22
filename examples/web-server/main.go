@@ -22,6 +22,7 @@ import (
 
 	"github.com/Sevyn17/tenon"
 	"github.com/Sevyn17/tenon/runtime/store/memstore"
+	"github.com/Sevyn17/tenon/std"
 	web "github.com/Sevyn17/tenon/transport/web"
 )
 
@@ -43,7 +44,7 @@ func run(dir, addr, base, model string, trust bool) error {
 	defer stop()
 
 	db := memstore.New()
-	opts := []tenon.Option{tenon.Default(), tenon.WithStore(db), tenon.WithWorkdir(dir),
+	opts := []tenon.Option{std.Default(), tenon.WithStore(db), tenon.WithWorkdir(dir),
 		tenon.WithProjectTrust(trust), tenon.WithProtocolUI()}
 	cfg := map[string]any{}
 	if base != "" {
