@@ -12,6 +12,7 @@ import (
 
 	"github.com/Sevyn17/tenon/runtime/host"
 	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/tasks"
 	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
@@ -21,7 +22,10 @@ const SubagentTimeout = 30 * time.Minute
 // SubagentTool 模型面委派工具 `subagent {task, session?}`：同步跑子会话一个回合，返回其最终文本。
 // 子会话 id = <父 id>/sub-<调用 id 末 8 位（uuid v7 末段随机）>；传 session 续用已有子会话（必须是本会话的子智能体）。
 // f 构造子会话的 agent（不含 subagent 工具 → 深度 1）。
-func Tool(h *host.Host, f host.Factory) *toolhub.Tool {
+func Tool(h *host.Host, f host.Factory) *toolhub.Tool { return ToolWithTasks(h, f, nil) }
+
+// ToolWithTasks 同 Tool，另外在每次委派开始 / 结束时向 sink 登记（Mortise docs/62 K2）；sink 为 nil 不报。
+func ToolWithTasks(h *host.Host, f host.Factory, sink tasks.Sink) *toolhub.Tool {
 	// 一批里的多个委派并行跑（2026-11-04 审查 P2 工具体验：原先串行）；续用同一子会话的调用按 id 串行，见 childLocks。
 	yes := true
 	var locks childLocks
@@ -56,7 +60,24 @@ func Tool(h *host.Host, f host.Factory) *toolhub.Tool {
 			cx.ChildSessionID = id
 			unlock := locks.lock(id)
 			defer unlock()
+			t := tasks.Task{ID: id, Session: cx.SessionID, Kind: tasks.KindSubagent, Title: taskTitle(a.Task),
+				Status: tasks.Running, Started: time.Now()}
+			if sink != nil {
+				sink.Started(t)
+			}
 			out, err := h.Spawn(ctx, cx.SessionID, id, def, f, a.Task)
+			if sink != nil {
+				t.Ended = time.Now()
+				switch {
+				case err == nil:
+					t.Status, t.Summary = tasks.Done, taskTitle(out)
+				case ctx.Err() != nil:
+					t.Status, t.Summary = tasks.Stopped, "已取消"
+				default:
+					t.Status, t.Summary = tasks.Failed, err.Error()
+				}
+				sink.Ended(t)
+			}
 			if err != nil {
 				if ctx.Err() != nil {
 					return toolhub.Output{}, ctx.Err()
@@ -66,6 +87,18 @@ func Tool(h *host.Host, f host.Factory) *toolhub.Tool {
 			return toolhub.Text(fmt.Sprintf("[子会话 %s]\n%s", id, out)), nil
 		},
 	}
+}
+
+// taskTitle 任务标题 / 摘要：取首行，最多 200 字符。
+func taskTitle(s string) string {
+	s = strings.TrimSpace(s)
+	if i := strings.IndexByte(s, '\n'); i >= 0 {
+		s = strings.TrimSpace(s[:i])
+	}
+	if r := []rune(s); len(r) > 200 {
+		s = string(r[:200]) + "…"
+	}
+	return s
 }
 
 // childLocks 按子会话 id 串行：两次调用续用同一个子会话时，第二次等第一次的回合结束再投递，

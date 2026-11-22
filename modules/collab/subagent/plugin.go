@@ -8,6 +8,7 @@ import (
 	"github.com/Sevyn17/tenon/runtime/assemble"
 	"github.com/Sevyn17/tenon/runtime/component"
 	"github.com/Sevyn17/tenon/runtime/host"
+	"github.com/Sevyn17/tenon/runtime/tasks"
 	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
@@ -37,7 +38,7 @@ type plug struct{}
 func init() { component.Register("subagent", func() component.Component { return &plug{} }) }
 
 func (*plug) Meta() component.Meta {
-	return component.Meta{Name: "subagent", Version: "0.1.0", Description: "委派工具：把一段任务交给子智能体，在独立的子会话里完成", Effects: []string{component.EffectTools}, Requires: []string{assemble.ServiceHost}}
+	return component.Meta{Name: "subagent", Version: "0.1.0", Description: "委派工具：把一段任务交给子智能体，在独立的子会话里完成", Effects: []string{component.EffectTools}, Requires: []string{assemble.ServiceHost, tasks.Key.Maybe()}}
 }
 
 func (*plug) Setup(cx *component.Registrar) error {
@@ -53,7 +54,12 @@ func (*plug) Setup(cx *component.Registrar) error {
 	if err := cx.AgentConfig(&UseConfig{}); err != nil {
 		return err
 	}
-	t := Tool(h, h.ChildFactory()).WithItems(ItemSpawn)
+	// 任务登记（Mortise docs/62 K2）：产品提供 service:tasks 时报委派，没有就不报。
+	sink, _, err := component.GetOptional(cx, tasks.Key)
+	if err != nil {
+		return err
+	}
+	t := ToolWithTasks(h, h.ChildFactory(), sink).WithItems(ItemSpawn)
 	for _, it := range Items() {
 		component.RegisterAt(cx, assemble.PermItems, it.ID, it)
 	}

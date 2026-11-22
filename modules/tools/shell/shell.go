@@ -16,10 +16,12 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Sevyn17/tenon/pkg/proc"
 	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/tasks"
 	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
@@ -125,6 +127,8 @@ type Shell struct {
 	KeepANSI   bool // 不去终端控制序列
 	NoDenyHint bool // 不追加沙箱拒绝提示
 	NoIntro    bool // 工具描述不带平台语法说明
+	// Tasks 可空：后台 job 开始 / 结束时登记（Mortise docs/62 K2）；空则不报。
+	Tasks tasks.Sink
 
 	mu   sync.Mutex
 	seq  int
@@ -143,6 +147,46 @@ type job struct {
 	err     error
 	cancel  context.CancelFunc
 	started time.Time
+	// killed job_kill / Close 主动终止过：结束时登记为 stopped 而不是 failed。
+	killed atomic.Bool
+}
+
+// stop 主动终止 job（记下是被终止的，供任务登记区分 stopped）。
+func (j *job) stop() {
+	j.killed.Store(true)
+	j.cancel()
+}
+
+// taskTitleMax 任务标题（命令行）最多保留的字符数。
+const taskTitleMax = 200
+
+// task 当前快照（任务登记用）。ended 为真时按退出情况给终态。
+func (j *job) task(ended bool) tasks.Task {
+	title := j.command
+	if r := []rune(title); len(r) > taskTitleMax {
+		title = string(r[:taskTitleMax]) + "…"
+	}
+	t := tasks.Task{ID: j.session + "/" + j.id, Session: j.session, Kind: tasks.KindShell, Title: title,
+		Status: tasks.Running, Started: j.started}
+	if !ended {
+		return t
+	}
+	t.Ended = time.Now()
+	switch {
+	case j.killed.Load():
+		t.Status, t.Summary = tasks.Stopped, "已终止"
+	case j.err != nil:
+		t.Status, t.Summary = tasks.Failed, j.err.Error()
+	case j.exit != 0:
+		t.Status, t.Summary = tasks.Failed, fmt.Sprintf("退出码 %d", j.exit)
+	default:
+		t.Status, t.Summary = tasks.Done, "退出码 0"
+	}
+	if j.err == nil {
+		code := j.exit
+		t.ExitCode = &code
+	}
+	return t
 }
 
 // NewShell 构造 shell 工具组。
@@ -486,9 +530,16 @@ func (s *Shell) startJob(command string, cx *toolhub.Cx, raw json.RawMessage) (t
 	j.id = "job-" + strconv.Itoa(s.seq)
 	s.jobs[j.id] = j
 	s.mu.Unlock()
+	sink := s.Tasks
+	if sink != nil {
+		sink.Started(j.task(false))
+	}
 	go func() {
 		j.exit, j.err = exitCode(cmd.Wait())
 		cancel()
+		if sink != nil { // 先登记再 close(done)：job_kill / Close 返回时登记已发出
+			sink.Ended(j.task(true))
+		}
 		close(j.done)
 	}()
 	return toolhub.Text(fmt.Sprintf("已在后台启动 %s（pid %d）。用 job_output 读取输出，job_kill 终止。", j.id, cmd.Process.Pid)), nil
@@ -597,7 +648,7 @@ func (s *Shell) callKill(_ context.Context, cx *toolhub.Cx, raw json.RawMessage)
 		return toolhub.Text(fmt.Sprintf("%s 早已结束（退出码 %d）", j.id, j.exit)), nil
 	default:
 	}
-	j.cancel()
+	j.stop()
 	select {
 	case <-j.done:
 	case <-time.After(5 * time.Second):
@@ -616,7 +667,7 @@ func (s *Shell) Close() {
 	}
 	s.mu.Unlock()
 	for _, j := range js {
-		j.cancel()
+		j.stop()
 	}
 	for _, j := range js {
 		select {

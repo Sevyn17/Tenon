@@ -118,7 +118,9 @@ type Hooks struct {
 	OnCreate   func(id string, o Origin) error // 失败即回滚创建
 	OnRestore  func(id string) error           // 失败即拒绝打开
 	BeforeTurn func(id string, in session.Content, untrusted bool) (session.Content, Decision, error)
-	AfterTurn  func(id string, end session.EndReason)
+	// AfterTurn 在 actor 协程里同步调用。钩子里可以 Get(id).Do(Command{Kind: Send, Queue: true}) 请求续跑：
+	// 只落信箱、不等 actor，回合收尾后自动开下一轮；续跑次数由调用方计（Mortise docs/62 K3）。
+	AfterTurn func(id string, end session.EndReason)
 }
 
 // Factory 为会话构造 agent（模型、工具、存储、显示回调已配好）与新会话配置。

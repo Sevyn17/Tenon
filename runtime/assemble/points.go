@@ -95,6 +95,12 @@ type BlockEntry struct {
 }
 
 // AfterTurnFunc 回合结束通知；ReadyFunc 构造器就绪。
+//
+// AfterTurnFunc 在会话 actor 的协程里同步调用，要尽快返回。要「回合结束后自动再跑一轮」（如目标续跑），
+// 在钩子里取句柄投排队输入：host.Get(id) 后 Handle.Do(host.Command{Kind: host.Send, Queue: true, ...})。
+// 它只落信箱并非阻塞唤醒 actor，不会卡死；本回合收尾后 actor 从信箱取出它单独开下一轮（见
+// runtime/host/afterturn_continue_test.go，Mortise docs/62 K3）。续跑轮的结束同样触发本钩子，
+// 轮数上限由调用方自己计。
 type (
 	AfterTurnFunc func(id string, end session.EndReason)
 	ReadyFunc     func(ctx context.Context) error

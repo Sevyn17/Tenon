@@ -8,6 +8,7 @@ import (
 
 	"github.com/Sevyn17/tenon/runtime/assemble"
 	"github.com/Sevyn17/tenon/runtime/component"
+	"github.com/Sevyn17/tenon/runtime/tasks"
 	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
 
@@ -25,7 +26,7 @@ func init() { component.Register("shell", func() component.Component { return &p
 func (*plug) Meta() component.Meta {
 	return component.Meta{Name: "shell", Version: "0.1.0", Description: "命令工具：执行命令行命令，长任务转到后台，可查看输出或终止", Default: true, Effects: []string{component.EffectTools, component.EffectExec},
 		Config:   &Config{},
-		Requires: []string{assemble.ServiceWorkdir, toolhub.KeySandbox.Maybe(), toolhub.KeySandboxPolicy.Maybe()}}
+		Requires: []string{assemble.ServiceWorkdir, toolhub.KeySandbox.Maybe(), toolhub.KeySandboxPolicy.Maybe(), tasks.Key.Maybe()}}
 }
 
 func (p *plug) Setup(cx *component.Registrar) error {
@@ -52,6 +53,12 @@ func (p *plug) Setup(cx *component.Registrar) error {
 	if ok {
 		sh.ModeFor = pol.SandboxMode // 档位切换即时生效
 		sh.Approver, _ = pol.(toolhub.SandboxApprover)
+	}
+	// 任务登记（Mortise docs/62 K2）：产品提供 service:tasks 时报后台 job，没有就不报。
+	if sink, ok, err := component.GetOptional(cx, tasks.Key); err != nil {
+		return err
+	} else if ok {
+		sh.Tasks = sink
 	}
 	p.sh = sh
 	for _, it := range Items() {
