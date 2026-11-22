@@ -15,7 +15,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Sevyn17/tenon/modules/internal/proc"
+	"github.com/Sevyn17/tenon/pkg/proc"
 )
 
 // StderrTail stdio 服务 stderr 保留的尾部字节数（诊断用）。

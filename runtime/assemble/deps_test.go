@@ -23,6 +23,10 @@ func isRuntime(p string) bool { return strings.HasPrefix(p, "runtime/") }
 
 func isAppAPI(p string) bool { return p == "appapi" || strings.HasPrefix(p, "appapi/") }
 
+// public 公开的叶子工具包（Mortise docs/62 K4）：任何层都可以 import，它们自己不得 import 本仓库的任何包。
+// 只放行这两个，新增公开包要显式加在这里。
+var public = map[string]bool{"pkg/proc": true, "pkg/cmdline": true}
+
 // assembler SDK、应用宿主（apphost）、协议适配（adapters）、传输（transport/）、示例（examples/）、测试套件与
 // 前端嵌入包：装配层，可以 import
 // 任何包；运行时、标准模块、应用接口层都不得反过来 import 它们（计划/07）。
@@ -58,8 +62,8 @@ func TestDependencyRule(t *testing.T) {
 		if assembler(from) {
 			continue
 		}
-		if !isRuntime(from) && !isModule(from) && !isAppAPI(from) {
-			t.Errorf("包 %s 不在 runtime/、modules/、appapi/ 之下", from)
+		if !isRuntime(from) && !isModule(from) && !isAppAPI(from) && !public[from] {
+			t.Errorf("包 %s 不在 runtime/、modules/、appapi/ 之下，也不是登记的公开包", from)
 			continue
 		}
 		for _, imp := range p.Imports {
@@ -82,10 +86,14 @@ func checkDep(t *testing.T, from, imp string, test bool) {
 		return
 	}
 	switch {
+	case public[from]:
+		t.Errorf("公开包 %s 只能依赖标准库，不得 import %s", from, to)
+	case public[to]:
+		// 公开叶子包：任何层都可以用
 	case assembler(to):
 		t.Errorf("%s 不得 import SDK / 测试套件 / 应用 %q", from, to)
 	case strings.HasPrefix(to, "modules/internal/") && isModule(from):
-		// modules/internal/*：标准模块共用的辅助包（进程启动、命令拆分），不算模块之间互相 import（05 3.2）
+		// modules/internal/*：标准模块共用的辅助包（工作区文件、SSE 等），不算模块之间互相 import（05 3.2）
 	case isModule(to) && isModule(from):
 		t.Errorf("标准模块 %s 不得 import 标准模块 %s", from, to)
 	case isModule(to):

@@ -1,7 +1,8 @@
 // Package proc 标准模块共用的子进程工具：选 shell、PowerShell 包装、杀进程树
 // （2026-11-04 审查 P1-29：原先散在 shell、hooks、mcp 三处，只有 shell 杀进程树；
 // hooks 超时会留下孙进程，mcp 的 npx 类服务关闭时子进程还占着管道）。
-// Go internal 包：只有 modules/ 下的组件能 import，不算组件之间互相依赖（见 runtime/assemble/deps_test.go）。
+// 稳定公开 API（Mortise docs/62 K4）：标准模块与应用（如产品终端）共用，导出名与语义冻结；
+// 只依赖标准库，不 import 本仓库其他包（见 runtime/assemble/deps_test.go）。
 package proc
 
 import (

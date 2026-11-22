@@ -1,7 +1,7 @@
 package extproc
 
 // 进程监管（框架设计 04 4.8，T6b）：崩溃退避重启，连续 MaxCrashes 次后标记不可用并回调；
-// 不可用期间调用方按 fail_closed 处理。杀进程用 modules/internal/proc 的杀进程树。
+// 不可用期间调用方按 fail_closed 处理。杀进程用 pkg/proc 的杀进程树。
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Sevyn17/tenon/modules/internal/proc"
+	"github.com/Sevyn17/tenon/pkg/proc"
 )
 
 // 缺省参数。
@@ -218,7 +218,7 @@ func (s *Supervisor) Stdout() io.ReadCloser {
 // Stop 主动停止：杀进程树，不再重启。
 //
 // 幂等：「已经停了」不算失败。进程可能在我们动手之前就自己崩了（这正是监管对象），
-// 此时 proc.Kill 对已退出的进程返回 nil（见 modules/internal/proc 的 killTree 契约），
+// 此时 proc.Kill 对已退出的进程返回 nil（见 pkg/proc 的 killTree 契约），
 // 所以这里直接返回它的结果即可；重复调用 Stop 也安全。
 func (s *Supervisor) Stop() error {
 	s.mu.Lock()

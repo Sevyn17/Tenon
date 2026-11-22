@@ -2,6 +2,9 @@
 // （2026-11-04 审查 P1-61：原先两份逐字近似的拷贝，permission 那份没有启动器判断，停止线从未生效）。
 //
 // 终端是开集：参数本身是另一门语言的程序，文本匹配只是减少询问次数的便利，不构成边界。
+//
+// 稳定公开 API（Mortise docs/62 K4）：标准模块与应用（如产品终端）共用，导出名与语义冻结；
+// 只依赖标准库，不 import 本仓库其他包（见 runtime/assemble/deps_test.go）。
 package cmdline
 
 import (

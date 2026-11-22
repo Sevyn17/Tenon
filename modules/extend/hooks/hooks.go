@@ -18,7 +18,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 
-	"github.com/Sevyn17/tenon/modules/internal/proc"
+	"github.com/Sevyn17/tenon/pkg/proc"
 	"github.com/Sevyn17/tenon/runtime/appid"
 	"github.com/Sevyn17/tenon/runtime/component"
 	"github.com/Sevyn17/tenon/runtime/session"
