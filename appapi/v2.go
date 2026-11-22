@@ -87,7 +87,7 @@ func registerCommands(m map[string]handler) {
 }
 
 // 握手、会话、档位、工件、插件、工作区等基础命令（实现在本文件）。其余模块的命令在各自文件的 init 里登记：
-// interact.go、queue.go、mode_edit.go、packages.go、changes.go、skills.go、mcp.go、providers.go、trust.go。
+// interact.go、queue.go、mode_edit.go、packages.go、changes.go、skills.go、mcp.go、trust.go。
 func init() {
 	registerCommands(map[string]handler{
 		"hello":             bind((*App).Hello),
@@ -265,10 +265,7 @@ func (v *App) capabilities() []string {
 			}
 		}
 	}
-	// 平台账号相关能力（platform 等）由产品扩展经 Extension.Capabilities 报（docs/61 T1）。
-	if o.Providers != nil { // docs/51 第 4 节：models.providers.*（providers.go）；T1 桥接，T2 迁出
-		out = append(out, CapProviders)
-	}
+	// 平台账号与按厂商管理的自定义模型（platform、providers 等）由产品扩展经 Extension.Capabilities 报（docs/61 T1、T2）。
 	if o.Followups != nil {
 		out = append(out, "followups")
 	}

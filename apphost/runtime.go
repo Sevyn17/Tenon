@@ -126,8 +126,6 @@ type AppOptions struct {
 	Upload bool
 	// Workspaces 工作区管理器（workspace.list / workspace.open）；nil = 不能切换。
 	Workspaces appapi.Workspaces
-	// Providers 按厂商管理自定义模型（appapi.Options.Providers，models.providers.*）；nil = 不提供。T1 桥接，T2 迁出。
-	Providers appapi.ModelProviders
 	// Extensions 产品扩展（appapi.Options.Extensions，docs/61 第 3 节）；可空。
 	Extensions []appapi.Extension
 }
@@ -189,9 +187,6 @@ func start(o StartOptions, pre *loaded) (*Runtime, error) {
 			ao.Profile, ao.Packages = p, ps
 			ao.Profiles = Profiles{Base: o.Flags.BaseProfile, Extra: o.Flags.Profile, Root: root, Trusted: trusted}
 			ao.Upload, ao.Workspaces = o.App.Upload, o.App.Workspaces
-			if o.App.Providers != nil {
-				ao.Providers = o.App.Providers
-			}
 			ao.Extensions = o.App.Extensions
 		}),
 	}

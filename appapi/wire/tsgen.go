@@ -40,9 +40,6 @@ var tsTypes = []any{
 	ConfigField{}, PluginInfo{},
 	PluginPending{}, ProfileScope{}, PluginsListResult{}, PluginsSetArgs{}, PluginsSetResult{}, PackageInfo{}, UISlot{}, UIData{}, PackagesListResult{},
 	PackagesPreviewArgs{}, PackagesPreviewResult{}, PackageConfig{}, PackageInstalled{}, PackagesInstallArgs{}, PackagesRemoveArgs{}, PackagesSetEnabledArgs{}, PackagesEditResult{},
-	BYOKTestResult{}, // T1 桥接：models.providers.test 的结果，随 T2 迁出
-	ProviderKind{}, ProviderKey{}, ProviderModel{}, ModelProviderInfo{}, ModelProvidersListResult{}, ProviderKeyDraft{}, ProviderModelDraft{}, ModelProviderDraft{},
-	ModelProvidersSaveArgs{}, ModelProvidersRemoveArgs{}, ModelProvidersSetModelEnabledArgs{}, ModelProvidersEditResult{}, ModelProvidersTestArgs{}, ModelProvidersFetchArgs{}, ModelProvidersFetchResult{},
 	Empty{}, Error{},
 }
 

@@ -59,12 +59,6 @@ export const COMMANDS = [
   "workspace.trustPreview",
   "workspace.trust",
   "models.list",
-  "models.providers.list",
-  "models.providers.save",
-  "models.providers.remove",
-  "models.providers.setModelEnabled",
-  "models.providers.test",
-  "models.providers.fetchModels",
   "artifact.get",
   "artifact.put",
   "trace.explain",
@@ -135,12 +129,6 @@ export interface CoreCommandMap {
   "workspace.trustPreview": [W.Empty, W.WorkspaceTrustPreviewResult];
   "workspace.trust": [W.WorkspaceTrustArgs, W.WorkspaceTrustResult];
   "models.list": [W.Empty, W.ModelsListResult];
-  "models.providers.list": [W.Empty, W.ModelProvidersListResult];
-  "models.providers.save": [W.ModelProvidersSaveArgs, W.ModelProvidersEditResult];
-  "models.providers.remove": [W.ModelProvidersRemoveArgs, W.ModelProvidersEditResult];
-  "models.providers.setModelEnabled": [W.ModelProvidersSetModelEnabledArgs, W.ModelProvidersEditResult];
-  "models.providers.test": [W.ModelProvidersTestArgs, W.BYOKTestResult];
-  "models.providers.fetchModels": [W.ModelProvidersFetchArgs, W.ModelProvidersFetchResult];
   "artifact.get": [W.ArtifactGetArgs, W.ArtifactGetResult];
   "artifact.put": [W.ArtifactPutArgs, W.ArtifactPutResult];
   "trace.explain": [W.TraceArgs, W.TraceResult];

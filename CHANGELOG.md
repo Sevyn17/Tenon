@@ -1,4 +1,4 @@
-﻿# 变更日志
+# 变更日志
 
 本文件记录**已发布版本**与**已合入但未发版**的变更。版本规则与发版判据见
 [07 - SDK 接口](<docs/01 - 设计文档/框架设计/07 - SDK 接口.md>) 7.4 与 7.4.1。
@@ -7,6 +7,35 @@
 **破坏性变更单独成节并置顶**——v0 期间公开面允许改，但必须让下游一眼看到。
 
 ---
+
+## [未发版] - 2026-11-22（产品段迁出：Mortise docs/61 T1、T2）
+
+### 破坏性变更
+
+平台账号与按厂商管理的自定义模型是产品业务，迁到 Mortise，经 `appapi.Extension` 注册。
+**线上协议不变**：protocol 仍是 2，命令名（`platform.*`、`models.providers.*` 是冻结的历史产品根）、
+参数、结果、错误码与能力名不变；只是 tenon 不再自带这些命令与类型，没注册对应扩展的应用调用时得到 `unsupported`
+（原先没注入实现时也是 `unsupported`），hello 不再报这些能力。
+
+- **T1 平台账号**：删除 `appapi.Platform` 及可选扩展 `BYOKTester / BYOKEditor / PlatformConfigurer`、16 条
+  `platform.*` 核心命令与 `App.Platform*` 方法；删除 `appapi.Options.Platform`、`apphost.AppOptions.Platform`、
+  `apphost.WorkspaceOptions.Platform`；hello 不再报 `platform / byok_test / byok_edit / platform_configure`。
+  wire 删 `AccountStatus`、`AccountLogin{Args,Result}`、`AccountEntitlements`、`APIKey*`、`BYOKProfile`、
+  `BYOK{List,Save,Remove,SetDefault}*`、`BYOKTestArgs`、`PlatformConfigure{Args,Result}`、
+  `Admin{ModelProvider,Model,Alias,RateCard,ModelsResult}`、`PasswordAuthArgs`。
+- **T2 模型厂商**：删除 `appapi.ModelProviders`、`ProvidersWrite`、`StaleRevision`、`CapProviders`、
+  `App.ModelProviders*` 方法与 6 条 `models.providers.*` 核心命令；删除 T1 的临时桥接字段 `appapi.Options.Providers`、
+  `apphost.AppOptions.Providers`、`apphost.WorkspaceOptions.Providers`；hello 不再报 `providers`。
+  wire 删 `BYOKTestResult`、`ProviderKind`、`ProviderKey`、`ProviderModel`、`ModelProviderInfo`、
+  `ModelProvidersListResult`、`ProviderKeyDraft`、`ProviderModelDraft`、`ModelProviderDraft`、
+  `ModelProviders{Save,Remove,SetModelEnabled}Args`、`ModelProvidersEditResult`、`ModelProvidersTestArgs`、
+  `ModelProvidersFetch{Args,Result}`。
+- `@tenon/client`：`COMMANDS` / `CommandMap` 删上述 22 条命令，`wire.gen.ts` 删上述类型。
+  产品用 `declare module "@tenon/client" { interface CommandMap { … } }` 自己补（Mortise 生成在 `src/gen/mortise.gen.ts`）。
+
+**迁移**：实现产品扩展（`appapi.Extension`，命令名可用历史产品根），放进 `apphost.AppOptions.Extensions` /
+`WorkspaceOptions.Extensions`；写配置后要重建运行时的命令调 `ExtCall.App.Rebuild(ctx, force, undo)`
+（与原 `models.providers.*` 的「先写、判空闲、重建、失败回滚」相同）。
 
 ## [未发版] -2026-11-21（审查修复批次，分支 review-fixes-2026-11-21）
 

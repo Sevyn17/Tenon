@@ -260,7 +260,7 @@ github.com/Sevyn17/tenon/adapters: type Skills struct{S *github.com/Sevyn17/teno
 github.com/Sevyn17/tenon/adapters: method (Skills) List(context.Context) (github.com/Sevyn17/tenon/appapi/wire.SkillsListResult, error)
 github.com/Sevyn17/tenon/adapters: method (Skills) SetEnabled(_ context.Context, in github.com/Sevyn17/tenon/appapi/wire.SkillsSetEnabledArgs) (github.com/Sevyn17/tenon/appapi/wire.SkillsSetEnabledResult, error)
 github.com/Sevyn17/tenon/adapters: func TitlerFrom(m *github.com/Sevyn17/tenon/runtime/assemble.Models) func(ctx context.Context, model string, input string) (string, error)
-github.com/Sevyn17/tenon/apphost: type AppOptions struct{MaxSteps int; Hooks func(*github.com/Sevyn17/tenon/runtime/assemble.SessionCx) github.com/Sevyn17/tenon/runtime/agent.Hooks; ModesWorkdir string; Upload bool; Workspaces github.com/Sevyn17/tenon/appapi.Workspaces; Providers github.com/Sevyn17/tenon/appapi.ModelProviders; Extensions []github.com/Sevyn17/tenon/appapi.Extension}
+github.com/Sevyn17/tenon/apphost: type AppOptions struct{MaxSteps int; Hooks func(*github.com/Sevyn17/tenon/runtime/assemble.SessionCx) github.com/Sevyn17/tenon/runtime/agent.Hooks; ModesWorkdir string; Upload bool; Workspaces github.com/Sevyn17/tenon/appapi.Workspaces; Extensions []github.com/Sevyn17/tenon/appapi.Extension}
 github.com/Sevyn17/tenon/apphost: func ApproveMode(root string, mode string, widened string) error
 github.com/Sevyn17/tenon/apphost: type Assembled struct{Asm *github.com/Sevyn17/tenon/runtime/component.Assembly; Store github.com/Sevyn17/tenon/runtime/assemble.DBHandle; Models *github.com/Sevyn17/tenon/runtime/assemble.Models; Compact *github.com/Sevyn17/tenon/modules/context/compact-basic.Compactor; Defs github.com/Sevyn17/tenon/runtime/agentdef.Source}
 github.com/Sevyn17/tenon/apphost: type Built struct{API *github.com/Sevyn17/tenon/appapi.App; DB github.com/Sevyn17/tenon/runtime/store.Store; Model string; Perms *github.com/Sevyn17/tenon/modules/security/permission.Sessions; Builder *github.com/Sevyn17/tenon/runtime/assemble.Builder}
@@ -328,7 +328,7 @@ github.com/Sevyn17/tenon/apphost: method (WorkspaceManager) SetPackageEnabled(_ 
 github.com/Sevyn17/tenon/apphost: method (WorkspaceManager) SetTrust(_ context.Context, level string) (github.com/Sevyn17/tenon/appapi.TrustChange, error)
 github.com/Sevyn17/tenon/apphost: method (WorkspaceManager) TrustPreview(context.Context) (github.com/Sevyn17/tenon/appapi/wire.WorkspaceTrustPreviewResult, error)
 github.com/Sevyn17/tenon/apphost: method (WorkspaceManager) UserPackages(context.Context) ([]github.com/Sevyn17/tenon/appapi/wire.PackageInfo, error)
-github.com/Sevyn17/tenon/apphost: type WorkspaceOptions struct{Flags Flags; SleepAfter time.Duration; Upload bool; OnSwitch func(api *github.com/Sevyn17/tenon/appapi.App); RecentPath string; Providers github.com/Sevyn17/tenon/appapi.ModelProviders; Extensions []github.com/Sevyn17/tenon/appapi.Extension; ResourceIdle time.Duration; ResourceMax int}
+github.com/Sevyn17/tenon/apphost: type WorkspaceOptions struct{Flags Flags; SleepAfter time.Duration; Upload bool; OnSwitch func(api *github.com/Sevyn17/tenon/appapi.App); RecentPath string; Extensions []github.com/Sevyn17/tenon/appapi.Extension; ResourceIdle time.Duration; ResourceMax int}
 github.com/Sevyn17/tenon/appapi/wire: type Approval struct{Tool string; CallID string; Args encoding/json.RawMessage; Reason string; SessionRules []string; Blocked []string}
 github.com/Sevyn17/tenon/appapi/wire: const ArchivedInclude untyped string
 github.com/Sevyn17/tenon/appapi/wire: const ArchivedOnly untyped string
@@ -336,7 +336,6 @@ github.com/Sevyn17/tenon/appapi/wire: type ArtifactGetArgs struct{Session string
 github.com/Sevyn17/tenon/appapi/wire: type ArtifactGetResult struct{MIME string; Size int; Text string; Base64 string}
 github.com/Sevyn17/tenon/appapi/wire: type ArtifactPutArgs struct{Session string; MIME string; Base64 string}
 github.com/Sevyn17/tenon/appapi/wire: type ArtifactPutResult struct{Ref string}
-github.com/Sevyn17/tenon/appapi/wire: type BYOKTestResult struct{OK bool; LatencyMS int64; Method string; ModelFound *bool; Models []string; ErrorKind string; Status int; Message string}
 github.com/Sevyn17/tenon/appapi/wire: type ChangeConflict struct{Path string; Reason string; Message string; By string; Forceable bool}
 github.com/Sevyn17/tenon/appapi/wire: type ChangeFile struct{Path string; Status string; Added int; Removed int; Binary bool; Sources []string; Turns []uint32; Untracked bool; Rewound bool; Revertible bool; Why string; Conflict string}
 github.com/Sevyn17/tenon/appapi/wire: const ChangeScopeFromTurn untyped string
@@ -499,16 +498,6 @@ github.com/Sevyn17/tenon/appapi/wire: type ModeSetResult struct{State Mode; Comm
 github.com/Sevyn17/tenon/appapi/wire: type ModeShowArgs struct{Session string; Mode string}
 github.com/Sevyn17/tenon/appapi/wire: type ModeShowResult struct{Mode string; Items []ModeItem; Name string; Base string; Description string; Builtin bool; Project bool; Editable bool; Revision string}
 github.com/Sevyn17/tenon/appapi/wire: type ModelInfo struct{ID string; Alias bool; Provider string; Name string; Label string; ContextWindow int; Images bool; Reasoning bool; Efforts []string; Available bool; Reason string}
-github.com/Sevyn17/tenon/appapi/wire: type ModelProviderDraft struct{ID string; Kind string; Name string; Protocol string; BaseURL string; Keys []ProviderKeyDraft; KeyRemove []string; Models []ProviderModelDraft; ModelRemove []string}
-github.com/Sevyn17/tenon/appapi/wire: type ModelProviderInfo struct{ID string; Kind string; Name string; Protocol string; BaseURL string; DefaultBaseURL string; NeedsKey bool; Configured bool; Keys []ProviderKey; Models []ProviderModel; FetchedAt string}
-github.com/Sevyn17/tenon/appapi/wire: type ModelProvidersEditResult struct{Revision string; Reloaded bool; Provider *ModelProviderInfo; Workspace WorkspaceInfo}
-github.com/Sevyn17/tenon/appapi/wire: type ModelProvidersFetchArgs struct{Provider string; Kind string; Key string; APIKey *string; BaseURL string; Protocol string; DryRun bool}
-github.com/Sevyn17/tenon/appapi/wire: type ModelProvidersFetchResult struct{OK bool; Models []string; Added int; ErrorKind string; Status int; Message string; Revision string; Provider *ModelProviderInfo}
-github.com/Sevyn17/tenon/appapi/wire: type ModelProvidersListResult struct{Kinds []ProviderKind; Providers []ModelProviderInfo; Revision string; Path string}
-github.com/Sevyn17/tenon/appapi/wire: type ModelProvidersRemoveArgs struct{Provider string; Revision string; Force bool}
-github.com/Sevyn17/tenon/appapi/wire: type ModelProvidersSaveArgs struct{Provider ModelProviderDraft; Revision string; Force bool}
-github.com/Sevyn17/tenon/appapi/wire: type ModelProvidersSetModelEnabledArgs struct{Provider string; ID string; Name string; Enabled bool; Revision string; Force bool}
-github.com/Sevyn17/tenon/appapi/wire: type ModelProvidersTestArgs struct{Provider string; Kind string; Key string; APIKey *string; BaseURL string; Protocol string; Model string}
 github.com/Sevyn17/tenon/appapi/wire: type ModelRetrying struct{Attempt int; Max int; WaitMs int64; Reason string}
 github.com/Sevyn17/tenon/appapi/wire: type ModelsListResult struct{Models []ModelInfo; Default string; Effective *EffectiveModel}
 github.com/Sevyn17/tenon/appapi/wire: type Notice struct{Level string; Source string; Text string; Replay bool}
@@ -547,11 +536,6 @@ github.com/Sevyn17/tenon/appapi/wire: type Principal struct{ID string; Role stri
 github.com/Sevyn17/tenon/appapi/wire: type ProfileScope struct{Scope string; Path string; Revision string; Writable bool; Reason string}
 github.com/Sevyn17/tenon/appapi/wire: const Protocol untyped int
 github.com/Sevyn17/tenon/appapi/wire: type ProtocolRange struct{Min int; Max int}
-github.com/Sevyn17/tenon/appapi/wire: type ProviderKey struct{ID string; Name string; MaskedKey string; CreatedAt string; Models int}
-github.com/Sevyn17/tenon/appapi/wire: type ProviderKeyDraft struct{ID string; Name string; Value *string}
-github.com/Sevyn17/tenon/appapi/wire: type ProviderKind struct{Kind string; Name string; Protocol string; BaseURL string; NeedsKey bool; Multiple bool}
-github.com/Sevyn17/tenon/appapi/wire: type ProviderModel struct{ID string; Name string; Label string; ModelID string; Enabled bool; Source string; Key string; IsDefault bool}
-github.com/Sevyn17/tenon/appapi/wire: type ProviderModelDraft struct{ID string; Name string; Label *string; Enabled *bool; Key *string}
 github.com/Sevyn17/tenon/appapi/wire: func Public(kind string) bool
 github.com/Sevyn17/tenon/appapi/wire: type Question struct{Text string; Options []string}
 github.com/Sevyn17/tenon/appapi/wire: type QueueChanged struct{Queued []QueuedInput}

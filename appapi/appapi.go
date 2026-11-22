@@ -67,9 +67,6 @@ type Options struct {
 	MCP MCP
 	// Upload 传输层挂了 UploadHandler（HTTP 上传大附件）：hello 的能力清单带 upload。
 	Upload bool
-	// Providers 按厂商管理自定义模型（models.providers.*，providers.go）；nil = 不提供。
-	// T1 桥接：平台账号迁出后它不再挂在 Platform 下，T2 整体迁出到产品扩展。
-	Providers ModelProviders
 	// Cleaners 删除会话时依次调用的插件清理回调（on_session_delete 点位）；可空。
 	Cleaners []store.Cleaner
 	// Extensions 产品扩展（docs/61 第 3 节，ext.go）：带命名空间的命令、能力与事件；命令名冲突或越过保留根时 New 失败。
