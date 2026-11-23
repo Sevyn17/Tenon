@@ -47,6 +47,7 @@ var viewerCommands = map[string]bool{
 	"artifact.get": true, "trace.explain": true, "interactions.list": true, "plugins.list": true, "packages.list": true, "workspace.files": true, "workspace.list": true, "models.list": true, "feedback.list": true, "session.followups": true,
 	"changes.list": true, "changes.diff": true, // changes.revert 写文件，只给 operator
 	"skills.list":            true, // skills.setEnabled 写启停记录，只给 operator
+	"skills.get":             true, // 只读正文，与 skills.list 同权限
 	"workspace.trustPreview": true, // workspace.trust 写信任记录并重建，只给 operator
 	"mcp.list":               true, // mcp.test 起进程，save / remove / setEnabled 写用户级文件并重建，只给 operator
 	// packages.list 在上面；packages.preview 读服务端本机任意路径、install / remove / setEnabled 改用户级插件包目录并重建，只给 operator

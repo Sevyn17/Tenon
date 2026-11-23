@@ -50,6 +50,35 @@ func TestBuildRebuildRoundTrip(t *testing.T) {
 	if r.Composition.Parts["system:plugin:agents-md"] == 0 || r.Composition.Parts["tools"] == 0 {
 		t.Fatalf("组成统计缺类别: %+v", r.Composition)
 	}
+	if r.Composition.Sub["tools:builtin"] != r.Composition.Parts["tools"] || r.Composition.Sub["tools:mcp"] != 0 {
+		t.Fatalf("没有 MCP 工具时 tools 全部算内置: %+v", r.Composition)
+	}
+}
+
+// tools 按内置 / MCP 细分：Sub 两组之和等于 Parts["tools"]，Parts 之和仍等于 Total。
+func TestComposeToolGroups(t *testing.T) {
+	req := session.Request{Tools: []session.ToolSpec{
+		{Name: "read", Schema: json.RawMessage(`{"type":"object"}`)},
+		{Name: "mcp__gh__create_issue", Description: "建 issue", Schema: json.RawMessage(`{"type":"object","properties":{"title":{"type":"string"}}}`)},
+	}}
+	c := Compose(req, 0, nil, false)
+	b, m := c.Sub["tools:builtin"], c.Sub["tools:mcp"]
+	if b == 0 || m == 0 || b+m != c.Parts["tools"] {
+		t.Fatalf("细分不符: %+v", c)
+	}
+	sum := 0
+	for _, v := range c.Parts {
+		sum += v
+	}
+	if sum != c.Total {
+		t.Fatalf("Parts 之和应等于 Total: %+v", c)
+	}
+	if ToolGroup("mcp__x__y") != ToolGroupMCP || ToolGroup("shell") != ToolGroupBuiltin {
+		t.Fatal("ToolGroup 分组不对")
+	}
+	if c := Compose(session.Request{}, 0, nil, false); c.Sub != nil {
+		t.Fatalf("没有工具时不给 Sub: %+v", c)
+	}
 }
 
 func TestRebuildWithCompactionView(t *testing.T) {

@@ -34,7 +34,7 @@ var tsTypes = []any{
 	ArtifactGetArgs{}, ArtifactGetResult{},
 	ArtifactPutArgs{}, ArtifactPutResult{}, TraceArgs{}, TraceResult{}, FilesArgs{}, FileInfo{}, FilesResult{},
 	ChangesArgs{}, ChangeFile{}, ChangesResult{}, ChangesDiffArgs{}, ChangesDiffResult{}, ChangesRevertArgs{}, ChangeConflict{}, ChangesRevertResult{},
-	SkillInfo{}, SkillsListResult{}, SkillsSetEnabledArgs{}, SkillsSetEnabledResult{},
+	SkillInfo{}, SkillsListResult{}, SkillsSetEnabledArgs{}, SkillsSetEnabledResult{}, SkillsGetArgs{}, SkillsGetResult{},
 	MCPTool{}, MCPServerInfo{}, MCPListResult{}, MCPServerDraft{}, MCPTestArgs{}, MCPTestResult{}, MCPSaveArgs{}, MCPRemoveArgs{}, MCPSetEnabledArgs{}, MCPEditResult{},
 	WorkspaceTrustPreviewResult{}, TrustMCPServer{}, TrustHook{}, TrustMode{}, TrustPackage{}, TrustPluginSetting{}, WorkspaceTrustArgs{}, WorkspaceTrustResult{},
 	ConfigField{}, PluginInfo{},

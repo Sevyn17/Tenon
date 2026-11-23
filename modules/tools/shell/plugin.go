@@ -59,6 +59,9 @@ func (p *plug) Setup(cx *component.Registrar) error {
 		return err
 	} else if ok {
 		sh.Tasks = sink
+		if o, ok := sink.(tasks.OutputSink); ok { // 可选：让任务表只读地看后台 job 输出尾部
+			o.SetReader(tasks.KindShell, sh.Tail)
+		}
 	}
 	p.sh = sh
 	for _, it := range Items() {

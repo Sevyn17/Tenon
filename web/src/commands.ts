@@ -48,6 +48,7 @@ export const COMMANDS = [
   "changes.revert",
   "skills.list",
   "skills.setEnabled",
+  "skills.get",
   "mcp.list",
   "mcp.test",
   "mcp.save",
@@ -118,6 +119,7 @@ export interface CoreCommandMap {
   "changes.revert": [W.ChangesRevertArgs, W.ChangesRevertResult];
   "skills.list": [W.Empty, W.SkillsListResult];
   "skills.setEnabled": [W.SkillsSetEnabledArgs, W.SkillsSetEnabledResult];
+  "skills.get": [W.SkillsGetArgs, W.SkillsGetResult];
   "mcp.list": [W.Empty, W.MCPListResult];
   "mcp.test": [W.MCPTestArgs, W.MCPTestResult];
   "mcp.save": [W.MCPSaveArgs, W.MCPEditResult];

@@ -131,6 +131,23 @@ func TestSkillsCommands(t *testing.T) {
 	if b := skillsBlock(t, app, "s4"); !strings.Contains(b, "- mine:") || !strings.Contains(b, "- proj:") {
 		t.Fatalf("重新启用后应回来：%q", b)
 	}
+	// skills.get：正文去掉 frontmatter；停用的也能读；工作区键不符 conflict；未知 not_found
+	call("skills.setEnabled", `{"name":"mine","enabled":false}`)
+	g := call("skills.get", `{"name":"mine"}`).(wire.SkillsGetResult)
+	if g.Skill.Name != "mine" || g.Skill.Enabled || strings.Contains(g.Body, "description:") || g.Body == "" || g.Truncated || g.Size != len(g.Body) {
+		t.Fatalf("skills.get：%+v", g)
+	}
+	call("skills.setEnabled", `{"name":"mine","enabled":true}`)
+	if _, err := app.API().Call(ctx, "skills.get", []byte(`{"name":"mine","workspace":"/elsewhere"}`)); err == nil {
+		t.Fatal("工作区不符应报错")
+	} else if e := asErr(t, err); e.Code != wire.CodeConflict {
+		t.Fatalf("工作区不符应 conflict：%+v", e)
+	}
+	if _, err := app.API().Call(ctx, "skills.get", []byte(`{"name":"ghost"}`)); err == nil {
+		t.Fatal("未知技能应报错")
+	} else if e := asErr(t, err); e.Code != wire.CodeNotFound {
+		t.Fatalf("skills.get 未知技能应 not_found：%+v", e)
+	}
 	// 未知技能 not_found
 	if _, err := app.API().Call(ctx, "skills.setEnabled", []byte(`{"name":"ghost","enabled":false}`)); err == nil || !strings.Contains(err.Error(), "ghost") {
 		t.Fatalf("未知技能：%v", err)

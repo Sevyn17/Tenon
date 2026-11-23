@@ -337,3 +337,116 @@ func TestManagerClose(t *testing.T) {
 		t.Fatalf("Close 应关掉全部：closes=%d", c.closes.Load())
 	}
 }
+
+func TestEvict(t *testing.T) {
+	m := New(Options{Idle: 50 * time.Millisecond})
+	defer m.Close()
+	c := &counter{}
+	d := c.def("e", "")
+	l1, _ := m.Acquire(context.Background(), d, wsA)
+	l2, _ := m.Acquire(context.Background(), d, wsA)
+	if !l1.Evict() {
+		t.Fatal("第一次 Evict 应拿掉实例")
+	}
+	if l2.Evict() || m.Evict(l1.Key()) {
+		t.Fatal("已拿掉的实例再 Evict 应返回 false")
+	}
+	if n := c.closes.Load(); n != 1 {
+		t.Fatalf("closes = %d，应 1", n)
+	}
+	l2.Release() // 空操作
+	if len(m.List()) != 0 {
+		t.Fatalf("List = %+v", m.List())
+	}
+	l3, err := m.Acquire(context.Background(), d, wsA)
+	if err != nil || c.opens.Load() != 2 || l3.Value() == l1.Value() {
+		t.Fatalf("同键再取应新建：opens=%d err=%v", c.opens.Load(), err)
+	}
+	l3.Release() // 新实例空闲回收照常
+	waitFor(t, "新实例空闲回收", func() bool { return c.closes.Load() == 2 })
+	time.Sleep(100 * time.Millisecond)
+	if n := c.closes.Load(); n != 2 {
+		t.Fatalf("closes = %d，应 2", n)
+	}
+}
+
+func TestEvictIdleStopsTimer(t *testing.T) {
+	m := New(Options{Idle: 80 * time.Millisecond})
+	defer m.Close()
+	c := &counter{}
+	l, _ := m.Acquire(context.Background(), c.def("i", ""), wsA)
+	k := l.Key()
+	l.Release()
+	if !m.Evict(k) {
+		t.Fatal("空闲实例应能 Evict")
+	}
+	time.Sleep(150 * time.Millisecond)
+	if n := c.closes.Load(); n != 1 {
+		t.Fatalf("closes = %d，定时器应已停", n)
+	}
+	if m.Evict(Key{Kind: "none"}) {
+		t.Fatal("不存在的键应返回 false")
+	}
+}
+
+func TestEvictWhileStarting(t *testing.T) {
+	m := New(Options{Idle: time.Hour})
+	defer m.Close()
+	c := &counter{delay: 100 * time.Millisecond}
+	d := c.def("s", "")
+	errc := make(chan error, 1)
+	go func() { _, err := m.Acquire(context.Background(), d, wsA); errc <- err }()
+	waitFor(t, "进入启动", func() bool { return len(m.List()) == 1 })
+	k := m.List()[0].Key
+	if !m.Evict(k) {
+		t.Fatal("启动中应能 Evict")
+	}
+	if err := <-errc; !errors.Is(err, ErrEvicted) {
+		t.Fatalf("err = %v，应 ErrEvicted", err)
+	}
+	if c.opens.Load() != 1 || c.closes.Load() != 1 || len(m.List()) != 0 {
+		t.Fatalf("opens=%d closes=%d list=%d", c.opens.Load(), c.closes.Load(), len(m.List()))
+	}
+}
+
+func TestEvictConcurrent(t *testing.T) {
+	m := New(Options{Idle: -1})
+	defer m.Close()
+	for round := 0; round < 50; round++ {
+		c := &counter{}
+		d := c.def(fmt.Sprintf("c%d", round), "")
+		var ls []*Lease
+		for i := 0; i < 8; i++ {
+			l, err := m.Acquire(context.Background(), d, wsA)
+			if err != nil {
+				t.Fatal(err)
+			}
+			ls = append(ls, l)
+		}
+		var wg sync.WaitGroup
+		var evicted atomic.Int32
+		for i, l := range ls {
+			wg.Add(1)
+			go func(i int, l *Lease) {
+				defer wg.Done()
+				if i%2 == 0 {
+					if l.Evict() {
+						evicted.Add(1)
+					}
+				} else {
+					l.Release()
+				}
+			}(i, l)
+		}
+		wg.Wait()
+		if n := c.closes.Load(); n != 1 {
+			t.Fatalf("round %d closes = %d，应 1", round, n)
+		}
+		if evicted.Load() > 1 {
+			t.Fatalf("round %d 多次 Evict 成功", round)
+		}
+	}
+	if len(m.List()) != 0 {
+		t.Fatalf("List = %+v", m.List())
+	}
+}

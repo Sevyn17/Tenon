@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/Sevyn17/tenon/appapi"
 	"github.com/Sevyn17/tenon/appapi/wire"
 	"github.com/Sevyn17/tenon/modules/context/skills"
 	"github.com/Sevyn17/tenon/runtime/store"
@@ -42,6 +43,30 @@ func (a Skills) List(context.Context) (wire.SkillsListResult, error) {
 		out.Skills = append(out.Skills, skillInfo(i))
 	}
 	return out, nil
+}
+
+var _ appapi.SkillReader = Skills{}
+
+// Body skills.get：读正文（含已停用的技能）；不在当前列表里返回 not_found。截断由 appapi 做。
+func (a Skills) Body(_ context.Context, name string) (wire.SkillInfo, string, error) {
+	if _, ok := a.S.Find(name); !ok {
+		return wire.SkillInfo{}, "", fmt.Errorf("%w: 没有技能 %s", store.ErrNotFound, name)
+	}
+	is, _ := a.S.Infos()
+	var info wire.SkillInfo
+	for _, i := range is {
+		if i.Name == name {
+			info = skillInfo(i)
+		}
+	}
+	_, body, ok, err := a.S.Body(name)
+	if !ok {
+		return wire.SkillInfo{}, "", fmt.Errorf("%w: 没有技能 %s", store.ErrNotFound, name)
+	}
+	if err != nil {
+		return info, "", err
+	}
+	return info, body, nil
 }
 
 // SetEnabled skills.setEnabled：只认当前列表里有的技能（not_found），写用户级的启停记录。

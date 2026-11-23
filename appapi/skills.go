@@ -9,6 +9,7 @@ package appapi
 import (
 	"context"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/Sevyn17/tenon/appapi/wire"
 )
@@ -18,7 +19,59 @@ func init() {
 	registerCommands(map[string]handler{
 		"skills.list":       bind((*App).SkillsList),
 		"skills.setEnabled": bind((*App).SkillsSetEnabled),
+		"skills.get":        bind((*App).SkillsGet),
 	})
+}
+
+// SkillReader 可选：Skills 实现再实现它就支持 skills.get（读正文）；没实现时 skills.get 返回 unsupported。
+// 正文已去掉 frontmatter；截断由 App 统一按 wire.SkillBodyMax 做。
+type SkillReader interface {
+	Body(ctx context.Context, name string) (wire.SkillInfo, string, error)
+}
+
+// SkillsGet 读一个技能的正文（只读，viewer 可用，与 skills.list 同权限）。
+func (v *App) SkillsGet(ctx context.Context, in wire.SkillsGetArgs) (wire.SkillsGetResult, error) {
+	s, err := v.skills()
+	if err != nil {
+		return wire.SkillsGetResult{}, err
+	}
+	r, ok := s.(SkillReader)
+	if !ok {
+		return wire.SkillsGetResult{}, Errorf(wire.CodeUnsupported, "skill body not available")
+	}
+	in.Name = strings.TrimSpace(in.Name)
+	if in.Name == "" {
+		return wire.SkillsGetResult{}, invalid("missing name")
+	}
+	if in.Workspace != "" {
+		l, err := s.List(ctx)
+		if err != nil {
+			return wire.SkillsGetResult{}, err
+		}
+		if l.Workspace != "" && l.Workspace != in.Workspace {
+			return wire.SkillsGetResult{}, Errorf(wire.CodeConflict, "workspace changed")
+		}
+	}
+	info, body, err := r.Body(ctx, in.Name)
+	if err != nil {
+		return wire.SkillsGetResult{}, err
+	}
+	out := wire.SkillsGetResult{Skill: info, Body: body, Size: len(body)}
+	if len(body) > wire.SkillBodyMax {
+		out.Body, out.Truncated = clipUTF8(body, wire.SkillBodyMax), true
+	}
+	return out, nil
+}
+
+// clipUTF8 截到不超过 n 字节且不切断多字节字符。
+func clipUTF8(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	for n > 0 && !utf8.RuneStart(s[n]) {
+		n--
+	}
+	return s[:n]
 }
 
 // Skills 技能目录与启停记录（skills 插件适配，见 adapters.Skills）。

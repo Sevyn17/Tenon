@@ -980,6 +980,18 @@ export interface SkillsSetEnabledResult {
   skill: SkillInfo;
 }
 
+export interface SkillsGetArgs {
+  name: string;
+  workspace?: string;
+}
+
+export interface SkillsGetResult {
+  skill: SkillInfo;
+  body: string;
+  truncated?: boolean;
+  size: number;
+}
+
 export interface MCPTool {
   name: string;
   public: string;

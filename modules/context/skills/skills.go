@@ -395,6 +395,21 @@ func (s *Skills) Load(name string) (string, error) {
 	return fmt.Sprintf("<skill_content name=%q>\n%s\n\n技能目录：%s\n文中的相对路径以该目录为基准解析，用绝对路径调用工具。\n</skill_content>", name, body, hit.Dir), nil
 }
 
+// Body 读技能正文（去掉 frontmatter，不截断），给界面查看用：含已停用、不允许模型调用的技能。
+// 不在当前列表里返回 found=false。
+func (s *Skills) Body(name string) (Skill, string, bool, error) {
+	sk, ok := s.Find(name)
+	if !ok {
+		return Skill{}, "", false, nil
+	}
+	b, err := os.ReadFile(sk.Path)
+	if err != nil {
+		return sk, "", true, err
+	}
+	_, body, _ := splitFrontmatter(string(b))
+	return sk, strings.TrimSpace(body), true, nil
+}
+
 // Tool 模型侧装载工具 skill {name}。
 func (s *Skills) Tool() *toolhub.Tool {
 	return toolhub.Simple("skill",

@@ -66,3 +66,12 @@ type Sink interface {
 	Updated(Task)
 	Ended(Task)
 }
+
+// Reader 读一项任务输出的尾部（最多 max 字节）：text 为尾部文本，skipped 为尾部之前未返回的字节数；
+// 任务不存在（或输出已回收）时 ok 为 false。只读：不影响模块自己的读偏移。须并发安全。
+type Reader func(id string, max int) (text string, skipped int64, ok bool)
+
+// OutputSink 可选：Sink 再实现它，有输出的模块在装配时按 Kind 交出 Reader（Ended 回调期间也可调用）。
+type OutputSink interface {
+	SetReader(kind string, r Reader)
+}

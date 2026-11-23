@@ -857,6 +857,27 @@ type SkillsSetEnabledResult struct {
 	Skill SkillInfo `json:"skill"`
 }
 
+// SkillBodyMax skills.get 返回正文的上限（字节）；超出按 UTF-8 边界截断并置 truncated。
+const SkillBodyMax = 64 << 10
+
+// SkillsGetArgs skills.get：读一个技能的 SKILL.md（或 <name>.md）正文，含已停用的技能。
+type SkillsGetArgs struct {
+	Name string `json:"name"`
+	// Workspace 可选：调用方以为的工作区键（skills.list 的 workspace）；给了且与当前不同返回 conflict。
+	Workspace string `json:"workspace,omitempty"`
+}
+
+// SkillsGetResult skills.get 的结果。
+type SkillsGetResult struct {
+	Skill SkillInfo `json:"skill"`
+	// Body 去掉 frontmatter 的正文（Markdown），最多 SkillBodyMax 字节。
+	Body string `json:"body"`
+	// Truncated 正文超过 SkillBodyMax 被截断。
+	Truncated bool `json:"truncated,omitempty"`
+	// Size 正文原始字节数（截断前）。
+	Size int `json:"size"`
+}
+
 // MCP 服务的实例范围（MCPServerInfo.scope、MCPServerDraft.scope）与启用记录范围（MCPSetEnabledArgs.scope、
 // MCPServerInfo.disabled_scope）：同一组值。
 const (

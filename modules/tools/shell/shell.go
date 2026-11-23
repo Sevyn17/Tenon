@@ -18,6 +18,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	"github.com/Sevyn17/tenon/pkg/proc"
 	"github.com/Sevyn17/tenon/runtime/session"
@@ -563,6 +564,33 @@ func (s *Shell) lookup(id, session string) (*job, bool) {
 		return nil, false
 	}
 	return j, true
+}
+
+// Tail 实现 tasks.Reader：按任务 id（"<会话>/job-N"）读后台 job 输出的最后 max 字节（去控制序列）。
+// 只读，不推进 job_output 的读偏移；job 已被回收时 ok 为 false。
+func (s *Shell) Tail(id string, max int) (string, int64, bool) {
+	i := strings.LastIndexByte(id, '/')
+	if i < 0 {
+		return "", 0, false
+	}
+	j, ok := s.lookup(id[i+1:], id[:i])
+	if !ok {
+		return "", 0, false
+	}
+	if max <= 0 {
+		max = JobBuffer
+	}
+	total := j.buf.size()
+	start := total - int64(max)
+	if start < 0 {
+		start = 0
+	}
+	text, _, dropped := j.buf.since(start)
+	start += dropped
+	for k := 0; k < utf8.UTFMax && len(text) > 0 && !utf8.RuneStart(text[0]); k++ { // 不从多字节字符中间开始
+		text, start = text[1:], start+1
+	}
+	return s.clean(text), start, true
 }
 
 // forget 已结束、输出已读完的 job 从表里删掉（每个占最多 JobBuffer 字节，原先从不回收）。

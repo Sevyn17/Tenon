@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/Sevyn17/tenon/runtime/session"
 )
@@ -125,9 +126,13 @@ type Composition struct {
 	Estimated bool           `json:"estimated"`
 	Total     int            `json:"total"`
 	Parts     map[string]int `json:"parts"`
+	// Sub 某些类别的细分，不计入 Total（Parts 各项之和仍等于 Total）：tools:builtin、tools:mcp 之和等于 Parts["tools"]。
+	// 只有出现的分组才有键；旧记录没有这个字段。
+	Sub map[string]int `json:"sub,omitempty"`
 }
 
-// Compose 按类别估算 token：system:<来源>、tools、user、assistant、tool_result、compaction_summary、inject:<来源>。
+// Compose 按类别估算 token：system:<来源>、tools、user、assistant、tool_result、compaction_summary、inject:<来源>；
+// tools 另在 Sub 里按 tools:builtin / tools:mcp 细分。
 // suffixFrom 是后缀起点（基础请求的消息数）；summaryFirst 表示首条消息是压缩摘要。
 func Compose(req session.Request, suffixFrom int, sources []string, summaryFirst bool) Composition {
 	p := map[string]int{}
@@ -143,9 +148,20 @@ func Compose(req session.Request, suffixFrom int, sources []string, summaryFirst
 		}
 		add("system:"+src, est(len(s.Text)))
 	}
+	var sub map[string]int
 	if len(req.Tools) > 0 {
-		b, _ := json.Marshal(req.Tools)
-		add("tools", est(len(b)))
+		// 工具按来源分两组各自估算；tools = 两组之和（旧客户端只读 tools，各类之和仍等于 total）。
+		groups := map[string][]session.ToolSpec{}
+		for _, t := range req.Tools {
+			groups[ToolGroup(t.Name)] = append(groups[ToolGroup(t.Name)], t)
+		}
+		sub = map[string]int{}
+		for g, ts := range groups {
+			b, _ := json.Marshal(ts)
+			n := est(len(b))
+			sub["tools:"+g] = n
+			add("tools", n)
+		}
 	}
 	for i, m := range req.Messages {
 		n := est(msgLen(m))
@@ -173,7 +189,24 @@ func Compose(req session.Request, suffixFrom int, sources []string, summaryFirst
 	for _, k := range keys {
 		total += p[k]
 	}
-	return Composition{Estimated: true, Total: total, Parts: p}
+	return Composition{Estimated: true, Total: total, Parts: p, Sub: sub}
+}
+
+// 工具分组（Composition.Sub 的 tools:<组>）。
+const (
+	ToolGroupBuiltin = "builtin"
+	ToolGroupMCP     = "mcp"
+)
+
+// MCPToolPrefix MCP 工具的模型侧名字前缀（与 modules/tools/mcp 的 PublicName 一致：mcp__<服务>__<工具>）。
+const MCPToolPrefix = "mcp__"
+
+// ToolGroup 工具名 → 分组：MCP 桥接的工具为 mcp，其余为 builtin。
+func ToolGroup(name string) string {
+	if strings.HasPrefix(name, MCPToolPrefix) {
+		return ToolGroupMCP
+	}
+	return ToolGroupBuiltin
 }
 
 // hasCompaction：加载窗口内是否有压缩条目（有则请求首条消息是摘要）。

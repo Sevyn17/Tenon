@@ -46,6 +46,9 @@ var ErrLimit = errors.New("resmgr: 实例数已到上限")
 // ErrClosed 管理器或绑定视图已关闭。
 var ErrClosed = errors.New("resmgr: 已关闭")
 
+// ErrEvicted 实例在启动期间被 Evict 拿掉了。
+var ErrEvicted = errors.New("resmgr: 实例已被拿掉")
+
 // KeyBound 组件取本工作区绑定视图的服务键（Requires 里写 KeyBound.Maybe()）。
 var KeyBound = ext.NewKey[*Bound](ext.ServiceResources)
 
@@ -155,7 +158,8 @@ type entry struct {
 	started   time.Time
 	idleSince time.Time
 	timer     *time.Timer
-	gen       int // 每次进入或离开空闲加一，作废过期的回收定时器
+	gen       int  // 每次进入或离开空闲加一，作废过期的回收定时器
+	evicted   bool // 启动期间被 Evict：Open 回来后关掉，取用方拿到 ErrEvicted
 }
 
 // New 建管理器。
@@ -188,6 +192,48 @@ func (l *Lease) Release() {
 		}
 		l.m.release(l.e)
 	})
+}
+
+// Evict 立即拿掉这份实例（不论还有几个引用）并关闭它，见 Manager.Evict；随后交还本次取用。
+// 实例自己结束了（如进程退出）、或取用方明确要关掉它时用。返回实例是否由这次调用拿掉。
+func (l *Lease) Evict() bool {
+	ok := l.m.evict(l.e)
+	l.Release()
+	return ok
+}
+
+// Evict 立即拿掉键 k 的实例：停掉回收定时器、从表里去掉，在锁外调一次关闭函数。
+// 其余持有者之后的 Release 是空操作；同一个键再 Acquire 会起一份新实例。
+// 实例还在启动时，Open 回来后立即关闭，这一批取用方拿到 ErrEvicted。没有这个键返回 false。
+func (m *Manager) Evict(k Key) bool {
+	m.mu.Lock()
+	e := m.entries[k]
+	m.mu.Unlock()
+	if e == nil {
+		return false
+	}
+	return m.evict(e)
+}
+
+func (m *Manager) evict(e *entry) bool {
+	m.mu.Lock()
+	if m.entries[e.key] != e {
+		m.mu.Unlock()
+		return false
+	}
+	m.dropLocked(e)
+	var closeFn func()
+	select {
+	case <-e.ready:
+		closeFn = e.close
+	default:
+		e.evicted = true // 还在启动：Open 回来后自己关
+	}
+	m.mu.Unlock()
+	if closeFn != nil {
+		closeFn()
+	}
+	return true
 }
 
 // Acquire 按 owner 取 def 的实例：同一个隔离键已有实例就复用（引用加一），没有就起一份。
@@ -252,8 +298,11 @@ func (m *Manager) Acquire(ctx context.Context, def Def, owner Owner) (*Lease, er
 
 	val, closeFn, err := def.Open(ctx)
 	m.mu.Lock()
-	if err == nil && m.closed { // 启动期间管理器关了：不留下实例
+	if err == nil && (m.closed || e.evicted) { // 启动期间管理器关了或实例被拿掉：不留下实例
 		err = ErrClosed
+		if e.evicted && !m.closed {
+			err = ErrEvicted
+		}
 		if closeFn != nil {
 			defer closeFn()
 		}
