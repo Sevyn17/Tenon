@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Sevyn17/tenon/runtime/session"
 	"github.com/Sevyn17/tenon/runtime/store"
 	"github.com/Sevyn17/tenon/runtime/store/memstore"
 	"github.com/Sevyn17/tenon/runtime/toolhub"
@@ -179,6 +180,35 @@ func TestQueuedSurvivesRestart(t *testing.T) {
 	}
 	if items, _ := db.Inbox(context.Background(), "s1"); len(items) != 0 {
 		t.Fatalf("处理后信箱应空：%+v", items)
+	}
+}
+
+// 排队的 Send 带 Source：落信箱、回合结束后取出开回合，user 条目的 meta.source 仍是它；
+// 不带 Source 的仍记 user（原行为）。
+func TestQueuedSendKeepsSource(t *testing.T) {
+	started, gate := make(chan struct{}, 1), make(chan struct{})
+	r := newT2Rig(t, nil, &fakeModel{}, 0, gatedTool(started, gate))
+	hd := mustOpen(t, r.h, "s1")
+	if err := hd.Do(Command{Kind: Send, ItemID: "a", Text: "use tool"}); err != nil {
+		t.Fatal(err)
+	}
+	waitSignal(t, started)
+	if err := hd.Do(Command{Kind: Send, ItemID: "g", Text: "G", Source: "goal", Queue: true}); err != nil {
+		t.Fatal(err)
+	}
+	close(gate)
+	if err := hd.Wait(); err != nil {
+		t.Fatal(err)
+	}
+	srcs := map[string]any{}
+	for _, e := range hd.Agent().Committed().Entries {
+		if e.Item.User == nil || len(e.Item.User.Content) == 0 {
+			continue
+		}
+		srcs[e.Item.User.Content[0].Text] = e.Meta[session.MetaSource]
+	}
+	if srcs["G"] != "goal" || srcs["use tool"] != "user" {
+		t.Fatalf("条目 source：%v", srcs)
 	}
 }
 

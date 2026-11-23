@@ -755,6 +755,27 @@ func envelopeMeta(e mail.Envelope, untrusted bool) map[string]any {
 	return m
 }
 
+// applyBatchSource 非信封批次（Send）按信箱项的 Source 改写条目 meta.source（Command.Source 落信箱后保留到条目）。
+// 只在批次里所有非信封、非补报项的 Source 相同且非空时才改；混合来源或空保持 envelopeMeta 的 user。
+func applyBatchSource(m map[string]any, env mail.Envelope, batch []store.InboxItem) {
+	if env.From.Kind != "" {
+		return
+	}
+	src := ""
+	for _, it := range batch {
+		if it.Envelope != "" || it.Kind == store.InboxNote {
+			continue
+		}
+		if it.Source == "" || (src != "" && src != it.Source) {
+			return
+		}
+		src = it.Source
+	}
+	if src != "" {
+		m[session.MetaSource] = src
+	}
+}
+
 // applyNotices 把 notice 信封转成一条 status 条目写进历史（12：notice 进状态更新），
 // 并在同一个检查点里确认消费。没有 notice 返回 false。
 func (a *actor) applyNotices(ctx context.Context, items []store.InboxItem) (bool, error) {

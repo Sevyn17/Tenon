@@ -401,7 +401,10 @@ type InboxItem struct {
 	// 由「延续某个任务」的调用方（子智能体、工作组成员）显式传入，回合开始时据此设置 trace，
 	// 让子会话的事件与父会话记在同一条链上。空 = 独立任务，回合 trace 置空（原行为）。
 	Trace string
-	At    time.Time
+	// Source 非信封输入（Send）的来源标记（host.Command.Source，如 goal、tasks）。开回合时写进条目
+	// meta.source；空 = 用户输入（原行为）。信封项的来源看信封 from，不用它。
+	Source string
+	At     time.Time
 }
 
 // OutboxItem 是一条待外发的信封（08 9.6：外发与检查点同事务、提交后派发）。

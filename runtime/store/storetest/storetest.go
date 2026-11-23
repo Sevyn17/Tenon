@@ -621,7 +621,7 @@ func testInbox(t *testing.T, db store.Store) {
 		t.Fatal("待处理时重放应被拒")
 	}
 	_, _ = db.Admit(ctx, "s1", store.InboxItem{ItemID: "i2", Kind: store.InboxNote, Input: `[]`, Trust: "untrusted",
-		Envelope: `{"id":"i2","from":{"kind":"human","id":"u1"}}`, Trace: "tr-2"})
+		Envelope: `{"id":"i2","from":{"kind":"human","id":"u1"}}`, Trace: "tr-2", Source: "goal"})
 	items, _ := db.Inbox(ctx, "s1")
 	if len(items) != 2 || items[0].ItemID != "i1" || items[0].Trust != "trusted" || items[1].Trust != "untrusted" || items[0].At.IsZero() {
 		t.Fatalf("顺序 / 信任: %+v", items)
@@ -632,6 +632,10 @@ func testInbox(t *testing.T, db store.Store) {
 	// trace 列往返（16 篇 L17）：带的原样读回，没带的为空。
 	if items[1].Trace != "tr-2" || items[0].Trace != "" {
 		t.Fatalf("trace 列往返: %+v", items)
+	}
+	// source 列往返（排队 Send 的来源保留到条目）：带的原样读回，没带的为空。
+	if items[1].Source != "goal" || items[0].Source != "" {
+		t.Fatalf("source 列往返: %+v", items)
 	}
 	if in, _ := db.InInbox(ctx, "s1", "i1"); !in {
 		t.Fatal("i1 应待处理")

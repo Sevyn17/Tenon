@@ -74,7 +74,7 @@ func (a *actor) enqueue(c Command) error {
 		}
 		body, _ := json.Marshal(in)
 		fresh, err := a.h.DB.Admit(context.Background(), a.id, store.InboxItem{ItemID: c.ItemID, Kind: kind,
-			Input: string(body), Trust: c.Trust, Trace: c.Trace})
+			Input: string(body), Trust: c.Trust, Trace: c.Trace, Source: c.Source})
 		if err != nil {
 			return err
 		}
@@ -563,6 +563,7 @@ func (a *actor) drainInbox(ctx context.Context) (stop bool, err error) {
 			a.h.recordTrace(trace, a.id, "session", "")
 		}
 		m := envelopeMeta(env, untrusted)
+		applyBatchSource(m, env, batch)
 		m[session.MetaClientIDs] = consume // 本回合吃进的输入（protocol 2 entry.client_ids、turn.started.inputs）
 		if hk := a.h.Hooks.BeforeTurn; hk != nil {
 			nc, d, err := hk(a.id, content, untrusted)
@@ -1173,6 +1174,7 @@ func (a *actor) insertFrom(ctx context.Context, items []store.InboxItem) error {
 		content = nc
 	}
 	m := envelopeMeta(env, untrusted)
+	applyBatchSource(m, env, batch)
 	m[session.MetaClientIDs] = ids
 	// 回合中插入的信封同样收窄本轮授权范围（触发链 caps 取交集），不可信输入只升不降。
 	a.turnCaps = intersectCaps(a.turnCaps, batchCaps(batch))
