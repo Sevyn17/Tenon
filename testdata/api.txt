@@ -580,7 +580,7 @@ github.com/Sevyn17/tenon/appapi/wire: type SendResult struct{ClientID string; Qu
 github.com/Sevyn17/tenon/appapi/wire: type SessionArgs struct{Session string}
 github.com/Sevyn17/tenon/appapi/wire: type SessionClosed struct{Reason string}
 github.com/Sevyn17/tenon/appapi/wire: type SessionForked struct{From string; Upto int}
-github.com/Sevyn17/tenon/appapi/wire: type SessionInfo struct{ID string; Title string; Preview string; RunState string; Origin string; Parent string; UpdatedAt int64; Pinned bool; Workspace string; Agent string; Archived bool; LastEnd *TurnEnded; Source string; Ref string}
+github.com/Sevyn17/tenon/appapi/wire: type SessionInfo struct{ID string; Title string; Preview string; RunState string; Origin string; Parent string; UpdatedAt int64; Pinned bool; Workspace string; WorkspaceID string; Agent string; Archived bool; LastEnd *TurnEnded; Source string; Ref string}
 github.com/Sevyn17/tenon/appapi/wire: type SessionSnapshot struct{ID string; Parent string; Origin string; Title string; Pinned bool; Archived bool; Agent string; RunState string; Mode *Mode; Settings Settings; Log LogPos; Interactions []Interaction; Live *Live; Cursor int64; LastEnd *TurnEnded; Queued []QueuedInput; Source string; Ref string}
 github.com/Sevyn17/tenon/appapi/wire: type SessionUpdated struct{Title string; Pinned bool; Archived bool}
 github.com/Sevyn17/tenon/appapi/wire: type SessionsChanged struct{ID string; RunState string; Title string; UpdatedAt int64; Pinned bool; Deleted bool; Preview string; Parent string; Origin string; Workspace string; Agent string; Archived bool; LastEnd *TurnEnded}

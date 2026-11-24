@@ -269,6 +269,7 @@ export interface SessionInfo {
   updated_at: number;
   pinned?: boolean;
   workspace?: string;
+  workspace_id?: string;
   agent?: string;
   archived?: boolean;
   last_end?: TurnEnded;

@@ -337,6 +337,8 @@ type SessionInfo struct {
 	Pinned    bool   `json:"pinned,omitempty"`
 	// Workspace 所属工作区的键（sessions.list {all_workspaces} 时用来分组）；空 = 不属于任何工作区。
 	Workspace string `json:"workspace,omitempty"`
+	// WorkspaceID 所属工作区的稳定 id（WorkspaceID(workspace)，Mortise docs/74 D6）；空 = 不属于任何工作区。
+	WorkspaceID string `json:"workspace_id,omitempty"`
 	// Agent 会话绑定的定义名；空 = 未绑定定义。
 	Agent string `json:"agent,omitempty"`
 	// Archived 已归档（session.update {archived}，客户端改进 M7）。

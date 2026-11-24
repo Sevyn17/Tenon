@@ -68,6 +68,7 @@ func Run(t *testing.T, open func(t *testing.T) store.Store) {
 		{"SessionQuery", testSessionQuery},
 		{"TurnRange", testTurnRange},
 		{"EntryLocate", testEntryLocate},
+		{"UsageSummary", testUsageSummary},
 		{"CollectionRoundTrip", testCollectionRoundTrip},
 		{"CollectionConflict", testCollectionConflict},
 		{"CollectionQueryPage", testCollectionQueryPage},

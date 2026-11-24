@@ -451,7 +451,7 @@ func sourceOf(meta json.RawMessage) (source, ref string) {
 func wireInfo(s store.SessionInfo) wire.SessionInfo {
 	src, ref := sourceOf(s.Meta)
 	return wire.SessionInfo{ID: s.ID, Title: s.Title, Preview: s.Preview, RunState: wireRun(s.RunState),
-		Origin: s.Origin, Parent: s.ParentID, UpdatedAt: s.UpdatedAt, Pinned: pinnedOf(s.Meta), Workspace: s.Workspace, Agent: s.AgentID,
+		Origin: s.Origin, Parent: s.ParentID, UpdatedAt: s.UpdatedAt, Pinned: pinnedOf(s.Meta), Workspace: s.Workspace, WorkspaceID: wire.WorkspaceID(s.Workspace), Agent: s.AgentID,
 		Archived: store.ArchivedOf(s.Meta), LastEnd: WireLastEnd(s.LastEnd), Source: src, Ref: ref}
 }
 

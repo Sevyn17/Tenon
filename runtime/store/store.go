@@ -597,6 +597,75 @@ func (s *Stats) AddSpan(kind, status, attrs string) {
 	s.CacheWrite += cw
 }
 
+// —— 用量汇总（Mortise docs/74 W1b）——
+//
+// 按「会话 × 本地日期」累加 span 用量：检查点提交时，新写入的 attempt / turn span 计入它开始那天。
+// 同一 span id 再次提交（覆盖更新）不重复计。会话删除时它的汇总行一起删掉，所以已删除会话不计。
+// 智能体名与主 / 子会话在查询时取会话行（子会话按自己的定义名计；复盘会话的定义是 reviewer，计在 reviewer 名下）。
+
+// UsageScopeMain / UsageScopeChild 主会话（store.TopLevel）与子会话。
+const (
+	UsageScopeMain  = "main"
+	UsageScopeChild = "child"
+)
+
+// UsageScope 会话行对应的用量范围。
+func UsageScope(parentID, origin string) string {
+	if TopLevel(parentID, origin) {
+		return UsageScopeMain
+	}
+	return UsageScopeChild
+}
+
+// UsageDay span 开始时间所在的本地日期（YYYY-MM-DD），汇总按它分天。
+func UsageDay(t time.Time) string { return t.Local().Format("2006-01-02") }
+
+// UsageDelta 一条 span 对汇总的贡献：turn span 计一个回合；attempt span 计一次尝试与厂商报告的 token（口径同 Stats.AddSpan）。
+// 其余种类返回零值与 false。
+func UsageDelta(sp Span) (d UsageRow, ok bool) {
+	switch sp.Kind {
+	case "turn":
+		d.Turns = 1
+		return d, true
+	case "attempt":
+		var st Stats
+		st.AddSpan(sp.Kind, sp.Status, string(sp.Attrs))
+		d.Attempts, d.Input, d.Output, d.CacheRead, d.CacheWrite = 1, st.Input, st.Output, st.CacheRead, st.CacheWrite
+		return d, true
+	}
+	return d, false
+}
+
+// UsageRow 一个智能体在一个范围（main / child）上的用量合计。Sessions 是窗口内有用量的不同会话数。
+type UsageRow struct {
+	Agent      string `json:"agent"`
+	Scope      string `json:"scope"`
+	Sessions   int    `json:"sessions"`
+	Turns      int    `json:"turns"`
+	Attempts   int    `json:"attempts"`
+	Input      uint64 `json:"input"`
+	Output     uint64 `json:"output"`
+	CacheRead  uint64 `json:"cache_read"`
+	CacheWrite uint64 `json:"cache_write"`
+}
+
+// Add 把 d 的计数加进 r（不动 Agent / Scope / Sessions）。
+func (r *UsageRow) Add(d UsageRow) {
+	r.Turns += d.Turns
+	r.Attempts += d.Attempts
+	r.Input += d.Input
+	r.Output += d.Output
+	r.CacheRead += d.CacheRead
+	r.CacheWrite += d.CacheWrite
+}
+
+// UsageSummarizer 可选：按智能体汇总用量（Mortise docs/74 W1b）。
+type UsageSummarizer interface {
+	// UsageSummary since（YYYY-MM-DD，含当天；空 = 全部）以来，按（定义名，范围）合计。agents 非空时只要这些定义；
+	// 未绑定定义的会话不计。结果按 Agent、Scope 排序。
+	UsageSummary(ctx context.Context, since string, agents []string) ([]UsageRow, error)
+}
+
 // ShellHash 计算 Config 的外壳哈希（与存储一致：JSON 的 sha256 十六进制）。
 func ShellHash(c *session.Config) (string, error) {
 	b, err := json.Marshal(c)

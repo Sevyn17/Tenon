@@ -79,6 +79,8 @@ type sess struct {
 	requests map[string]request
 	reqOrder []string
 	spans    []spanRow
+	// usage 按本地日期累加的用量（store.UsageSummarizer）：新 span 第一次提交时计入。
+	usage map[string]store.UsageRow
 
 	// 会话事件序列（06 10.2.1，与 sqlite 的 session_events 同语义）：只追加，Replay 只读它；
 	// eventFloor 是按保留期清掉的最大游标，早于它的回放返回 ErrCursorExpired。
@@ -481,6 +483,62 @@ func (s *Store) putSpan(sid string, sp store.Span) {
 	}
 	x := s.sessions[sid]
 	x.spans = append(x.spans, spanRow{s: sp, sid: sid})
+	if d, ok := store.UsageDelta(sp); ok {
+		if x.usage == nil {
+			x.usage = map[string]store.UsageRow{}
+		}
+		day := store.UsageDay(sp.Start)
+		r := x.usage[day]
+		r.Add(d)
+		x.usage[day] = r
+	}
+}
+
+// UsageSummary 按定义名与主 / 子会话合计 since 以来的用量（store.UsageSummarizer，与 sqlite 同语义）。
+func (s *Store) UsageSummary(ctx context.Context, since string, agents []string) ([]store.UsageRow, error) {
+	if err := s.lock(); err != nil {
+		return nil, err
+	}
+	defer s.mu.Unlock()
+	want := map[string]bool{}
+	for _, a := range agents {
+		want[a] = true
+	}
+	type key struct{ agent, scope string }
+	acc := map[key]*store.UsageRow{}
+	for _, x := range s.sessions {
+		if x.status == "deleted" || x.meta.AgentID == "" || (len(want) > 0 && !want[x.meta.AgentID]) {
+			continue
+		}
+		k := key{x.meta.AgentID, store.UsageScope(x.meta.ParentID, x.meta.Origin)}
+		used := false
+		for day, d := range x.usage {
+			if since != "" && day < since {
+				continue
+			}
+			r := acc[k]
+			if r == nil {
+				r = &store.UsageRow{Agent: k.agent, Scope: k.scope}
+				acc[k] = r
+			}
+			r.Add(d)
+			used = true
+		}
+		if used {
+			acc[k].Sessions++
+		}
+	}
+	out := make([]store.UsageRow, 0, len(acc))
+	for _, r := range acc {
+		out = append(out, *r)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Agent != out[j].Agent {
+			return out[i].Agent < out[j].Agent
+		}
+		return out[i].Scope < out[j].Scope
+	})
+	return out, nil
 }
 
 // Load 读头部 + 外壳，并从 base（默认 compaction_base）起读条目。
