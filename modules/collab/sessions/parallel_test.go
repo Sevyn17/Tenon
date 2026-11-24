@@ -1,4 +1,4 @@
-package subagent
+package sessions
 
 import (
 	"context"
@@ -67,8 +67,8 @@ func TestSubagentCallsRunInParallel(t *testing.T) {
 		t.Fatal(err)
 	}
 	calls := []session.ToolCall{
-		{ID: "call-aaaaaaaa", Name: "subagent", Args: json.RawMessage(`{"task":"一"}`)},
-		{ID: "call-bbbbbbbb", Name: "subagent", Args: json.RawMessage(`{"task":"二"}`)},
+		{ID: "call-aaaaaaaa", Name: "session_start", Args: json.RawMessage(`{"task":"一"}`)},
+		{ID: "call-bbbbbbbb", Name: "session_start", Args: json.RawMessage(`{"task":"二"}`)},
 	}
 	run := hub.Execute(ctx, callctx.New(callctx.Options{SessionID: "p"}), calls, nil)
 	for {

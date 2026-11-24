@@ -66,7 +66,7 @@ func (m roleModel) Stream(_ context.Context, req session.Request, onText func(st
 	case last.Role == "tool":
 		txt = "done"
 	case strings.Contains(txt, "派子智能体"):
-		return call("subagent", `{"task":"子任务"}`)
+		return call("session_start", `{"task":"子任务"}`)
 	case strings.Contains(txt, "派成员"):
 		return call("team_spawn", `{"name":"alice","task":"成员任务"}`)
 	default:
@@ -91,7 +91,7 @@ func TestAssembledSnapshot(t *testing.T) {
 	t.Setenv("TENON_BASE_URL", "")
 	t.Setenv("TENON_MODEL", "")
 	extra := filepath.Join(home, "extra.toml")
-	if err := os.WriteFile(extra, []byte("[[plugin]]\nname = \"subagent\"\nenabled = true\n\n[[plugin]]\nname = \"workgroup\"\nenabled = true\n"), 0o644); err != nil {
+	if err := os.WriteFile(extra, []byte("[[plugin]]\nname = \"session-start\"\nenabled = true\n\n[[plugin]]\nname = \"workgroup\"\nenabled = true\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	rt, err := Start(StartOptions{Flags: Flags{Workdir: root, Profile: extra, Yes: true, MaxSteps: -1},

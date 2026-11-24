@@ -1,4 +1,4 @@
-package subagent
+package sessions
 
 // 插件登记（thin-kernel-plan §2.2）：subagent 委派工具，只给顶层会话（子会话不带 → 深度 1）。
 // 子会话经 service:host 的 Child 构造（可空 = New）。
@@ -33,11 +33,11 @@ func TemplateSource() (agentdef.Source, error) {
 	return m, nil
 }
 
-// PluginConfig 插件配置 [use.subagent] 的参数开关（Mortise docs/62 K5、docs/56 第 2 节）：
+// PluginConfig 插件配置 [use.session-start] 的参数开关（Mortise docs/62 K5、docs/56 第 2 节）：
 // 每个按次参数一个开关，开着的才出现在委派工具 schema 里。task 必有，不可关。
 //
 //	[[plugin]]
-//	name = "subagent"
+//	name = "session-start"
 //	[plugin.config]
 //	param_model = true
 type PluginConfig struct {
@@ -57,10 +57,10 @@ func (c *PluginConfig) Params() Params {
 
 type plug struct{}
 
-func init() { component.Register("subagent", func() component.Component { return &plug{} }) }
+func init() { component.Register(PluginName, func() component.Component { return &plug{} }) }
 
 func (*plug) Meta() component.Meta {
-	return component.Meta{Name: "subagent", Version: "0.1.0", Description: "Delegate a task to a subagent in its own child session", Effects: []string{component.EffectTools}, Requires: []string{assemble.ServiceHost, tasks.Key.Maybe()}, Config: &PluginConfig{}}
+	return component.Meta{Name: PluginName, Version: "0.1.0", Description: "Delegate a task to a subagent in its own child session", Effects: []string{component.EffectTools}, Requires: []string{assemble.ServiceHost, tasks.Key.Maybe()}, Config: &PluginConfig{}}
 }
 
 func (*plug) Setup(cx *component.Registrar) error {
@@ -87,7 +87,7 @@ func (*plug) Setup(cx *component.Registrar) error {
 		component.RegisterAt(cx, assemble.PermItems, it.ID, it)
 	}
 	// 子会话不再带委派工具（深度上限 1）。这里用 Visible 而不是重造工具。
-	component.RegisterAt(cx, assemble.SessionTools, "subagent", assemble.ToolsEntry{Order: 60,
+	component.RegisterAt(cx, assemble.SessionTools, PluginName, assemble.ToolsEntry{Order: 60,
 		Tools:   func() []*toolhub.Tool { return []*toolhub.Tool{t} },
 		Visible: func(sc *assemble.SessionCx) bool { return !sc.Child }})
 	return nil

@@ -22,7 +22,7 @@ func startWorkspace(t *testing.T) *Runtime {
 	t.Setenv("TENON_BASE_URL", "")
 	t.Setenv("TENON_MODEL", "")
 	extra := root + "/extra.toml"
-	if err := os.WriteFile(extra, []byte("[[plugin]]\nname = \"subagent\"\nenabled = true\n"), 0o644); err != nil {
+	if err := os.WriteFile(extra, []byte("[[plugin]]\nname = \"session-start\"\nenabled = true\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	rt, err := Start(StartOptions{Flags: Flags{Workdir: root, Profile: extra, Mode: "workspace", MaxSteps: -1},
@@ -69,13 +69,13 @@ func TestSpawnOverrideNarrows(t *testing.T) {
 	}
 
 	// tools：主会话没有的去掉并说明；子会话没有委派工具，也加不进。
-	avail, _, notes, _ := run("p/sub-1", host.SpawnOptions{Tools: []string{"read_file", "subagent", "nope_*"}}, "", "")
+	avail, _, notes, _ := run("p/sub-1", host.SpawnOptions{Tools: []string{"read_file", "session_start", "nope_*"}}, "", "")
 	for _, n := range avail {
 		if n != "read_file" && n != "read_artifact" {
 			t.Fatalf("tools 应收窄为 read_file：%v", avail)
 		}
 	}
-	if len(notes) != 1 || !strings.Contains(notes[0], "tools 已收窄为 read_file") || !strings.Contains(notes[0], "subagent") {
+	if len(notes) != 1 || !strings.Contains(notes[0], "tools 已收窄为 read_file") || !strings.Contains(notes[0], "session_start") {
 		t.Fatalf("tools 收窄说明：%v", notes)
 	}
 

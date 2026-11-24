@@ -1,4 +1,4 @@
-package subagent
+package sessions
 
 // 委派参数开关（Mortise docs/62 K5、docs/56 第 2 节）：开着的参数才出现在 schema 里；关着的即使模型传了也不生效；
 // 打开的参数经 host.SpawnWith 交给子会话构造，收窄说明写进工具结果。

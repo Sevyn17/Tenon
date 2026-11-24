@@ -1,6 +1,8 @@
-// Package subagent 提供委派工具：把一段任务派给子智能体（独立子会话），
-// 等它完成后把结果交回父会话。
-package subagent
+// Package sessions 提供 session_start（Mortise docs/70、docs/73 S1）：给某个智能体新建会话并交给它第一条消息。
+// 本版只实现子会话同步委派（relation=child、reply=wait）：跑子会话一个回合，把最终回答交回创建者会话。
+// relation=independent、reply=notify|none 已在 schema 里登记，调用时返回"随 T3 提供"。
+// 子会话 origin 字面量仍是 "subagent"（宿主据此判断子会话，docs/73 R1），内置临时智能体定义名仍是 "subagent"。
+package sessions
 
 import (
 	"context"
@@ -15,6 +17,43 @@ import (
 	"github.com/Sevyn17/tenon/runtime/tasks"
 	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
+
+// 名字。
+const (
+	PluginName = "session-start" // 组件名（profile 键、[use.session-start]）
+	ToolName   = "session_start" // 模型工具名
+	// Origin 子会话行的 origin（不改，宿主按它判断子会话）。
+	Origin = "subagent"
+)
+
+// relation / reply 取值。
+const (
+	RelationChild       = "child"
+	RelationIndependent = "independent"
+	ReplyWait           = "wait"
+	ReplyNotify         = "notify"
+	ReplyNone           = "none"
+)
+
+// unsupported 本版不支持的 relation / reply 取值返回说明；空串与已实现的取值返回 ""。
+// 其它取值（拼错的）按 invalid 说明，模型据此改参数。
+func unsupported(relation, reply string) string {
+	switch relation {
+	case "", RelationChild:
+	case RelationIndependent:
+		return "relation=independent（独立会话）本版本暂不支持，随 T3 提供；请用 child"
+	default:
+		return fmt.Sprintf("relation 只能是 %s 或 %s，得到 %q", RelationChild, RelationIndependent, relation)
+	}
+	switch reply {
+	case "", ReplyWait:
+	case ReplyNotify, ReplyNone:
+		return fmt.Sprintf("reply=%s 本版本暂不支持，随 T3 提供；请用 wait", reply)
+	default:
+		return fmt.Sprintf("reply 只能是 %s、%s 或 %s，得到 %q", ReplyWait, ReplyNotify, ReplyNone, reply)
+	}
+	return ""
+}
 
 // SubagentTimeout 委派工具默认超时（子回合可能很长）。
 const SubagentTimeout = 30 * time.Minute
@@ -44,7 +83,11 @@ func schemaFor(p Params) json.RawMessage {
 	props := map[string]any{
 		"task":    map[string]any{"type": "string", "description": "自包含的任务说明"},
 		"session": map[string]any{"type": "string", "description": "可选：续用的子会话 id（续用时沿用创建时的设置，本次的覆盖参数不生效）"},
-		"agent":   map[string]any{"type": "string", "description": "可选：子智能体用的定义名；只能选本会话定义 [use.subagent] agents 里列出的，缺省为通用子智能体"},
+		"agent":   map[string]any{"type": "string", "description": "可选：执行的智能体定义名；只能选本会话定义 [use.session-start] agents 里列出的；缺省为临时智能体"},
+		"relation": map[string]any{"type": "string", "enum": []string{RelationChild, RelationIndependent},
+			"description": "新会话与本会话的关系：child（缺省，子会话，归本会话管）；independent 暂不支持"},
+		"reply": map[string]any{"type": "string", "enum": []string{ReplyWait, ReplyNotify, ReplyNone},
+			"description": "结果怎么回来：wait（缺省，等它做完并返回最终回答）；notify、none 暂不支持"},
 	}
 	if p.SystemPrompt {
 		props["system_prompt"] = map[string]any{"type": "string", "description": "可选：追加在子智能体基础提示词之后的系统提示，用来定角色、定输出格式"}
@@ -70,9 +113,10 @@ func ToolWithParams(h *host.Host, f host.Factory, sink tasks.Sink, p Params) *to
 	yes := true
 	var locks childLocks
 	return &toolhub.Tool{
-		Spec: session.ToolSpec{Name: "subagent",
-			Description: "把一个独立、边界清楚的子任务委派给子智能体（全新上下文，同样的工具）。task 要自包含：子智能体看不到当前对话。" +
-				"返回子智能体的最终回答与子会话 id；传 session 可继续同一个子会话追问。",
+		Spec: session.ToolSpec{Name: ToolName,
+			Description: "把一个独立、边界清楚的子任务交给另一个智能体，在新的子会话里完成（全新上下文）。适合可以并行、或需要隔离上下文的子任务；" +
+				"一两步就能做完的事自己做，不要委派。task 要自包含：对方看不到当前对话。" +
+				"返回最终回答与子会话 id；传 session 可在同一个子会话里追问。",
 			Schema: schemaFor(p)},
 		Risk:     toolhub.Write,
 		Parallel: &yes,
@@ -81,12 +125,16 @@ func ToolWithParams(h *host.Host, f host.Factory, sink tasks.Sink, p Params) *to
 		Call: func(ctx context.Context, cx *toolhub.Cx, raw json.RawMessage) (toolhub.Output, error) {
 			var a struct {
 				Task, Session, Agent string
+				Relation, Reply      string
 				SystemPrompt         string `json:"system_prompt"`
 				Model, Mode          string
 				Tools                []string
 			}
 			if err := json.Unmarshal(raw, &a); err != nil || strings.TrimSpace(a.Task) == "" {
 				return toolhub.Failf("task 不能为空"), nil
+			}
+			if msg := unsupported(strings.TrimSpace(a.Relation), strings.TrimSpace(a.Reply)); msg != "" {
+				return toolhub.Failf("%s", msg), nil
 			}
 			// 关着的参数即使模型传了也不生效（schema 里没有它）。
 			var o host.SpawnOptions
@@ -124,12 +172,12 @@ func ToolWithParams(h *host.Host, f host.Factory, sink tasks.Sink, p Params) *to
 			cx.ChildSessionID = id
 			unlock := locks.lock(id)
 			defer unlock()
-			t := tasks.Task{ID: id, Session: cx.SessionID, Kind: tasks.KindSubagent, Title: taskTitle(a.Task),
+			t := tasks.Task{ID: id, Session: cx.SessionID, Kind: tasks.KindSession, Title: taskTitle(a.Task),
 				Status: tasks.Running, Started: time.Now()}
 			if sink != nil {
 				sink.Started(t)
 			}
-			out, _, err := h.SpawnWith(ctx, cx.SessionID, id, "subagent", def, f, a.Task, h.Untrusted(cx.SessionID), o)
+			out, _, err := h.SpawnWith(ctx, cx.SessionID, id, Origin, def, f, a.Task, h.Untrusted(cx.SessionID), o)
 			if sink != nil {
 				t.Ended = time.Now()
 				switch {
@@ -206,23 +254,23 @@ func (c *childLocks) lock(id string) func() {
 	}
 }
 
-// UseConfig 定义里的 [use.subagent]：本智能体派子智能体时可选的定义（2026-11-04 审查 P2：原先只能用内置的通用定义）。
+// UseConfig 定义里的 [use.session-start]：本智能体派子智能体时可选的定义（2026-11-04 审查 P2：原先只能用内置的通用定义）。
 // 子会话仍不越过父会话（父定义的 tools 白名单与 [use.permission] 上限都叠加到子会话上，见 assemble.ParentLimits）。
 //
-//	[use.subagent]
+//	[use.session-start]
 //	agents = ["reviewer", "researcher"]
 type UseConfig struct {
 	Agents []string `toml:"agents" limit:"intersect" description:"subagent 工具的 agent 参数可选的定义名；不写 = 只能用通用子智能体"`
 }
 
-// pickDefinition 本次委派用的定义：没给 = 内置通用定义；给了必须在 [use.subagent] agents 里。
+// pickDefinition 本次委派用的定义：没给 = 内置通用定义；给了必须在 [use.session-start] agents 里。
 func pickDefinition(cx *toolhub.Cx, name string) (string, error) {
 	if name == "" || name == Definition {
 		return Definition, nil
 	}
 	var u UseConfig
 	if cx.Ctx != nil {
-		if err := cx.Ctx.Config("subagent", &u); err != nil {
+		if err := cx.Ctx.Config(PluginName, &u); err != nil {
 			return "", err
 		}
 	}
@@ -232,7 +280,7 @@ func pickDefinition(cx *toolhub.Cx, name string) (string, error) {
 		}
 	}
 	if len(u.Agents) == 0 {
-		return "", fmt.Errorf("本会话的定义没有列出可委派的智能体（[use.subagent] agents），agent 只能留空")
+		return "", fmt.Errorf("本会话的定义没有列出可委派的智能体（[use.session-start] agents），agent 只能留空")
 	}
 	return "", fmt.Errorf("智能体 %s 不在可委派列表里（%s）", name, strings.Join(u.Agents, "、"))
 }

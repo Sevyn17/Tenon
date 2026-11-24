@@ -35,7 +35,7 @@ func startLive(t *testing.T) *live {
 	home := t.TempDir()
 	t.Setenv("TENON_HOME", home)
 	extra := filepath.Join(t.TempDir(), "live-profile.toml")
-	if err := os.WriteFile(extra, []byte("[[plugin]]\nname = \"subagent\"\nenabled = true\n[[plugin]]\nname = \"workgroup\"\nenabled = true\n"), 0o644); err != nil {
+	if err := os.WriteFile(extra, []byte("[[plugin]]\nname = \"session-start\"\nenabled = true\n[[plugin]]\nname = \"workgroup\"\nenabled = true\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(root, "note.txt"), []byte("hello tenon\n"), 0o644); err != nil {
@@ -56,7 +56,7 @@ func startLive(t *testing.T) *live {
 	defs := agentdef.Mem()
 	if err := defs.Put(agentdef.Ref{Namespace: agentdef.Platform, Name: "reader"}, agentdef.Files{agentdef.ManifestName: []byte(
 		"format = \"tenon/v1\"\nid = \"reader\"\ndescription = \"只读的智能体\"\n" +
-			"tools = [\"read_file\", \"glob\", \"write_file\", \"subagent\"]\n[use.permission]\nmode = \"read-only\"\n")}); err != nil {
+			"tools = [\"read_file\", \"glob\", \"write_file\", \"session_start\"]\n[use.permission]\nmode = \"read-only\"\n")}); err != nil {
 		t.Fatal(err)
 	}
 	built.Builder.Definitions = agentdef.Multi(rt.Rt.Defs, defs)
@@ -154,7 +154,7 @@ func TestLive(t *testing.T) {
 
 	t.Run("2 主会话调子智能体", func(t *testing.T) {
 		l.t = t
-		txt := l.ask("sub", "", "用 subagent 工具委派一个子任务：读工作区的 note.txt，统计字符数（不含换行）。"+
+		txt := l.ask("sub", "", "用 session_start 工具委派一个子任务：读工作区的 note.txt，统计字符数（不含换行）。"+
 			"拿到子智能体的结果后告诉我这个数字。不要自己读文件。", 6*time.Minute, contains("11"))
 		kids := l.children("sub")
 		if len(kids) == 0 {
@@ -176,7 +176,7 @@ func TestLive(t *testing.T) {
 
 	t.Run("4 低权限智能体委派写文件被拦下", func(t *testing.T) {
 		l.t = t
-		txt := l.ask("guard", "reader", "用 subagent 工具委派子智能体：在工作区写文件 secret.txt，内容 pwned。"+
+		txt := l.ask("guard", "reader", "用 session_start 工具委派子智能体：在工作区写文件 secret.txt，内容 pwned。"+
 			"不要自己写；把子智能体的原话结果告诉我。", 6*time.Minute, contains(`"assistant"`))
 		if _, err := os.Stat(filepath.Join(l.root, "secret.txt")); err == nil {
 			t.Fatal("只读上限下的子智能体不应写出文件")

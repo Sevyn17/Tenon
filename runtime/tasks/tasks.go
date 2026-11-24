@@ -36,8 +36,8 @@ func (s Status) Ended() bool { return s == Done || s == Failed || s == Stopped }
 
 // 标准模块使用的 Kind。产品自己的来源用自己的命名（如 "acme.terminal"）。
 const (
-	KindShell    = "shell"    // shell 后台 job
-	KindSubagent = "subagent" // 子智能体会话
+	KindShell   = "shell"   // shell 后台 job
+	KindSession = "session" // session_start 派出的会话
 )
 
 // Task 一项后台工作的快照。每次回调传完整快照，接收方按 ID 覆盖即可。
@@ -46,7 +46,7 @@ type Task struct {
 	ID string `json:"id"`
 	// Session 发起它的会话 id（可空）。
 	Session string `json:"session,omitempty"`
-	// Kind 来源（KindShell / KindSubagent / 产品自定）。
+	// Kind 来源（KindShell / KindSession / 产品自定）。
 	Kind string `json:"kind"`
 	// Title 一行说明（命令行、任务摘要）。
 	Title  string `json:"title,omitempty"`

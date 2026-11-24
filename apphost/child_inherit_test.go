@@ -22,7 +22,7 @@ func TestChildInheritsParentLimits(t *testing.T) {
 	t.Setenv("TENON_BASE_URL", "")
 	t.Setenv("TENON_MODEL", "")
 	extra := root + "/extra.toml"
-	if err := os.WriteFile(extra, []byte("[[plugin]]\nname = \"subagent\"\nenabled = true\n"), 0o644); err != nil {
+	if err := os.WriteFile(extra, []byte("[[plugin]]\nname = \"session-start\"\nenabled = true\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	rt, err := Start(StartOptions{Flags: Flags{Workdir: root, Profile: extra, Yes: true, MaxSteps: -1},
@@ -43,7 +43,7 @@ func TestChildInheritsParentLimits(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	put("lead", "tools = [\"read_file\", \"glob\", \"write_file\", \"subagent\"]\n[use.permission]\nmode = \"read-only\"\n")
+	put("lead", "tools = [\"read_file\", \"glob\", \"write_file\", \"session_start\"]\n[use.permission]\nmode = \"read-only\"\n")
 	built.Builder.Definitions = agentdef.Multi(rt.Rt.Defs, defs)
 	ctx := context.Background()
 	p, pcfg, err := built.Builder.Build("p", "lead", false)

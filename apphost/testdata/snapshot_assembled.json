@@ -337,16 +337,33 @@
             }
           },
           {
-            "Name": "subagent",
-            "Description": "把一个独立、边界清楚的子任务委派给子智能体（全新上下文，同样的工具）。task 要自包含：子智能体看不到当前对话。返回子智能体的最终回答与子会话 id；传 session 可继续同一个子会话追问。",
+            "Name": "session_start",
+            "Description": "把一个独立、边界清楚的子任务交给另一个智能体，在新的子会话里完成（全新上下文）。适合可以并行、或需要隔离上下文的子任务；一两步就能做完的事自己做，不要委派。task 要自包含：对方看不到当前对话。返回最终回答与子会话 id；传 session 可在同一个子会话里追问。",
             "Schema": {
               "properties": {
                 "agent": {
-                  "description": "可选：子智能体用的定义名；只能选本会话定义 [use.subagent] agents 里列出的，缺省为通用子智能体",
+                  "description": "可选：执行的智能体定义名；只能选本会话定义 [use.session-start] agents 里列出的；缺省为临时智能体",
                   "type": "string"
                 },
                 "mode": {
                   "description": "可选：子智能体的权限档位（read-only / ask / workspace / full 或自定义档位）；最多与主会话一样宽，更宽的按主会话档位；缺省继承主会话",
+                  "type": "string"
+                },
+                "relation": {
+                  "description": "新会话与本会话的关系：child（缺省，子会话，归本会话管）；independent 暂不支持",
+                  "enum": [
+                    "child",
+                    "independent"
+                  ],
+                  "type": "string"
+                },
+                "reply": {
+                  "description": "结果怎么回来：wait（缺省，等它做完并返回最终回答）；notify、none 暂不支持",
+                  "enum": [
+                    "wait",
+                    "notify",
+                    "none"
+                  ],
                   "type": "string"
                 },
                 "session": {
@@ -861,16 +878,33 @@
             }
           },
           {
-            "Name": "subagent",
-            "Description": "把一个独立、边界清楚的子任务委派给子智能体（全新上下文，同样的工具）。task 要自包含：子智能体看不到当前对话。返回子智能体的最终回答与子会话 id；传 session 可继续同一个子会话追问。",
+            "Name": "session_start",
+            "Description": "把一个独立、边界清楚的子任务交给另一个智能体，在新的子会话里完成（全新上下文）。适合可以并行、或需要隔离上下文的子任务；一两步就能做完的事自己做，不要委派。task 要自包含：对方看不到当前对话。返回最终回答与子会话 id；传 session 可在同一个子会话里追问。",
             "Schema": {
               "properties": {
                 "agent": {
-                  "description": "可选：子智能体用的定义名；只能选本会话定义 [use.subagent] agents 里列出的，缺省为通用子智能体",
+                  "description": "可选：执行的智能体定义名；只能选本会话定义 [use.session-start] agents 里列出的；缺省为临时智能体",
                   "type": "string"
                 },
                 "mode": {
                   "description": "可选：子智能体的权限档位（read-only / ask / workspace / full 或自定义档位）；最多与主会话一样宽，更宽的按主会话档位；缺省继承主会话",
+                  "type": "string"
+                },
+                "relation": {
+                  "description": "新会话与本会话的关系：child（缺省，子会话，归本会话管）；independent 暂不支持",
+                  "enum": [
+                    "child",
+                    "independent"
+                  ],
+                  "type": "string"
+                },
+                "reply": {
+                  "description": "结果怎么回来：wait（缺省，等它做完并返回最终回答）；notify、none 暂不支持",
+                  "enum": [
+                    "wait",
+                    "notify",
+                    "none"
+                  ],
                   "type": "string"
                 },
                 "session": {
@@ -1407,16 +1441,33 @@
             }
           },
           {
-            "Name": "subagent",
-            "Description": "把一个独立、边界清楚的子任务委派给子智能体（全新上下文，同样的工具）。task 要自包含：子智能体看不到当前对话。返回子智能体的最终回答与子会话 id；传 session 可继续同一个子会话追问。",
+            "Name": "session_start",
+            "Description": "把一个独立、边界清楚的子任务交给另一个智能体，在新的子会话里完成（全新上下文）。适合可以并行、或需要隔离上下文的子任务；一两步就能做完的事自己做，不要委派。task 要自包含：对方看不到当前对话。返回最终回答与子会话 id；传 session 可在同一个子会话里追问。",
             "Schema": {
               "properties": {
                 "agent": {
-                  "description": "可选：子智能体用的定义名；只能选本会话定义 [use.subagent] agents 里列出的，缺省为通用子智能体",
+                  "description": "可选：执行的智能体定义名；只能选本会话定义 [use.session-start] agents 里列出的；缺省为临时智能体",
                   "type": "string"
                 },
                 "mode": {
                   "description": "可选：子智能体的权限档位（read-only / ask / workspace / full 或自定义档位）；最多与主会话一样宽，更宽的按主会话档位；缺省继承主会话",
+                  "type": "string"
+                },
+                "relation": {
+                  "description": "新会话与本会话的关系：child（缺省，子会话，归本会话管）；independent 暂不支持",
+                  "enum": [
+                    "child",
+                    "independent"
+                  ],
+                  "type": "string"
+                },
+                "reply": {
+                  "description": "结果怎么回来：wait（缺省，等它做完并返回最终回答）；notify、none 暂不支持",
+                  "enum": [
+                    "wait",
+                    "notify",
+                    "none"
+                  ],
                   "type": "string"
                 },
                 "session": {
@@ -1909,16 +1960,33 @@
             }
           },
           {
-            "Name": "subagent",
-            "Description": "把一个独立、边界清楚的子任务委派给子智能体（全新上下文，同样的工具）。task 要自包含：子智能体看不到当前对话。返回子智能体的最终回答与子会话 id；传 session 可继续同一个子会话追问。",
+            "Name": "session_start",
+            "Description": "把一个独立、边界清楚的子任务交给另一个智能体，在新的子会话里完成（全新上下文）。适合可以并行、或需要隔离上下文的子任务；一两步就能做完的事自己做，不要委派。task 要自包含：对方看不到当前对话。返回最终回答与子会话 id；传 session 可在同一个子会话里追问。",
             "Schema": {
               "properties": {
                 "agent": {
-                  "description": "可选：子智能体用的定义名；只能选本会话定义 [use.subagent] agents 里列出的，缺省为通用子智能体",
+                  "description": "可选：执行的智能体定义名；只能选本会话定义 [use.session-start] agents 里列出的；缺省为临时智能体",
                   "type": "string"
                 },
                 "mode": {
                   "description": "可选：子智能体的权限档位（read-only / ask / workspace / full 或自定义档位）；最多与主会话一样宽，更宽的按主会话档位；缺省继承主会话",
+                  "type": "string"
+                },
+                "relation": {
+                  "description": "新会话与本会话的关系：child（缺省，子会话，归本会话管）；independent 暂不支持",
+                  "enum": [
+                    "child",
+                    "independent"
+                  ],
+                  "type": "string"
+                },
+                "reply": {
+                  "description": "结果怎么回来：wait（缺省，等它做完并返回最终回答）；notify、none 暂不支持",
+                  "enum": [
+                    "wait",
+                    "notify",
+                    "none"
+                  ],
                   "type": "string"
                 },
                 "session": {
@@ -2428,16 +2496,33 @@
             }
           },
           {
-            "Name": "subagent",
-            "Description": "把一个独立、边界清楚的子任务委派给子智能体（全新上下文，同样的工具）。task 要自包含：子智能体看不到当前对话。返回子智能体的最终回答与子会话 id；传 session 可继续同一个子会话追问。",
+            "Name": "session_start",
+            "Description": "把一个独立、边界清楚的子任务交给另一个智能体，在新的子会话里完成（全新上下文）。适合可以并行、或需要隔离上下文的子任务；一两步就能做完的事自己做，不要委派。task 要自包含：对方看不到当前对话。返回最终回答与子会话 id；传 session 可在同一个子会话里追问。",
             "Schema": {
               "properties": {
                 "agent": {
-                  "description": "可选：子智能体用的定义名；只能选本会话定义 [use.subagent] agents 里列出的，缺省为通用子智能体",
+                  "description": "可选：执行的智能体定义名；只能选本会话定义 [use.session-start] agents 里列出的；缺省为临时智能体",
                   "type": "string"
                 },
                 "mode": {
                   "description": "可选：子智能体的权限档位（read-only / ask / workspace / full 或自定义档位）；最多与主会话一样宽，更宽的按主会话档位；缺省继承主会话",
+                  "type": "string"
+                },
+                "relation": {
+                  "description": "新会话与本会话的关系：child（缺省，子会话，归本会话管）；independent 暂不支持",
+                  "enum": [
+                    "child",
+                    "independent"
+                  ],
+                  "type": "string"
+                },
+                "reply": {
+                  "description": "结果怎么回来：wait（缺省，等它做完并返回最终回答）；notify、none 暂不支持",
+                  "enum": [
+                    "wait",
+                    "notify",
+                    "none"
+                  ],
                   "type": "string"
                 },
                 "session": {
@@ -2640,7 +2725,7 @@
               {
                 "ID": "id1",
                 "WireID": "id1",
-                "Name": "subagent",
+                "Name": "session_start",
                 "Args": {
                   "task": "子任务"
                 }
@@ -2973,16 +3058,33 @@
             }
           },
           {
-            "Name": "subagent",
-            "Description": "把一个独立、边界清楚的子任务委派给子智能体（全新上下文，同样的工具）。task 要自包含：子智能体看不到当前对话。返回子智能体的最终回答与子会话 id；传 session 可继续同一个子会话追问。",
+            "Name": "session_start",
+            "Description": "把一个独立、边界清楚的子任务交给另一个智能体，在新的子会话里完成（全新上下文）。适合可以并行、或需要隔离上下文的子任务；一两步就能做完的事自己做，不要委派。task 要自包含：对方看不到当前对话。返回最终回答与子会话 id；传 session 可在同一个子会话里追问。",
             "Schema": {
               "properties": {
                 "agent": {
-                  "description": "可选：子智能体用的定义名；只能选本会话定义 [use.subagent] agents 里列出的，缺省为通用子智能体",
+                  "description": "可选：执行的智能体定义名；只能选本会话定义 [use.session-start] agents 里列出的；缺省为临时智能体",
                   "type": "string"
                 },
                 "mode": {
                   "description": "可选：子智能体的权限档位（read-only / ask / workspace / full 或自定义档位）；最多与主会话一样宽，更宽的按主会话档位；缺省继承主会话",
+                  "type": "string"
+                },
+                "relation": {
+                  "description": "新会话与本会话的关系：child（缺省，子会话，归本会话管）；independent 暂不支持",
+                  "enum": [
+                    "child",
+                    "independent"
+                  ],
+                  "type": "string"
+                },
+                "reply": {
+                  "description": "结果怎么回来：wait（缺省，等它做完并返回最终回答）；notify、none 暂不支持",
+                  "enum": [
+                    "wait",
+                    "notify",
+                    "none"
+                  ],
                   "type": "string"
                 },
                 "session": {

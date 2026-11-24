@@ -1,4 +1,4 @@
-package subagent
+package sessions
 
 import (
 	"context"
@@ -21,9 +21,9 @@ func ctxWith(use string) *callctx.Ctx {
 	return c
 }
 
-// subagent 能选定义，但只能选父定义 [use.subagent] agents 列出的（2026-11-04 审查 P2：原先只能用通用定义）。
+// subagent 能选定义，但只能选父定义 [use.session-start] agents 列出的（2026-11-04 审查 P2：原先只能用通用定义）。
 func TestPickDefinition(t *testing.T) {
-	allow := ctxWith(`{"subagent":{"agents":["reviewer"]}}`)
+	allow := ctxWith(`{"session-start":{"agents":["reviewer"]}}`)
 	for _, c := range []struct {
 		ctx  *callctx.Ctx
 		name string
@@ -66,7 +66,7 @@ func TestSubagentToolUsesChosenDefinition(t *testing.T) {
 			&session.Config{Model: "m", Policy: session.DefaultPolicy()}, nil
 	}
 	tool := Tool(h, h.New)
-	cx := &toolhub.Cx{SessionID: "p", CallID: "call-0000000000aa", Tool: tool, Ctx: ctxWith(`{"subagent":{"agents":["reviewer"]}}`)}
+	cx := &toolhub.Cx{SessionID: "p", CallID: "call-0000000000aa", Tool: tool, Ctx: ctxWith(`{"session-start":{"agents":["reviewer"]}}`)}
 	out, err := tool.Call(ctx, cx, json.RawMessage(`{"task":"看看","agent":"reviewer"}`))
 	if err != nil || out.Status.State != "ok" {
 		t.Fatalf("委派失败：%v %+v", err, out)

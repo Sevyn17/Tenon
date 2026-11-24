@@ -9,7 +9,7 @@ import (
 	"github.com/Sevyn17/tenon"
 
 	_ "github.com/Sevyn17/tenon/modules/collab/group"
-	_ "github.com/Sevyn17/tenon/modules/collab/subagent"
+	_ "github.com/Sevyn17/tenon/modules/collab/sessions"
 	_ "github.com/Sevyn17/tenon/modules/collab/workgroup"
 	_ "github.com/Sevyn17/tenon/modules/context/compact-basic"
 	_ "github.com/Sevyn17/tenon/modules/context/instructions"
@@ -61,7 +61,7 @@ var defaultComponents = []string{
 	"shell",
 	"todo",
 	"web",
-	"subagent",
+	"session-start",
 	"workgroup",
 	"group",
 	"events",

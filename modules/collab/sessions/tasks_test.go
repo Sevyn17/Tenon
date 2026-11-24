@@ -1,4 +1,4 @@
-package subagent
+package sessions
 
 // K2（Mortise docs/62）：委派开始 / 结束向 tasks.Sink 登记。
 
@@ -60,7 +60,7 @@ func TestSubagentReportsTasks(t *testing.T) {
 		t.Fatalf("登记序列：%v", sink.ev)
 	}
 	st, en := sink.ts[0], sink.ts[1]
-	if st.ID != "p/sub-456789ab" || st.Session != "p" || st.Kind != tasks.KindSubagent || st.Title != "做事" || st.Status != tasks.Running {
+	if st.ID != "p/sub-456789ab" || st.Session != "p" || st.Kind != tasks.KindSession || st.Title != "做事" || st.Status != tasks.Running {
 		t.Fatalf("started：%+v", st)
 	}
 	if en.ID != st.ID || en.Status != tasks.Done || en.Summary != "re:做事" || en.Ended.IsZero() || en.ExitCode != nil {

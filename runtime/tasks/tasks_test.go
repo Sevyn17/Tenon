@@ -23,7 +23,7 @@ func TestTaskJSON(t *testing.T) {
 	if out.ID != in.ID || out.Status != Failed || out.ExitCode == nil || *out.ExitCode != 2 || !out.Ended.Equal(in.Ended) {
 		t.Fatalf("往返不一致：%s → %+v", b, out)
 	}
-	run, _ := json.Marshal(Task{ID: "x", Kind: KindSubagent, Status: Running, Started: time.Unix(1, 0)})
+	run, _ := json.Marshal(Task{ID: "x", Kind: KindSession, Status: Running, Started: time.Unix(1, 0)})
 	if s := string(run); strings.Contains(s, "ended") || strings.Contains(s, "exit_code") {
 		t.Fatalf("进行中不应带 ended / exit_code：%s", s)
 	}
