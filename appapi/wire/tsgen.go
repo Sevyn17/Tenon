@@ -27,7 +27,7 @@ var tsTypes = []any{
 	ProtocolRange{}, HelloArgs{}, HelloResult{}, ExtensionInfo{}, SessionArgs{}, ListArgs{}, ListResult{}, UpdateArgs{}, FeedbackArgs{}, Feedback{}, FeedbackListResult{}, FollowupsArgs{}, FollowupsResult{}, CreateArgs{},
 	SubscribeArgs{}, EntriesArgs{}, EntriesResult{}, SendArgs{}, SendResult{}, SteerArgs{}, RewindArgs{},
 	QueuedInput{}, QueueChanged{}, UnqueueArgs{}, UnqueueResult{},
-	RewindResult{}, CompactArgs{}, CompactResult{}, ForkArgs{}, SettingsArgs{}, SettingsResult{}, ModelInfo{}, ModelsListResult{}, EffectiveModel{}, WorkspaceInfo{}, WorkspaceListResult{}, WorkspaceOpenArgs{}, WorkspaceOpenResult{}, WorkspaceReloadArgs{}, WorkspaceReloadResult{}, Response{},
+	RewindResult{}, CompactArgs{}, CompactResult{}, ForkArgs{}, SettingsArgs{}, SettingsResult{}, ModelInfo{}, ModelsListResult{}, EffectiveModel{}, WorkspaceInfo{}, WorkspaceListResult{}, LocateArgs{}, LocateResult{}, WorkspaceOpenArgs{}, WorkspaceOpenResult{}, WorkspaceReloadArgs{}, WorkspaceReloadResult{}, Response{},
 	RespondArgs{}, RespondResult{}, InteractionsResult{}, ModeInfo{}, ModeListResult{}, ModeSetArgs{},
 	ModeSetResult{}, ModeShowArgs{}, ModeItem{}, ModeShowResult{},
 	ModeItemDraft{}, ModeDraft{}, ModeSaveArgs{}, ModeSaveResult{}, ModeRemoveArgs{}, ModeRemoveResult{}, ModeSetDefaultArgs{}, ModeSetDefaultResult{},

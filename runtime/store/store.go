@@ -108,6 +108,14 @@ type TurnRangeStore interface {
 	TurnRange(ctx context.Context, id string, turn uint32) (from, to int, ok bool, err error)
 }
 
+// EntryLocator 可选：按条目 id 找它所在的回合（Mortise docs/72 B2，session.locate）。与 TurnRangeStore 一样不加进 Store：
+// 没实现的存储由 appapi 扫 Entries 兜底，只是查不到已回退的条目。
+type EntryLocator interface {
+	// EntryTurn 条目 entryID 所在回合。条目在当前日志里：rewound = false；已被回退移进归档：rewound = true。
+	// 会话或条目都不存在时 ok = false。
+	EntryTurn(ctx context.Context, id, entryID string) (turn uint32, rewound, ok bool, err error)
+}
+
 // InboxStore 会话输入队列（session-host D2 / D6）。
 type InboxStore interface {
 	// Admit 准入；true = 新写入，false = 同 id 已存在（含已消费）。

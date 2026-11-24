@@ -561,6 +561,39 @@ func (s *Store) Entries(ctx context.Context, id string, from, to int) ([]*sessio
 	return x.read(from, to)
 }
 
+// EntryTurn 条目所在回合（store.EntryLocator，Mortise docs/72 B2）：先查当前日志，再查回退归档。
+func (s *Store) EntryTurn(ctx context.Context, id, entryID string) (uint32, bool, bool, error) {
+	if err := s.lock(); err != nil {
+		return 0, false, false, err
+	}
+	defer s.mu.Unlock()
+	x := s.live(id)
+	if x == nil || entryID == "" {
+		return 0, false, false, nil
+	}
+	for _, e := range x.entries {
+		if eid, turn := entryIDTurn(e.body); eid == entryID {
+			return turn, false, true, nil
+		}
+	}
+	for _, a := range x.archive {
+		if eid, turn := entryIDTurn(a.body); eid == entryID {
+			return turn, true, true, nil
+		}
+	}
+	return 0, false, false, nil
+}
+
+// entryIDTurn 条目正文里的 id 与回合号。
+func entryIDTurn(body []byte) (string, uint32) {
+	var e struct {
+		ID   string `json:"id"`
+		Turn uint32 `json:"turn"`
+	}
+	_ = json.Unmarshal(body, &e)
+	return e.ID, e.Turn
+}
+
 // TurnRange 回合 turn 的条目区间（store.TurnRangeStore，客户端改进 M8 协议T15）：扫描条目，语义与 sqlite 一致。
 func (s *Store) TurnRange(ctx context.Context, id string, turn uint32) (int, int, bool, error) {
 	if err := s.lock(); err != nil {

@@ -1,6 +1,10 @@
 package wire
 
-import "encoding/json"
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+)
 
 // 错误码（10.7）：按客户端要做的决定划分。
 const (
@@ -74,6 +78,8 @@ type HelloResult struct {
 	// Workspace 当前工作区的键（与 SessionInfo.workspace 同一个值，客户端改进 M7）：缺省列表只列这个工作区的会话。
 	// 空 = 宿主不按工作区分（CLI 等），列表不过滤。
 	Workspace string `json:"workspace,omitempty"`
+	// WorkspaceID 当前工作区的稳定 id（WorkspaceID(workspace)，Mortise docs/72 B2）；workspace 为空时不给。
+	WorkspaceID string `json:"workspace_id,omitempty"`
 	// Extensions 装配的产品扩展（docs/61 3.2）；没有扩展时不给，旧客户端忽略。
 	Extensions []ExtensionInfo `json:"extensions,omitempty"`
 }
@@ -309,6 +315,8 @@ type SettingsArgs struct {
 
 // WorkspaceInfo 一个工作区（项目目录）。workspace.list 的一项、workspace.open 的结果。
 type WorkspaceInfo struct {
+	// ID 稳定 id（WorkspaceID：工作区键的 sha256 前 16 位十六进制）。地址栏、链接用它，不暴露路径；目录改名即新工作区。
+	ID      string `json:"id"`
 	Path    string `json:"path"` // 绝对路径
 	Name    string `json:"name"` // 最后一级目录名
 	Trusted bool   `json:"trusted,omitempty"`
@@ -319,9 +327,34 @@ type WorkspaceInfo struct {
 	Missing bool `json:"missing,omitempty"`
 }
 
+// WorkspaceID 工作区键（SessionInfo.workspace、hello.workspace 同一个值）的稳定 id：sha256 前 16 位十六进制。空键返回空。
+func WorkspaceID(key string) string {
+	if key == "" {
+		return ""
+	}
+	sum := sha256.Sum256([]byte(key))
+	return hex.EncodeToString(sum[:8])
+}
+
 // WorkspaceListResult workspace.list：当前工作区在前，其余按最近打开倒序。
 type WorkspaceListResult struct {
 	Items []WorkspaceInfo `json:"items"`
+}
+
+// LocateArgs session.locate（Mortise docs/72 B2）：会话属于哪个工作区；给了 entry 时再报它所在的回合。
+// 只给本机操作者（同 sessions.list {all_workspaces}）：会话不必属于当前工作区。
+type LocateArgs struct {
+	Session string `json:"session"`
+	Entry   string `json:"entry,omitempty"`
+}
+
+// LocateResult session.locate 的结果。Workspace 是会话行的工作区键（空 = 不属于任何工作区），WorkspaceID 是它的稳定 id
+// （WorkspaceInfo.id 同一算法）。给了 entry 才有 Turn / Rewound：Rewound = 条目已被回退移进归档；条目不存在返回 not_found。
+type LocateResult struct {
+	Workspace   string `json:"workspace"`
+	WorkspaceID string `json:"workspace_id,omitempty"`
+	Turn        uint32 `json:"turn,omitempty"`
+	Rewound     bool   `json:"rewound,omitempty"`
 }
 
 // WorkspaceOpenArgs workspace.open：切到另一个目录。成功后旧工作区的连接会被断开，客户端重连后 hello 报新的 workdir。

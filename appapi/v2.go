@@ -122,6 +122,7 @@ func init() {
 		"workspace.files":  bind((*App).WorkspaceFiles),
 		"models.list":      bind((*App).ModelsList),
 		"workspace.list":   bind((*App).WorkspaceList),
+		"session.locate":   bind((*App).Locate),
 		"workspace.open":   bind((*App).WorkspaceOpen),
 		"workspace.reload": bind((*App).WorkspaceReload),
 	})
@@ -224,7 +225,7 @@ func (v *App) Hello(_ context.Context, in wire.HelloArgs) (wire.HelloResult, err
 	}
 	return wire.HelloResult{Protocol: wire.Protocol, Server: appid.Name(), Principal: LocalPrincipal,
 		Capabilities: v.capabilities(), Model: o.Model, Workdir: o.Workdir, Trusted: o.Trusted, MaxOutput: MaxWireText,
-		Workspace: ws, Extensions: v.extInfos()}, nil
+		Workspace: ws, WorkspaceID: wire.WorkspaceID(ws), Extensions: v.extInfos()}, nil
 }
 
 // capabilities 按装配了哪些部件列出可选功能，界面据此决定显示哪些入口。
@@ -1533,13 +1534,74 @@ func (v *App) Settings(ctx context.Context, in wire.SettingsArgs) (wire.Settings
 // WorkspaceList 当前与最近打开的工作区。没有工作区管理器时只报当前目录。
 func (v *App) WorkspaceList(_ context.Context, _ wire.Empty) (wire.WorkspaceListResult, error) {
 	if v.o.Workspaces == nil {
-		return wire.WorkspaceListResult{Items: []wire.WorkspaceInfo{{Path: v.o.Workdir, Name: filepath.Base(v.o.Workdir), Trusted: v.o.Trusted, Current: true}}}, nil
+		return wire.WorkspaceListResult{Items: []wire.WorkspaceInfo{v.selfWorkspace()}}, nil
 	}
 	items := v.o.Workspaces.List()
 	if items == nil {
 		items = []wire.WorkspaceInfo{}
 	}
 	return wire.WorkspaceListResult{Items: items}, nil
+}
+
+// workspaceKey 当前工作区的键（Host.Workspace）；宿主不按工作区分时为空。
+func (v *App) workspaceKey() string {
+	if v.o.Host != nil {
+		return v.o.Host.Workspace
+	}
+	return ""
+}
+
+// selfWorkspace 没有工作区管理器时按本 App 的目录拼出当前工作区。id 按工作区键算（与 hello.workspace_id 一致），
+// 没有键时按工作目录算。
+func (v *App) selfWorkspace() wire.WorkspaceInfo {
+	key := v.workspaceKey()
+	if key == "" {
+		key = v.o.Workdir
+	}
+	return wire.WorkspaceInfo{ID: wire.WorkspaceID(key), Path: v.o.Workdir, Name: filepath.Base(v.o.Workdir), Trusted: v.o.Trusted, Current: true}
+}
+
+// Locate session.locate（Mortise docs/72 B2）：会话所属工作区；给了 entry 时报它所在回合与是否已被回退。
+// 不按当前工作区过滤（深链要先知道会话在哪个工作区才能决定切换还是只读查看）。
+func (v *App) Locate(ctx context.Context, in wire.LocateArgs) (wire.LocateResult, error) {
+	if err := need(in.Session); err != nil {
+		return wire.LocateResult{}, err
+	}
+	l, err := host.LoadHead(ctx, v.o.DB, in.Session)
+	if err != nil {
+		return wire.LocateResult{}, err
+	}
+	out := wire.LocateResult{Workspace: l.Meta.Workspace, WorkspaceID: wire.WorkspaceID(l.Meta.Workspace)}
+	if in.Entry == "" {
+		return out, nil
+	}
+	turn, rewound, found, err := v.entryTurn(ctx, in.Session, in.Entry)
+	if err != nil {
+		return wire.LocateResult{}, err
+	}
+	if !found {
+		return wire.LocateResult{}, Errorf(wire.CodeNotFound, "entry %s not found in session %s", in.Entry, in.Session)
+	}
+	out.Turn, out.Rewound = turn, rewound
+	return out, nil
+}
+
+// entryTurn 条目所在回合：存储实现了 store.EntryLocator 就走它（含回退归档）；否则扫当前日志兜底，
+// 已回退的条目找不到（ok = false）。
+func (v *App) entryTurn(ctx context.Context, id, entryID string) (uint32, bool, bool, error) {
+	if el, ok := v.o.DB.(store.EntryLocator); ok {
+		return el.EntryTurn(ctx, id, entryID)
+	}
+	es, err := v.o.DB.Entries(ctx, id, 0, -1)
+	if err != nil {
+		return 0, false, false, err
+	}
+	for _, e := range es {
+		if e.ID == entryID {
+			return e.Turn, false, true, nil
+		}
+	}
+	return 0, false, false, nil
 }
 
 // WorkspaceOpen 切换工作区。有会话正在跑回合时拒绝（not_idle）：切换会关掉本工作区的运行时，进行中的回合会被打断。

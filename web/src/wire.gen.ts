@@ -468,6 +468,7 @@ export interface HelloResult {
   trusted: boolean;
   max_output: number;
   workspace?: string;
+  workspace_id?: string;
   extensions?: ExtensionInfo[];
 }
 
@@ -687,6 +688,7 @@ export interface EffectiveModel {
 }
 
 export interface WorkspaceInfo {
+  id: string;
   path: string;
   name: string;
   trusted?: boolean;
@@ -697,6 +699,18 @@ export interface WorkspaceInfo {
 
 export interface WorkspaceListResult {
   items: WorkspaceInfo[];
+}
+
+export interface LocateArgs {
+  session: string;
+  entry?: string;
+}
+
+export interface LocateResult {
+  workspace: string;
+  workspace_id?: string;
+  turn?: number;
+  rewound?: boolean;
 }
 
 export interface WorkspaceOpenArgs {

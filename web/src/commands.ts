@@ -55,6 +55,7 @@ export const COMMANDS = [
   "mcp.remove",
   "mcp.setEnabled",
   "workspace.list",
+  "session.locate",
   "workspace.open",
   "workspace.reload",
   "workspace.trustPreview",
@@ -126,6 +127,7 @@ export interface CoreCommandMap {
   "mcp.remove": [W.MCPRemoveArgs, W.MCPEditResult];
   "mcp.setEnabled": [W.MCPSetEnabledArgs, W.MCPEditResult];
   "workspace.list": [W.Empty, W.WorkspaceListResult];
+  "session.locate": [W.LocateArgs, W.LocateResult];
   "workspace.open": [W.WorkspaceOpenArgs, W.WorkspaceOpenResult];
   "workspace.reload": [W.WorkspaceReloadArgs, W.WorkspaceReloadResult];
   "workspace.trustPreview": [W.Empty, W.WorkspaceTrustPreviewResult];

@@ -446,7 +446,7 @@ github.com/Sevyn17/tenon/appapi/wire: type Form struct{Text string; Submit strin
 github.com/Sevyn17/tenon/appapi/wire: type GenOptions struct{Header string; Import string; Base []any}
 github.com/Sevyn17/tenon/appapi/wire: func Generate(types []any, consts map[string]any, opts GenOptions) string
 github.com/Sevyn17/tenon/appapi/wire: type HelloArgs struct{Client string; Protocol ProtocolRange}
-github.com/Sevyn17/tenon/appapi/wire: type HelloResult struct{Protocol int; Server string; Principal Principal; Capabilities []string; Model string; Workdir string; Trusted bool; MaxOutput int; Workspace string; Extensions []ExtensionInfo}
+github.com/Sevyn17/tenon/appapi/wire: type HelloResult struct{Protocol int; Server string; Principal Principal; Capabilities []string; Model string; Workdir string; Trusted bool; MaxOutput int; Workspace string; WorkspaceID string; Extensions []ExtensionInfo}
 github.com/Sevyn17/tenon/appapi/wire: type Interaction struct{ID string; Session string; Turn uint32; Kind string; Title string; Approval *Approval; Question *Question; Choice *Choice; Form *Form; Confirm *Confirm; Plan *PlanPrompt; Schema encoding/json.RawMessage; Blocking *bool; Responders []string; Deadline int64; OpenedAt int64}
 github.com/Sevyn17/tenon/appapi/wire: const InteractionApproval untyped string
 github.com/Sevyn17/tenon/appapi/wire: const InteractionChoice untyped string
@@ -468,6 +468,8 @@ github.com/Sevyn17/tenon/appapi/wire: type ListResult struct{Items []SessionInfo
 github.com/Sevyn17/tenon/appapi/wire: type Live struct{Turn uint32; Streams []LiveStream; Tools []LiveTool}
 github.com/Sevyn17/tenon/appapi/wire: type LiveStream struct{StreamID string; EntryID string; Part string; Text string}
 github.com/Sevyn17/tenon/appapi/wire: type LiveTool struct{CallID string; Name string; Args encoding/json.RawMessage}
+github.com/Sevyn17/tenon/appapi/wire: type LocateArgs struct{Session string; Entry string}
+github.com/Sevyn17/tenon/appapi/wire: type LocateResult struct{Workspace string; WorkspaceID string; Turn uint32; Rewound bool}
 github.com/Sevyn17/tenon/appapi/wire: type LogCompacted struct{Upto int; EntryIdx int}
 github.com/Sevyn17/tenon/appapi/wire: type LogPos struct{Base int; Len int}
 github.com/Sevyn17/tenon/appapi/wire: type LogRewound struct{To int; VoidedInteractions []string}
@@ -636,7 +638,8 @@ github.com/Sevyn17/tenon/appapi/wire: const VersionSame untyped string
 github.com/Sevyn17/tenon/appapi/wire: const VersionUnknown untyped string
 github.com/Sevyn17/tenon/appapi/wire: const WorkModeExecute untyped string
 github.com/Sevyn17/tenon/appapi/wire: const WorkModePlan untyped string
-github.com/Sevyn17/tenon/appapi/wire: type WorkspaceInfo struct{Path string; Name string; Trusted bool; Current bool; OpenedAt int64; Missing bool}
+github.com/Sevyn17/tenon/appapi/wire: func WorkspaceID(key string) string
+github.com/Sevyn17/tenon/appapi/wire: type WorkspaceInfo struct{ID string; Path string; Name string; Trusted bool; Current bool; OpenedAt int64; Missing bool}
 github.com/Sevyn17/tenon/appapi/wire: type WorkspaceListResult struct{Items []WorkspaceInfo}
 github.com/Sevyn17/tenon/appapi/wire: type WorkspaceOpenArgs struct{Path string}
 github.com/Sevyn17/tenon/appapi/wire: type WorkspaceOpenResult struct{Workspace WorkspaceInfo}

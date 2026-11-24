@@ -9,7 +9,6 @@ package appapi
 import (
 	"context"
 	"errors"
-	"path/filepath"
 
 	"github.com/Sevyn17/tenon/appapi/wire"
 )
@@ -147,5 +146,5 @@ func (v *App) currentWorkspace() wire.WorkspaceInfo {
 			}
 		}
 	}
-	return wire.WorkspaceInfo{Path: v.o.Workdir, Name: filepath.Base(v.o.Workdir), Trusted: v.o.Trusted, Current: true}
+	return v.selfWorkspace()
 }

@@ -272,7 +272,7 @@ func (m *WorkspaceManager) List() []wire.WorkspaceInfo {
 }
 
 func (m *WorkspaceManager) info(path string, trusted, current bool) wire.WorkspaceInfo {
-	return wire.WorkspaceInfo{Path: path, Name: filepath.Base(path), Trusted: trusted, Current: current}
+	return wire.WorkspaceInfo{ID: wire.WorkspaceID(WorkspaceKey(path)), Path: path, Name: filepath.Base(path), Trusted: trusted, Current: current}
 }
 
 // —— 最近列表 ——
