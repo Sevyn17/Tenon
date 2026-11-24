@@ -398,7 +398,8 @@ func prepareAssembly(c *config) (*assemblyInput, error) {
 	if err != nil {
 		return nil, err
 	}
-	h := &host.Host{Bus: b, Workspace: c.workspace, DefaultDefinition: c.defaultAgent}
+	h := &host.Host{Bus: b, Workspace: c.workspace}
+	h.SetDefaultDef(c.defaultAgent)
 	inject := buildInject(c, h, ui, workdir, handle, hasSQL)
 	appDefs, builtin, toolNames, extra, err := resolveDefinitionsAndTools(c)
 	if err != nil {

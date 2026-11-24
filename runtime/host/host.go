@@ -156,9 +156,9 @@ type Host struct {
 	// Definitions 智能体定义来源（T5a）：投递 agent:<名> 时查该定义是否常驻。
 	// nil = 不查（按非常驻处理）。
 	Definitions agentdef.Source
-	// DefaultDefinition 新建顶层会话没给定义名时用的定义（Open 新建、Create 的 def 为空）；空 = 无定义会话。
-	// 只作用于新建：已有会话按会话行里记的定义名恢复，不受它影响。
-	DefaultDefinition string
+	// defaultDef 新建顶层会话没给定义名时用的定义（Open 新建、Create 的 def 为空）；空 = 无定义会话。
+	// 只作用于新建：已有会话按会话行里记的定义名恢复，不受它影响。运行期可改（用户切换默认智能体），经 DefaultDef / SetDefaultDef 读写。
+	defaultDef atomic.Value // string
 	// resident / residentMu 常驻判定缓存（定义来源运行期不变，避免每次投递全量 List）。
 	residentMu sync.Mutex
 	resident   map[string]bool
@@ -320,17 +320,26 @@ func (h *Host) Open(ctx context.Context, id string) (Handle, error) {
 		}
 	}
 	def := ""
-	if h.DefaultDefinition != "" {
+	if dd := h.DefaultDef(); dd != "" {
 		ok, err := h.DB.Exists(ctx, id)
 		if err != nil {
 			return Handle{}, err
 		}
 		if !ok { // 只有新建才用缺省定义；已有会话从会话行取
-			def = h.DefaultDefinition
+			def = dd
 		}
 	}
 	return h.open(ctx, id, def, f, nil)
 }
+
+// DefaultDef 新建顶层会话的缺省定义名（空 = 无定义会话）。并发安全。
+func (h *Host) DefaultDef() string {
+	v, _ := h.defaultDef.Load().(string)
+	return v
+}
+
+// SetDefaultDef 改缺省定义名，只影响之后新建的会话（已打开、已存在的会话不变）。并发安全。
+func (h *Host) SetDefaultDef(name string) { h.defaultDef.Store(name) }
 
 // OpenExisting 同 Open，但会话不存在时返回 ErrSessionNotFound，不新建（protocol 2 G1：任何命令都不隐式新建会话）。
 func (h *Host) OpenExisting(ctx context.Context, id string) (Handle, error) {
@@ -356,7 +365,7 @@ func (h *Host) Create(ctx context.Context, id, def string, bizMeta json.RawMessa
 		return Handle{}, fmt.Errorf("%w: 会话 %s 已存在", store.ErrConflict, id)
 	}
 	if def == "" {
-		def = h.DefaultDefinition
+		def = h.DefaultDef()
 	}
 	hd, err := h.open(ctx, id, def, h.New, func(ag *agent.Agent, cfg *session.Config) error {
 		_, err := ag.OpenAs(ctx, cfg, h.newMeta(ag, bizMeta))
