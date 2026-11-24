@@ -496,6 +496,7 @@ export interface ListArgs {
   parent?: string;
   archived?: string;
   agent?: string;
+  workspace_id?: string;
 }
 
 export interface ListResult {

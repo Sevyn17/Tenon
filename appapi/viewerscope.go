@@ -4,7 +4,7 @@ package appapi
 //
 // 会话库是用户级的，多个工作区共用；operator 是本机操作者，可以跨工作区读（数据页导出、智能体页汇总）。
 // viewer 是受限身份（远程只读观察者等），只给当前工作区：
-//   - sessions.list 带 all_workspaces → forbidden；
+//   - sessions.list 带 all_workspaces，或 workspace_id 不是当前工作区 → forbidden；
 //   - 按会话读的只读命令（session.get / entries / stats / followups / subscribe、changes.list / diff、
 //     interactions.list、artifact.get）
 //     指向别的工作区的会话 → forbidden。
@@ -31,12 +31,13 @@ func (v *App) viewerScope(ctx context.Context, p wire.Principal, cmd string, arg
 	var in struct {
 		Session       string `json:"session"`
 		AllWorkspaces bool   `json:"all_workspaces"`
+		WorkspaceID   string `json:"workspace_id"`
 	}
 	if len(args) > 0 {
 		_ = json.Unmarshal(args, &in) // 解析失败交给命令自己报参数错误
 	}
 	switch {
-	case cmd == "sessions.list" && in.AllWorkspaces:
+	case cmd == "sessions.list" && (in.AllWorkspaces || (in.WorkspaceID != "" && in.WorkspaceID != wire.WorkspaceID(v.o.Host.Workspace))):
 		return Errorf(wire.CodeForbidden, "principal %s (%s) may not list sessions of all workspaces", p.ID, p.Role)
 	case viewerSessionReads[cmd] && in.Session != "":
 		if err := v.inWorkspace(ctx, in.Session); err != nil {

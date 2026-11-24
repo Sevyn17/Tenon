@@ -115,6 +115,10 @@ func testSessionQuery(t *testing.T, st store.Store) {
 	if ls := list(store.SessionQuery{Agent: "coder"}); len(ls) != 1 || ls[0].AgentID != "coder" {
 		t.Errorf("行应带 AgentID：%+v", ls)
 	}
+	// 按工作区稳定 id（Mortise docs/74 W4a）：与 Workspace 等价，可与定义名叠加。
+	want("按工作区 id", store.SessionQuery{WorkspaceID: store.WorkspaceID("w2"), TopOnly: true}, "other")
+	want("按工作区 id 与定义名", store.SessionQuery{WorkspaceID: store.WorkspaceID("w"), Agent: "main", TopOnly: true}, "t1")
+	want("按不存在的工作区 id", store.SessionQuery{WorkspaceID: store.WorkspaceID("nope")})
 
 	// 归档三种取值。
 	want("只看已归档", store.SessionQuery{Workspace: "w", TopOnly: true, Archived: store.ArchivedOnly}, "arch")

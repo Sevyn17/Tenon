@@ -108,6 +108,17 @@ type SessionQuery struct {
 	Archived ArchivedFilter
 	// Agent 非空：只列绑定这个定义名的会话（SessionMeta.AgentID）。
 	Agent string
+	// WorkspaceID 非空：只列 WorkspaceID(Workspace) 等于它的会话（工作区稳定 id，Mortise docs/74 W4a）。
+	// 与 Workspace 同时给时两者都要满足；Unassigned 为真时忽略。
+	WorkspaceID string
+}
+
+// WorkspaceID 工作区键的稳定 id：sha256 前 16 位十六进制（与 wire.WorkspaceID 同一算法）；空键返回空。
+func WorkspaceID(key string) string {
+	if key == "" {
+		return ""
+	}
+	return HashBytes([]byte(key))[:16]
 }
 
 // SessionQueryStore 可选：按条件列会话（文本搜索、按 parent、归档）。客户端改进 M7 协议T12。

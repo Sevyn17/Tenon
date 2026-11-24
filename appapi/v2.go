@@ -351,6 +351,14 @@ func (v *App) SessionsList(ctx context.Context, in wire.ListArgs) (wire.ListResu
 	if in.AllWorkspaces {
 		ws = ""
 	}
+	// workspace_id（Mortise docs/74 W4a）：按工作区稳定 id 列。是当前工作区就按当前列；别的工作区视同
+	// all_workspaces 再按 id 下推到存储（viewer 由 viewerscope.go 拒绝）。
+	wsID := in.WorkspaceID
+	if wsID != "" && wsID == wire.WorkspaceID(v.o.Host.Workspace) {
+		wsID = ""
+	} else if wsID != "" {
+		ws = ""
+	}
 	// query / parent / archived（客户端改进 M7 协议T13）：要存储实现 SessionQueryStore（能力 sessions.query）。
 	archived, err := archivedFilter(in.Archived)
 	if err != nil {
@@ -361,7 +369,7 @@ func (v *App) SessionsList(ctx context.Context, in wire.ListArgs) (wire.ListResu
 		return wire.ListResult{}, invalid("query exceeds %d bytes", MaxQuery)
 	}
 	qs, canQuery := v.o.DB.(store.SessionQueryStore)
-	if (query != "" || in.Parent != "" || in.Archived != "" || in.Agent != "") && !canQuery {
+	if (query != "" || in.Parent != "" || in.Archived != "" || in.Agent != "" || wsID != "") && !canQuery {
 		return wire.ListResult{}, Errorf(wire.CodeUnsupported, "store does not support search, parent, archive or agent filters")
 	}
 	if in.Pinned && (query != "" || in.Parent != "") {
@@ -382,7 +390,7 @@ func (v *App) SessionsList(ctx context.Context, in wire.ListArgs) (wire.ListResu
 		if in.Unassigned {
 			return s.Workspace == ""
 		}
-		return ws == "" || s.Workspace == ws
+		return (ws == "" || s.Workspace == ws) && (wsID == "" || wire.WorkspaceID(s.Workspace) == wsID)
 	}
 	if in.Pinned { // 置顶的会话：单独一页，不分页
 		ms, ok := v.o.DB.(store.SessionMetaStore)
@@ -406,9 +414,9 @@ func (v *App) SessionsList(ctx context.Context, in wire.ListArgs) (wire.ListResu
 	switch {
 	case canQuery:
 		q := store.SessionQuery{Workspace: ws, Unassigned: in.Unassigned, Before: in.Cursor, Limit: limit, TopOnly: !in.All,
-			Parent: in.Parent, Text: query, Archived: archived, Agent: in.Agent}
+			Parent: in.Parent, Text: query, Archived: archived, Agent: in.Agent, WorkspaceID: wsID}
 		if in.Parent != "" { // 子会话跟随父会话的工作区，按 parent 列时不再按工作区、顶层过滤
-			q.Workspace, q.TopOnly = "", false
+			q.Workspace, q.WorkspaceID, q.TopOnly = "", "", false
 		}
 		items, err = qs.QuerySessions(ctx, q)
 	case in.Unassigned:

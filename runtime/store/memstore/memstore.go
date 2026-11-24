@@ -818,7 +818,8 @@ func (s *Store) query(q store.SessionQuery, archived store.ArchivedFilter) ([]st
 	var out []store.SessionInfo
 	for _, x := range s.sessions {
 		if x.status == "deleted" || (q.Before > 0 && x.updatedAt >= q.Before) || (q.TopOnly && !store.TopLevel(x.meta.ParentID, x.meta.Origin)) ||
-			(q.Parent != "" && x.meta.ParentID != q.Parent) || (q.Agent != "" && x.meta.AgentID != q.Agent) {
+			(q.Parent != "" && x.meta.ParentID != q.Parent) || (q.Agent != "" && x.meta.AgentID != q.Agent) ||
+			(q.WorkspaceID != "" && store.WorkspaceID(x.meta.Workspace) != q.WorkspaceID) {
 			continue
 		}
 		if q.Unassigned {

@@ -127,6 +127,10 @@ type ListArgs struct {
 	Archived string `json:"archived,omitempty"`
 	// Agent 非空：只列绑定这个定义名的会话（要能力 sessions.query）。工作区、all、archived 照常生效。
 	Agent string `json:"agent,omitempty"`
+	// WorkspaceID 非空：只列属于这个工作区（WorkspaceID(workspace) 等于它）的会话，优先于 all_workspaces。
+	// 不是当前工作区时等同跨工作区读，只给 operator（Mortise docs/74 W4a）。找不到对应工作区时返回空列表。
+	// 不能和 unassigned 同用。
+	WorkspaceID string `json:"workspace_id,omitempty"`
 }
 
 // sessions.list 的 archived 取值。

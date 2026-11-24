@@ -46,6 +46,34 @@ func TestViewerScope(t *testing.T) {
 	if err := call(op, "sessions.list", `{"all_workspaces":true}`); err != nil {
 		t.Fatalf("operator 带 all_workspaces 应放行：%v", err)
 	}
+	// workspace_id（docs/74 W4a）：别的工作区视同 all_workspaces，viewer 拒绝；当前工作区照常；operator 按 id 列。
+	if err := call(viewer, "sessions.list", `{"workspace_id":"`+wire.WorkspaceID("wb")+`"}`); code(err) != wire.CodeForbidden {
+		t.Fatalf("viewer 带别的工作区 workspace_id 应 forbidden，得到 %v", err)
+	}
+	if err := call(viewer, "sessions.list", `{"workspace_id":"`+wire.WorkspaceID("wa")+`"}`); err != nil {
+		t.Fatalf("viewer 带当前工作区 workspace_id 应照常：%v", err)
+	}
+	ids := func(c *Conn, args string) []string {
+		t.Helper()
+		raw, err := c.Call(ctx, "sessions.list", json.RawMessage(args))
+		if err != nil {
+			t.Fatalf("sessions.list %s：%v", args, err)
+		}
+		b, _ := json.Marshal(raw)
+		var r wire.ListResult
+		_ = json.Unmarshal(b, &r)
+		var out []string
+		for _, s := range r.Items {
+			out = append(out, s.ID)
+		}
+		return out
+	}
+	if got := ids(op, `{"workspace_id":"`+wire.WorkspaceID("wb")+`"}`); len(got) != 1 || got[0] != "other" {
+		t.Fatalf("operator 按别的工作区 id 列应只有 other，得到 %v", got)
+	}
+	if got := ids(op, `{"workspace_id":"`+wire.WorkspaceID("wa")+`"}`); len(got) != 1 || got[0] != "here" {
+		t.Fatalf("operator 按当前工作区 id 列应只有 here，得到 %v", got)
+	}
 
 	for _, cmd := range []string{"session.get", "session.entries", "session.stats"} {
 		err := call(viewer, cmd, `{"session":"other"}`)
