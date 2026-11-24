@@ -174,6 +174,11 @@ func (c *Conn) Call(ctx context.Context, cmd string, args json.RawMessage) (resu
 	if c.p.Role != wire.RoleOperator && !viewerCommands[cmd] {
 		return nil, Errorf(wire.CodeForbidden, "principal %s (%s) may not run %s", c.p.ID, c.p.Role, cmd)
 	}
+	if c.p.Role != wire.RoleOperator {
+		if err := c.a.viewerScope(ctx, c.p, cmd, args); err != nil {
+			return nil, err
+		}
+	}
 	switch cmd {
 	case "session.subscribe":
 		return bind(func(_ *App, ctx context.Context, in wire.SubscribeArgs) (wire.Empty, error) {
