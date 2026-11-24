@@ -242,6 +242,7 @@ export interface SessionSnapshot {
   title: string;
   pinned?: boolean;
   archived?: boolean;
+  agent?: string;
   run_state: string;
   mode?: Mode;
   settings: Settings;
@@ -265,6 +266,7 @@ export interface SessionInfo {
   updated_at: number;
   pinned?: boolean;
   workspace?: string;
+  agent?: string;
   archived?: boolean;
   last_end?: TurnEnded;
   source?: string;
@@ -441,6 +443,7 @@ export interface SessionsChanged {
   parent?: string;
   origin?: string;
   workspace?: string;
+  agent?: string;
   archived?: boolean;
   last_end?: TurnEnded;
 }
@@ -487,6 +490,7 @@ export interface ListArgs {
   query?: string;
   parent?: string;
   archived?: string;
+  agent?: string;
 }
 
 export interface ListResult {

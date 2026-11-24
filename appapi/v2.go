@@ -360,8 +360,8 @@ func (v *App) SessionsList(ctx context.Context, in wire.ListArgs) (wire.ListResu
 		return wire.ListResult{}, invalid("query exceeds %d bytes", MaxQuery)
 	}
 	qs, canQuery := v.o.DB.(store.SessionQueryStore)
-	if (query != "" || in.Parent != "" || in.Archived != "") && !canQuery {
-		return wire.ListResult{}, Errorf(wire.CodeUnsupported, "store does not support search, parent or archive filters")
+	if (query != "" || in.Parent != "" || in.Archived != "" || in.Agent != "") && !canQuery {
+		return wire.ListResult{}, Errorf(wire.CodeUnsupported, "store does not support search, parent, archive or agent filters")
 	}
 	if in.Pinned && (query != "" || in.Parent != "") {
 		return wire.ListResult{}, invalid("pinned cannot be combined with query or parent")
@@ -394,7 +394,8 @@ func (v *App) SessionsList(ctx context.Context, in wire.ListArgs) (wire.ListResu
 		}
 		out := wire.ListResult{Items: []wire.SessionInfo{}}
 		for _, s := range items {
-			if (in.All || store.TopLevel(s.ParentID, s.Origin)) && inWS(s) && keepArchived(archived, s.Meta) {
+			if (in.All || store.TopLevel(s.ParentID, s.Origin)) && inWS(s) && keepArchived(archived, s.Meta) &&
+				(in.Agent == "" || s.AgentID == in.Agent) {
 				out.Items = append(out.Items, wireInfo(s))
 			}
 		}
@@ -404,7 +405,7 @@ func (v *App) SessionsList(ctx context.Context, in wire.ListArgs) (wire.ListResu
 	switch {
 	case canQuery:
 		q := store.SessionQuery{Workspace: ws, Unassigned: in.Unassigned, Before: in.Cursor, Limit: limit, TopOnly: !in.All,
-			Parent: in.Parent, Text: query, Archived: archived}
+			Parent: in.Parent, Text: query, Archived: archived, Agent: in.Agent}
 		if in.Parent != "" { // 子会话跟随父会话的工作区，按 parent 列时不再按工作区、顶层过滤
 			q.Workspace, q.TopOnly = "", false
 		}
@@ -449,7 +450,7 @@ func sourceOf(meta json.RawMessage) (source, ref string) {
 func wireInfo(s store.SessionInfo) wire.SessionInfo {
 	src, ref := sourceOf(s.Meta)
 	return wire.SessionInfo{ID: s.ID, Title: s.Title, Preview: s.Preview, RunState: wireRun(s.RunState),
-		Origin: s.Origin, Parent: s.ParentID, UpdatedAt: s.UpdatedAt, Pinned: pinnedOf(s.Meta), Workspace: s.Workspace,
+		Origin: s.Origin, Parent: s.ParentID, UpdatedAt: s.UpdatedAt, Pinned: pinnedOf(s.Meta), Workspace: s.Workspace, Agent: s.AgentID,
 		Archived: store.ArchivedOf(s.Meta), LastEnd: WireLastEnd(s.LastEnd), Source: src, Ref: ref}
 }
 
@@ -963,7 +964,7 @@ func (v *App) snapshot(ctx context.Context, id string) (wire.SessionSnapshot, er
 	}
 	src, ref := sourceOf(l.Meta.Meta)
 	return wire.SessionSnapshot{ID: id, Parent: l.Meta.ParentID, Origin: l.Meta.Origin, Title: l.Meta.Title, Pinned: pinnedOf(l.Meta.Meta),
-		Source: src, Ref: ref,
+		Source: src, Ref: ref, Agent: l.Meta.AgentID,
 		Archived: store.ArchivedOf(l.Meta.Meta), RunState: WireRunState(h.Status), Mode: v.committedMode(id, modeHdr), Settings: settingsOf(h),
 		Log: wire.LogPos{Base: h.CompactionBase, Len: h.LogLen}, Interactions: v.openInteractions(ctx, id), Cursor: l.Cursor,
 		Live: v.live(id, h), LastEnd: lastEnd, Queued: v.queuedOf(ctx, id)}, nil

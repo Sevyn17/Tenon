@@ -112,6 +112,8 @@ type ListArgs struct {
 	// Archived 已归档的会话：""（缺省）= 排除，"only" = 只要已归档的，"include" = 都要。
 	// 缺省列表、置顶列表都排除已归档的。
 	Archived string `json:"archived,omitempty"`
+	// Agent 非空：只列绑定这个定义名的会话（要能力 sessions.query）。工作区、all、archived 照常生效。
+	Agent string `json:"agent,omitempty"`
 }
 
 // sessions.list 的 archived 取值。

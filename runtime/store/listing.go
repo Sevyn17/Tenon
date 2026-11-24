@@ -106,6 +106,8 @@ type SessionQuery struct {
 	Text string
 	// Archived 已归档的会话怎么处理（MetaArchived）。
 	Archived ArchivedFilter
+	// Agent 非空：只列绑定这个定义名的会话（SessionMeta.AgentID）。
+	Agent string
 }
 
 // SessionQueryStore 可选：按条件列会话（文本搜索、按 parent、归档）。客户端改进 M7 协议T12。

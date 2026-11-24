@@ -727,7 +727,7 @@ func (s *Store) query(q store.SessionQuery, archived store.ArchivedFilter) ([]st
 	var out []store.SessionInfo
 	for _, x := range s.sessions {
 		if x.status == "deleted" || (q.Before > 0 && x.updatedAt >= q.Before) || (q.TopOnly && !store.TopLevel(x.meta.ParentID, x.meta.Origin)) ||
-			(q.Parent != "" && x.meta.ParentID != q.Parent) {
+			(q.Parent != "" && x.meta.ParentID != q.Parent) || (q.Agent != "" && x.meta.AgentID != q.Agent) {
 			continue
 		}
 		if q.Unassigned {
@@ -759,7 +759,7 @@ func (s *Store) query(q store.SessionQuery, archived store.ArchivedFilter) ([]st
 
 func (x *sess) info() store.SessionInfo {
 	i := store.SessionInfo{ID: x.meta.ID, Title: x.meta.Title, Preview: x.preview, RunState: x.runState,
-		Origin: x.meta.Origin, ParentID: x.meta.ParentID, Workspace: x.meta.Workspace, UpdatedAt: x.updatedAt,
+		Origin: x.meta.Origin, ParentID: x.meta.ParentID, Workspace: x.meta.Workspace, AgentID: x.meta.AgentID, UpdatedAt: x.updatedAt,
 		LastEnd: copyLastEnd(x.lastEnd)}
 	if m := x.meta.Meta; len(m) > 0 && string(m) != "{}" {
 		i.Meta = cloneRaw(m)

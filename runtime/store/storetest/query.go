@@ -56,15 +56,15 @@ func testSessionQuery(t *testing.T, st store.Store) {
 		}
 		time.Sleep(2 * time.Millisecond)
 	}
-	mk(store.SessionMeta{ID: "t1", Title: "Alpha 计划", Workspace: "w"}, "随便聊聊")
-	mk(store.SessionMeta{ID: "m2", Workspace: "w"}, "第一条", "第二条里有找到我")
+	mk(store.SessionMeta{ID: "t1", Title: "Alpha 计划", Workspace: "w", AgentID: "main"}, "随便聊聊")
+	mk(store.SessionMeta{ID: "m2", Workspace: "w", AgentID: "coder"}, "第一条", "第二条里有找到我")
 	mk(store.SessionMeta{ID: "pct", Workspace: "w"}, "完成 100% 了")
 	mk(store.SessionMeta{ID: "und", Workspace: "w"}, "a_b")
 	mk(store.SessionMeta{ID: "plain", Workspace: "w"}, "abc 100 xyz")
 	mk(store.SessionMeta{ID: "other", Workspace: "w2"}, "alpha 别的工作区")
 	mk(store.SessionMeta{ID: "arch", Title: "alpha 已归档", Workspace: "w"})
 	mk(store.SessionMeta{ID: "p", Workspace: "w"})
-	mk(store.SessionMeta{ID: "p/c1", ParentID: "p", Origin: "subagent"}, "子任务 alpha")
+	mk(store.SessionMeta{ID: "p/c1", ParentID: "p", Origin: "subagent", AgentID: "main"}, "子任务 alpha")
 	mk(store.SessionMeta{ID: "p/c2", ParentID: "p", Origin: "subagent"})
 	mk(store.SessionMeta{ID: "none"}, "alpha 无归属")
 	if err := ms.UpdateSessionMeta(ctx, "arch", nil, map[string]any{store.MetaArchived: true}); err != nil {
@@ -107,6 +107,14 @@ func testSessionQuery(t *testing.T, st store.Store) {
 	want("parent 与文本", store.SessionQuery{Parent: "p", Text: "alpha"}, "p/c1")
 	want("未归属", store.SessionQuery{Unassigned: true, Text: "alpha"}, "none")
 	want("未归属优先于 Workspace", store.SessionQuery{Unassigned: true, Workspace: "w"}, "none")
+	// 按定义名（docs/72 B1）：与工作区、顶层、parent 叠加；行上带 AgentID。
+	want("按定义名", store.SessionQuery{Agent: "main"}, "t1", "p/c1")
+	want("按定义名只要顶层", store.SessionQuery{Agent: "main", TopOnly: true}, "t1")
+	want("按定义名与 parent", store.SessionQuery{Agent: "main", Parent: "p"}, "p/c1")
+	want("按定义名与工作区", store.SessionQuery{Agent: "coder", Workspace: "w2"})
+	if ls := list(store.SessionQuery{Agent: "coder"}); len(ls) != 1 || ls[0].AgentID != "coder" {
+		t.Errorf("行应带 AgentID：%+v", ls)
+	}
 
 	// 归档三种取值。
 	want("只看已归档", store.SessionQuery{Workspace: "w", TopOnly: true, Archived: store.ArchivedOnly}, "arch")

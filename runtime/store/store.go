@@ -492,6 +492,8 @@ type SessionInfo struct {
 	Origin    string `json:"origin"`
 	ParentID  string `json:"parent"`
 	Workspace string `json:"workspace,omitempty"`
+	// AgentID 会话绑定的定义名（SessionMeta.AgentID）；空 = 未绑定定义。
+	AgentID   string `json:"agent,omitempty"`
 	UpdatedAt int64  `json:"updated_at"`
 	// Meta 应用写入的业务键（JSON 对象）。
 	Meta json.RawMessage `json:"meta,omitempty"`

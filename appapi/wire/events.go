@@ -280,6 +280,7 @@ type SessionsChanged struct {
 	Parent    string     `json:"parent,omitempty"`
 	Origin    string     `json:"origin,omitempty"`
 	Workspace string     `json:"workspace,omitempty"`
+	Agent     string     `json:"agent,omitempty"` // 同 SessionInfo.agent
 	Archived  bool       `json:"archived,omitempty"`
 	LastEnd   *TurnEnded `json:"last_end,omitempty"` // 同 SessionInfo.last_end：运行中也给（上一回合的）
 }
