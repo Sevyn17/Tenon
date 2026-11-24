@@ -34,6 +34,13 @@ const (
 	ConflictFiles = "files"
 )
 
+// invalid 的 details.reason。
+const (
+	// InvalidOtherWorkspace 会话属于另一个工作区（不是宿主当前工作区）：会触发执行、改运行配置、改文件的命令被拒绝。
+	// details.workspace、details.workspace_id 是会话所属工作区；客户端提示切换后再操作。
+	InvalidOtherWorkspace = "other_workspace"
+)
+
 // 改动范围（changes.*，客户端改进 M9）。
 const (
 	ChangeScopeSession  = "session"   // 本会话全部改动（缺省）

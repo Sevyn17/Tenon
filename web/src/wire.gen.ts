@@ -38,6 +38,9 @@ export type ErrorCode = (typeof ErrorCodes)[number];
 export const ConflictReasons = ["exists", "answered", "stale", "leased", "files"] as const;
 export type ConflictReason = (typeof ConflictReasons)[number];
 
+export const InvalidReasons = ["other_workspace"] as const;
+export type InvalidReason = (typeof InvalidReasons)[number];
+
 export const ChangeScopes = ["session", "turn", "from_turn", "git"] as const;
 export type ChangeScope = (typeof ChangeScopes)[number];
 

@@ -1087,6 +1087,9 @@ func (v *App) Send(ctx context.Context, in wire.SendArgs) (wire.SendResult, erro
 	if err := need(in.Session); err != nil {
 		return wire.SendResult{}, err
 	}
+	if err := v.inWorkspace(ctx, in.Session); err != nil {
+		return wire.SendResult{}, err
+	}
 	if err := needClientID(in.ClientID); err != nil {
 		return wire.SendResult{}, err
 	}
@@ -1175,6 +1178,9 @@ func (v *App) Steer(ctx context.Context, in wire.SteerArgs) (wire.Empty, error) 
 	if err := need(in.Session); err != nil {
 		return wire.Empty{}, err
 	}
+	if err := v.inWorkspace(ctx, in.Session); err != nil {
+		return wire.Empty{}, err
+	}
 	if err := needClientID(in.ClientID); err != nil {
 		return wire.Empty{}, err
 	}
@@ -1239,6 +1245,9 @@ func (v *App) Rewind(ctx context.Context, in wire.RewindArgs) (wire.RewindResult
 	if err := need(in.Session); err != nil {
 		return wire.RewindResult{}, err
 	}
+	if err := v.inWorkspace(ctx, in.Session); err != nil {
+		return wire.RewindResult{}, err
+	}
 	if in.ToTurn == 0 {
 		return wire.RewindResult{}, invalid("to_turn must be >= 1")
 	}
@@ -1262,6 +1271,9 @@ func (v *App) Rewind(ctx context.Context, in wire.RewindArgs) (wire.RewindResult
 // Compact 手动压缩到 upto（缺省按保留尾部规则选）；已压缩到该位置时直接返回那次压缩。需空闲；if_cursor 不符返回 conflict（stale）。
 func (v *App) Compact(ctx context.Context, in wire.CompactArgs) (wire.CompactResult, error) {
 	if err := need(in.Session); err != nil {
+		return wire.CompactResult{}, err
+	}
+	if err := v.inWorkspace(ctx, in.Session); err != nil {
 		return wire.CompactResult{}, err
 	}
 	if v.o.Compactor == nil {
@@ -1332,6 +1344,9 @@ func lastSummary(s session.Snapshot) string {
 // 都缺省时生成。来源须空闲；if_cursor 不符返回 conflict（stale）；目标已存在返回 conflict（exists）。
 func (v *App) Fork(ctx context.Context, in wire.ForkArgs) (wire.SessionSnapshot, error) {
 	if err := need(in.Session); err != nil {
+		return wire.SessionSnapshot{}, err
+	}
+	if err := v.inWorkspace(ctx, in.Session); err != nil {
 		return wire.SessionSnapshot{}, err
 	}
 	if in.Origin != "" && in.Origin != "fork" && in.Origin != "side" {
@@ -1474,6 +1489,9 @@ func (v *App) Stats(ctx context.Context, in wire.SessionArgs) (wire.Stats, error
 // 回合中只改内存、到步边界生效，返回 committed=false，落库时发 session.settings_changed（10.2.2 规则 5）。
 func (v *App) Settings(ctx context.Context, in wire.SettingsArgs) (wire.SettingsResult, error) {
 	if err := need(in.Session); err != nil {
+		return wire.SettingsResult{}, err
+	}
+	if err := v.inWorkspace(ctx, in.Session); err != nil {
 		return wire.SettingsResult{}, err
 	}
 	l, err := host.LoadHead(ctx, v.o.DB, in.Session)
@@ -1792,6 +1810,9 @@ func (v *App) ModeGet(ctx context.Context, in wire.SessionArgs) (wire.ModeSetRes
 // ModeSet 切换档位：立即对后续工具调用生效，持久化到顶层会话头。空闲时等落库，committed=true；
 // 回合中到步边界落库，committed=false，落库时发 session.mode_changed（10.2.2 规则 5）。
 func (v *App) ModeSet(ctx context.Context, in wire.ModeSetArgs) (wire.ModeSetResult, error) {
+	if err := v.inWorkspace(ctx, in.Session); err != nil { // 先于档位插件检查：跨工作区一律同一种错误
+		return wire.ModeSetResult{}, err
+	}
 	m, err := v.modes()
 	if err != nil {
 		return wire.ModeSetResult{}, err

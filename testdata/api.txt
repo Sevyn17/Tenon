@@ -456,6 +456,7 @@ github.com/Sevyn17/tenon/appapi/wire: const InteractionPlan untyped string
 github.com/Sevyn17/tenon/appapi/wire: const InteractionQuestion untyped string
 github.com/Sevyn17/tenon/appapi/wire: type InteractionResolved struct{ID string; Session string; Outcome string; By string}
 github.com/Sevyn17/tenon/appapi/wire: type InteractionsResult struct{Items []Interaction}
+github.com/Sevyn17/tenon/appapi/wire: const InvalidOtherWorkspace untyped string
 github.com/Sevyn17/tenon/appapi/wire: type Item struct{Kind string; Content []Part; Reasoning []Reasoning; ToolCalls []ToolCall; Model string; Usage *Usage; Interrupted bool; CallID string; Output []Part; Status string; CancelReason string; Truncated bool; OutputRef string; Upto int; Summary []Part; ContextSource string; Text string; Raw encoding/json.RawMessage}
 github.com/Sevyn17/tenon/appapi/wire: const KindAssistant untyped string
 github.com/Sevyn17/tenon/appapi/wire: const KindCompaction untyped string

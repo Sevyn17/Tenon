@@ -42,6 +42,9 @@ func (v *App) respondAs(ctx context.Context, in wire.RespondArgs, p wire.Princip
 	if err != nil {
 		return wire.RespondResult{}, err
 	}
+	if err := v.inWorkspace(ctx, cur.SessionID); err != nil {
+		return wire.RespondResult{}, err
+	}
 	it := v.wireInteraction(cur)
 	if !slices.Contains(it.Responders, p.ID) {
 		return wire.RespondResult{}, Errorf(wire.CodeForbidden, "principal %s may not answer interaction %s", p.ID, in.Interaction)

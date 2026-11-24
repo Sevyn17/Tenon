@@ -233,6 +233,9 @@ func (v *App) ChangesRevert(ctx context.Context, in wire.ChangesRevertArgs) (wir
 	if err := need(in.Session); err != nil {
 		return wire.ChangesRevertResult{}, err
 	}
+	if err := v.inWorkspace(ctx, in.Session); err != nil {
+		return wire.ChangesRevertResult{}, err
+	}
 	c, err := v.changes()
 	if err != nil {
 		return wire.ChangesRevertResult{}, err

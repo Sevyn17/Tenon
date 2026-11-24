@@ -65,6 +65,7 @@ var tsConsts = []struct {
 		CodeConflict, CodeDenied, CodeNeedConfirm, CodeCursorExpired, CodeUnauthorized, CodeForbidden,
 		CodeUnsupported, CodeInternal}},
 	{"ConflictReasons", []string{ConflictExists, ConflictAnswered, ConflictStale, ConflictLeased, ConflictFiles}},
+	{"InvalidReasons", []string{InvalidOtherWorkspace}},
 	{"ChangeScopes", []string{ChangeScopeSession, ChangeScopeTurn, ChangeScopeFromTurn, ChangeScopeGit}},
 	{"SkillScopes", []string{SkillScopeGlobal, SkillScopeWorkspace}},
 	{"MCPScopes", []string{MCPScopeGlobal, MCPScopeWorkspace}},
