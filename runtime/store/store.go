@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/Sevyn17/tenon/runtime/bus"
@@ -114,6 +115,71 @@ type EntryLocator interface {
 	// EntryTurn 条目 entryID 所在回合。条目在当前日志里：rewound = false；已被回退移进归档：rewound = true。
 	// 会话或条目都不存在时 ok = false。
 	EntryTurn(ctx context.Context, id, entryID string) (turn uint32, rewound, ok bool, err error)
+}
+
+// EntrySearcher 可选：在一个会话的当前日志里按关键词找条目（Mortise docs/76 §16，session_turns {query}）。
+// 与 TurnRangeStore 一样不加进 Store：没实现的存储由调用方扫 Entries 兜底，结果相同，只是慢。
+type EntrySearcher interface {
+	// SearchEntries 当前日志里 kind 属于 kinds（空 = user、assistant、tool_result 三类）、文本含 query 的条目，
+	// 按下标倒序，最多 limit 条。匹配可以偏宽（如命中 JSON 键名），调用方用 EntryText 再核一次。会话不存在返回空。
+	SearchEntries(ctx context.Context, id, query string, kinds []string, limit int) ([]EntryHit, error)
+}
+
+// EntryHit 搜索命中：完整日志下标与条目。
+type EntryHit struct {
+	Idx   int
+	Entry *session.Entry
+}
+
+// ArchiveReader 可选：读一个会话被回退移进归档的条目（Mortise docs/76 §16，session_turns {include_rewound}、读已回退条目）。
+type ArchiveReader interface {
+	// ArchivedEntries 归档条目，按 (rewind_seq, idx) 升序。会话不存在返回空。
+	ArchivedEntries(ctx context.Context, id string) ([]ArchivedEntry, error)
+}
+
+// ArchivedEntry 一条归档条目：原下标、第几次回退归档的、条目本身。
+type ArchivedEntry struct {
+	Idx       int
+	RewindSeq int
+	Entry     *session.Entry
+}
+
+// SearchKinds 可搜索的条目种类（EntrySearcher 的 kinds 为空时用它）。
+var SearchKinds = []string{session.KindUser, session.KindAssistant, session.KindToolResult}
+
+// EntryText 条目里可读的文本：用户与助手正文、助手的工具调用（名字与参数）、工具结果输出。
+// 搜索核对与回顾工具共用这一份口径；其余种类返回空。
+func EntryText(e *session.Entry) string {
+	if e == nil {
+		return ""
+	}
+	it := e.Item
+	var b strings.Builder
+	text := func(c session.Content) {
+		for _, p := range c {
+			if p.Kind == "text" {
+				b.WriteString(p.Text)
+			}
+		}
+	}
+	switch it.Kind {
+	case session.KindUser:
+		if it.User != nil {
+			text(it.User.Content)
+		}
+	case session.KindAssistant:
+		if it.Assistant != nil {
+			text(it.Assistant.Content)
+			for _, c := range it.Assistant.ToolCalls {
+				b.WriteString("\n⚙" + c.Name + " " + string(c.Args))
+			}
+		}
+	case session.KindToolResult:
+		if it.ToolResult != nil {
+			text(it.ToolResult.Output)
+		}
+	}
+	return b.String()
 }
 
 // InboxStore 会话输入队列（session-host D2 / D6）。

@@ -102,6 +102,10 @@ func (*plug) Setup(cx *component.Registrar) error {
 	component.RegisterAt(cx, assemble.SessionTools, PluginName, assemble.ToolsEntry{Order: 60,
 		Tools:   func() []*toolhub.Tool { return []*toolhub.Tool{t} },
 		Visible: func(sc *assemble.SessionCx) bool { return !sc.Child && sc.ChainDepth < store.MaxChainDepth }})
+	// 会话回顾（Mortise docs/76 第四版 §16）：所有会话都带，从会话开始就在清单里（不随压缩出现，避免改工具清单伤缓存）。
+	turns, read := TurnsTool(h), ReadTool(h)
+	component.RegisterAt(cx, assemble.SessionTools, PluginName+".review", assemble.ToolsEntry{Order: 61,
+		Tools: func() []*toolhub.Tool { return []*toolhub.Tool{turns, read} }})
 	return nil
 }
 

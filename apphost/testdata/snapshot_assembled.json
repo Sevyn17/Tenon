@@ -397,6 +397,83 @@
             }
           },
           {
+            "Name": "session_turns",
+            "Description": "列出会话的回合（回合号、条目 id、首行、用过的工具、状态：in_context 还在上下文、compacted 已压缩、partial 部分压缩），或用 query 按关键词搜。压缩后、用户提到早先内容、拿不准之前说过什么时用；先列或搜，再用 session_read 读原文。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "session": {
+                  "type": "string",
+                  "description": "会话 id；缺省为本会话，也可以是本会话派出的会话"
+                },
+                "query": {
+                  "type": "string",
+                  "description": "关键词；给了就只返回命中的条目片段（最多 20 条，新的在前）"
+                },
+                "from": {
+                  "type": "integer",
+                  "description": "从这个回合号起列"
+                },
+                "limit": {
+                  "type": "integer",
+                  "description": "最多列多少回合，缺省 50"
+                },
+                "include_rewound": {
+                  "type": "boolean",
+                  "description": "也列已回退的回合"
+                }
+              }
+            }
+          },
+          {
+            "Name": "session_read",
+            "Description": "读会话里某个条目、某个回合或某次工具调用的原文（entry / turn / call 三选一，id 从 session_turns 取）。kinds 只读用户、助手或工具内容。内容已在上下文里就不必读；长内容按 from 分段继续。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "session": {
+                  "type": "string",
+                  "description": "会话 id；缺省为本会话"
+                },
+                "entry": {
+                  "type": "string",
+                  "description": "条目 id（优先用它定位）"
+                },
+                "turn": {
+                  "type": "integer",
+                  "description": "回合号"
+                },
+                "rewind_seq": {
+                  "type": "integer",
+                  "description": "读已回退的回合时给回退序号"
+                },
+                "call": {
+                  "type": "string",
+                  "description": "工具调用 id：读这次调用的参数与结果"
+                },
+                "kinds": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "user",
+                      "assistant",
+                      "tool"
+                    ]
+                  }
+                },
+                "from": {
+                  "type": "integer",
+                  "description": "从第几个字节继续（分段时用）"
+                },
+                "max_bytes": {
+                  "type": "integer",
+                  "description": "本次最多返回多少字节，缺省 8192，最大 32768"
+                }
+              }
+            }
+          },
+          {
             "Name": "team_spawn",
             "Description": "派一个工作组成员（独立会话、同样的基础工具 + 看板）去做自包含的任务，立即返回，不等结果。成员做完时它的最终回答会作为一条新消息送回给你。同名成员已存在则把 task 作为下一条消息发给它。",
             "Schema": {
@@ -939,6 +1016,83 @@
                 "task"
               ],
               "type": "object"
+            }
+          },
+          {
+            "Name": "session_turns",
+            "Description": "列出会话的回合（回合号、条目 id、首行、用过的工具、状态：in_context 还在上下文、compacted 已压缩、partial 部分压缩），或用 query 按关键词搜。压缩后、用户提到早先内容、拿不准之前说过什么时用；先列或搜，再用 session_read 读原文。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "session": {
+                  "type": "string",
+                  "description": "会话 id；缺省为本会话，也可以是本会话派出的会话"
+                },
+                "query": {
+                  "type": "string",
+                  "description": "关键词；给了就只返回命中的条目片段（最多 20 条，新的在前）"
+                },
+                "from": {
+                  "type": "integer",
+                  "description": "从这个回合号起列"
+                },
+                "limit": {
+                  "type": "integer",
+                  "description": "最多列多少回合，缺省 50"
+                },
+                "include_rewound": {
+                  "type": "boolean",
+                  "description": "也列已回退的回合"
+                }
+              }
+            }
+          },
+          {
+            "Name": "session_read",
+            "Description": "读会话里某个条目、某个回合或某次工具调用的原文（entry / turn / call 三选一，id 从 session_turns 取）。kinds 只读用户、助手或工具内容。内容已在上下文里就不必读；长内容按 from 分段继续。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "session": {
+                  "type": "string",
+                  "description": "会话 id；缺省为本会话"
+                },
+                "entry": {
+                  "type": "string",
+                  "description": "条目 id（优先用它定位）"
+                },
+                "turn": {
+                  "type": "integer",
+                  "description": "回合号"
+                },
+                "rewind_seq": {
+                  "type": "integer",
+                  "description": "读已回退的回合时给回退序号"
+                },
+                "call": {
+                  "type": "string",
+                  "description": "工具调用 id：读这次调用的参数与结果"
+                },
+                "kinds": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "user",
+                      "assistant",
+                      "tool"
+                    ]
+                  }
+                },
+                "from": {
+                  "type": "integer",
+                  "description": "从第几个字节继续（分段时用）"
+                },
+                "max_bytes": {
+                  "type": "integer",
+                  "description": "本次最多返回多少字节，缺省 8192，最大 32768"
+                }
+              }
             }
           },
           {
@@ -1509,6 +1663,83 @@
             }
           },
           {
+            "Name": "session_turns",
+            "Description": "列出会话的回合（回合号、条目 id、首行、用过的工具、状态：in_context 还在上下文、compacted 已压缩、partial 部分压缩），或用 query 按关键词搜。压缩后、用户提到早先内容、拿不准之前说过什么时用；先列或搜，再用 session_read 读原文。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "session": {
+                  "type": "string",
+                  "description": "会话 id；缺省为本会话，也可以是本会话派出的会话"
+                },
+                "query": {
+                  "type": "string",
+                  "description": "关键词；给了就只返回命中的条目片段（最多 20 条，新的在前）"
+                },
+                "from": {
+                  "type": "integer",
+                  "description": "从这个回合号起列"
+                },
+                "limit": {
+                  "type": "integer",
+                  "description": "最多列多少回合，缺省 50"
+                },
+                "include_rewound": {
+                  "type": "boolean",
+                  "description": "也列已回退的回合"
+                }
+              }
+            }
+          },
+          {
+            "Name": "session_read",
+            "Description": "读会话里某个条目、某个回合或某次工具调用的原文（entry / turn / call 三选一，id 从 session_turns 取）。kinds 只读用户、助手或工具内容。内容已在上下文里就不必读；长内容按 from 分段继续。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "session": {
+                  "type": "string",
+                  "description": "会话 id；缺省为本会话"
+                },
+                "entry": {
+                  "type": "string",
+                  "description": "条目 id（优先用它定位）"
+                },
+                "turn": {
+                  "type": "integer",
+                  "description": "回合号"
+                },
+                "rewind_seq": {
+                  "type": "integer",
+                  "description": "读已回退的回合时给回退序号"
+                },
+                "call": {
+                  "type": "string",
+                  "description": "工具调用 id：读这次调用的参数与结果"
+                },
+                "kinds": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "user",
+                      "assistant",
+                      "tool"
+                    ]
+                  }
+                },
+                "from": {
+                  "type": "integer",
+                  "description": "从第几个字节继续（分段时用）"
+                },
+                "max_bytes": {
+                  "type": "integer",
+                  "description": "本次最多返回多少字节，缺省 8192，最大 32768"
+                }
+              }
+            }
+          },
+          {
             "Name": "team_spawn",
             "Description": "派一个工作组成员（独立会话、同样的基础工具 + 看板）去做自包含的任务，立即返回，不等结果。成员做完时它的最终回答会作为一条新消息送回给你。同名成员已存在则把 task 作为下一条消息发给它。",
             "Schema": {
@@ -2029,6 +2260,83 @@
                 "task"
               ],
               "type": "object"
+            }
+          },
+          {
+            "Name": "session_turns",
+            "Description": "列出会话的回合（回合号、条目 id、首行、用过的工具、状态：in_context 还在上下文、compacted 已压缩、partial 部分压缩），或用 query 按关键词搜。压缩后、用户提到早先内容、拿不准之前说过什么时用；先列或搜，再用 session_read 读原文。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "session": {
+                  "type": "string",
+                  "description": "会话 id；缺省为本会话，也可以是本会话派出的会话"
+                },
+                "query": {
+                  "type": "string",
+                  "description": "关键词；给了就只返回命中的条目片段（最多 20 条，新的在前）"
+                },
+                "from": {
+                  "type": "integer",
+                  "description": "从这个回合号起列"
+                },
+                "limit": {
+                  "type": "integer",
+                  "description": "最多列多少回合，缺省 50"
+                },
+                "include_rewound": {
+                  "type": "boolean",
+                  "description": "也列已回退的回合"
+                }
+              }
+            }
+          },
+          {
+            "Name": "session_read",
+            "Description": "读会话里某个条目、某个回合或某次工具调用的原文（entry / turn / call 三选一，id 从 session_turns 取）。kinds 只读用户、助手或工具内容。内容已在上下文里就不必读；长内容按 from 分段继续。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "session": {
+                  "type": "string",
+                  "description": "会话 id；缺省为本会话"
+                },
+                "entry": {
+                  "type": "string",
+                  "description": "条目 id（优先用它定位）"
+                },
+                "turn": {
+                  "type": "integer",
+                  "description": "回合号"
+                },
+                "rewind_seq": {
+                  "type": "integer",
+                  "description": "读已回退的回合时给回退序号"
+                },
+                "call": {
+                  "type": "string",
+                  "description": "工具调用 id：读这次调用的参数与结果"
+                },
+                "kinds": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "user",
+                      "assistant",
+                      "tool"
+                    ]
+                  }
+                },
+                "from": {
+                  "type": "integer",
+                  "description": "从第几个字节继续（分段时用）"
+                },
+                "max_bytes": {
+                  "type": "integer",
+                  "description": "本次最多返回多少字节，缺省 8192，最大 32768"
+                }
+              }
             }
           },
           {
@@ -2569,6 +2877,83 @@
                 "task"
               ],
               "type": "object"
+            }
+          },
+          {
+            "Name": "session_turns",
+            "Description": "列出会话的回合（回合号、条目 id、首行、用过的工具、状态：in_context 还在上下文、compacted 已压缩、partial 部分压缩），或用 query 按关键词搜。压缩后、用户提到早先内容、拿不准之前说过什么时用；先列或搜，再用 session_read 读原文。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "session": {
+                  "type": "string",
+                  "description": "会话 id；缺省为本会话，也可以是本会话派出的会话"
+                },
+                "query": {
+                  "type": "string",
+                  "description": "关键词；给了就只返回命中的条目片段（最多 20 条，新的在前）"
+                },
+                "from": {
+                  "type": "integer",
+                  "description": "从这个回合号起列"
+                },
+                "limit": {
+                  "type": "integer",
+                  "description": "最多列多少回合，缺省 50"
+                },
+                "include_rewound": {
+                  "type": "boolean",
+                  "description": "也列已回退的回合"
+                }
+              }
+            }
+          },
+          {
+            "Name": "session_read",
+            "Description": "读会话里某个条目、某个回合或某次工具调用的原文（entry / turn / call 三选一，id 从 session_turns 取）。kinds 只读用户、助手或工具内容。内容已在上下文里就不必读；长内容按 from 分段继续。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "session": {
+                  "type": "string",
+                  "description": "会话 id；缺省为本会话"
+                },
+                "entry": {
+                  "type": "string",
+                  "description": "条目 id（优先用它定位）"
+                },
+                "turn": {
+                  "type": "integer",
+                  "description": "回合号"
+                },
+                "rewind_seq": {
+                  "type": "integer",
+                  "description": "读已回退的回合时给回退序号"
+                },
+                "call": {
+                  "type": "string",
+                  "description": "工具调用 id：读这次调用的参数与结果"
+                },
+                "kinds": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "user",
+                      "assistant",
+                      "tool"
+                    ]
+                  }
+                },
+                "from": {
+                  "type": "integer",
+                  "description": "从第几个字节继续（分段时用）"
+                },
+                "max_bytes": {
+                  "type": "integer",
+                  "description": "本次最多返回多少字节，缺省 8192，最大 32768"
+                }
+              }
             }
           },
           {
@@ -3138,6 +3523,83 @@
             }
           },
           {
+            "Name": "session_turns",
+            "Description": "列出会话的回合（回合号、条目 id、首行、用过的工具、状态：in_context 还在上下文、compacted 已压缩、partial 部分压缩），或用 query 按关键词搜。压缩后、用户提到早先内容、拿不准之前说过什么时用；先列或搜，再用 session_read 读原文。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "session": {
+                  "type": "string",
+                  "description": "会话 id；缺省为本会话，也可以是本会话派出的会话"
+                },
+                "query": {
+                  "type": "string",
+                  "description": "关键词；给了就只返回命中的条目片段（最多 20 条，新的在前）"
+                },
+                "from": {
+                  "type": "integer",
+                  "description": "从这个回合号起列"
+                },
+                "limit": {
+                  "type": "integer",
+                  "description": "最多列多少回合，缺省 50"
+                },
+                "include_rewound": {
+                  "type": "boolean",
+                  "description": "也列已回退的回合"
+                }
+              }
+            }
+          },
+          {
+            "Name": "session_read",
+            "Description": "读会话里某个条目、某个回合或某次工具调用的原文（entry / turn / call 三选一，id 从 session_turns 取）。kinds 只读用户、助手或工具内容。内容已在上下文里就不必读；长内容按 from 分段继续。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "session": {
+                  "type": "string",
+                  "description": "会话 id；缺省为本会话"
+                },
+                "entry": {
+                  "type": "string",
+                  "description": "条目 id（优先用它定位）"
+                },
+                "turn": {
+                  "type": "integer",
+                  "description": "回合号"
+                },
+                "rewind_seq": {
+                  "type": "integer",
+                  "description": "读已回退的回合时给回退序号"
+                },
+                "call": {
+                  "type": "string",
+                  "description": "工具调用 id：读这次调用的参数与结果"
+                },
+                "kinds": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "user",
+                      "assistant",
+                      "tool"
+                    ]
+                  }
+                },
+                "from": {
+                  "type": "integer",
+                  "description": "从第几个字节继续（分段时用）"
+                },
+                "max_bytes": {
+                  "type": "integer",
+                  "description": "本次最多返回多少字节，缺省 8192，最大 32768"
+                }
+              }
+            }
+          },
+          {
             "Name": "team_spawn",
             "Description": "派一个工作组成员（独立会话、同样的基础工具 + 看板）去做自包含的任务，立即返回，不等结果。成员做完时它的最终回答会作为一条新消息送回给你。同名成员已存在则把 task 作为下一条消息发给它。",
             "Schema": {
@@ -3601,6 +4063,83 @@
             }
           },
           {
+            "Name": "session_turns",
+            "Description": "列出会话的回合（回合号、条目 id、首行、用过的工具、状态：in_context 还在上下文、compacted 已压缩、partial 部分压缩），或用 query 按关键词搜。压缩后、用户提到早先内容、拿不准之前说过什么时用；先列或搜，再用 session_read 读原文。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "session": {
+                  "type": "string",
+                  "description": "会话 id；缺省为本会话，也可以是本会话派出的会话"
+                },
+                "query": {
+                  "type": "string",
+                  "description": "关键词；给了就只返回命中的条目片段（最多 20 条，新的在前）"
+                },
+                "from": {
+                  "type": "integer",
+                  "description": "从这个回合号起列"
+                },
+                "limit": {
+                  "type": "integer",
+                  "description": "最多列多少回合，缺省 50"
+                },
+                "include_rewound": {
+                  "type": "boolean",
+                  "description": "也列已回退的回合"
+                }
+              }
+            }
+          },
+          {
+            "Name": "session_read",
+            "Description": "读会话里某个条目、某个回合或某次工具调用的原文（entry / turn / call 三选一，id 从 session_turns 取）。kinds 只读用户、助手或工具内容。内容已在上下文里就不必读；长内容按 from 分段继续。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "session": {
+                  "type": "string",
+                  "description": "会话 id；缺省为本会话"
+                },
+                "entry": {
+                  "type": "string",
+                  "description": "条目 id（优先用它定位）"
+                },
+                "turn": {
+                  "type": "integer",
+                  "description": "回合号"
+                },
+                "rewind_seq": {
+                  "type": "integer",
+                  "description": "读已回退的回合时给回退序号"
+                },
+                "call": {
+                  "type": "string",
+                  "description": "工具调用 id：读这次调用的参数与结果"
+                },
+                "kinds": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "user",
+                      "assistant",
+                      "tool"
+                    ]
+                  }
+                },
+                "from": {
+                  "type": "integer",
+                  "description": "从第几个字节继续（分段时用）"
+                },
+                "max_bytes": {
+                  "type": "integer",
+                  "description": "本次最多返回多少字节，缺省 8192，最大 32768"
+                }
+              }
+            }
+          },
+          {
             "Name": "team_send",
             "Description": "给工作组里的另一位发消息：to 为 \"lead\"（领导）或成员名。消息进入对方 inbox，对方空闲时立即处理。",
             "Schema": {
@@ -4024,6 +4563,83 @@
               "required": [
                 "id"
               ]
+            }
+          },
+          {
+            "Name": "session_turns",
+            "Description": "列出会话的回合（回合号、条目 id、首行、用过的工具、状态：in_context 还在上下文、compacted 已压缩、partial 部分压缩），或用 query 按关键词搜。压缩后、用户提到早先内容、拿不准之前说过什么时用；先列或搜，再用 session_read 读原文。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "session": {
+                  "type": "string",
+                  "description": "会话 id；缺省为本会话，也可以是本会话派出的会话"
+                },
+                "query": {
+                  "type": "string",
+                  "description": "关键词；给了就只返回命中的条目片段（最多 20 条，新的在前）"
+                },
+                "from": {
+                  "type": "integer",
+                  "description": "从这个回合号起列"
+                },
+                "limit": {
+                  "type": "integer",
+                  "description": "最多列多少回合，缺省 50"
+                },
+                "include_rewound": {
+                  "type": "boolean",
+                  "description": "也列已回退的回合"
+                }
+              }
+            }
+          },
+          {
+            "Name": "session_read",
+            "Description": "读会话里某个条目、某个回合或某次工具调用的原文（entry / turn / call 三选一，id 从 session_turns 取）。kinds 只读用户、助手或工具内容。内容已在上下文里就不必读；长内容按 from 分段继续。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "session": {
+                  "type": "string",
+                  "description": "会话 id；缺省为本会话"
+                },
+                "entry": {
+                  "type": "string",
+                  "description": "条目 id（优先用它定位）"
+                },
+                "turn": {
+                  "type": "integer",
+                  "description": "回合号"
+                },
+                "rewind_seq": {
+                  "type": "integer",
+                  "description": "读已回退的回合时给回退序号"
+                },
+                "call": {
+                  "type": "string",
+                  "description": "工具调用 id：读这次调用的参数与结果"
+                },
+                "kinds": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "user",
+                      "assistant",
+                      "tool"
+                    ]
+                  }
+                },
+                "from": {
+                  "type": "integer",
+                  "description": "从第几个字节继续（分段时用）"
+                },
+                "max_bytes": {
+                  "type": "integer",
+                  "description": "本次最多返回多少字节，缺省 8192，最大 32768"
+                }
+              }
             }
           }
         ],

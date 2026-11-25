@@ -1236,3 +1236,73 @@ func (s *Store) FindSessionByKey(_ context.Context, agentID, creator, key string
 	}
 	return "", store.ErrNotFound
 }
+
+// SearchEntries 当前日志里按关键词找条目（store.EntrySearcher，Mortise docs/76 §16）：按下标倒序，最多 limit 条。
+func (s *Store) SearchEntries(ctx context.Context, id, query string, kinds []string, limit int) ([]store.EntryHit, error) {
+	if err := s.lock(); err != nil {
+		return nil, err
+	}
+	defer s.mu.Unlock()
+	x := s.live(id)
+	q := strings.ToLower(strings.TrimSpace(query))
+	if x == nil || q == "" {
+		return nil, nil
+	}
+	if len(kinds) == 0 {
+		kinds = store.SearchKinds
+	}
+	want := map[string]bool{}
+	for _, k := range kinds {
+		want[k] = true
+	}
+	idxs := make([]int, 0, len(x.entries))
+	for idx := range x.entries {
+		idxs = append(idxs, idx)
+	}
+	sort.Sort(sort.Reverse(sort.IntSlice(idxs)))
+	var out []store.EntryHit
+	for _, idx := range idxs {
+		var e session.Entry
+		if err := json.Unmarshal(x.entries[idx].body, &e); err != nil {
+			return nil, err
+		}
+		if !want[e.Item.Kind] || !strings.Contains(strings.ToLower(store.EntryText(&e)), q) {
+			continue
+		}
+		ec := e
+		out = append(out, store.EntryHit{Idx: idx, Entry: &ec})
+		if limit > 0 && len(out) >= limit {
+			break
+		}
+	}
+	return out, nil
+}
+
+// ArchivedEntries 回退归档的条目（store.ArchiveReader），按 (rewind_seq, idx) 升序。
+func (s *Store) ArchivedEntries(ctx context.Context, id string) ([]store.ArchivedEntry, error) {
+	if err := s.lock(); err != nil {
+		return nil, err
+	}
+	defer s.mu.Unlock()
+	x := s.live(id)
+	if x == nil {
+		return nil, nil
+	}
+	arch := append([]archived(nil), x.archive...)
+	sort.SliceStable(arch, func(i, j int) bool {
+		if arch[i].rewindSeq != arch[j].rewindSeq {
+			return arch[i].rewindSeq < arch[j].rewindSeq
+		}
+		return arch[i].idx < arch[j].idx
+	})
+	out := make([]store.ArchivedEntry, 0, len(arch))
+	for _, a := range arch {
+		var e session.Entry
+		if err := json.Unmarshal(a.body, &e); err != nil {
+			return nil, err
+		}
+		ec := e
+		out = append(out, store.ArchivedEntry{Idx: a.idx, RewindSeq: a.rewindSeq, Entry: &ec})
+	}
+	return out, nil
+}
