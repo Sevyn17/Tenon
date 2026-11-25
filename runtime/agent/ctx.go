@@ -25,12 +25,14 @@ func (a *Agent) bindCtx(m store.SessionMeta) {
 		return
 	}
 	a.Ctx.Bind(callctx.Session{
-		ID:         a.SessionID,
-		Definition: m.AgentID,
-		Hash:       m.AgentHash,
-		Creator:    m.Creator,
-		Parent:     m.ParentID,
-		Key:        m.SessionKey,
+		ID:             a.SessionID,
+		Definition:     m.AgentID,
+		Hash:           m.AgentHash,
+		Creator:        m.Creator,
+		Parent:         m.ParentID,
+		Key:            m.SessionKey,
+		CreatorSession: m.CreatorSession,
+		ChainDepth:     m.Depth(),
 	}, m.Meta, m.UseConfig)
 	// 按本轮触发者重解使用配置的能力（T4f，08 8.3）：守卫每轮按触发者的用户层上限取一次。
 	// 只有配了租户/用户来源、且有定义时才装；否则 UseForTrigger 退回会话算好的那份。

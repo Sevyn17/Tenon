@@ -459,7 +459,7 @@ func sourceOf(meta json.RawMessage) (source, ref string) {
 func wireInfo(s store.SessionInfo) wire.SessionInfo {
 	src, ref := sourceOf(s.Meta)
 	return wire.SessionInfo{ID: s.ID, Title: s.Title, Preview: s.Preview, RunState: wireRun(s.RunState),
-		Origin: s.Origin, Parent: s.ParentID, UpdatedAt: s.UpdatedAt, Pinned: pinnedOf(s.Meta), Workspace: s.Workspace, WorkspaceID: wire.WorkspaceID(s.Workspace), Agent: s.AgentID,
+		Origin: s.Origin, Parent: s.ParentID, UpdatedAt: s.UpdatedAt, Pinned: pinnedOf(s.Meta), Workspace: s.Workspace, WorkspaceID: wire.WorkspaceID(s.Workspace), Agent: s.AgentID, CreatorSession: s.CreatorSession, ChainDepth: s.ChainDepth,
 		Archived: store.ArchivedOf(s.Meta), LastEnd: WireLastEnd(s.LastEnd), Source: src, Ref: ref}
 }
 
@@ -973,7 +973,7 @@ func (v *App) snapshot(ctx context.Context, id string) (wire.SessionSnapshot, er
 	}
 	src, ref := sourceOf(l.Meta.Meta)
 	return wire.SessionSnapshot{ID: id, Parent: l.Meta.ParentID, Origin: l.Meta.Origin, Title: l.Meta.Title, Pinned: pinnedOf(l.Meta.Meta),
-		Source: src, Ref: ref, Agent: l.Meta.AgentID,
+		Source: src, Ref: ref, Agent: l.Meta.AgentID, CreatorSession: l.Meta.CreatorSession, ChainDepth: l.Meta.ChainDepth,
 		Archived: store.ArchivedOf(l.Meta.Meta), RunState: WireRunState(h.Status), Mode: v.committedMode(id, modeHdr), Settings: settingsOf(h),
 		Log: wire.LogPos{Base: h.CompactionBase, Len: h.LogLen}, Interactions: v.openInteractions(ctx, id), Cursor: l.Cursor,
 		Live: v.live(id, h), LastEnd: lastEnd, Queued: v.queuedOf(ctx, id)}, nil

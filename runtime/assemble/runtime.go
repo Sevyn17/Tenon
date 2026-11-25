@@ -47,8 +47,44 @@ type SessionCx struct {
 	// Spawn 子会话的按次覆盖（Mortise docs/62 K5，host.SpawnWith 传入）；nil = 没有覆盖。
 	// 组件只能用它收窄（如 permission 把 Spawn.Mode 当一层上限），收窄时调 Narrowed 说明。
 	Spawn *host.SpawnOptions
+	// ChainDepth 本会话在创建链上的深度（Mortise docs/76 C1）：1 = 由用户、系统或定时任务发起；2 = 由别的会话建的。
+	// 新会话在建会话行之前构造，所以按父会话深度 + 1 推算；已有会话读会话行。组件据此决定协作工具是否可见。
+	ChainDepth int
+	// CreatorSession 建本会话的会话 id；空 = 第一层。
+	CreatorSession string
 	// Values 同一会话内贡献函数之间共享的状态（如指令层与指令系统块共用一份已装载集合）。
 	Values map[string]any
+}
+
+// chainOf 本会话的创建链深度与创建者：会话行已存在时以行为准；新子会话按父会话深度 + 1；新顶层会话为第一层。
+func (b *Builder) chainOf(id string, child bool, p *ParentLimits) (int, string, error) {
+	if b.DB != nil {
+		l, err := host.LoadHead(context.Background(), b.DB, id)
+		if err == nil {
+			return l.Meta.Depth(), l.Meta.CreatorSession, nil
+		}
+		if !errors.Is(err, store.ErrNotFound) {
+			return 0, "", fmt.Errorf("runtime: 读会话 %s：%w", id, err)
+		}
+	}
+	if !child {
+		return 1, "", nil
+	}
+	parent := ""
+	if p != nil {
+		parent = p.ID
+	} else if i := strings.LastIndex(id, "/"); i > 0 {
+		parent = id[:i]
+	}
+	depth := 2
+	if parent != "" && b.DB != nil {
+		if l, err := host.LoadHead(context.Background(), b.DB, parent); err == nil {
+			depth = l.Meta.Depth() + 1
+		} else if !errors.Is(err, store.ErrNotFound) {
+			return 0, "", fmt.Errorf("runtime: 读父会话 %s：%w", parent, err)
+		}
+	}
+	return depth, parent, nil
 }
 
 // ToolSet 装配期登记好的一组工具；BlockFunc 每会话系统块（nil 跳过）；HooksFunc 每会话钩子。
@@ -174,6 +210,9 @@ func (b *Builder) BuildWith(id, defName string, child bool, o *host.SpawnOptions
 		if cx.Parent, err = b.parentLimits(id); err != nil {
 			return nil, nil, err
 		}
+	}
+	if cx.ChainDepth, cx.CreatorSession, err = b.chainOf(id, child, cx.Parent); err != nil {
+		return nil, nil, err
 	}
 	for _, it := range b.Items {
 		if err := hub.RegisterItem(it); err != nil {

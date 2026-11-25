@@ -34,6 +34,8 @@ var (
 	ErrClosed = errors.New("host: 会话已关闭")
 	// ErrStale 命令带的 IfCursor 与会话当前游标不符（protocol 2 乐观并发，06 10.4）。
 	ErrStale = errors.New("host: 会话游标已变化")
+	// ErrChainDepth 创建链已到最大深度（store.MaxChainDepth，Mortise docs/76 C1）：第二层会话不能再建会话。
+	ErrChainDepth = errors.New("host: 创建链已到最大深度，第二层会话不能再派出会话")
 )
 
 // Kind 命令种类（session-host D1 全集；op_id 去重推迟）。

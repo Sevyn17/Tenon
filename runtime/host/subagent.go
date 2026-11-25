@@ -111,6 +111,17 @@ func (h *Host) spawn(ctx context.Context, parent, id, origin, def string, f Fact
 			return "", err
 		}
 	} else {
+		// 创建链（Mortise docs/76 C1）：子会话记 CreatorSession = 父会话，深度 = 父深度 + 1，根沿用父的根。
+		// 深度写死两层（store.MaxChainDepth）：父会话已是第二层时拒绝，防定义白名单或旧客户端绕过 Visible。
+		depth, root := 2, parent
+		if pl, err := h.head(ctx, parent); err == nil {
+			depth, root = pl.Meta.Depth()+1, pl.Meta.Root()
+		} else if !errors.Is(err, store.ErrNotFound) {
+			return "", err
+		}
+		if depth > store.MaxChainDepth {
+			return "", fmt.Errorf("%w：会话 %s 已在创建链第 %d 层，不能再建会话（最多 %d 层）", ErrChainDepth, parent, depth-1, store.MaxChainDepth)
+		}
 		var raw json.RawMessage
 		if !o.IsZero() {
 			if raw, err = store.MergeMeta(nil, map[string]any{MetaSpawn: o}); err != nil {
@@ -129,7 +140,8 @@ func (h *Host) spawn(ctx context.Context, parent, id, origin, def string, f Fact
 			}()
 		}
 		hd, err = h.open(ctx, id, def, f, func(ag *agent.Agent, cfg *session.Config) error {
-			meta := store.SessionMeta{ParentID: parent, Origin: origin, Meta: raw}
+			meta := store.SessionMeta{ParentID: parent, Origin: origin, Meta: raw,
+				CreatorSession: parent, ChainDepth: depth, ChainRoot: root}
 			if ag.Def != nil {
 				meta.AgentID, meta.AgentHash = ag.Def.ID, ag.Def.Version
 			}

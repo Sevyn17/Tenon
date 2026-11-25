@@ -167,6 +167,9 @@ export interface Interaction {
   responders: string[];
   deadline?: number;
   opened_at: number;
+  creator_session?: string;
+  chain_root?: string;
+  chain_depth?: number;
 }
 
 export interface Approval {
@@ -246,6 +249,8 @@ export interface SessionSnapshot {
   pinned?: boolean;
   archived?: boolean;
   agent?: string;
+  creator_session?: string;
+  chain_depth?: number;
   run_state: string;
   mode?: Mode;
   settings: Settings;
@@ -271,6 +276,8 @@ export interface SessionInfo {
   workspace?: string;
   workspace_id?: string;
   agent?: string;
+  creator_session?: string;
+  chain_depth?: number;
   archived?: boolean;
   last_end?: TurnEnded;
   source?: string;
@@ -448,6 +455,8 @@ export interface SessionsChanged {
   origin?: string;
   workspace?: string;
   agent?: string;
+  creator_session?: string;
+  chain_depth?: number;
   archived?: boolean;
   last_end?: TurnEnded;
 }

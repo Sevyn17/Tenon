@@ -534,7 +534,7 @@ func (c *Conn) watchSessions(sub *bus.Sub) {
 			// 能据 parent / workspace / archived 判断该不该插入，不用再查一次列表。
 			row = wire.SessionsChanged{ID: e.Session, RunState: wireRun(l.RunState), Title: l.Meta.Title,
 				Pinned: pinnedOf(l.Meta.Meta), UpdatedAt: e.At, Preview: l.Preview, Parent: l.Meta.ParentID,
-				Origin: l.Meta.Origin, Workspace: l.Meta.Workspace, Agent: l.Meta.AgentID, Archived: store.ArchivedOf(l.Meta.Meta),
+				Origin: l.Meta.Origin, Workspace: l.Meta.Workspace, Agent: l.Meta.AgentID, CreatorSession: l.Meta.CreatorSession, ChainDepth: l.Meta.ChainDepth, Archived: store.ArchivedOf(l.Meta.Meta),
 				LastEnd: WireLastEnd(l.LastEnd)}
 			if e.Kind == store.EventRunState {
 				s, _ := dataMap(e.Data)["run_state"].(string)

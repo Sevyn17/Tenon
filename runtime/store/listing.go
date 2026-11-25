@@ -111,6 +111,8 @@ type SessionQuery struct {
 	// WorkspaceID 非空：只列 WorkspaceID(Workspace) 等于它的会话（工作区稳定 id，Mortise docs/74 W4a）。
 	// 与 Workspace 同时给时两者都要满足；Unassigned 为真时忽略。
 	WorkspaceID string
+	// CreatorSession 非空：只列由这个会话创建的会话（创建链，docs/76 C1；session_list 与并发计数用）。
+	CreatorSession string
 }
 
 // WorkspaceID 工作区键的稳定 id：sha256 前 16 位十六进制（与 wire.WorkspaceID 同一算法）；空键返回空。

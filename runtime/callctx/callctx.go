@@ -22,6 +22,9 @@ type Session struct {
 	Creator    string // 创建者（用户 id；空 = 本机）
 	Parent     string // 父会话 id
 	Key        string // 会话键
+	// CreatorSession / ChainDepth 创建链（Mortise docs/76 C1）：建本会话的会话 id（空 = 用户、系统或定时任务发起），深度 1 或 2。
+	CreatorSession string
+	ChainDepth     int
 }
 
 // Ctx 调用上下文。零值不可用，用 New 构造。

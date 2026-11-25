@@ -118,7 +118,7 @@ github.com/Sevyn17/tenon: method (Session) History(ctx context.Context) ([]*Entr
 github.com/Sevyn17/tenon: method (Session) ID() string
 github.com/Sevyn17/tenon: method (Session) Send(ctx context.Context, text string) (*Reply, error)
 github.com/Sevyn17/tenon: method (Session) Stream(ctx context.Context, text string) iter.Seq[Event]
-github.com/Sevyn17/tenon: type SessionCx = github.com/Sevyn17/tenon/runtime/assemble.SessionCx struct{ID string; Workdir string; Hub *github.com/Sevyn17/tenon/runtime/toolhub.Hub; Agent *github.com/Sevyn17/tenon/runtime/agent.Agent; Ctx *github.com/Sevyn17/tenon/runtime/callctx.Ctx; Child bool; Def *github.com/Sevyn17/tenon/runtime/agentdef.Agent; Parent *github.com/Sevyn17/tenon/runtime/assemble.ParentLimits; Spawn *github.com/Sevyn17/tenon/runtime/host.SpawnOptions; Values map[string]any}
+github.com/Sevyn17/tenon: type SessionCx = github.com/Sevyn17/tenon/runtime/assemble.SessionCx struct{ID string; Workdir string; Hub *github.com/Sevyn17/tenon/runtime/toolhub.Hub; Agent *github.com/Sevyn17/tenon/runtime/agent.Agent; Ctx *github.com/Sevyn17/tenon/runtime/callctx.Ctx; Child bool; Def *github.com/Sevyn17/tenon/runtime/agentdef.Agent; Parent *github.com/Sevyn17/tenon/runtime/assemble.ParentLimits; Spawn *github.com/Sevyn17/tenon/runtime/host.SpawnOptions; ChainDepth int; CreatorSession string; Values map[string]any}
 github.com/Sevyn17/tenon: method (SessionCx) Narrowed(note string)
 github.com/Sevyn17/tenon: func SetAppID(id AppID)
 github.com/Sevyn17/tenon: type Store = github.com/Sevyn17/tenon/runtime/store.Store
@@ -447,7 +447,7 @@ github.com/Sevyn17/tenon/appapi/wire: type GenOptions struct{Header string; Impo
 github.com/Sevyn17/tenon/appapi/wire: func Generate(types []any, consts map[string]any, opts GenOptions) string
 github.com/Sevyn17/tenon/appapi/wire: type HelloArgs struct{Client string; Protocol ProtocolRange}
 github.com/Sevyn17/tenon/appapi/wire: type HelloResult struct{Protocol int; Server string; Principal Principal; Capabilities []string; Model string; Workdir string; Trusted bool; MaxOutput int; Workspace string; WorkspaceID string; Extensions []ExtensionInfo}
-github.com/Sevyn17/tenon/appapi/wire: type Interaction struct{ID string; Session string; Turn uint32; Kind string; Title string; Approval *Approval; Question *Question; Choice *Choice; Form *Form; Confirm *Confirm; Plan *PlanPrompt; Schema encoding/json.RawMessage; Blocking *bool; Responders []string; Deadline int64; OpenedAt int64}
+github.com/Sevyn17/tenon/appapi/wire: type Interaction struct{ID string; Session string; Turn uint32; Kind string; Title string; Approval *Approval; Question *Question; Choice *Choice; Form *Form; Confirm *Confirm; Plan *PlanPrompt; Schema encoding/json.RawMessage; Blocking *bool; Responders []string; Deadline int64; OpenedAt int64; CreatorSession string; ChainRoot string; ChainDepth int}
 github.com/Sevyn17/tenon/appapi/wire: const InteractionApproval untyped string
 github.com/Sevyn17/tenon/appapi/wire: const InteractionChoice untyped string
 github.com/Sevyn17/tenon/appapi/wire: const InteractionConfirm untyped string
@@ -580,10 +580,10 @@ github.com/Sevyn17/tenon/appapi/wire: type SendResult struct{ClientID string; Qu
 github.com/Sevyn17/tenon/appapi/wire: type SessionArgs struct{Session string}
 github.com/Sevyn17/tenon/appapi/wire: type SessionClosed struct{Reason string}
 github.com/Sevyn17/tenon/appapi/wire: type SessionForked struct{From string; Upto int}
-github.com/Sevyn17/tenon/appapi/wire: type SessionInfo struct{ID string; Title string; Preview string; RunState string; Origin string; Parent string; UpdatedAt int64; Pinned bool; Workspace string; WorkspaceID string; Agent string; Archived bool; LastEnd *TurnEnded; Source string; Ref string}
-github.com/Sevyn17/tenon/appapi/wire: type SessionSnapshot struct{ID string; Parent string; Origin string; Title string; Pinned bool; Archived bool; Agent string; RunState string; Mode *Mode; Settings Settings; Log LogPos; Interactions []Interaction; Live *Live; Cursor int64; LastEnd *TurnEnded; Queued []QueuedInput; Source string; Ref string}
+github.com/Sevyn17/tenon/appapi/wire: type SessionInfo struct{ID string; Title string; Preview string; RunState string; Origin string; Parent string; UpdatedAt int64; Pinned bool; Workspace string; WorkspaceID string; Agent string; CreatorSession string; ChainDepth int; Archived bool; LastEnd *TurnEnded; Source string; Ref string}
+github.com/Sevyn17/tenon/appapi/wire: type SessionSnapshot struct{ID string; Parent string; Origin string; Title string; Pinned bool; Archived bool; Agent string; CreatorSession string; ChainDepth int; RunState string; Mode *Mode; Settings Settings; Log LogPos; Interactions []Interaction; Live *Live; Cursor int64; LastEnd *TurnEnded; Queued []QueuedInput; Source string; Ref string}
 github.com/Sevyn17/tenon/appapi/wire: type SessionUpdated struct{Title string; Pinned bool; Archived bool}
-github.com/Sevyn17/tenon/appapi/wire: type SessionsChanged struct{ID string; RunState string; Title string; UpdatedAt int64; Pinned bool; Deleted bool; Preview string; Parent string; Origin string; Workspace string; Agent string; Archived bool; LastEnd *TurnEnded}
+github.com/Sevyn17/tenon/appapi/wire: type SessionsChanged struct{ID string; RunState string; Title string; UpdatedAt int64; Pinned bool; Deleted bool; Preview string; Parent string; Origin string; Workspace string; Agent string; CreatorSession string; ChainDepth int; Archived bool; LastEnd *TurnEnded}
 github.com/Sevyn17/tenon/appapi/wire: type Settings struct{MaxSteps uint32; Model string; Reasoning string; WorkMode string}
 github.com/Sevyn17/tenon/appapi/wire: type SettingsArgs struct{Session string; MaxSteps *uint32; Model *string; Reasoning *string; WorkMode *string}
 github.com/Sevyn17/tenon/appapi/wire: type SettingsChanged struct{Settings Settings}

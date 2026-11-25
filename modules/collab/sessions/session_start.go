@@ -14,6 +14,7 @@ import (
 
 	"github.com/Sevyn17/tenon/runtime/host"
 	"github.com/Sevyn17/tenon/runtime/session"
+	"github.com/Sevyn17/tenon/runtime/store"
 	"github.com/Sevyn17/tenon/runtime/tasks"
 	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
@@ -109,6 +110,11 @@ func schemaFor(p Params) json.RawMessage {
 // ToolWithParams 同 ToolWithTasks，另按 p 开放按次参数（K5）。参数经 host.SpawnWith 交给会话构造，
 // 与父会话上限求交集：mode、tools 只能收窄，收窄时结果里写明「已收窄为 …」，不报错。
 func ToolWithParams(h *host.Host, f host.Factory, sink tasks.Sink, p Params) *toolhub.Tool {
+	return ToolWithContacts(h, f, sink, p, nil)
+}
+
+// ToolWithContacts 同 ToolWithParams，另带联系策略（docs/76 §6；nil = 只看定义名单）。
+func ToolWithContacts(h *host.Host, f host.Factory, sink tasks.Sink, p Params, contacts ContactPolicy) *toolhub.Tool {
 	// 一批里的多个委派并行跑（2026-11-04 审查 P2 工具体验：原先串行）；续用同一子会话的调用按 id 串行，见 childLocks。
 	yes := true
 	var locks childLocks
@@ -135,6 +141,12 @@ func ToolWithParams(h *host.Host, f host.Factory, sink tasks.Sink, p Params) *to
 			}
 			if msg := unsupported(strings.TrimSpace(a.Relation), strings.TrimSpace(a.Reply)); msg != "" {
 				return toolhub.Failf("%s", msg), nil
+			}
+			// 创建链两层（docs/76 C1）：Visible 已隐藏，这里按会话身份再校验一次，防定义白名单或旧会话绕过。
+			if cx.Ctx != nil {
+				if d := cx.Ctx.Session().ChainDepth; d >= store.MaxChainDepth {
+					return toolhub.Failf("本会话已在创建链第 %d 层，不能再建会话（最多 %d 层）；需要协作时把结果交回创建你的会话", d, store.MaxChainDepth), nil
+				}
 			}
 			// 关着的参数即使模型传了也不生效（schema 里没有它）。
 			var o host.SpawnOptions
@@ -168,6 +180,11 @@ func ToolWithParams(h *host.Host, f host.Factory, sink tasks.Sink, p Params) *to
 			def, err := pickDefinition(cx, strings.TrimSpace(a.Agent))
 			if err != nil {
 				return toolhub.Failf("%v", err), nil
+			}
+			if cx.Ctx != nil {
+				if err := checkContact(ctx, contacts, cx.Ctx.Session().Definition, def); err != nil {
+					return toolhub.Failf("%v", err), nil
+				}
 			}
 			cx.ChildSessionID = id
 			unlock := locks.lock(id)

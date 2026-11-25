@@ -819,7 +819,8 @@ func (s *Store) query(q store.SessionQuery, archived store.ArchivedFilter) ([]st
 	for _, x := range s.sessions {
 		if x.status == "deleted" || (q.Before > 0 && x.updatedAt >= q.Before) || (q.TopOnly && !store.TopLevel(x.meta.ParentID, x.meta.Origin)) ||
 			(q.Parent != "" && x.meta.ParentID != q.Parent) || (q.Agent != "" && x.meta.AgentID != q.Agent) ||
-			(q.WorkspaceID != "" && store.WorkspaceID(x.meta.Workspace) != q.WorkspaceID) {
+			(q.WorkspaceID != "" && store.WorkspaceID(x.meta.Workspace) != q.WorkspaceID) ||
+			(q.CreatorSession != "" && x.meta.CreatorSession != q.CreatorSession) {
 			continue
 		}
 		if q.Unassigned {
@@ -852,6 +853,7 @@ func (s *Store) query(q store.SessionQuery, archived store.ArchivedFilter) ([]st
 func (x *sess) info() store.SessionInfo {
 	i := store.SessionInfo{ID: x.meta.ID, Title: x.meta.Title, Preview: x.preview, RunState: x.runState,
 		Origin: x.meta.Origin, ParentID: x.meta.ParentID, Workspace: x.meta.Workspace, AgentID: x.meta.AgentID, UpdatedAt: x.updatedAt,
+		CreatorSession: x.meta.CreatorSession, ChainDepth: x.meta.ChainDepth, ChainRoot: x.meta.ChainRoot,
 		LastEnd: copyLastEnd(x.lastEnd)}
 	if m := x.meta.Meta; len(m) > 0 && string(m) != "{}" {
 		i.Meta = cloneRaw(m)
@@ -1062,6 +1064,7 @@ func (s *Store) Export(ctx context.Context, sessionID string, w io.Writer) error
 	if err := emit("session", map[string]any{
 		"id": m.ID, "agent_id": m.AgentID, "agent_hash": m.AgentHash, "creator": m.Creator,
 		"parent_id": m.ParentID, "origin": m.Origin, "fork_upto": m.ForkUpto,
+		"creator_session": m.CreatorSession, "chain_depth": m.ChainDepth, "chain_root": m.ChainRoot,
 		"status": x.status, "run_state": x.runState, "title": m.Title, "log_len": x.logLen,
 		"updated_at": x.updatedAt, "header": json.RawMessage(x.header), "config": json.RawMessage(cfg),
 	}); err != nil {

@@ -292,11 +292,17 @@ type UnassignedLister interface {
 
 // SessionMeta 会话行的非头部字段。
 type SessionMeta struct {
-	ID         string
-	AgentID    string
-	AgentHash  string // 定义整包内容哈希（框架设计 D1）；空 = 未绑定定义
-	Creator    string // 创建者（用户 id；空 = 本机）
-	ParentID   string
+	ID        string
+	AgentID   string
+	AgentHash string // 定义整包内容哈希（框架设计 D1）；空 = 未绑定定义
+	Creator   string // 创建者（用户 id；空 = 本机）。注意与 CreatorSession 区分：这里是人，那里是会话
+	ParentID  string // 子会话归属（随父会话、折叠在父会话下）；投递规则不看它，看 CreatorSession
+	// CreatorSession 建这个会话的会话 id（Mortise docs/76 C1）；空 = 由用户、系统或定时任务发起。子会话与独立会话都记。
+	CreatorSession string
+	// ChainDepth 创建链深度：1 = 第一层（CreatorSession 为空），2 = 第二层；0 视同 1（旧数据）。建会话时算好存下。
+	ChainDepth int
+	// ChainRoot 创建链根会话 id（第一层会话等于自身；空 = 自身，旧数据）。
+	ChainRoot  string
 	Origin     string // new / fork / side / subagent / member
 	ForkUpto   int
 	Title      string
@@ -501,12 +507,35 @@ type SessionInfo struct {
 	ParentID  string `json:"parent"`
 	Workspace string `json:"workspace,omitempty"`
 	// AgentID 会话绑定的定义名（SessionMeta.AgentID）；空 = 未绑定定义。
-	AgentID   string `json:"agent,omitempty"`
-	UpdatedAt int64  `json:"updated_at"`
+	AgentID string `json:"agent,omitempty"`
+	// CreatorSession / ChainDepth / ChainRoot 同 SessionMeta（创建链，docs/76 C1）。
+	CreatorSession string `json:"creator_session,omitempty"`
+	ChainDepth     int    `json:"chain_depth,omitempty"`
+	ChainRoot      string `json:"chain_root,omitempty"`
+	UpdatedAt      int64  `json:"updated_at"`
 	// Meta 应用写入的业务键（JSON 对象）。
 	Meta json.RawMessage `json:"meta,omitempty"`
 	// LastEnd 最近一个回合的结束原因（同 Loaded.LastEnd）；nil = 没有记录。
 	LastEnd *LastEnd `json:"last_end,omitempty"`
+}
+
+// MaxChainDepth 创建链最大深度（docs/69 §5、76：写死两层）。与信封跳数上限 MaxHop 独立：hop 管消息转发次数，深度管会话创建层数。
+const MaxChainDepth = 2
+
+// Depth 规范化的创建链深度：0（旧数据或未记）视同 1。
+func (m SessionMeta) Depth() int {
+	if m.ChainDepth <= 0 {
+		return 1
+	}
+	return m.ChainDepth
+}
+
+// Root 创建链根：ChainRoot 为空时是自身。
+func (m SessionMeta) Root() string {
+	if m.ChainRoot == "" {
+		return m.ID
+	}
+	return m.ChainRoot
 }
 
 // MergeMeta 把 set 合并进业务键 JSON 对象（值为 nil 删除该键），返回新对象。原对象不合法时按空对象处理。

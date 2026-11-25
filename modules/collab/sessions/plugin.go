@@ -8,6 +8,7 @@ import (
 	"github.com/Sevyn17/tenon/runtime/assemble"
 	"github.com/Sevyn17/tenon/runtime/component"
 	"github.com/Sevyn17/tenon/runtime/host"
+	"github.com/Sevyn17/tenon/runtime/store"
 	"github.com/Sevyn17/tenon/runtime/tasks"
 	"github.com/Sevyn17/tenon/runtime/toolhub"
 )
@@ -60,7 +61,7 @@ type plug struct{}
 func init() { component.Register(PluginName, func() component.Component { return &plug{} }) }
 
 func (*plug) Meta() component.Meta {
-	return component.Meta{Name: PluginName, Version: "0.1.0", Description: "Delegate a task to a subagent in its own child session", Effects: []string{component.EffectTools}, Requires: []string{assemble.ServiceHost, tasks.Key.Maybe()}, Config: &PluginConfig{}}
+	return component.Meta{Name: PluginName, Version: "0.1.0", Description: "Delegate a task to a subagent in its own child session", Effects: []string{component.EffectTools}, Requires: []string{assemble.ServiceHost, tasks.Key.Maybe(), ContactKey.Maybe()}, Config: &PluginConfig{}}
 }
 
 func (*plug) Setup(cx *component.Registrar) error {
@@ -82,14 +83,19 @@ func (*plug) Setup(cx *component.Registrar) error {
 		return err
 	}
 	cfg, _ := cx.Config().(*PluginConfig)
-	t := ToolWithParams(h, h.ChildFactory(), sink, cfg.Params()).WithItems(ItemSpawn)
+	contacts, _, err := component.GetOptional(cx, ContactKey)
+	if err != nil {
+		return err
+	}
+	t := ToolWithContacts(h, h.ChildFactory(), sink, cfg.Params(), contacts).WithItems(ItemSpawn)
 	for _, it := range Items() {
 		component.RegisterAt(cx, assemble.PermItems, it.ID, it)
 	}
-	// 子会话不再带委派工具（深度上限 1）。这里用 Visible 而不是重造工具。
+	// 创建链两层（Mortise docs/76 C1）：第二层会话（子会话或由别的会话建的独立会话）不带 session_start。
+	// 这里用 Visible 而不是重造工具；执行时再按会话行深度校验一次（见 ToolWithParams）。
 	component.RegisterAt(cx, assemble.SessionTools, PluginName, assemble.ToolsEntry{Order: 60,
 		Tools:   func() []*toolhub.Tool { return []*toolhub.Tool{t} },
-		Visible: func(sc *assemble.SessionCx) bool { return !sc.Child }})
+		Visible: func(sc *assemble.SessionCx) bool { return !sc.Child && sc.ChainDepth < store.MaxChainDepth }})
 	return nil
 }
 

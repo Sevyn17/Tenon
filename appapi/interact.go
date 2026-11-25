@@ -187,6 +187,14 @@ func (v *App) wireInteraction(p store.Pending) wire.Interaction {
 	if it.Responders == nil {
 		it.Responders = []string{}
 	}
+	if v.o.DB != nil { // 来源链：按会话行取（只读头部，不读条目）
+		if l, err := host.LoadHead(context.Background(), v.o.DB, p.SessionID); err == nil {
+			it.CreatorSession, it.ChainDepth = l.Meta.CreatorSession, l.Meta.ChainDepth
+			if l.Meta.ChainRoot != "" && l.Meta.ChainRoot != p.SessionID {
+				it.ChainRoot = l.Meta.ChainRoot
+			}
+		}
+	}
 	if it.OpenedAt == 0 {
 		it.OpenedAt = p.CreatedAt
 	}

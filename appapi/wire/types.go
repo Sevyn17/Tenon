@@ -149,6 +149,11 @@ type Interaction struct {
 	Responders []string `json:"responders"`
 	Deadline   int64    `json:"deadline,omitempty"`
 	OpenedAt   int64    `json:"opened_at"`
+	// CreatorSession / ChainRoot / ChainDepth 发起这次交互的会话在创建链上的位置（Mortise docs/76 C1）：界面据此显示来源链。
+	// 第一层会话不给 creator_session；chain_depth 0 视同 1。
+	CreatorSession string `json:"creator_session,omitempty"`
+	ChainRoot      string `json:"chain_root,omitempty"`
+	ChainDepth     int    `json:"chain_depth,omitempty"`
 }
 
 // Approval 工具确认的内容。
@@ -272,14 +277,17 @@ type SessionSnapshot struct {
 	Pinned   bool   `json:"pinned,omitempty"`
 	Archived bool   `json:"archived,omitempty"` // 已归档（客户端改进 M7）
 	// Agent 会话绑定的定义名（建会话时冻结）；空 = 未绑定定义。
-	Agent        string        `json:"agent,omitempty"`
-	RunState     string        `json:"run_state"` // idle / running
-	Mode         *Mode         `json:"mode,omitempty"`
-	Settings     Settings      `json:"settings"`
-	Log          LogPos        `json:"log"`
-	Interactions []Interaction `json:"interactions"`
-	Live         *Live         `json:"live,omitempty"`
-	Cursor       int64         `json:"cursor"`
+	Agent string `json:"agent,omitempty"`
+	// CreatorSession / ChainDepth 同 SessionInfo（创建链，docs/76 C1）。
+	CreatorSession string        `json:"creator_session,omitempty"`
+	ChainDepth     int           `json:"chain_depth,omitempty"`
+	RunState       string        `json:"run_state"` // idle / running
+	Mode           *Mode         `json:"mode,omitempty"`
+	Settings       Settings      `json:"settings"`
+	Log            LogPos        `json:"log"`
+	Interactions   []Interaction `json:"interactions"`
+	Live           *Live         `json:"live,omitempty"`
+	Cursor         int64         `json:"cursor"`
 	// LastEnd 最近一个回合的结束原因（hello 能力 last_end）：只在 idle 时给；没有记录（旧会话、
 	// 还没跑完过回合、已被回退清掉）时不给。
 	LastEnd *TurnEnded `json:"last_end,omitempty"`
@@ -341,6 +349,10 @@ type SessionInfo struct {
 	WorkspaceID string `json:"workspace_id,omitempty"`
 	// Agent 会话绑定的定义名；空 = 未绑定定义。
 	Agent string `json:"agent,omitempty"`
+	// CreatorSession 建这个会话的会话 id（创建链，Mortise docs/76 C1）；空 = 由用户、系统或定时任务发起。
+	CreatorSession string `json:"creator_session,omitempty"`
+	// ChainDepth 创建链深度：1 = 第一层，2 = 由别的会话建的；0（不给）视同 1。
+	ChainDepth int `json:"chain_depth,omitempty"`
 	// Archived 已归档（session.update {archived}，客户端改进 M7）。
 	Archived bool `json:"archived,omitempty"`
 	// LastEnd 最近一个回合的结束原因（客户端改进 M7，未读与通知用 last_end.at / kind）。与快照不同，

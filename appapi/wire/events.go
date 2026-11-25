@@ -270,17 +270,19 @@ type CursorRef struct {
 // 缺省就是空 / false / 没有（last_end 不给 = 没有记录或已被回退清掉），客户端据此插入列表里还没有的会话；
 // 没有这项能力的旧服务端不带，客户端不能把「没给」当成空。
 type SessionsChanged struct {
-	ID        string     `json:"id"`
-	RunState  string     `json:"run_state"`
-	Title     string     `json:"title"`
-	UpdatedAt int64      `json:"updated_at"`
-	Pinned    bool       `json:"pinned"`
-	Deleted   bool       `json:"deleted,omitempty"`
-	Preview   string     `json:"preview,omitempty"`
-	Parent    string     `json:"parent,omitempty"`
-	Origin    string     `json:"origin,omitempty"`
-	Workspace string     `json:"workspace,omitempty"`
-	Agent     string     `json:"agent,omitempty"` // 同 SessionInfo.agent
-	Archived  bool       `json:"archived,omitempty"`
-	LastEnd   *TurnEnded `json:"last_end,omitempty"` // 同 SessionInfo.last_end：运行中也给（上一回合的）
+	ID             string     `json:"id"`
+	RunState       string     `json:"run_state"`
+	Title          string     `json:"title"`
+	UpdatedAt      int64      `json:"updated_at"`
+	Pinned         bool       `json:"pinned"`
+	Deleted        bool       `json:"deleted,omitempty"`
+	Preview        string     `json:"preview,omitempty"`
+	Parent         string     `json:"parent,omitempty"`
+	Origin         string     `json:"origin,omitempty"`
+	Workspace      string     `json:"workspace,omitempty"`
+	Agent          string     `json:"agent,omitempty"`           // 同 SessionInfo.agent
+	CreatorSession string     `json:"creator_session,omitempty"` // 同 SessionInfo.creator_session
+	ChainDepth     int        `json:"chain_depth,omitempty"`     // 同 SessionInfo.chain_depth
+	Archived       bool       `json:"archived,omitempty"`
+	LastEnd        *TurnEnded `json:"last_end,omitempty"` // 同 SessionInfo.last_end：运行中也给（上一回合的）
 }
