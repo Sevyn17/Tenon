@@ -216,7 +216,9 @@ type Host struct {
 	actors map[string]*actor
 	// spawnOpts 正在新建的子会话的按次覆盖（SpawnWith → SpawnOptionsFor，K5）。同受 mu 保护。
 	spawnOpts map[string]SpawnOptions
-	sem       chan struct{} // Limit 的许可池，首次使用时按 Limit 建
+	// pendingCreator 正在由 StartSession 新建的会话 → 派出方（docs/76 C2）。同受 mu 保护。
+	pendingCreator map[string]string
+	sem            chan struct{} // Limit 的许可池，首次使用时按 Limit 建
 
 	// 发件箱派发（08 9.6）：同一时刻只有一个派发者（读未发行 → 投递 → 标记之间不能交错，
 	// 否则同一条会投递多次）；回合结束只「踢一下」后台派发，不在 actor 协程里投递
@@ -626,6 +628,8 @@ type actor struct {
 	// turnBudgetRef 是本轮的预算账（信封 budget_ref，取本批主触发者）：turn 开始时设，结束时按本回合
 	// 用量记账（08 8.4）。
 	turnBudgetRef string
+	// turnCorr / turnFrom 本轮由会话信封触发时，那封信的 corr 与发件会话 id（docs/76 C2 回投判定）。只在 actor 协程里读写。
+	turnCorr, turnFrom string
 	// budgetedTurn 已记账的回合号：同一回合重跑（TreePolicy=restart）不重复记账（进程内去重）。
 	budgetedTurn uint32
 	// steered 本回合已受理的插话 client_id（protocol 2 steer 幂等：插话只在回合中有效，同回合重发只确认不重复插入）。只在 actor 协程里读写。

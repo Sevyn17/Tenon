@@ -96,6 +96,20 @@ func (s *Span) ID() string { return s.s.ID }
 //
 // 信封随本轮检查点落库，提交后由宿主派发（08 9.6）。
 func (a *Agent) Outbound(env mail.Envelope) error {
+	a.stamp(&env)
+	if err := env.Normalize(); err != nil {
+		return err
+	}
+	b, err := json.Marshal(env)
+	if err != nil {
+		return err
+	}
+	a.EnqueueOutbox(env.ID, b)
+	return nil
+}
+
+// stamp 按本会话本回合写信封的内核字段（Outbound 与 Stamp 共用）。
+func (a *Agent) stamp(env *mail.Envelope) {
 	o := a.CurrentTurnOrigin()
 	env.From = mail.Address{Kind: mail.AddrSession, ID: a.SessionID}
 	env.Hop = o.Hop
@@ -106,15 +120,15 @@ func (a *Agent) Outbound(env mail.Envelope) error {
 		env.Origin = mail.OriginExternal
 	}
 	env.Via = ""
-	if err := env.Normalize(); err != nil {
-		return err
+}
+
+// Stamp 同 Outbound 写内核字段（from、hop、trace、caps、origin），另把本回合的预算账带上（调用方没给时），
+// 但不入发件箱：宿主当场投递的信用它（Mortise docs/76 C2：session_start 派出的第一封信、被派会话的回投）。
+func (a *Agent) Stamp(env *mail.Envelope) {
+	a.stamp(env)
+	if env.BudgetRef == "" {
+		env.BudgetRef = a.CurrentTurnOrigin().BudgetRef
 	}
-	b, err := json.Marshal(env)
-	if err != nil {
-		return err
-	}
-	a.EnqueueOutbox(env.ID, b)
-	return nil
 }
 
 // effectiveCaps 本会话这一轮能用的工具：可用工具集 ∩ 本轮 caps。总是返回非 nil
@@ -154,6 +168,8 @@ type TurnOrigin struct {
 	// From 触发本回合的输入来源地址（信封 from 字符串，如 "human:u1"）；空 = 非信封输入。
 	// 多人会话里 control 放行到本轮触发者（02 2.4，T4f）。
 	From string
+	// BudgetRef 本回合的预算账（信封 budget_ref）；Stamp 据此把整条创建链记在同一账上（Mortise docs/76 C2）。
+	BudgetRef string
 }
 
 // SetTurnOrigin 设置本回合的触发链信息。

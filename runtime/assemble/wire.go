@@ -122,21 +122,22 @@ func Wire(o WireOptions) (*Wired, error) {
 			}
 			return pol
 		},
-		Tools:       col.Tools,
-		Inits:       col.Inits,
-		ToolCallMW:  o.Asm.ToolCallTransforms(),
-		Blocks:      col.Blocks, // 系统提示词由 prompt 组件提供
-		Items:       col.Items,
-		Kernel:      &k,
-		Compactor:   col.Compactor, // 自动压缩与超限后的强制压缩（审查 P0-1）
-		ContextMW:   ctxMiddleware(o.Asm),
-		ModelMW:     modelMiddleware(o.Asm),
-		Definitions: o.Definitions,
-		Statuses:    col.Statuses,
-		Schemas:     o.Asm.AgentSchemas(),
-		UseSource:   o.UseSource,
-		Hooks:       o.Hooks,
-		PointGuards: pointGuards(o.Asm),
+		Tools:          col.Tools,
+		Inits:          col.Inits,
+		ToolCallMW:     o.Asm.ToolCallTransforms(),
+		Blocks:         col.Blocks, // 系统提示词由 prompt 组件提供
+		Items:          col.Items,
+		Kernel:         &k,
+		Compactor:      col.Compactor, // 自动压缩与超限后的强制压缩（审查 P0-1）
+		ContextMW:      ctxMiddleware(o.Asm),
+		ModelMW:        modelMiddleware(o.Asm),
+		Definitions:    o.Definitions,
+		Statuses:       col.Statuses,
+		Schemas:        o.Asm.AgentSchemas(),
+		UseSource:      o.UseSource,
+		Hooks:          o.Hooks,
+		PointGuards:    pointGuards(o.Asm),
+		PendingCreator: h.PendingCreator,
 	}
 	// 顶层会话带委派 / 领导工具；子会话与工作组成员按 child 构造（深度 1）。
 	h.New = func(id, def string) (*agent.Agent, *session.Config, error) { return rb.Build(id, def, false) }
@@ -165,7 +166,13 @@ func (w *Wired) Background() context.CancelFunc {
 				w.host.Bus.Publish(bus.Envelope{Kind: kind, Data: data})
 			}
 		}})
-	go func() { _, _ = w.host.FlushOutbox(ctx) }()
+	// 启动：先派发上次留下的外发，再打开信箱里有可唤醒信件的会话（不论 active / sleeping，docs/76 C2 §4.5），
+	// 之后每 OutboxRetryEvery 重试一次发件箱（临时失败的回投不必等下一次检查点或重启，与 SleepAfter 解耦）。
+	go func() {
+		_, _ = w.host.FlushOutbox(ctx)
+		_, _ = w.host.ScanMail(ctx)
+		w.host.OutboxLoop(ctx, host.OutboxRetryEvery)
+	}()
 	return cancel
 }
 

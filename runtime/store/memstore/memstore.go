@@ -1064,7 +1064,7 @@ func (s *Store) Export(ctx context.Context, sessionID string, w io.Writer) error
 	if err := emit("session", map[string]any{
 		"id": m.ID, "agent_id": m.AgentID, "agent_hash": m.AgentHash, "creator": m.Creator,
 		"parent_id": m.ParentID, "origin": m.Origin, "fork_upto": m.ForkUpto,
-		"creator_session": m.CreatorSession, "chain_depth": m.ChainDepth, "chain_root": m.ChainRoot,
+		"creator_session": m.CreatorSession, "chain_depth": m.ChainDepth, "chain_root": m.ChainRoot, "reply_mode": m.ReplyMode,
 		"status": x.status, "run_state": x.runState, "title": m.Title, "log_len": x.logLen,
 		"updated_at": x.updatedAt, "header": json.RawMessage(x.header), "config": json.RawMessage(cfg),
 	}); err != nil {

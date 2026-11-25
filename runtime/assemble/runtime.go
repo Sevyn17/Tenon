@@ -68,6 +68,16 @@ func (b *Builder) chainOf(id string, child bool, p *ParentLimits) (int, string, 
 		}
 	}
 	if !child {
+		// 独立会话（docs/76 C2）：StartSession 建会话行之前登记了派出方，按它算第二层。
+		if c := b.pendingCreator(id); c != "" {
+			depth := 2
+			if b.DB != nil {
+				if l, err := host.LoadHead(context.Background(), b.DB, c); err == nil {
+					depth = l.Meta.Depth() + 1
+				}
+			}
+			return depth, c, nil
+		}
 		return 1, "", nil
 	}
 	parent := ""
@@ -137,6 +147,15 @@ type Builder struct {
 	// PointGuards 判定区（component.WrapGuard 登记的规则）：点位名 → 该点位的判定链。
 	// 04 4.3.2：与 Guards 并存——Guards 是内核守卫（GuardRule），PointGuards 是组件扩展点。
 	PointGuards func(ctx context.Context, req component.ToolCallReq) (component.Verdict, string)
+	// PendingCreator 正在新建的独立会话的派出方（host.PendingCreator，docs/76 C2）；可空。
+	PendingCreator func(id string) string
+}
+
+func (b *Builder) pendingCreator(id string) string {
+	if b.PendingCreator == nil {
+		return ""
+	}
+	return b.PendingCreator(id)
 }
 
 // modelFor 会话用的模型：定义写了 model 就用它（经目录解析校验，写错即报错），否则用全局缺省。
@@ -206,10 +225,9 @@ func (b *Builder) BuildWith(id, defName string, child bool, o *host.SpawnOptions
 	cx := &SessionCx{ID: id, Workdir: b.Workdir, Hub: hub, Agent: a, Child: child, Values: map[string]any{}, Ctx: kctx, Def: def, Spawn: o}
 	// 04 4.3.1：把会话作用域挂到 kctx，中间件经 ToolCallReq.Scope 拿到「每会话一份」的状态。
 	kctx.SetScope(&sessionScope{cx: cx})
-	if child {
-		if cx.Parent, err = b.parentLimits(id); err != nil {
-			return nil, nil, err
-		}
+	// 子会话按父会话收窄；独立会话（有派出方）按派出方收窄：创建者 ∩ 目标上限（docs/76 C2）。
+	if cx.Parent, err = b.parentLimits(id, child); err != nil {
+		return nil, nil, err
 	}
 	if cx.ChainDepth, cx.CreatorSession, err = b.chainOf(id, child, cx.Parent); err != nil {
 		return nil, nil, err
@@ -528,7 +546,7 @@ func (p *ParentLimits) UseValues(component, key string) []any {
 
 // parentLimits 读子会话 id 的父会话（会话行有 ParentID 就用它；新建时会话行还不存在，按 id 约定
 // "<父 id>/<子名>" 取，subagent 与 workgroup 都这样拼）。父会话不存在返回 nil。
-func (b *Builder) parentLimits(id string) (*ParentLimits, error) {
+func (b *Builder) parentLimits(id string, child bool) (*ParentLimits, error) {
 	if b.DB == nil {
 		return nil, nil
 	}
@@ -536,16 +554,27 @@ func (b *Builder) parentLimits(id string) (*ParentLimits, error) {
 	noEntries := math.MaxInt
 	parent := ""
 	if l, err := b.DB.Load(ctx, id, &noEntries); err == nil {
-		parent = l.Meta.ParentID
+		if child {
+			parent = l.Meta.ParentID
+		}
+		if parent == "" { // 分叉（origin=fork）也有 ParentID，但它是顶层会话，不按源会话收窄
+			parent = l.Meta.CreatorSession // 独立会话：上限按派出方（创建者 ∩ 目标上限，docs/76 C2）
+		}
 	} else if !errors.Is(err, store.ErrNotFound) {
 		return nil, fmt.Errorf("runtime: 读子会话 %s：%w", id, err)
 	}
 	if parent == "" {
+		parent = b.pendingCreator(id)
+	}
+	if parent == "" && child { // id 约定只对子会话成立；顶层会话 id 里的 "/"（如 resident:）不算父子
 		i := strings.LastIndex(id, "/")
 		if i <= 0 {
 			return nil, nil
 		}
 		parent = id[:i]
+	}
+	if parent == "" {
+		return nil, nil // 顶层会话、没有派出方：不收窄
 	}
 	l, err := b.DB.Load(ctx, parent, &noEntries)
 	if errors.Is(err, store.ErrNotFound) {

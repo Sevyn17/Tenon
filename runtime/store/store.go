@@ -170,6 +170,13 @@ type SleepScanner interface {
 	SleepingWithMail(ctx context.Context, kinds []string, limit int) ([]string, error)
 }
 
+// MailScanner 可选：有可唤醒信件（kind 属于 kinds）、状态不是 deleted 的会话 id，不看 active / sleeping（Mortise docs/76 C2 启动扫描：
+// 上次进程退出时状态停在 active 的会话、子会话的未消费信件也要被打开处理）。按 id 升序，limit<=0 不限。
+// 未实现时宿主退回 SessionsWithStatus(active / sleeping) 逐个查信箱。
+type MailScanner interface {
+	SessionsWithMail(ctx context.Context, kinds []string, limit int) ([]string, error)
+}
+
 // ErrCorrRejected：回信核对失败（不存在、已过期、已用过、发送者不是预期回复方）。
 var ErrCorrRejected = errors.New("store: corr 回信核对失败")
 
@@ -302,7 +309,10 @@ type SessionMeta struct {
 	// ChainDepth 创建链深度：1 = 第一层（CreatorSession 为空），2 = 第二层；0 视同 1（旧数据）。建会话时算好存下。
 	ChainDepth int
 	// ChainRoot 创建链根会话 id（第一层会话等于自身；空 = 自身，旧数据）。
-	ChainRoot  string
+	ChainRoot string
+	// ReplyMode 被派会话的回投方式（Mortise docs/76 C2）：wait / notify / notify_wake / none；空 = 不回投（非派出会话）。
+	// 建会话时写，之后不变。只有由创建者那封带 corr 的信触发的回合结束时才按它回投。
+	ReplyMode  string
 	Origin     string // new / fork / side / subagent / member
 	ForkUpto   int
 	Title      string

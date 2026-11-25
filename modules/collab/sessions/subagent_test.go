@@ -66,8 +66,8 @@ func TestSubagentTool(t *testing.T) {
 	}
 }
 
-// relation=independent、reply=notify|none 本版未实现：返回失败，不建会话（docs/73 §2.1）。
-func TestSessionStartRejectsUnimplemented(t *testing.T) {
+// 不合法的 relation / reply 组合：返回失败，不建会话（docs/76 C2：independent 不能配 wait，拼错的值拒绝）。
+func TestSessionStartRejectsInvalid(t *testing.T) {
 	ctx := context.Background()
 	db := memstore.New()
 	t.Cleanup(func() { db.Close() })
@@ -77,9 +77,8 @@ func TestSessionStartRejectsUnimplemented(t *testing.T) {
 	}}
 	tool := Tool(h, h.New)
 	for _, args := range []string{
-		`{"task":"x","relation":"independent"}`,
-		`{"task":"x","reply":"notify"}`,
-		`{"task":"x","reply":"none"}`,
+		`{"task":"x","relation":"independent","reply":"wait"}`,
+		`{"task":"x","reply":"later"}`,
 		`{"task":"x","relation":"bogus"}`,
 	} {
 		cx := &toolhub.Cx{SessionID: "p", CallID: "call-00000000ffff", Tool: tool}

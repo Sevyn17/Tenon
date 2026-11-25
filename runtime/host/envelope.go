@@ -454,7 +454,8 @@ func (h *Host) deliverSession(ctx context.Context, env mail.Envelope) error {
 		return fmt.Errorf("%w: %s", ErrNotAllowed, reason)
 	}
 	// 常驻会话（T5a）：谁能联系只看 agent: 定义守卫，创建者是 system:<租户>，不按「是否创建者」拦。
-	allowContact := verdict == component.Allow || strings.HasPrefix(id, "resident:")
+	// 创建链（Mortise docs/76 C2）：派出方给自己派出的会话投信、被派会话回投创建者，沿创建链放行。
+	allowContact := verdict == component.Allow || strings.HasPrefix(id, "resident:") || h.chainContact(ctx, env, l.Meta, id)
 	if err := guardContact(env, l.Meta, allowContact); err != nil {
 		h.guardDenied(env, id, err.Error())
 		return err
@@ -793,7 +794,8 @@ func (a *actor) applyNotices(ctx context.Context, items []store.InboxItem) (bool
 		parts = append(parts, fmt.Sprintf(`<item source=%q key=%q>%s</item>`,
 			mail.EscapeAttr(e.From.ID), mail.EscapeAttr(e.ID), mail.EscapeText(e.Body)))
 		consume = append(consume, it.ItemID)
-		if !e.Origin.Trusted() {
+		// 别的会话发来的 notice（被派会话的回投，docs/76 §4.3）一律按不可信背景显示，不当作用户指令。
+		if !e.Origin.Trusted() || e.From.Kind == mail.AddrSession {
 			untrusted = true
 		}
 	}

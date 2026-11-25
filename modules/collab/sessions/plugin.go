@@ -46,6 +46,8 @@ type PluginConfig struct {
 	Model        bool `cfg:"param_model" default:"false" title:"开放 model" widget:"switch" description:"委派时可指定子智能体的模型；关着时跟随主会话"`
 	Mode         bool `cfg:"param_mode" default:"true" title:"开放 mode" widget:"switch" description:"委派时可指定子智能体的权限档位；只能收窄，最多与主会话一样宽"`
 	Tools        bool `cfg:"param_tools" default:"true" title:"开放 tools" widget:"switch" description:"委派时可给子智能体工具白名单；只能是主会话有的工具"`
+	// MaxConcurrent 一个会话同时在跑的派出会话上限（Mortise docs/76 已定 Q1）：缺省 4，范围 1–8，上限 8 写死在代码里。
+	MaxConcurrent int `cfg:"max_concurrent" default:"4" title:"并发上限" description:"一个会话同时在跑的派出会话数上限（1–8）"`
 }
 
 // Params 配置对应的参数开关。
@@ -87,7 +89,11 @@ func (*plug) Setup(cx *component.Registrar) error {
 	if err != nil {
 		return err
 	}
-	t := ToolWithContacts(h, h.ChildFactory(), sink, cfg.Params(), contacts).WithItems(ItemSpawn)
+	maxC := DefaultMaxConcurrent
+	if cfg != nil {
+		maxC = cfg.MaxConcurrent
+	}
+	t := ToolWithOptions(h, h.ChildFactory(), sink, cfg.Params(), contacts, maxC).WithItems(ItemSpawn)
 	for _, it := range Items() {
 		component.RegisterAt(cx, assemble.PermItems, it.ID, it)
 	}

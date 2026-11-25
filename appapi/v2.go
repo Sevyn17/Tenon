@@ -772,9 +772,14 @@ func (v *App) Delete(ctx context.Context, in wire.SessionArgs) (wire.Empty, erro
 	if err != nil {
 		return wire.Empty{}, err
 	}
-	for _, id := range ids {
+	// 顶层会话有进行中的回合：先 session.cancel。子会话（含异步派出、Mortise docs/76 C2 D5）随创建者删除级联停止：
+	// 取消它们正在跑的回合再删；独立会话（不以 "<session>/" 开头）不受影响。
+	if hd, ok := v.o.Host.Get(in.Session); ok && hd.InTurn() {
+		return wire.Empty{}, fmt.Errorf("%w: session %s has a turn in progress", session.ErrNotIdle, in.Session)
+	}
+	for _, id := range ids[1:] {
 		if hd, ok := v.o.Host.Get(id); ok && hd.InTurn() {
-			return wire.Empty{}, fmt.Errorf("%w: session %s has a turn in progress", session.ErrNotIdle, id)
+			_ = hd.Do(host.Command{Kind: host.Cancel})
 		}
 	}
 	// 子会话先删：顶层删到一半失败时，重试还能找到剩下的子会话。

@@ -549,7 +549,7 @@ func (a *actor) drainInbox(ctx context.Context) (stop bool, err error) {
 		}
 		a.ag.SetTrace(trace)
 		// 触发链信息：本回合发出的信封沿用本批里最大的跳数、来源可信度只降不升（08 8.7）。
-		a.ag.SetTurnOrigin(agent.TurnOrigin{Hop: batchHop(batch), Untrusted: untrusted, From: env.From.String()})
+		a.ag.SetTurnOrigin(agent.TurnOrigin{Hop: batchHop(batch), Untrusted: untrusted, From: env.From.String(), BudgetRef: batchBudgetRef(batch)})
 		a.ag.Ctx.SetUntrusted(untrusted) // 权限组件据此把 allow 降为询问
 		// 本轮触发者（T4f，08 8.3）：守卫按它的用户层上限重解权限。非人触发（组件/智能体）置空。
 		if env.From.Kind == mail.AddrHuman {
@@ -600,6 +600,11 @@ func (a *actor) drainInbox(ctx context.Context) (stop bool, err error) {
 		a.turnInputs = consume                  // 守卫放行后才记：被拒的输入不开回合
 		a.turnCaps = batchCaps(batch)           // 信封 caps 交集：本轮只许调这些工具（空=不限）
 		a.turnBudgetRef = batchBudgetRef(batch) // 本轮预算账（08 8.4）
+		// 回投判定（docs/76 C2）：只记会话发来、带 corr 的请求；用户或组件触发的回合不回投。
+		a.turnCorr, a.turnFrom = "", ""
+		if env.From.Kind == mail.AddrSession && env.Corr != "" && env.Kind == mail.KindRequest {
+			a.turnCorr, a.turnFrom = env.Corr, env.From.ID
+		}
 		end, terr := a.turn(ctx, false, func(tctx context.Context) (session.EndReason, error) {
 			return a.ag.SendContent(tctx, content, m, consume)
 		})
@@ -761,6 +766,7 @@ func (a *actor) turn(ctx context.Context, resumed bool, f func(context.Context) 
 	if a.h.Hooks.AfterTurn != nil {
 		a.h.Hooks.AfterTurn(a.id, end)
 	}
+	a.replyToCreator(ctx, end) // 回投随下面的提交进发件箱（08 9.6）
 	a.publishTurnEnd(end)
 	if err := a.ag.Commit(ctx); err != nil { // span 与 after_turn 的修改落库（中间件改写的 last_end 也在这里落库）
 		return end, err

@@ -93,3 +93,34 @@ func (s *Store) SleepingWithMail(ctx context.Context, kinds []string, limit int)
 }
 
 var _ store.SleepScanner = (*Store)(nil)
+
+// SessionsWithMail 有可唤醒信件、未删除的会话 id（不看 active / sleeping），按 id 升序，最多 limit 个（与 sqlite 一致）。
+func (s *Store) SessionsWithMail(ctx context.Context, kinds []string, limit int) ([]string, error) {
+	if err := s.lock(); err != nil {
+		return nil, err
+	}
+	defer s.mu.Unlock()
+	want := map[string]bool{}
+	for _, k := range kinds {
+		want[k] = true
+	}
+	out := []string{}
+	for id, x := range s.sessions {
+		if x.status == "deleted" {
+			continue
+		}
+		for _, r := range s.inbox[id] {
+			if !r.consumed && want[r.it.Kind] {
+				out = append(out, id)
+				break
+			}
+		}
+	}
+	sort.Strings(out)
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
+}
+
+var _ store.MailScanner = (*Store)(nil)

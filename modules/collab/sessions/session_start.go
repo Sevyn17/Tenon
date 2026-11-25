@@ -1,6 +1,6 @@
 // Package sessions 提供 session_start（Mortise docs/70、docs/73 S1）：给某个智能体新建会话并交给它第一条消息。
-// 本版只实现子会话同步委派（relation=child、reply=wait）：跑子会话一个回合，把最终回答交回创建者会话。
-// relation=independent、reply=notify|none 已在 schema 里登记，调用时返回"随 T3 提供"。
+// 三种用法（docs/76 C2）：child + wait 同步跑子会话一个回合并返回最终回答；child + notify|none 派出子会话不等它；
+// independent 建顶层独立会话交给对方负责（缺省 notify，结果以 notice 回投创建者）。并发、深度两层、联系策略都在这里先判一次。
 // 子会话 origin 字面量仍是 "subagent"（宿主据此判断子会话，docs/73 R1），内置临时智能体定义名仍是 "subagent"。
 package sessions
 
@@ -36,24 +36,47 @@ const (
 	ReplyNone           = "none"
 )
 
-// unsupported 本版不支持的 relation / reply 取值返回说明；空串与已实现的取值返回 ""。
-// 其它取值（拼错的）按 invalid 说明，模型据此改参数。
-func unsupported(relation, reply string) string {
+// normalize 规范化 relation / reply（docs/76 C2）：缺省 child + wait；independent 缺省 notify；
+// independent + wait 不合法（同步等待只对子会话有意义）。返回规范值，或给模型看的错误说明。
+func normalize(relation, reply string) (string, string, string) {
 	switch relation {
-	case "", RelationChild:
-	case RelationIndependent:
-		return "relation=independent（独立会话）本版本暂不支持，随 T3 提供；请用 child"
+	case "":
+		relation = RelationChild
+	case RelationChild, RelationIndependent:
 	default:
-		return fmt.Sprintf("relation 只能是 %s 或 %s，得到 %q", RelationChild, RelationIndependent, relation)
+		return "", "", fmt.Sprintf("relation 只能是 %s 或 %s，得到 %q", RelationChild, RelationIndependent, relation)
 	}
 	switch reply {
-	case "", ReplyWait:
-	case ReplyNotify, ReplyNone:
-		return fmt.Sprintf("reply=%s 本版本暂不支持，随 T3 提供；请用 wait", reply)
+	case "":
+		reply = ReplyWait
+		if relation == RelationIndependent {
+			reply = ReplyNotify
+		}
+	case ReplyWait, ReplyNotify, ReplyNone:
 	default:
-		return fmt.Sprintf("reply 只能是 %s、%s 或 %s，得到 %q", ReplyWait, ReplyNotify, ReplyNone, reply)
+		return "", "", fmt.Sprintf("reply 只能是 %s、%s 或 %s，得到 %q", ReplyWait, ReplyNotify, ReplyNone, reply)
 	}
-	return ""
+	if relation == RelationIndependent && reply == ReplyWait {
+		return "", "", "relation=independent 不能配 reply=wait：独立会话不等结果；要等结果用 child，要结果回投用 notify"
+	}
+	return relation, reply, ""
+}
+
+// 并发上限（docs/76 §5.1 D12、已定 Q1）：[plugin.session-start] max_concurrent，缺省 4，范围 1–8，硬上限写死。
+const (
+	DefaultMaxConcurrent = 4
+	MaxConcurrentCap     = 8
+)
+
+// clampConcurrent 把配置值夹到 1..MaxConcurrentCap；0 = 缺省。
+func clampConcurrent(n int) int {
+	if n <= 0 {
+		return DefaultMaxConcurrent
+	}
+	if n > MaxConcurrentCap {
+		return MaxConcurrentCap
+	}
+	return n
 }
 
 // SubagentTimeout 委派工具默认超时（子回合可能很长）。
@@ -66,6 +89,8 @@ type Params struct {
 	Model        bool
 	Mode         bool
 	Tools        bool
+	// MaxConcurrent 本会话同时在跑的派出会话上限（[plugin.session-start] max_concurrent）；0 = 缺省 4，夹到 1..8。
+	MaxConcurrent int
 }
 
 // SubagentTool 模型面委派工具 `subagent {task, session?}`：同步跑子会话一个回合，返回其最终文本。
@@ -86,9 +111,10 @@ func schemaFor(p Params) json.RawMessage {
 		"session": map[string]any{"type": "string", "description": "可选：续用的子会话 id（续用时沿用创建时的设置，本次的覆盖参数不生效）"},
 		"agent":   map[string]any{"type": "string", "description": "可选：执行的智能体定义名；只能选本会话定义 [use.session-start] agents 里列出的；缺省为临时智能体"},
 		"relation": map[string]any{"type": "string", "enum": []string{RelationChild, RelationIndependent},
-			"description": "新会话与本会话的关系：child（缺省，子会话，归本会话管）；independent 暂不支持"},
+			"description": "新会话与本会话的关系：child（缺省，子会话，归本会话管、随本会话删除）；independent（独立会话，交给对方负责，不随本会话删除）"},
 		"reply": map[string]any{"type": "string", "enum": []string{ReplyWait, ReplyNotify, ReplyNone},
-			"description": "结果怎么回来：wait（缺省，等它做完并返回最终回答）；notify、none 暂不支持"},
+			"description": "结果怎么回来：wait（child 缺省，等它做完并返回最终回答）；notify（independent 缺省，派出后立即返回，对方做完时结果作为通知回到本会话）；none（不回报）"},
+		"wake": map[string]any{"type": "boolean", "description": "可选，只对 notify：对方做完时立即唤醒本会话开一轮处理结果；缺省不唤醒，结果在下次对话时作为背景出现"},
 	}
 	if p.SystemPrompt {
 		props["system_prompt"] = map[string]any{"type": "string", "description": "可选：追加在子智能体基础提示词之后的系统提示，用来定角色、定输出格式"}
@@ -116,13 +142,21 @@ func ToolWithParams(h *host.Host, f host.Factory, sink tasks.Sink, p Params) *to
 // ToolWithContacts 同 ToolWithParams，另带联系策略（docs/76 §6；nil = 只看定义名单）。
 func ToolWithContacts(h *host.Host, f host.Factory, sink tasks.Sink, p Params, contacts ContactPolicy) *toolhub.Tool {
 	// 一批里的多个委派并行跑（2026-11-04 审查 P2 工具体验：原先串行）；续用同一子会话的调用按 id 串行，见 childLocks。
+	return ToolWithOptions(h, f, sink, p, contacts, DefaultMaxConcurrent)
+}
+
+// ToolWithOptions 同 ToolWithContacts，另带并发上限 max（[plugin.session-start] max_concurrent，夹到 1..8）。
+func ToolWithOptions(h *host.Host, f host.Factory, sink tasks.Sink, p Params, contacts ContactPolicy, max int) *toolhub.Tool {
+	max = clampConcurrent(max)
 	yes := true
 	var locks childLocks
+	slots := &concurrency{}
 	return &toolhub.Tool{
 		Spec: session.ToolSpec{Name: ToolName,
-			Description: "把一个独立、边界清楚的子任务交给另一个智能体，在新的子会话里完成（全新上下文）。适合可以并行、或需要隔离上下文的子任务；" +
-				"一两步就能做完的事自己做，不要委派。task 要自包含：对方看不到当前对话。" +
-				"返回最终回答与子会话 id；传 session 可在同一个子会话里追问。",
+			Description: "把一件事交给另一个智能体做，在新会话里完成（全新上下文）。三种用法：child + wait（缺省）等它做完、返回最终回答；" +
+				"child + notify 派出去自己接着干，做完结果作为通知回到本会话；independent 交给对方负责（独立会话，缺省 notify）。" +
+				"一两步就能做完的事自己做，不要派；同一件事不要派多个。task 要自包含：对方看不到当前对话。" +
+				"wait 时传 session 可在同一个子会话里追问。",
 			Schema: schemaFor(p)},
 		Risk:     toolhub.Write,
 		Parallel: &yes,
@@ -139,7 +173,8 @@ func ToolWithContacts(h *host.Host, f host.Factory, sink tasks.Sink, p Params, c
 			if err := json.Unmarshal(raw, &a); err != nil || strings.TrimSpace(a.Task) == "" {
 				return toolhub.Failf("task 不能为空"), nil
 			}
-			if msg := unsupported(strings.TrimSpace(a.Relation), strings.TrimSpace(a.Reply)); msg != "" {
+			relation, reply, msg := normalize(strings.TrimSpace(a.Relation), strings.TrimSpace(a.Reply))
+			if msg != "" {
 				return toolhub.Failf("%s", msg), nil
 			}
 			// 创建链两层（docs/76 C1）：Visible 已隐藏，这里按会话身份再校验一次，防定义白名单或旧会话绕过。
@@ -186,6 +221,42 @@ func ToolWithContacts(h *host.Host, f host.Factory, sink tasks.Sink, p Params, c
 					return toolhub.Failf("%v", err), nil
 				}
 			}
+			// 并发上限（docs/76 §5.1 D12）：按派出方加锁，先登记名额再建会话，失败回滚登记。
+			release, cerr := slots.acquire(cx.SessionID, max)
+			if cerr != nil {
+				return toolhub.Failf("%v", cerr), nil
+			}
+			if relation == RelationIndependent || reply != ReplyWait {
+				if a.Session != "" {
+					release()
+					return toolhub.Failf("续用已有会话请等结果（reply=wait）；异步派出总是新建会话"), nil
+				}
+				so := host.StartOptions{Creator: cx.SessionID, Definition: def, Child: relation == RelationChild,
+					Task: a.Task, ReplyMode: reply}
+				if so.Child {
+					so.ID, so.Spawn, so.Factory = id, o, f
+				}
+				if hd, ok := h.Get(cx.SessionID); ok {
+					so.Stamp = hd.Agent().Stamp
+				}
+				nid, err := h.StartSession(ctx, so)
+				if err != nil {
+					release()
+					return toolhub.Failf("派出会话失败：%v", err), nil
+				}
+				track(h, nid, release)
+				cx.ChildSessionID = nid
+				how := "做完后结果会作为通知回到本会话（不可信背景，不开新回合）"
+				if reply == ReplyNone {
+					how = "它做完不会回投，需要时自己去看"
+				}
+				kind := "独立会话"
+				if so.Child {
+					kind = "子会话"
+				}
+				return toolhub.Text(fmt.Sprintf("[已派出%s %s，正在后台运行；%s]", kind, nid, how)), nil
+			}
+			defer release()
 			cx.ChildSessionID = id
 			unlock := locks.lock(id)
 			defer unlock()
