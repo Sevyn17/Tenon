@@ -152,18 +152,93 @@ func entryTokens(e *session.Entry) int {
 	return (len(b) + 3) / 4
 }
 
-// Instruction 摘要指令（结构化模板，DSH 对照；旧摘要合并而不是照抄）。
-const Instruction = `请把以上对话压缩成一份交接摘要，供接手者在看不到原文的情况下继续工作。不要调用工具，只输出摘要。
+// Instruction 摘要指令（索引式，Mortise docs/76 §16：原文留在库里可按需读回，摘要只做索引，不求保留全部细节）。
+const Instruction = `请把以上对话压缩成一份索引式交接摘要，供接手者继续工作。原文仍保存在会话里，接手者需要细节时可以按回合号读回，所以不必抄录细节。不要调用工具，只输出摘要。
 按以下小节组织，没有内容的小节写"（无）"：
 ## 目标与用户意图
-## 关键技术概念
-## 文件与代码（路径、改动、关键代码行）
-## 错误与修复
+## 进展索引（按时间分段，每段一句话，标出相关回合号，如"第 3–5 回合：……"）
+## 关键决定（决定、原因、所在回合号）
 ## 未完成的事项
-## 当前工作
-## 下一步
-## 关键上下文（约束、决定及原因、精确数值）
-如果对话开头已有 <compacted-summary>，把其中仍然有效的内容合并进来，不要原样照抄。`
+## 当前工作与下一步
+## 必须记住的精确信息（路径、数值、约束；只列以后一定会用到的）
+如果对话开头已有 <compacted-summary>，把其中仍然有效的内容合并进来，保留原有的回合号，不要原样照抄。`
+
+// recallNote 摘要末尾由代码拼接的一句（固定中文，与 Instruction 同语言；范围由代码算，不交给模型抄写）。
+func recallNote(first, last uint32) string {
+	if first == 0 || last == 0 {
+		return ""
+	}
+	if first == last {
+		return fmt.Sprintf("第 %d 回合已压缩，原文可用 session_turns / session_read 查。", first)
+	}
+	return fmt.Sprintf("第 %d–%d 回合已压缩，原文可用 session_turns / session_read 查。", first, last)
+}
+
+// turnRange 被本次压缩覆盖的回合范围 [first, last]（docs/76 §16 C3c）：
+// first 优先取窗口内上一个压缩条目 meta 的 turn_range 起点（多次压缩从第一个被压缩回合算起），
+// 否则取窗口内 [Base, upto) 第一个非压缩条目的回合；last 取 [Base, upto) 非压缩条目的最大回合。
+// 压缩条目自身的 Turn 是压缩发生时的回合，不计入。
+func turnRange(cx session.Context, upto int) (first, last uint32, fromIdx int) {
+	fromIdx = -1
+	n := upto - cx.Base
+	if n > len(cx.Items) {
+		n = len(cx.Items)
+	}
+	for i := 0; i < n; i++ {
+		e := cx.Items[i]
+		if e.Item.Kind == session.KindCompaction {
+			if f, ok := metaTurnStart(e.Meta); ok && (first == 0 || f < first) {
+				first = f
+			}
+			continue
+		}
+		if fromIdx < 0 {
+			fromIdx = cx.Base + i
+		}
+		if first == 0 || e.Turn < first {
+			first = e.Turn
+		}
+		if e.Turn > last {
+			last = e.Turn
+		}
+	}
+	if fromIdx < 0 {
+		fromIdx = cx.Base
+	}
+	return first, last, fromIdx
+}
+
+func metaTurnStart(m map[string]any) (uint32, bool) {
+	r, ok := m["turn_range"]
+	if !ok {
+		return 0, false
+	}
+	var arr []float64
+	switch v := r.(type) {
+	case []any:
+		for _, x := range v {
+			if f, ok := x.(float64); ok {
+				arr = append(arr, f)
+			} else if i, ok := x.(int); ok {
+				arr = append(arr, float64(i))
+			} else if u, ok := x.(uint32); ok {
+				arr = append(arr, float64(u))
+			}
+		}
+	case []uint32:
+		for _, x := range v {
+			arr = append(arr, float64(x))
+		}
+	case []int:
+		for _, x := range v {
+			arr = append(arr, float64(x))
+		}
+	}
+	if len(arr) == 0 || arr[0] <= 0 {
+		return 0, false
+	}
+	return uint32(arr[0]), true
+}
 
 // At 在给定切点总结 [起点, upto)。before_compact 先于侧调用（被拒绝不花钱）。
 func (c *Compactor) At(ctx context.Context, sessionID string, core *session.Core, upto int) (*reqlog.CompactionView, map[string]any, error) {
@@ -209,12 +284,19 @@ func (c *Compactor) At(ctx context.Context, sessionID string, core *session.Core
 	if text == "" {
 		return nil, nil, ErrEmpty
 	}
+	first, last, fromIdx := turnRange(cx, upto)
+	if note := recallNote(first, last); note != "" {
+		text += "\n\n" + note // 代码拼接，计入下面的变短检查
+	}
 	sum := "<compacted-summary>\n" + text + "\n</compacted-summary>"
 	if (len(sum)+3)/4 >= dropped {
 		return nil, nil, ErrNoShrink
 	}
 	meta := map[string]any{session.MetaSource: "compact-basic", "summary_model": c.Model,
-		"tokens_before": dropped, "tokens_after": (len(sum) + 3) / 4}
+		"tokens_before": dropped, "tokens_after": (len(sum) + 3) / 4, "from_idx": fromIdx}
+	if first > 0 {
+		meta["turn_range"] = []uint32{first, last}
+	}
 	return &reqlog.CompactionView{Summary: session.Content{session.NewTextPart(sum)}, Upto: upto}, meta, nil
 }
 

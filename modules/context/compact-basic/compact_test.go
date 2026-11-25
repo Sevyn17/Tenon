@@ -115,3 +115,40 @@ func TestBeforeCompactDenyAndNoShrink(t *testing.T) {
 		t.Fatalf("应拒绝空摘要: %v", err)
 	}
 }
+
+// docs/76 §16 C3c：meta 带 from_idx 与 turn_range，摘要末尾由代码拼回合范围一句；二次压缩从第一个被压缩回合算起。
+func TestTurnRangeAndRecallNote(t *testing.T) {
+	core := turns(t, 6)
+	n := 0
+	c := &Compactor{Summarize: fake("索引", &n), KeepRatio: 0.3, Window: 4000, MaxOutput: 1, Headroom: 1}
+	v, meta, err := c.Plan(context.Background(), "s", core, true)
+	if err != nil || v == nil {
+		t.Fatalf("应压缩: %v", err)
+	}
+	tr, ok := meta["turn_range"].([]uint32)
+	if !ok || tr[0] != 1 || tr[1] < 1 || meta["from_idx"] != 0 {
+		t.Fatalf("meta 不符: %v", meta)
+	}
+	if !strings.Contains(v.Summary[0].Text, "回合已压缩，原文可用 session_turns / session_read 查。") {
+		t.Fatalf("摘要应带代码拼的一句: %q", v.Summary[0].Text)
+	}
+	if err := core.Compact(v.Summary, v.Upto, meta); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 4; i++ {
+		need, _ := core.Input(txt("再问"+strings.Repeat("内容", 200)), map[string]any{session.MetaSource: "user"})
+		core.ModelDone(need.Model.RequestID, need.ID, session.AssistantItem{Content: txt("再答" + strings.Repeat("内容", 200))}, session.StopReason{V: "EndTurn"})
+	}
+	v2, meta2, err := c.Plan(context.Background(), "s", core, true)
+	if err != nil || v2 == nil {
+		t.Fatalf("二次应压缩: %v", err)
+	}
+	tr2 := meta2["turn_range"].([]uint32)
+	if tr2[0] != 1 || tr2[1] <= tr[1] {
+		t.Fatalf("二次范围应从第 1 回合起且向后延伸: %v vs %v", tr2, tr)
+	}
+	// JSON 往返后的 meta（落库再读）仍能取到起点。
+	if f, ok := metaTurnStart(map[string]any{"turn_range": []any{float64(3), float64(9)}}); !ok || f != 3 {
+		t.Fatal("JSON 往返 meta 应能取起点")
+	}
+}
