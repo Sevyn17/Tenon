@@ -118,6 +118,8 @@ type Agent struct {
 	buf     commitBuf
 	resumed recovery
 	step    *span // 当前 step span（attempt / compact 的父）
+	// compactSpan 刚落成的 compact span id，压缩后第一次 attempt 用它关联（之后清空）。
+	compactSpan string
 
 	// crashAt 故障注入（测试）：在指定 checkpoint 点提交后返回 errCrash，模拟进程被杀。
 	crashAt string
@@ -296,6 +298,7 @@ func (a *Agent) buildRequestKernel(ctx context.Context, force bool) (session.Req
 				sp.Set(k, v)
 			}
 			sp.Set("upto", view.Upto).End("ok")
+			a.compactSpan = sp.s.ID // 压缩后第一次 attempt 记 after_compact 指回它（docs/76 C3c 压缩成本）
 			return req, view, nil
 		}
 	}
@@ -314,6 +317,12 @@ func (a *Agent) sendModel(ctx context.Context, need *session.Need, req session.R
 	}
 	sp := a.startSpan("attempt", req.Model, a.curStep()).Set("request_id", need.Model.RequestID).
 		Set("turn", need.Model.Turn).Set("step", need.Model.Step).Set("shell_hash", rec.FinalHash)
+	if view != nil && a.compactSpan != "" {
+		// 压缩成本（docs/76 C3c）：本次是压缩后的第一次调用，它的 input / cache_read / cache_write 就是压缩的缓存代价；
+		// 厂商与模型看本 span 的 name（req.Model），compact span 记 tokens_before / tokens_after。
+		sp.Set("after_compact", a.compactSpan)
+		a.compactSpan = ""
+	}
 	first := time.Time{}
 	ss := a.newStepStream(need, retried) // protocol 2 分段流式（stream.go）
 	onText := func(d string) {
