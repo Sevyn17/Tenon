@@ -106,6 +106,10 @@ func (*plug) Setup(cx *component.Registrar) error {
 	turns, read := TurnsTool(h), ReadTool(h)
 	component.RegisterAt(cx, assemble.SessionTools, PluginName+".review", assemble.ToolsEntry{Order: 61,
 		Tools: func() []*toolhub.Tool { return []*toolhub.Tool{turns, read} }})
+	// 创建链上的会话管理（docs/76 C3b）：所有会话都带、从会话开始就在清单里；层级与范围在执行时校验。
+	send, list, stop := SendTool(h), ListTool(h), StopTool(h)
+	component.RegisterAt(cx, assemble.SessionTools, PluginName+".manage", assemble.ToolsEntry{Order: 62,
+		Tools: func() []*toolhub.Tool { return []*toolhub.Tool{send, list, stop} }})
 	return nil
 }
 

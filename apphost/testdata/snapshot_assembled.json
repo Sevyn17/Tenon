@@ -474,6 +474,72 @@
             }
           },
           {
+            "Name": "session_send",
+            "Description": "给你派出去的会话补充信息，或回复派你的会话。mode=wake（缺省）让对方开一轮处理；context 只作通知、不开回合。不能发给其他会话；要新开一件事用 session_start。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "session": {
+                  "type": "string",
+                  "description": "目标会话 id：本会话派出的会话，或创建本会话的会话"
+                },
+                "message": {
+                  "type": "string",
+                  "description": "要说的内容，自包含"
+                },
+                "mode": {
+                  "type": "string",
+                  "enum": [
+                    "wake",
+                    "context"
+                  ],
+                  "description": "wake 开一轮处理（缺省）；context 只作通知"
+                }
+              },
+              "required": [
+                "session",
+                "message"
+              ]
+            }
+          },
+          {
+            "Name": "session_list",
+            "Description": "列出本会话派出的会话（子会话与独立会话）：id、智能体、关系、回投方式、运行状态、最近活跃。派出后想看进度、要追问或停止前用；读内容用 session_read。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "include_creator": {
+                  "type": "boolean",
+                  "description": "也列创建本会话的会话"
+                },
+                "state": {
+                  "type": "string",
+                  "enum": [
+                    "running",
+                    "idle"
+                  ],
+                  "description": "只列这种运行状态"
+                }
+              }
+            }
+          },
+          {
+            "Name": "session_stop",
+            "Description": "停止本会话派出的某个会话的当前回合（会话保留，之后可用 session_send 让它继续）。它跑偏或不再需要时用；不能停其他会话。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "session": {
+                  "type": "string",
+                  "description": "本会话派出的会话 id"
+                }
+              },
+              "required": [
+                "session"
+              ]
+            }
+          },
+          {
             "Name": "team_spawn",
             "Description": "派一个工作组成员（独立会话、同样的基础工具 + 看板）去做自包含的任务，立即返回，不等结果。成员做完时它的最终回答会作为一条新消息送回给你。同名成员已存在则把 task 作为下一条消息发给它。",
             "Schema": {
@@ -1093,6 +1159,72 @@
                   "description": "本次最多返回多少字节，缺省 8192，最大 32768"
                 }
               }
+            }
+          },
+          {
+            "Name": "session_send",
+            "Description": "给你派出去的会话补充信息，或回复派你的会话。mode=wake（缺省）让对方开一轮处理；context 只作通知、不开回合。不能发给其他会话；要新开一件事用 session_start。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "session": {
+                  "type": "string",
+                  "description": "目标会话 id：本会话派出的会话，或创建本会话的会话"
+                },
+                "message": {
+                  "type": "string",
+                  "description": "要说的内容，自包含"
+                },
+                "mode": {
+                  "type": "string",
+                  "enum": [
+                    "wake",
+                    "context"
+                  ],
+                  "description": "wake 开一轮处理（缺省）；context 只作通知"
+                }
+              },
+              "required": [
+                "session",
+                "message"
+              ]
+            }
+          },
+          {
+            "Name": "session_list",
+            "Description": "列出本会话派出的会话（子会话与独立会话）：id、智能体、关系、回投方式、运行状态、最近活跃。派出后想看进度、要追问或停止前用；读内容用 session_read。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "include_creator": {
+                  "type": "boolean",
+                  "description": "也列创建本会话的会话"
+                },
+                "state": {
+                  "type": "string",
+                  "enum": [
+                    "running",
+                    "idle"
+                  ],
+                  "description": "只列这种运行状态"
+                }
+              }
+            }
+          },
+          {
+            "Name": "session_stop",
+            "Description": "停止本会话派出的某个会话的当前回合（会话保留，之后可用 session_send 让它继续）。它跑偏或不再需要时用；不能停其他会话。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "session": {
+                  "type": "string",
+                  "description": "本会话派出的会话 id"
+                }
+              },
+              "required": [
+                "session"
+              ]
             }
           },
           {
@@ -1740,6 +1872,72 @@
             }
           },
           {
+            "Name": "session_send",
+            "Description": "给你派出去的会话补充信息，或回复派你的会话。mode=wake（缺省）让对方开一轮处理；context 只作通知、不开回合。不能发给其他会话；要新开一件事用 session_start。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "session": {
+                  "type": "string",
+                  "description": "目标会话 id：本会话派出的会话，或创建本会话的会话"
+                },
+                "message": {
+                  "type": "string",
+                  "description": "要说的内容，自包含"
+                },
+                "mode": {
+                  "type": "string",
+                  "enum": [
+                    "wake",
+                    "context"
+                  ],
+                  "description": "wake 开一轮处理（缺省）；context 只作通知"
+                }
+              },
+              "required": [
+                "session",
+                "message"
+              ]
+            }
+          },
+          {
+            "Name": "session_list",
+            "Description": "列出本会话派出的会话（子会话与独立会话）：id、智能体、关系、回投方式、运行状态、最近活跃。派出后想看进度、要追问或停止前用；读内容用 session_read。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "include_creator": {
+                  "type": "boolean",
+                  "description": "也列创建本会话的会话"
+                },
+                "state": {
+                  "type": "string",
+                  "enum": [
+                    "running",
+                    "idle"
+                  ],
+                  "description": "只列这种运行状态"
+                }
+              }
+            }
+          },
+          {
+            "Name": "session_stop",
+            "Description": "停止本会话派出的某个会话的当前回合（会话保留，之后可用 session_send 让它继续）。它跑偏或不再需要时用；不能停其他会话。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "session": {
+                  "type": "string",
+                  "description": "本会话派出的会话 id"
+                }
+              },
+              "required": [
+                "session"
+              ]
+            }
+          },
+          {
             "Name": "team_spawn",
             "Description": "派一个工作组成员（独立会话、同样的基础工具 + 看板）去做自包含的任务，立即返回，不等结果。成员做完时它的最终回答会作为一条新消息送回给你。同名成员已存在则把 task 作为下一条消息发给它。",
             "Schema": {
@@ -2337,6 +2535,72 @@
                   "description": "本次最多返回多少字节，缺省 8192，最大 32768"
                 }
               }
+            }
+          },
+          {
+            "Name": "session_send",
+            "Description": "给你派出去的会话补充信息，或回复派你的会话。mode=wake（缺省）让对方开一轮处理；context 只作通知、不开回合。不能发给其他会话；要新开一件事用 session_start。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "session": {
+                  "type": "string",
+                  "description": "目标会话 id：本会话派出的会话，或创建本会话的会话"
+                },
+                "message": {
+                  "type": "string",
+                  "description": "要说的内容，自包含"
+                },
+                "mode": {
+                  "type": "string",
+                  "enum": [
+                    "wake",
+                    "context"
+                  ],
+                  "description": "wake 开一轮处理（缺省）；context 只作通知"
+                }
+              },
+              "required": [
+                "session",
+                "message"
+              ]
+            }
+          },
+          {
+            "Name": "session_list",
+            "Description": "列出本会话派出的会话（子会话与独立会话）：id、智能体、关系、回投方式、运行状态、最近活跃。派出后想看进度、要追问或停止前用；读内容用 session_read。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "include_creator": {
+                  "type": "boolean",
+                  "description": "也列创建本会话的会话"
+                },
+                "state": {
+                  "type": "string",
+                  "enum": [
+                    "running",
+                    "idle"
+                  ],
+                  "description": "只列这种运行状态"
+                }
+              }
+            }
+          },
+          {
+            "Name": "session_stop",
+            "Description": "停止本会话派出的某个会话的当前回合（会话保留，之后可用 session_send 让它继续）。它跑偏或不再需要时用；不能停其他会话。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "session": {
+                  "type": "string",
+                  "description": "本会话派出的会话 id"
+                }
+              },
+              "required": [
+                "session"
+              ]
             }
           },
           {
@@ -2954,6 +3218,72 @@
                   "description": "本次最多返回多少字节，缺省 8192，最大 32768"
                 }
               }
+            }
+          },
+          {
+            "Name": "session_send",
+            "Description": "给你派出去的会话补充信息，或回复派你的会话。mode=wake（缺省）让对方开一轮处理；context 只作通知、不开回合。不能发给其他会话；要新开一件事用 session_start。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "session": {
+                  "type": "string",
+                  "description": "目标会话 id：本会话派出的会话，或创建本会话的会话"
+                },
+                "message": {
+                  "type": "string",
+                  "description": "要说的内容，自包含"
+                },
+                "mode": {
+                  "type": "string",
+                  "enum": [
+                    "wake",
+                    "context"
+                  ],
+                  "description": "wake 开一轮处理（缺省）；context 只作通知"
+                }
+              },
+              "required": [
+                "session",
+                "message"
+              ]
+            }
+          },
+          {
+            "Name": "session_list",
+            "Description": "列出本会话派出的会话（子会话与独立会话）：id、智能体、关系、回投方式、运行状态、最近活跃。派出后想看进度、要追问或停止前用；读内容用 session_read。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "include_creator": {
+                  "type": "boolean",
+                  "description": "也列创建本会话的会话"
+                },
+                "state": {
+                  "type": "string",
+                  "enum": [
+                    "running",
+                    "idle"
+                  ],
+                  "description": "只列这种运行状态"
+                }
+              }
+            }
+          },
+          {
+            "Name": "session_stop",
+            "Description": "停止本会话派出的某个会话的当前回合（会话保留，之后可用 session_send 让它继续）。它跑偏或不再需要时用；不能停其他会话。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "session": {
+                  "type": "string",
+                  "description": "本会话派出的会话 id"
+                }
+              },
+              "required": [
+                "session"
+              ]
             }
           },
           {
@@ -3600,6 +3930,72 @@
             }
           },
           {
+            "Name": "session_send",
+            "Description": "给你派出去的会话补充信息，或回复派你的会话。mode=wake（缺省）让对方开一轮处理；context 只作通知、不开回合。不能发给其他会话；要新开一件事用 session_start。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "session": {
+                  "type": "string",
+                  "description": "目标会话 id：本会话派出的会话，或创建本会话的会话"
+                },
+                "message": {
+                  "type": "string",
+                  "description": "要说的内容，自包含"
+                },
+                "mode": {
+                  "type": "string",
+                  "enum": [
+                    "wake",
+                    "context"
+                  ],
+                  "description": "wake 开一轮处理（缺省）；context 只作通知"
+                }
+              },
+              "required": [
+                "session",
+                "message"
+              ]
+            }
+          },
+          {
+            "Name": "session_list",
+            "Description": "列出本会话派出的会话（子会话与独立会话）：id、智能体、关系、回投方式、运行状态、最近活跃。派出后想看进度、要追问或停止前用；读内容用 session_read。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "include_creator": {
+                  "type": "boolean",
+                  "description": "也列创建本会话的会话"
+                },
+                "state": {
+                  "type": "string",
+                  "enum": [
+                    "running",
+                    "idle"
+                  ],
+                  "description": "只列这种运行状态"
+                }
+              }
+            }
+          },
+          {
+            "Name": "session_stop",
+            "Description": "停止本会话派出的某个会话的当前回合（会话保留，之后可用 session_send 让它继续）。它跑偏或不再需要时用；不能停其他会话。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "session": {
+                  "type": "string",
+                  "description": "本会话派出的会话 id"
+                }
+              },
+              "required": [
+                "session"
+              ]
+            }
+          },
+          {
             "Name": "team_spawn",
             "Description": "派一个工作组成员（独立会话、同样的基础工具 + 看板）去做自包含的任务，立即返回，不等结果。成员做完时它的最终回答会作为一条新消息送回给你。同名成员已存在则把 task 作为下一条消息发给它。",
             "Schema": {
@@ -4140,6 +4536,72 @@
             }
           },
           {
+            "Name": "session_send",
+            "Description": "给你派出去的会话补充信息，或回复派你的会话。mode=wake（缺省）让对方开一轮处理；context 只作通知、不开回合。不能发给其他会话；要新开一件事用 session_start。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "session": {
+                  "type": "string",
+                  "description": "目标会话 id：本会话派出的会话，或创建本会话的会话"
+                },
+                "message": {
+                  "type": "string",
+                  "description": "要说的内容，自包含"
+                },
+                "mode": {
+                  "type": "string",
+                  "enum": [
+                    "wake",
+                    "context"
+                  ],
+                  "description": "wake 开一轮处理（缺省）；context 只作通知"
+                }
+              },
+              "required": [
+                "session",
+                "message"
+              ]
+            }
+          },
+          {
+            "Name": "session_list",
+            "Description": "列出本会话派出的会话（子会话与独立会话）：id、智能体、关系、回投方式、运行状态、最近活跃。派出后想看进度、要追问或停止前用；读内容用 session_read。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "include_creator": {
+                  "type": "boolean",
+                  "description": "也列创建本会话的会话"
+                },
+                "state": {
+                  "type": "string",
+                  "enum": [
+                    "running",
+                    "idle"
+                  ],
+                  "description": "只列这种运行状态"
+                }
+              }
+            }
+          },
+          {
+            "Name": "session_stop",
+            "Description": "停止本会话派出的某个会话的当前回合（会话保留，之后可用 session_send 让它继续）。它跑偏或不再需要时用；不能停其他会话。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "session": {
+                  "type": "string",
+                  "description": "本会话派出的会话 id"
+                }
+              },
+              "required": [
+                "session"
+              ]
+            }
+          },
+          {
             "Name": "team_send",
             "Description": "给工作组里的另一位发消息：to 为 \"lead\"（领导）或成员名。消息进入对方 inbox，对方空闲时立即处理。",
             "Schema": {
@@ -4640,6 +5102,72 @@
                   "description": "本次最多返回多少字节，缺省 8192，最大 32768"
                 }
               }
+            }
+          },
+          {
+            "Name": "session_send",
+            "Description": "给你派出去的会话补充信息，或回复派你的会话。mode=wake（缺省）让对方开一轮处理；context 只作通知、不开回合。不能发给其他会话；要新开一件事用 session_start。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "session": {
+                  "type": "string",
+                  "description": "目标会话 id：本会话派出的会话，或创建本会话的会话"
+                },
+                "message": {
+                  "type": "string",
+                  "description": "要说的内容，自包含"
+                },
+                "mode": {
+                  "type": "string",
+                  "enum": [
+                    "wake",
+                    "context"
+                  ],
+                  "description": "wake 开一轮处理（缺省）；context 只作通知"
+                }
+              },
+              "required": [
+                "session",
+                "message"
+              ]
+            }
+          },
+          {
+            "Name": "session_list",
+            "Description": "列出本会话派出的会话（子会话与独立会话）：id、智能体、关系、回投方式、运行状态、最近活跃。派出后想看进度、要追问或停止前用；读内容用 session_read。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "include_creator": {
+                  "type": "boolean",
+                  "description": "也列创建本会话的会话"
+                },
+                "state": {
+                  "type": "string",
+                  "enum": [
+                    "running",
+                    "idle"
+                  ],
+                  "description": "只列这种运行状态"
+                }
+              }
+            }
+          },
+          {
+            "Name": "session_stop",
+            "Description": "停止本会话派出的某个会话的当前回合（会话保留，之后可用 session_send 让它继续）。它跑偏或不再需要时用；不能停其他会话。",
+            "Schema": {
+              "type": "object",
+              "properties": {
+                "session": {
+                  "type": "string",
+                  "description": "本会话派出的会话 id"
+                }
+              },
+              "required": [
+                "session"
+              ]
             }
           }
         ],
