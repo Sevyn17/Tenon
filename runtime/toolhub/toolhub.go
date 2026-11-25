@@ -138,6 +138,8 @@ type Cx struct {
 	// 已把 DefaultAuthorizer 里的 `cx.Approved` 分支删掉（它不该关心批准状态——
 	// 它的职责是「没装权限组件时的缺省判定」，而批准是确认流程的事）。
 	Approved bool
+	// ConfirmDetail 本次要求确认时授权方给的结构化原因（可空；宿主写进审批交互）。
+	ConfirmDetail *ReasonDetail
 	// Progress 报告执行中的输出（易失，只给界面看，不进结果）：text 是"最新的一段"而不是增量，
 	// 界面直接替换显示。nil = 没人看，工具不必采样。
 	Progress func(text string)

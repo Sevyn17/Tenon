@@ -141,7 +141,7 @@ func (h *Host) spawn(ctx context.Context, parent, id, origin, def string, f Fact
 		}
 		hd, err = h.open(ctx, id, def, f, func(ag *agent.Agent, cfg *session.Config) error {
 			meta := store.SessionMeta{ParentID: parent, Origin: origin, Meta: raw,
-				CreatorSession: parent, ChainDepth: depth, ChainRoot: root}
+				CreatorSession: parent, ChainDepth: depth, ChainRoot: root, Title: TaskTitle(task)}
 			if ag.Def != nil {
 				meta.AgentID, meta.AgentHash = ag.Def.ID, ag.Def.Version
 			}

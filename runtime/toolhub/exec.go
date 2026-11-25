@@ -353,6 +353,7 @@ func (h *Hub) admitChain(call session.ToolCall) Next {
 				return Failf("权限拒绝：%s", d.Reason), nil
 			default: // DecisionConfirm
 				if !cx.Approved {
+					cx.ConfirmDetail = d.Detail
 					return Output{Kind: Confirm, Reason: d.Reason}, nil
 				}
 			}

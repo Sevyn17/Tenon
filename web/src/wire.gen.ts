@@ -179,8 +179,22 @@ export interface Approval {
   call_id?: string;
   args?: unknown;
   reason?: string;
+  detail?: ApprovalDetail;
   session_rules?: string[];
   blocked?: string[];
+}
+
+export interface ApprovalDetail {
+  mode?: string;
+  mode_label?: string;
+  mode_builtin?: boolean;
+  item?: string;
+  item_title?: string;
+  action?: string;
+  subject?: string;
+  pattern?: string;
+  cap?: string;
+  untrusted?: boolean;
 }
 
 export interface Question {

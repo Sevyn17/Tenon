@@ -172,11 +172,27 @@ type Approval struct {
 	Tool string `json:"tool"`
 	// CallID 待确认的那次工具调用的 id（= 条目 tool_calls[].id），界面据此把确认挂到对应步骤上。
 	// 升级前登记、还没回答的交互没有这个字段。
-	CallID       string          `json:"call_id,omitempty"`
-	Args         json.RawMessage `json:"args,omitempty"`
-	Reason       string          `json:"reason,omitempty"`
+	CallID string          `json:"call_id,omitempty"`
+	Args   json.RawMessage `json:"args,omitempty"`
+	Reason string          `json:"reason,omitempty"`
+	// Detail 原因的结构化字段（可空）：界面按语言拼句，Reason 作兜底。
+	Detail       *ApprovalDetail `json:"detail,omitempty"`
 	SessionRules []string        `json:"session_rules,omitempty"`
 	Blocked      []string        `json:"blocked,omitempty"`
+}
+
+// ApprovalDetail 确认原因的结构化字段：档位 id（内置档位界面按 id 翻译，自定义用 ModeLabel）、权限项、判定结果。
+type ApprovalDetail struct {
+	Mode        string `json:"mode,omitempty"`
+	ModeLabel   string `json:"mode_label,omitempty"`
+	ModeBuiltin bool   `json:"mode_builtin,omitempty"`
+	Item        string `json:"item,omitempty"`
+	ItemTitle   string `json:"item_title,omitempty"`
+	Action      string `json:"action,omitempty"` // allow / ask / deny
+	Subject     string `json:"subject,omitempty"`
+	Pattern     string `json:"pattern,omitempty"`
+	Cap         string `json:"cap,omitempty"`
+	Untrusted   bool   `json:"untrusted,omitempty"`
 }
 
 // Question 提问的内容。

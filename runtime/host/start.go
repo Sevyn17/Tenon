@@ -124,7 +124,7 @@ func (h *Host) StartSession(ctx context.Context, o StartOptions) (string, error)
 		h.mu.Unlock()
 	}()
 	meta := store.SessionMeta{Origin: origin, CreatorSession: o.Creator, ChainDepth: depth, ChainRoot: root,
-		ReplyMode: o.ReplyMode, Workspace: cl.Meta.Workspace}
+		ReplyMode: o.ReplyMode, Workspace: cl.Meta.Workspace, Title: TaskTitle(o.Task)}
 	if o.Child {
 		meta.ParentID = o.Creator
 		if !o.Spawn.IsZero() {

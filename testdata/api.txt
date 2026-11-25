@@ -341,7 +341,8 @@ github.com/Sevyn17/tenon/apphost: method (WorkspaceManager) SetTrust(_ context.C
 github.com/Sevyn17/tenon/apphost: method (WorkspaceManager) TrustPreview(context.Context) (github.com/Sevyn17/tenon/appapi/wire.WorkspaceTrustPreviewResult, error)
 github.com/Sevyn17/tenon/apphost: method (WorkspaceManager) UserPackages(context.Context) ([]github.com/Sevyn17/tenon/appapi/wire.PackageInfo, error)
 github.com/Sevyn17/tenon/apphost: type WorkspaceOptions struct{Flags Flags; SleepAfter time.Duration; Upload bool; OnSwitch func(api *github.com/Sevyn17/tenon/appapi.App); RecentPath string; Extensions []github.com/Sevyn17/tenon/appapi.Extension; DefaultAgent string; StoreAgents bool; Agents []github.com/Sevyn17/tenon/runtime/agentdef.Source; ResourceIdle time.Duration; ResourceMax int}
-github.com/Sevyn17/tenon/appapi/wire: type Approval struct{Tool string; CallID string; Args encoding/json.RawMessage; Reason string; SessionRules []string; Blocked []string}
+github.com/Sevyn17/tenon/appapi/wire: type Approval struct{Tool string; CallID string; Args encoding/json.RawMessage; Reason string; Detail *ApprovalDetail; SessionRules []string; Blocked []string}
+github.com/Sevyn17/tenon/appapi/wire: type ApprovalDetail struct{Mode string; ModeLabel string; ModeBuiltin bool; Item string; ItemTitle string; Action string; Subject string; Pattern string; Cap string; Untrusted bool}
 github.com/Sevyn17/tenon/appapi/wire: const ArchivedInclude untyped string
 github.com/Sevyn17/tenon/appapi/wire: const ArchivedOnly untyped string
 github.com/Sevyn17/tenon/appapi/wire: type ArtifactGetArgs struct{Session string; Ref string; Offset int; Length int}

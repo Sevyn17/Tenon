@@ -18,6 +18,23 @@ type Decision struct {
 	Action DecisionAction
 	// Reason 原因（拒绝与确认时给用户看）。
 	Reason string
+	// Detail 原因的结构化字段（可空）：界面按语言自己拼句，Reason 作兜底。
+	Detail *ReasonDetail
+}
+
+// ReasonDetail 确认原因的结构化字段：档位、权限项、判定结果。
+// json 键与 wire.ApprovalDetail 一致（交互载荷经 JSON 原样转交）。
+type ReasonDetail struct {
+	Mode        string `json:"mode,omitempty"`         // 档位 id
+	ModeLabel   string `json:"mode_label,omitempty"`   // 档位显示名（自定义档位用它）
+	ModeBuiltin bool   `json:"mode_builtin,omitempty"` // 内置档位（界面按 id 走词表）
+	Item        string `json:"item,omitempty"`         // 权限项 id
+	ItemTitle   string `json:"item_title,omitempty"`   // 权限项标题（兜底）
+	Action      string `json:"action,omitempty"`       // allow / ask / deny
+	Subject     string `json:"subject,omitempty"`      // match 型的匹配对象（命令、路径）
+	Pattern     string `json:"pattern,omitempty"`      // 命中的规则模式
+	Cap         string `json:"cap,omitempty"`          // 由智能体权限上限判定时：上限档位 id
+	Untrusted   bool   `json:"untrusted,omitempty"`    // 输入不可信降级为确认
 }
 
 // DecisionAction 判定动作。

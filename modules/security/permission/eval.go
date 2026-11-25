@@ -80,30 +80,34 @@ func evalItem(d *ModeDef, it toolhub.Item, tool string, args json.RawMessage) (D
 	if it.Type == toolhub.ItemLevel {
 		return Decision{}, false
 	}
+	det := func(act Action, sub, pat string) *toolhub.ReasonDetail {
+		return &toolhub.ReasonDetail{Mode: string(d.ID), ModeLabel: d.Title, ModeBuiltin: d.Builtin, Item: it.ID, ItemTitle: it.Title,
+			Action: string(act), Subject: sub, Pattern: pat}
+	}
 	s, _ := ItemValue(d, it)
 	def := toAction(s.Default)
 	if it.Type == toolhub.ItemSwitch {
-		return Decision{Action: def, Reason: fmt.Sprintf("档位 %s：%s → %s", d.Title, it.Title, def)}, true
+		return Decision{Action: def, Reason: fmt.Sprintf("档位 %s：%s → %s", d.Title, it.Title, def), Detail: det(def, "", "")}, true
 	}
 	subs, err := it.Subject(tool, args)
 	if err != nil {
 		return Decision{Action: AskUser, Reason: fmt.Sprintf("%s：无法取出匹配对象（%v）", it.Title, err)}, true
 	}
 	if len(subs) == 0 {
-		return Decision{Action: def, Reason: fmt.Sprintf("档位 %s：%s → %s", d.Title, it.Title, def)}, true
+		return Decision{Action: def, Reason: fmt.Sprintf("档位 %s：%s → %s", d.Title, it.Title, def), Detail: det(def, "", "")}, true
 	}
 	worst := Decision{Action: Allow}
 	for _, sub := range subs {
-		act, why := def, fmt.Sprintf("档位 %s：%s %q 未命中，按缺省 %s", d.Title, it.Title, sub, def)
+		act, why, pat := def, fmt.Sprintf("档位 %s：%s %q 未命中，按缺省 %s", d.Title, it.Title, sub, def), ""
 		if p, ok := matchAny(s.Deny, sub); ok {
-			act, why = Deny, fmt.Sprintf("档位 %s：%s %q 命中 deny %s", d.Title, it.Title, sub, p)
+			act, why, pat = Deny, fmt.Sprintf("档位 %s：%s %q 命中 deny %s", d.Title, it.Title, sub, p), p
 		} else if p, ok := matchAny(s.Ask, sub); ok {
-			act, why = AskUser, fmt.Sprintf("档位 %s：%s %q 命中 ask %s", d.Title, it.Title, sub, p)
+			act, why, pat = AskUser, fmt.Sprintf("档位 %s：%s %q 命中 ask %s", d.Title, it.Title, sub, p), p
 		} else if p, ok := matchAny(s.Allow, sub); ok {
-			act, why = Allow, fmt.Sprintf("档位 %s：%s %q 命中 allow %s", d.Title, it.Title, sub, p)
+			act, why, pat = Allow, fmt.Sprintf("档位 %s：%s %q 命中 allow %s", d.Title, it.Title, sub, p), p
 		}
 		if severity(act) > severity(worst.Action) || worst.Reason == "" {
-			worst = Decision{Action: act, Reason: why}
+			worst = Decision{Action: act, Reason: why, Detail: det(act, sub, pat)}
 		}
 	}
 	return worst, true

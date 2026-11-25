@@ -1027,7 +1027,7 @@ func (a *actor) wireConfirm() {
 		// 「已落库但还没人等」的窗口里被误判成遗留交互而作废（D6）。
 		w := make(chan bool, 1)
 		iid, corr, registered := a.openInteraction("approval", cx.Tool.Spec.Name+" 需要确认", map[string]any{
-			"tool": cx.Tool.Spec.Name, "call_id": cx.CallID, "args": jsonArgs(cx.Args), "reason": reason}, deadline, func(corr string) {
+			"tool": cx.Tool.Spec.Name, "call_id": cx.CallID, "args": jsonArgs(cx.Args), "reason": reason, "detail": cx.ConfirmDetail}, deadline, func(corr string) {
 			a.h.humanMu.Lock()
 			if a.h.humanWait == nil {
 				a.h.humanWait = map[string]chan bool{}

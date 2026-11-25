@@ -18,7 +18,7 @@ const Version = 2
 // tsTypes 要生成的线上类型（按这个顺序输出）。
 var tsTypes = []any{
 	Entry{}, Item{}, Part{}, MediaRef{}, Reasoning{}, ToolCall{}, Usage{}, LogPos{}, Mode{}, Settings{},
-	Interaction{}, Approval{}, Question{}, Choice{}, ChoiceOption{}, Form{}, Confirm{}, PlanPrompt{}, PlanAnswer{}, Live{}, LiveStream{}, LiveTool{}, SessionSnapshot{}, SessionInfo{},
+	Interaction{}, Approval{}, ApprovalDetail{}, Question{}, Choice{}, ChoiceOption{}, Form{}, Confirm{}, PlanPrompt{}, PlanAnswer{}, Live{}, LiveStream{}, LiveTool{}, SessionSnapshot{}, SessionInfo{},
 	Principal{}, Stats{},
 	Envelope{}, EntryAppended{}, LogRewound{}, LogCompacted{}, StateChanged{}, SettingsChanged{},
 	InteractionResolved{}, SessionClosed{}, SessionForked{}, SessionUpdated{}, TurnStarted{}, TurnEnded{}, TurnRejected{},

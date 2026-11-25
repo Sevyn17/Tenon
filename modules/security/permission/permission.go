@@ -53,6 +53,7 @@ const AttrDestructive = "destructive"
 type Decision struct {
 	Action Action
 	Reason string
+	Detail *toolhub.ReasonDetail // 结构化原因（按权限项判定时有；规则 / 沙箱等为空，界面用 Reason）
 }
 
 // Policy 一个会话的权限策略。
@@ -108,6 +109,11 @@ func (p Policy) Decide(cx *toolhub.Cx, args json.RawMessage) Decision {
 	cd := c.Decide(cx, args) // 上限可以再带上限（子会话：自己的定义 + 父会话），逐层取严
 	if severity(cd.Action) > severity(d.Action) {
 		cd.Reason = "智能体权限上限 " + string(c.Mode) + "：" + cd.Reason
+		if cd.Detail != nil {
+			x := *cd.Detail
+			x.Cap = string(c.Mode)
+			cd.Detail = &x
+		}
 		return cd
 	}
 	return d
@@ -123,7 +129,13 @@ func (p Policy) decide(cx *toolhub.Cx, args json.RawMessage) Decision {
 		return Decision{Action: AskUser, Reason: "服务端声明此操作具有破坏性"}
 	}
 	if p.Untrusted != nil && p.Untrusted(cx) {
-		return Decision{Action: AskUser, Reason: d.Reason + "（输入不可信，降级为确认）"}
+		var det *toolhub.ReasonDetail
+		if d.Detail != nil {
+			x := *d.Detail
+			x.Action, x.Untrusted = string(AskUser), true
+			det = &x
+		}
+		return Decision{Action: AskUser, Reason: d.Reason + "（输入不可信，降级为确认）", Detail: det}
 	}
 	_ = name
 	return d
@@ -158,10 +170,12 @@ func (p Policy) base(cx *toolhub.Cx, args json.RawMessage) Decision {
 	}
 	def := p.def()
 	act, why := AskUser, ""
+	var detail *toolhub.ReasonDetail
 	if cx.Tool.NoAuth {
 		act, why = Allow, fmt.Sprintf("%s 声明无需授权", name)
 	} else if dec, ok := evalItems(def, cx.Items, name, args); ok {
 		act, why = dec.Action, dec.Reason
+		detail = dec.Detail
 	} else if len(cx.Tool.Items) > 0 {
 		why = fmt.Sprintf("%s 的权限项只有级别项，按询问处理", name)
 	} else {
@@ -171,7 +185,7 @@ func (p Policy) base(cx *toolhub.Cx, args json.RawMessage) Decision {
 	if act == Allow && wider {
 		return Decision{Action: AskUser, Reason: fmt.Sprintf("%s 申请沙箱 %s（本档 %s）", name, req, sb)}
 	}
-	return Decision{Action: act, Reason: why}
+	return Decision{Action: act, Reason: why, Detail: detail}
 }
 
 // effectLabel 效果的中文名。
@@ -409,14 +423,14 @@ func Authorizer(policy func(sessionID string) Policy) toolhub.Authorizer {
 		case Allow:
 			return toolhub.Decision{Action: toolhub.DecisionAllow}, nil
 		case Deny:
-			return toolhub.Decision{Action: toolhub.DecisionDeny, Reason: d.Reason}, nil
+			return toolhub.Decision{Action: toolhub.DecisionDeny, Reason: d.Reason, Detail: d.Detail}, nil
 		default: // AskUser
 			// 已批准（工具管理器按挂起记录核对参数哈希后置 cx.Approved）：确认类直接放行。
 			// 原来这一判断在 Layer.Call 的 default 分支里，迁到 Authorizer 后要在这里补上。
 			if cx.Approved {
 				return toolhub.Decision{Action: toolhub.DecisionAllow}, nil
 			}
-			return toolhub.Decision{Action: toolhub.DecisionConfirm, Reason: d.Reason}, nil
+			return toolhub.Decision{Action: toolhub.DecisionConfirm, Reason: d.Reason, Detail: d.Detail}, nil
 		}
 	})
 }
