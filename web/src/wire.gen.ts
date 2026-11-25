@@ -75,6 +75,8 @@ export interface Entry {
   at: number;
   source?: string;
   client_ids?: string[];
+  from?: string;
+  replies?: { entry?: string; from: string; send?: boolean }[];
   item: Item;
 }
 

@@ -13,6 +13,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -30,8 +31,9 @@ const (
 	ReplyNone       = "none"        // 不回投
 )
 
-// ReplyMaxBytes 回投正文上限（docs/76 O3）：被派会话最后一条回复截到这么长，后面附会话链接。
-const ReplyMaxBytes = 4096
+// ReplyMaxBytes 回投正文上限（docs/76 §16 C3c）：被派会话最后一条回复截到约 1 KB，附条目 id 与会话 id；
+// 需要细节时创建者用 session_read 读原文（不额外调模型）。
+const ReplyMaxBytes = 1024
 
 // StartOptions 派出一个会话。
 type StartOptions struct {
@@ -198,13 +200,42 @@ func (a *actor) replyToCreator(ctx context.Context, end session.EndReason) {
 	default:
 		return
 	}
-	text, _ := lastAssistant(a.ag.CommittedHistory())
-	body := fmt.Sprintf("[会话 session:%s（%s）这一轮结束：%s]\n%s", a.id, l.Meta.AgentID, end.String(), truncateBytes(text, ReplyMaxBytes))
+	text, entry := lastAssistantEntry(a.ag.Committed().Entries)
+	body := fmt.Sprintf("[会话 session:%s（%s）这一轮结束：%s；条目 %s]\n%s", a.id, l.Meta.AgentID, end.String(), entry, truncateBytes(text, ReplyMaxBytes))
 	env := mail.Envelope{ID: "rp-" + corr, To: mail.Address{Kind: mail.AddrSession, ID: from},
 		Kind: mail.KindNotify, Mode: mode, Corr: corr, Body: body}
 	if err := a.ag.Outbound(env); err != nil {
 		a.h.publish(a.id, "mail.failed", map[string]any{"error": "回投：" + err.Error()})
 	}
+}
+
+// lastAssistantEntry 已提交日志里最后一条有文本的助手条目：文本与条目 id。
+func lastAssistantEntry(es []*session.Entry) (string, string) {
+	for i := len(es) - 1; i >= 0; i-- {
+		a := es[i].Item.Assistant
+		if es[i].Item.Kind != session.KindAssistant || a == nil {
+			continue
+		}
+		t := ""
+		for _, p := range a.Content {
+			t += p.Text
+		}
+		if t != "" {
+			return t, es[i].ID
+		}
+	}
+	return "", ""
+}
+
+// ReplyHeaderEntry 从回投正文头取条目 id（applyNotices 写 meta 用；格式由 replyToCreator 定，同包维护）。
+func replyHeaderEntry(body string) string {
+	const mark = "；条目 "
+	head, _, _ := strings.Cut(body, "\n")
+	i := strings.LastIndex(head, mark)
+	if i < 0 {
+		return ""
+	}
+	return strings.TrimSuffix(head[i+len(mark):], "]")
 }
 
 // truncateBytes 按字节截断（不切断 UTF-8 字符），截断时末尾加"…"。

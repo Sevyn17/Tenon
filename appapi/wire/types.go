@@ -20,7 +20,18 @@ type Entry struct {
 	At        int64    `json:"at"`
 	Source    string   `json:"source,omitempty"`
 	ClientIDs []string `json:"client_ids,omitempty"`
-	Item      Item     `json:"item"`
+	// From 信封来源地址 id（meta.from；session_send 投来的消息为发件会话 id，source=session）。
+	From string `json:"from,omitempty"`
+	// Replies 状态更新里来自别的会话的项（回投 / session_send 的 notice，Mortise docs/76 C3c）。
+	Replies []EntryReply `json:"replies,omitempty"`
+	Item    Item         `json:"item"`
+}
+
+// EntryReply 一条来自别的会话的状态更新项：From 来源会话 id；Entry 回投时对方最后一条回复的条目 id；Send 为 session_send 的 context 消息。
+type EntryReply struct {
+	From  string `json:"from"`
+	Entry string `json:"entry,omitempty"`
+	Send  bool   `json:"send,omitempty"`
 }
 
 // Item 条目体：平铺的判别联合，Kind 决定哪些字段有效。

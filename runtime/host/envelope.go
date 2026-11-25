@@ -748,6 +748,8 @@ func envelopeMeta(e mail.Envelope, untrusted bool) map[string]any {
 			m[session.MetaSource] = "agent"
 		case mail.AddrComponent:
 			m[session.MetaSource] = "component"
+		case mail.AddrSession: // session_send 投来的消息（docs/76 C3b）：前端按来源会话显示
+			m[session.MetaSource] = "session"
 		}
 	}
 	if untrusted {
@@ -777,11 +779,15 @@ func applyBatchSource(m map[string]any, env mail.Envelope, batch []store.InboxIt
 	}
 }
 
+// MetaReplies status 条目 meta：本条状态更新里来自别的会话的项 [{from, entry?, send?}]（docs/76 C3c）。
+const MetaReplies = "replies"
+
 // applyNotices 把 notice 信封转成一条 status 条目写进历史（12：notice 进状态更新），
 // 并在同一个检查点里确认消费。没有 notice 返回 false。
 func (a *actor) applyNotices(ctx context.Context, items []store.InboxItem) (bool, error) {
 	var parts []string
 	var consume []string
+	var replies []any
 	untrusted := false
 	for _, it := range items {
 		if it.Kind != store.InboxNotice {
@@ -794,6 +800,12 @@ func (a *actor) applyNotices(ctx context.Context, items []store.InboxItem) (bool
 		parts = append(parts, fmt.Sprintf(`<item source=%q key=%q>%s</item>`,
 			mail.EscapeAttr(e.From.ID), mail.EscapeAttr(e.ID), mail.EscapeText(e.Body)))
 		consume = append(consume, it.ItemID)
+		// 被派会话的回投（信封 id rp-<corr>）：meta 记来源会话与条目，前端据此识别，不解析正文（docs/76 C3c）。
+		if e.From.Kind == mail.AddrSession && strings.HasPrefix(e.ID, "rp-") {
+			replies = append(replies, map[string]any{"from": e.From.ID, "entry": replyHeaderEntry(e.Body)})
+		} else if e.From.Kind == mail.AddrSession {
+			replies = append(replies, map[string]any{"from": e.From.ID, "send": true})
+		}
 		// 别的会话发来的 notice（被派会话的回投，docs/76 §4.3）一律按不可信背景显示，不当作用户指令。
 		if !e.Origin.Trusted() || e.From.Kind == mail.AddrSession {
 			untrusted = true
@@ -806,6 +818,9 @@ func (a *actor) applyNotices(ctx context.Context, items []store.InboxItem) (bool
 	m := map[string]any{session.MetaSource: "notice", session.MetaTrust: "trusted", "notice": true}
 	if untrusted {
 		m[session.MetaTrust] = "untrusted"
+	}
+	if len(replies) > 0 {
+		m[MetaReplies] = replies
 	}
 	a.processing = inboxSet(consume)
 	if err := a.ag.Core.Inject(session.KindStatus, text, m); err != nil {

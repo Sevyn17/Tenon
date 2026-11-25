@@ -33,7 +33,34 @@ func WireEntry(idx int, e *session.Entry, spill Spill) wire.Entry {
 		out.Source = s
 	}
 	out.ClientIDs = stringList(e.Meta[MetaClientIDs])
+	if f, ok := e.Meta[session.MetaFrom].(string); ok {
+		out.From = f
+	}
+	out.Replies = wireReplies(e.Meta["replies"])
 	out.Item = wireItem(e.Item, spill)
+	return out
+}
+
+// wireReplies meta.replies（内存里是 []any of map，落库再读回也是 []any of map[string]any）。
+func wireReplies(v any) []wire.EntryReply {
+	arr, ok := v.([]any)
+	if !ok {
+		return nil
+	}
+	var out []wire.EntryReply
+	for _, x := range arr {
+		m, ok := x.(map[string]any)
+		if !ok {
+			continue
+		}
+		r := wire.EntryReply{}
+		r.From, _ = m["from"].(string)
+		r.Entry, _ = m["entry"].(string)
+		r.Send, _ = m["send"].(bool)
+		if r.From != "" {
+			out = append(out, r)
+		}
+	}
 	return out
 }
 

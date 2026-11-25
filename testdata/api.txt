@@ -399,8 +399,9 @@ github.com/Sevyn17/tenon/appapi/wire: type EffectiveModel struct{Model string; P
 github.com/Sevyn17/tenon/appapi/wire: type Empty struct{}
 github.com/Sevyn17/tenon/appapi/wire: type EntriesArgs struct{Session string; From *int; To *int; Tail int; Turn *uint32}
 github.com/Sevyn17/tenon/appapi/wire: type EntriesResult struct{Entries []Entry; Base int; Len int}
-github.com/Sevyn17/tenon/appapi/wire: type Entry struct{ID string; Idx int; Turn uint32; At int64; Source string; ClientIDs []string; Item Item}
+github.com/Sevyn17/tenon/appapi/wire: type Entry struct{ID string; Idx int; Turn uint32; At int64; Source string; ClientIDs []string; From string; Replies []EntryReply; Item Item}
 github.com/Sevyn17/tenon/appapi/wire: type EntryAppended struct{Entry Entry}
+github.com/Sevyn17/tenon/appapi/wire: type EntryReply struct{From string; Entry string; Send bool}
 github.com/Sevyn17/tenon/appapi/wire: type Envelope struct{V int; Session string; Kind string; At int64; Cursor int64; Turn uint32; Data any}
 github.com/Sevyn17/tenon/appapi/wire: type Error struct{Code string; Message string; Retry bool; Details map[string]any}
 github.com/Sevyn17/tenon/appapi/wire: const EvEntryAppended untyped string
