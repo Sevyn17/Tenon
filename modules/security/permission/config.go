@@ -126,6 +126,46 @@ type Sessions struct {
 	lookup func(tool string) []toolhub.Item
 	// itemTools 权限项 → 管的工具名（首个会话装配时登记，mode.show 用）
 	itemTools map[string][]string
+	// defDefault 顶层会话定义的 [use.permission] default（Mortise docs/75 P1）：会话装配时登记，
+	// 会话头没有档位时用它代替用户全局缺省。不随 state 淘汰（会话仍打开时不会重新装配）。
+	defDefault map[string]Mode
+}
+
+// SetDefinitionDefault 登记顶层会话定义给的缺省档位（会话装配时调用，先于第一次 get）。
+// 空值清除。子会话跟随顶层会话，不单独登记。
+func (s *Sessions) SetDefinitionDefault(id string, m Mode) {
+	id = Top(id)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if m == "" {
+		delete(s.defDefault, id)
+		return
+	}
+	if s.defDefault == nil {
+		s.defDefault = map[string]Mode{}
+	}
+	s.defDefault[id] = m
+}
+
+// sessionDefault 新会话（会话头没有档位）的缺省档位：项目钉住或启动参数强制时用全局缺省（项目层优先）；
+// 否则定义给了 default 且仍可用就用它；再否则用户全局缺省（docs/69 回落顺序）。调用方不持锁。
+func (s *Sessions) sessionDefault(id string) Mode {
+	s.mu.Lock()
+	m, pinned := s.defDefault[Top(id)], s.Pinned != ""
+	s.mu.Unlock()
+	if m == "" || pinned {
+		return s.defaultMode()
+	}
+	d, ok := s.reg().Get(m)
+	if !ok {
+		return s.defaultMode()
+	}
+	if d.Project {
+		if w := ProjectWidened(d, s.itemsSnapshot()); len(w) > 0 && (s.ModeApproved == nil || !s.ModeApproved(m, w)) {
+			return s.defaultMode()
+		}
+	}
+	return m
 }
 
 type sessState struct {
@@ -183,7 +223,7 @@ func (s *Sessions) get(id string) *sessState {
 		return st
 	}
 	s.mu.Unlock()
-	def := s.defaultMode() // 不持锁：要读权限项注册表、可能调应用的确认查询
+	def := s.sessionDefault(id) // 不持锁：要读权限项注册表、可能调应用的确认查询
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.state == nil {

@@ -30,6 +30,31 @@ const Service = ext.ServicePermission
 //	mode = "read-only"
 type UseConfig struct {
 	Mode string `toml:"mode" tenant:"true" description:"本智能体的权限上限档位（read-only / ask / workspace / full 或自定义档位名）；租户/用户可覆盖，与会话档位取更严"`
+	// Default 新会话的缺省档位（Mortise docs/75 P1）：会话头没有档位时代替用户全局缺省；
+	// 必须是已知档位且不宽于 Mode；项目钉住或强制档位时不生效。只作缺省，仍受全部上限约束。
+	Default string `toml:"default" description:"本智能体新会话的缺省档位；不宽于 mode 上限"`
+}
+
+// checkDefault 校验 [use.permission] default：档位存在，且（有上限时）不宽于上限。
+func checkDefault(reg *Registry, def, cap string) error {
+	if def == "" {
+		return nil
+	}
+	d, ok := reg.Get(Mode(def))
+	if !ok {
+		return fmt.Errorf("permission: [use.permission] default 档位 %q 不存在", def)
+	}
+	if cap == "" {
+		return nil
+	}
+	c, ok := reg.Get(Mode(cap))
+	if !ok {
+		c = builtinDef(ReadOnly)
+	}
+	if rank(d.Root) > rank(c.Root) {
+		return fmt.Errorf("permission: [use.permission] default %q 宽于上限 mode %q", def, cap)
+	}
+	return nil
 }
 
 // PluginConfig permission 插件配置（命令行 -mode / -yes / -sandbox 经插件配置覆盖传入）。
@@ -102,6 +127,16 @@ func (*plug) Setup(cx *component.Registrar) error {
 			// §9.2：插件建议值越过封顶表 → 拒绝启动。
 			if err := CheckItems(hub.Items()); err != nil {
 				return err
+			}
+			// [use.permission] default（docs/75 P1）：顶层会话按定义登记缺省档位，先于第一次读档位。
+			// Open 与 Create 两条路径都经会话构造走到这里；子会话跟随顶层会话，不登记。
+			if !sc.Child && sc.Def != nil {
+				dm, _ := sc.Def.Use["permission"]["default"].(string)
+				cm, _ := sc.Def.Use["permission"]["mode"].(string)
+				if err := checkDefault(s.reg(), dm, cm); err != nil {
+					return err
+				}
+				s.SetDefinitionDefault(id, Mode(dm))
 			}
 			// [use.permission]（08 8.3）：定义给的权限上限档位，会话打开后由框架算好放进 Ctx。
 			// 没写时不加限制；写了但档位不存在时按 read-only 处理（不因笔误放开）。
@@ -270,6 +305,9 @@ func applyUse(u *UseConfig, v any) {
 	case map[string]any:
 		if m, ok := x["mode"].(string); ok {
 			u.Mode = m
+		}
+		if m, ok := x["default"].(string); ok {
+			u.Default = m
 		}
 	}
 }
