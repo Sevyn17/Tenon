@@ -60,3 +60,36 @@ func TestOpenExistingKeepsMeta(t *testing.T) {
 		t.Fatalf("旧会话的会话行不应被改写：%+v", l.Meta)
 	}
 }
+
+// Mortise docs/63 W-4：跨工作区分叉在建行之前就拒绝，不留孤儿会话；同工作区分叉继承来源工作区。
+func TestForkChecksWorkspaceBeforeCreate(t *testing.T) {
+	ctx := context.Background()
+	r := newRig(t, nil, &fakeModel{})
+	r.h.Workspace = "wa"
+	c := session.New(&session.Config{Model: "m", Policy: session.DefaultPolicy()})
+	if err := r.db.CreateSession(ctx, store.SessionMeta{ID: "src", Workspace: "wa"}, c.Snapshot().Header, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	// 另一个工作区的宿主（同一份库）分叉：报 ErrOtherWorkspace，且不建行。
+	r2 := newRig(t, r.db, &fakeModel{})
+	r2.h.Workspace = "wb"
+	if _, err := r2.h.Fork(ctx, "src", "orphan", -1, "fork"); !errors.Is(err, ErrOtherWorkspace) {
+		t.Fatalf("跨工作区分叉应报 ErrOtherWorkspace，得到 %v", err)
+	}
+	if ok, err := r.db.Exists(ctx, "orphan"); err != nil || ok {
+		t.Fatalf("跨工作区分叉被拒后不应留下会话行：exists=%v err=%v", ok, err)
+	}
+
+	// 同工作区分叉：成功，新会话继承来源工作区。
+	if _, err := r.h.Fork(ctx, "src", "child", -1, "fork"); err != nil {
+		t.Fatal(err)
+	}
+	l, err := r.db.Load(ctx, "child", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if l.Meta.Workspace != "wa" || l.Meta.ParentID != "src" {
+		t.Fatalf("分叉应继承来源工作区 wa：%+v", l.Meta)
+	}
+}

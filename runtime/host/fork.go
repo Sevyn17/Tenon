@@ -29,6 +29,11 @@ func (h *Host) ForkIf(ctx context.Context, src, dst string, upto int, origin str
 	if origin != "fork" && origin != "side" {
 		return Handle{}, fmt.Errorf("host: fork 的 origin 只能是 fork / side，得到 %q", origin)
 	}
+	// 先查来源工作区再建行（Mortise docs/63 W-4）：跨工作区分叉若到 open 才拒，会留下孤儿会话行。
+	// 新会话的工作区由存储按 ParentID 继承来源会话。
+	if err := h.checkWorkspace(ctx, src); err != nil {
+		return Handle{}, err
+	}
 	if ok, err := h.DB.Exists(ctx, dst); err != nil || ok {
 		if err == nil {
 			err = fmt.Errorf("%w: host: 会话 %s 已存在", store.ErrConflict, dst)
