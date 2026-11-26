@@ -236,6 +236,7 @@ func (r *Runner) run(ctx context.Context, h *Hook, in Input) Result {
 	a := r.argv(h.Command)
 	cmd := exec.CommandContext(ctx, a[0], a[1:]...)
 	proc.SetTree(cmd) // 超时杀整个进程树，不留孙进程（审查 P1-29）
+	proc.NoWindow(cmd)
 	cmd.Dir = r.Cwd
 	cmd.Stdin = bytes.NewReader(body)
 	env := os.Environ()

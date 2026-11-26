@@ -11,7 +11,10 @@ import (
 
 // group 新进程组（taskkill /T 按进程树杀，不依赖进程组，但新组让 Ctrl-C 不波及宿主）。
 func group(cmd *exec.Cmd) {
-	cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: syscall.CREATE_NEW_PROCESS_GROUP}
+	if cmd.SysProcAttr == nil {
+		cmd.SysProcAttr = &syscall.SysProcAttr{}
+	}
+	cmd.SysProcAttr.CreationFlags |= syscall.CREATE_NEW_PROCESS_GROUP // 合并：保留 NoWindow 等已设的字段
 }
 
 // killTree 杀整个进程树：先按系统快照记下所有后代，再杀主进程，最后逐个杀掉记下的后代（孙进程）。
@@ -37,6 +40,7 @@ func killTree(cmd *exec.Cmd) error {
 	}
 	// 快照失败：退回 taskkill /T，再不行只杀主进程。
 	k := exec.Command("taskkill", "/T", "/F", "/PID", strconv.Itoa(int(pid)))
+	NoWindow(k)
 	if kerr := k.Run(); kerr != nil && err != nil {
 		return err
 	}

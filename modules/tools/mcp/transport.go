@@ -89,6 +89,7 @@ func newStdio(s Server) (transport, error) {
 	cmd.Env = scrubEnvWith(os.Environ(), s.Env, s.expand)
 	cmd.Dir = s.Cwd
 	proc.Group(cmd) // 关闭时杀整个进程树：npx → cmd → node 这类服务只杀主进程会留下持有管道的子进程（审查 P1-29）
+	proc.NoWindow(cmd) // stdio 服务走管道，不要控制台窗口
 	t := &stdioTransport{cmd: cmd, wait: map[int64]chan message{}, stderr: &tail{}, done: make(chan struct{})}
 	cmd.Stderr = t.stderr
 	in, err := cmd.StdinPipe()

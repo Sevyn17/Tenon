@@ -18,6 +18,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Sevyn17/tenon/pkg/proc"
 )
 
 // GitTimeout 每次 git 调用的超时。
@@ -66,6 +68,7 @@ func (e *Engine) runGitIn(ctx context.Context, stdin []byte, args ...string) ([]
 	defer cancel()
 	full := append([]string{"-c", "core.quotepath=off", "--no-optional-locks", "--literal-pathspecs"}, args...)
 	cmd := exec.CommandContext(ctx, "git", full...)
+	proc.NoWindow(cmd) // GUI 宿主下不弹控制台黑窗
 	cmd.Dir = e.Root
 	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "LC_ALL=C")
 	if stdin != nil {

@@ -10,7 +10,10 @@ import (
 
 // group 新进程组：killTree 向整个组发信号。
 func group(cmd *exec.Cmd) {
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	if cmd.SysProcAttr == nil {
+		cmd.SysProcAttr = &syscall.SysProcAttr{}
+	}
+	cmd.SysProcAttr.Setpgid = true // 合并：保留已设的其他字段
 }
 
 // killTree 向整个进程组发 SIGKILL。

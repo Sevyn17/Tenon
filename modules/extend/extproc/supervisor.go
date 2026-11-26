@@ -74,6 +74,7 @@ func (s *Supervisor) startLocked(ctx context.Context) error {
 		cmd.Env = append(cmd.Environ(), s.Env...)
 	}
 	proc.SetTree(cmd)
+	proc.NoWindow(cmd)
 	in, err := cmd.StdinPipe()
 	if err != nil {
 		return err

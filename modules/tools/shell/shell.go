@@ -241,6 +241,7 @@ func (s *Shell) command(ctx context.Context, command string, out *tailBuf) *exec
 	cmd.Dir = s.Root
 	cmd.Stdout, cmd.Stderr = out, out
 	proc.SetTree(cmd)
+	proc.NoWindow(cmd) // 非交互、输出走管道：不要控制台窗口（终端走 pty，不经这里）
 	// WaitDelay 只在进程已退出、但还有子进程占着 stdout/stderr 管道时生效（否则 Wait 会一直挂着）。
 	// 它到点会关掉管道，**可能截断最后一段还没读到的输出**——D3 的「等待结束后输出不全」
 	// 就是高负载下 2 秒不够、尾部被切断。放宽到 10 秒：正常情况进程退出后管道立刻 EOF，
