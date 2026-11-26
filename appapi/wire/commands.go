@@ -100,6 +100,8 @@ type ExtensionInfo struct {
 // SessionArgs 只带一个会话 id 的命令参数（session.get / stats / delete 等）。
 type SessionArgs struct {
 	Session string `json:"session"`
+	// AllWorkspaces 读别的工作区的会话（docs/63 W-1）：只对 operator 生效，缺省只读当前工作区。
+	AllWorkspaces bool `json:"all_workspaces,omitempty"`
 }
 
 // ListArgs sessions.list 的分页与过滤条件。
@@ -139,6 +141,8 @@ const (
 type FollowupsArgs struct {
 	Session string `json:"session"`
 	Turn    uint32 `json:"turn,omitempty"`
+	// AllWorkspaces 读别的工作区的会话（docs/63 W-1）：只对 operator 生效，缺省只读当前工作区。
+	AllWorkspaces bool `json:"all_workspaces,omitempty"`
 }
 
 // FollowupsResult session.followups 的结果：某回合之后的建议追问。
@@ -204,6 +208,8 @@ type SubscribeArgs struct {
 	Session  string `json:"session"`
 	After    *int64 `json:"after,omitempty"`
 	Children bool   `json:"children,omitempty"`
+	// AllWorkspaces 读别的工作区的会话（docs/63 W-1）：只对 operator 生效，缺省只读当前工作区。
+	AllWorkspaces bool `json:"all_workspaces,omitempty"`
 }
 
 // EntriesArgs session.entries：按区间或尾部条数取会话条目。
@@ -215,6 +221,8 @@ type EntriesArgs struct {
 	// Turn 只取这个回合的全部条目（要能力 entries.turn，客户端改进 M8）；与 from / to / tail 互斥。
 	// 回合不存在返回 invalid。
 	Turn *uint32 `json:"turn,omitempty"`
+	// AllWorkspaces 读别的工作区的会话（docs/63 W-1）：只对 operator 生效，缺省只读当前工作区。
+	AllWorkspaces bool `json:"all_workspaces,omitempty"`
 }
 
 // EntriesResult session.entries 的结果：条目数组与它们在完整日志里的位置。
@@ -712,6 +720,8 @@ type ArtifactGetArgs struct {
 	Ref     string `json:"ref"`
 	Offset  int    `json:"offset,omitempty"`
 	Length  int    `json:"length,omitempty"`
+	// AllWorkspaces 读别的工作区的会话（docs/63 W-1）：只对 operator 生效，缺省只读当前工作区。
+	AllWorkspaces bool `json:"all_workspaces,omitempty"`
 }
 
 // ArtifactGetResult artifact.get 的结果：base64 内容与元信息。
@@ -771,6 +781,8 @@ type ChangesArgs struct {
 	Session string  `json:"session"`
 	Scope   string  `json:"scope,omitempty"` // ChangeScope*；空 = session
 	Turn    *uint32 `json:"turn,omitempty"`  // scope 为 turn / from_turn 时必填（≥ 1）
+	// AllWorkspaces 读别的工作区的会话（docs/63 W-1）：只对 operator 生效，缺省只读当前工作区。
+	AllWorkspaces bool `json:"all_workspaces,omitempty"`
 }
 
 // ChangeFile 一个文件在所选范围内的净改动。
@@ -807,6 +819,8 @@ type ChangesDiffArgs struct {
 	Path    string  `json:"path"`
 	Scope   string  `json:"scope,omitempty"`
 	Turn    *uint32 `json:"turn,omitempty"`
+	// AllWorkspaces 读别的工作区的会话（docs/63 W-1）：只对 operator 生效，缺省只读当前工作区。
+	AllWorkspaces bool `json:"all_workspaces,omitempty"`
 }
 
 // ChangesDiffResult changes.diff 的结果。

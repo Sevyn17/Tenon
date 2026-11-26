@@ -147,6 +147,9 @@ func (a *App) Call(ctx context.Context, cmd string, args json.RawMessage) (any, 
 		}
 		return nil, Errorf(wire.CodeUnsupported, "unknown command %q", cmd)
 	}
+	if err := a.readScope(ctx, cmd, args); err != nil { // docs/63 W-1：会话读取一律只读当前工作区
+		return nil, err
+	}
 	return h(ctx, a, args)
 }
 

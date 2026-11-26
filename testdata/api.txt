@@ -345,7 +345,7 @@ github.com/Sevyn17/tenon/appapi/wire: type Approval struct{Tool string; CallID s
 github.com/Sevyn17/tenon/appapi/wire: type ApprovalDetail struct{Mode string; ModeLabel string; ModeBuiltin bool; Item string; ItemTitle string; Action string; Subject string; Pattern string; Cap string; Untrusted bool}
 github.com/Sevyn17/tenon/appapi/wire: const ArchivedInclude untyped string
 github.com/Sevyn17/tenon/appapi/wire: const ArchivedOnly untyped string
-github.com/Sevyn17/tenon/appapi/wire: type ArtifactGetArgs struct{Session string; Ref string; Offset int; Length int}
+github.com/Sevyn17/tenon/appapi/wire: type ArtifactGetArgs struct{Session string; Ref string; Offset int; Length int; AllWorkspaces bool}
 github.com/Sevyn17/tenon/appapi/wire: type ArtifactGetResult struct{MIME string; Size int; Text string; Base64 string}
 github.com/Sevyn17/tenon/appapi/wire: type ArtifactPutArgs struct{Session string; MIME string; Base64 string}
 github.com/Sevyn17/tenon/appapi/wire: type ArtifactPutResult struct{Ref string}
@@ -358,8 +358,8 @@ github.com/Sevyn17/tenon/appapi/wire: const ChangeScopeTurn untyped string
 github.com/Sevyn17/tenon/appapi/wire: const ChangeSourceDrift untyped string
 github.com/Sevyn17/tenon/appapi/wire: const ChangeSourceFS untyped string
 github.com/Sevyn17/tenon/appapi/wire: const ChangeSourceShell untyped string
-github.com/Sevyn17/tenon/appapi/wire: type ChangesArgs struct{Session string; Scope string; Turn *uint32}
-github.com/Sevyn17/tenon/appapi/wire: type ChangesDiffArgs struct{Session string; Path string; Scope string; Turn *uint32}
+github.com/Sevyn17/tenon/appapi/wire: type ChangesArgs struct{Session string; Scope string; Turn *uint32; AllWorkspaces bool}
+github.com/Sevyn17/tenon/appapi/wire: type ChangesDiffArgs struct{Session string; Path string; Scope string; Turn *uint32; AllWorkspaces bool}
 github.com/Sevyn17/tenon/appapi/wire: type ChangesDiffResult struct{Path string; Diff string; Binary bool; OldSize int64; NewSize int64; Truncated bool; Unavailable string}
 github.com/Sevyn17/tenon/appapi/wire: type ChangesResult struct{Files []ChangeFile; ScanSkipped string}
 github.com/Sevyn17/tenon/appapi/wire: type ChangesRevertArgs struct{Session string; Paths []string; Scope string; Turn *uint32; DryRun bool; Force bool}
@@ -398,7 +398,7 @@ github.com/Sevyn17/tenon/appapi/wire: func DeclNodeTypes() []string
 github.com/Sevyn17/tenon/appapi/wire: func Durable(kind string) bool
 github.com/Sevyn17/tenon/appapi/wire: type EffectiveModel struct{Model string; Provider string; Protocol string; BaseURL string; Name string; Label string; CredKind string; CredLabel string; Origin string; OriginRef string; Available bool; Reason string; Notice string}
 github.com/Sevyn17/tenon/appapi/wire: type Empty struct{}
-github.com/Sevyn17/tenon/appapi/wire: type EntriesArgs struct{Session string; From *int; To *int; Tail int; Turn *uint32}
+github.com/Sevyn17/tenon/appapi/wire: type EntriesArgs struct{Session string; From *int; To *int; Tail int; Turn *uint32; AllWorkspaces bool}
 github.com/Sevyn17/tenon/appapi/wire: type EntriesResult struct{Entries []Entry; Base int; Len int}
 github.com/Sevyn17/tenon/appapi/wire: type Entry struct{ID string; Idx int; Turn uint32; At int64; Source string; ClientIDs []string; From string; Replies []EntryReply; Item Item}
 github.com/Sevyn17/tenon/appapi/wire: type EntryAppended struct{Entry Entry}
@@ -441,7 +441,7 @@ github.com/Sevyn17/tenon/appapi/wire: type FeedbackListResult struct{Items []Fee
 github.com/Sevyn17/tenon/appapi/wire: type FileInfo struct{Path string; Size int64; MTime int64}
 github.com/Sevyn17/tenon/appapi/wire: type FilesArgs struct{Query string; Limit int}
 github.com/Sevyn17/tenon/appapi/wire: type FilesResult struct{Files []FileInfo; Truncated bool}
-github.com/Sevyn17/tenon/appapi/wire: type FollowupsArgs struct{Session string; Turn uint32}
+github.com/Sevyn17/tenon/appapi/wire: type FollowupsArgs struct{Session string; Turn uint32; AllWorkspaces bool}
 github.com/Sevyn17/tenon/appapi/wire: type FollowupsResult struct{Turn uint32; Items []string}
 github.com/Sevyn17/tenon/appapi/wire: type ForkArgs struct{Session string; To string; Upto *int; UptoTurn *uint32; Origin string; IfCursor *int64; ClientID string}
 github.com/Sevyn17/tenon/appapi/wire: type Form struct{Text string; Submit string}
@@ -579,7 +579,7 @@ github.com/Sevyn17/tenon/appapi/wire: const RunIdle untyped string
 github.com/Sevyn17/tenon/appapi/wire: const RunRunning untyped string
 github.com/Sevyn17/tenon/appapi/wire: type SendArgs struct{Session string; Content []Part; Text string; ClientID string; Queue bool}
 github.com/Sevyn17/tenon/appapi/wire: type SendResult struct{ClientID string; Queued bool}
-github.com/Sevyn17/tenon/appapi/wire: type SessionArgs struct{Session string}
+github.com/Sevyn17/tenon/appapi/wire: type SessionArgs struct{Session string; AllWorkspaces bool}
 github.com/Sevyn17/tenon/appapi/wire: type SessionClosed struct{Reason string}
 github.com/Sevyn17/tenon/appapi/wire: type SessionForked struct{From string; Upto int}
 github.com/Sevyn17/tenon/appapi/wire: type SessionInfo struct{ID string; Title string; Preview string; RunState string; Origin string; Parent string; UpdatedAt int64; Pinned bool; Workspace string; WorkspaceID string; Agent string; CreatorSession string; ChainDepth int; Archived bool; LastEnd *TurnEnded; Source string; Ref string}
@@ -606,7 +606,7 @@ github.com/Sevyn17/tenon/appapi/wire: type StateChanged struct{RunState string; 
 github.com/Sevyn17/tenon/appapi/wire: type Stats struct{Attempts int; Reported int; Missing int; Errors int; Input uint64; Output uint64; CacheRead uint64; CacheWrite uint64; HitRate float64; ToolCalls int; Compacts int; LastRequest string; Composition encoding/json.RawMessage}
 github.com/Sevyn17/tenon/appapi/wire: type SteerArgs struct{Session string; Text string; ClientID string}
 github.com/Sevyn17/tenon/appapi/wire: type StreamRef struct{StreamID string}
-github.com/Sevyn17/tenon/appapi/wire: type SubscribeArgs struct{Session string; After *int64; Children bool}
+github.com/Sevyn17/tenon/appapi/wire: type SubscribeArgs struct{Session string; After *int64; Children bool; AllWorkspaces bool}
 github.com/Sevyn17/tenon/appapi/wire: type ToolArgsDelta struct{CallID string; Text string}
 github.com/Sevyn17/tenon/appapi/wire: type ToolCall struct{ID string; Name string; Args encoding/json.RawMessage}
 github.com/Sevyn17/tenon/appapi/wire: type ToolEnded struct{CallID string; Status string; Preview string; OutputRef string}

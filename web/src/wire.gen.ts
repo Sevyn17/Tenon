@@ -508,6 +508,7 @@ export interface ExtensionInfo {
 
 export interface SessionArgs {
   session: string;
+  all_workspaces?: boolean;
 }
 
 export interface ListArgs {
@@ -557,6 +558,7 @@ export interface FeedbackListResult {
 export interface FollowupsArgs {
   session: string;
   turn?: number;
+  all_workspaces?: boolean;
 }
 
 export interface FollowupsResult {
@@ -577,6 +579,7 @@ export interface SubscribeArgs {
   session: string;
   after?: number;
   children?: boolean;
+  all_workspaces?: boolean;
 }
 
 export interface EntriesArgs {
@@ -585,6 +588,7 @@ export interface EntriesArgs {
   to?: number;
   tail?: number;
   turn?: number;
+  all_workspaces?: boolean;
 }
 
 export interface EntriesResult {
@@ -892,6 +896,7 @@ export interface ArtifactGetArgs {
   ref: string;
   offset?: number;
   length?: number;
+  all_workspaces?: boolean;
 }
 
 export interface ArtifactGetResult {
@@ -939,6 +944,7 @@ export interface ChangesArgs {
   session: string;
   scope?: string;
   turn?: number;
+  all_workspaces?: boolean;
 }
 
 export interface ChangeFile {
@@ -966,6 +972,7 @@ export interface ChangesDiffArgs {
   path: string;
   scope?: string;
   turn?: number;
+  all_workspaces?: boolean;
 }
 
 export interface ChangesDiffResult {

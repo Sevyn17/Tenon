@@ -41,8 +41,8 @@ func TestWorkspaceGuard(t *testing.T) {
 	}
 
 	allowed := []struct{ cmd, args string }{
-		{"session.get", `{"session":"other"}`},
-		{"session.entries", `{"session":"other"}`},
+		{"session.get", `{"session":"other","all_workspaces":true}`}, // docs/63 W-1：跨工作区读要显式 all_workspaces
+		{"session.entries", `{"session":"other","all_workspaces":true}`},
 		{"session.locate", `{"session":"other"}`},
 		{"session.update", `{"session":"other","title":"改名"}`},
 		{"session.cancel", `{"session":"other"}`},

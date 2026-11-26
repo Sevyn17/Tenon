@@ -179,8 +179,12 @@ func (c *Conn) Call(ctx context.Context, cmd string, args json.RawMessage) (resu
 			return nil, err
 		}
 	}
+	ctx = withPrincipal(ctx, c.p) // readScope 按连接身份判定 all_workspaces（docs/63 W-1）
 	switch cmd {
 	case "session.subscribe":
+		if err := c.a.readScope(ctx, cmd, args); err != nil {
+			return nil, err
+		}
 		return bind(func(_ *App, ctx context.Context, in wire.SubscribeArgs) (wire.Empty, error) {
 			return wire.Empty{}, c.Subscribe(ctx, in)
 		})(ctx, c.a, args)

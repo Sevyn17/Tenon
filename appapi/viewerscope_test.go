@@ -83,8 +83,11 @@ func TestViewerScope(t *testing.T) {
 		if err := call(viewer, cmd, `{"session":"here"}`); code(err) == wire.CodeForbidden {
 			t.Fatalf("viewer %s 本工作区会话不应被拒：%v", cmd, err)
 		}
-		if err := call(op, cmd, `{"session":"other"}`); code(err) == wire.CodeForbidden {
-			t.Fatalf("operator %s 跨工作区读应放行：%v", cmd, err)
+		if err := call(op, cmd, `{"session":"other","all_workspaces":true}`); code(err) == wire.CodeForbidden {
+			t.Fatalf("operator %s 带 all_workspaces 跨工作区读应放行：%v", cmd, err)
+		}
+		if err := call(viewer, cmd, `{"session":"other","all_workspaces":true}`); code(err) != wire.CodeForbidden {
+			t.Fatalf("viewer %s 带 all_workspaces 仍应 forbidden，得到 %v", cmd, err)
 		}
 	}
 }
