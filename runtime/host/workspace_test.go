@@ -46,7 +46,7 @@ func TestOpenExistingKeepsMeta(t *testing.T) {
 	r.h.Workspace = "wa"
 	c := session.New(&session.Config{Model: "m", Policy: session.DefaultPolicy()})
 	// 存储对空 origin 缺省填 new；这里给 fork 以便看出字段没被 Open 的新建字段覆盖。
-	if err := r.db.CreateSession(ctx, store.SessionMeta{ID: "old", Origin: "fork", Title: "旧"}, c.Snapshot().Header, nil); err != nil {
+	if err := r.db.CreateSession(ctx, store.SessionMeta{Workspace: "wa", ID: "old", Origin: "fork", Title: "旧"}, c.Snapshot().Header, nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := r.h.Open(ctx, "old"); err != nil {
@@ -56,7 +56,7 @@ func TestOpenExistingKeepsMeta(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if l.Meta.Workspace != "" || l.Meta.Origin != "fork" || l.Meta.Title != "旧" {
+	if l.Meta.Workspace != "wa" || l.Meta.Origin != "fork" || l.Meta.Title != "旧" {
 		t.Fatalf("旧会话的会话行不应被改写：%+v", l.Meta)
 	}
 }

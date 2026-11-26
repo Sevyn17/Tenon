@@ -82,21 +82,11 @@ export interface SessionsView {
   loading: boolean;
   error?: string;
   all: boolean; // 含子会话
-  /**
-   * 没有工作区的会话（记工作区之前建的旧会话；左栏「未归属」分组，Mortise 客户端改进 M6 决定 10）。
-   * 服务端报能力 sessions_unassigned 才查（sessions.list {unassigned}）；否则为空或缺省。置顶的也在这里，
-   * 不进 pinned（置顶查询按工作区过滤）。不在 listed() 里：上下一个会话、命令面板只走当前工作区。
-   */
-  unassigned?: SessionRow[];
-  /** 未归属的下一页游标；0 / 缺省 = 没有下一页。 */
-  unassignedNext?: number;
   /** 已归档的会话（M7）；不在 listed() 里。 */
   archived?: ArchivedView;
 }
 
 export interface SessionsStoreOptions {
-  /** 是否查未归属的会话（通常是 () => client.can("sessions_unassigned")；每次查第一页时判断）。 */
-  unassigned?: () => boolean;
   /** sessions.changed 是否带全套字段（client.can(CAP_CHANGED_FULL)）。 */
   full?: () => boolean;
   /** 当前工作区的键（hello.workspace）；空串或 undefined = 不按工作区区分。 */
@@ -110,14 +100,12 @@ export interface SessionsStoreOptions {
 export interface SessionsStore extends ReadStore<SessionsView> {
   refresh(): Promise<void>;
   more(): Promise<void>;
-  /** 未归属的下一页。 */
-  moreUnassigned(): Promise<void>;
   setAll(all: boolean): Promise<void>;
   /** 本地插入（新建、分叉后立即出现在列表里，不等下一次查询）。 */
   upsert(info: SessionRow): void;
   /** 本地移除（删除成功后立即消失，不等 sessions.changed）。 */
   remove(id: string): void;
-  /** 一行的信息（置顶、分页、未归属、已归档任一处）。 */
+  /** 一行的信息（置顶、分页、已归档任一处）。 */
   find(id: string): SessionRow | undefined;
   /** 打开「已归档」：查第一页（已打开时重查）。失败记在 archived.error，不抛。 */
   openArchived(): Promise<void>;
@@ -137,7 +125,6 @@ export interface SessionsStore extends ReadStore<SessionsView> {
 export function createSessionsStore(conn: Connection, limit = 50, opts: SessionsStoreOptions = {}): SessionsStore {
   const store = createStore<SessionsView>({ items: [], pinned: [], next: 0, loading: false, all: false });
   let gen = 0;
-  let moreGen = 0; // 未归属翻页的代次：重新查第一页后丢弃旧的翻页结果
   let archGen = 0; // 已归档查询的代次
 
   const page = async (cursor: number) => {
@@ -145,41 +132,19 @@ export function createSessionsStore(conn: Connection, limit = 50, opts: Sessions
     store.update((v) => ({ ...v, loading: true, error: undefined }));
     try {
       const all = store.get().all;
-      const withUn = cursor === 0 && !!opts.unassigned?.();
-      if (cursor === 0) moreGen++;
-      const [r, p, u] = await Promise.all([
+      const [r, p] = await Promise.all([
         conn.call("sessions.list", { cursor, limit, all }),
         cursor === 0 ? conn.call("sessions.list", { pinned: true, limit: 200, all }) : Promise.resolve(null),
-        // 未归属查失败不影响主列表：保留上一次的结果。
-        withUn ? conn.call("sessions.list", { unassigned: true, limit, all }).catch(() => null) : Promise.resolve(null),
       ]);
       if (g !== gen) return;
       store.update((v) => {
         const pinned = p ? (p.items ?? []) : v.pinned;
         const items = cursor === 0 ? (r.items ?? []) : dedupe([...v.items, ...(r.items ?? [])]);
-        const next: SessionsView = { ...v, loading: false, next: r.next, pinned, items: items.filter((x) => !x.pinned) };
-        if (u) return { ...next, unassigned: u.items ?? [], unassignedNext: u.next };
-        if (cursor === 0 && !withUn && v.unassigned) return { ...next, unassigned: [], unassignedNext: 0 }; // 换到没有这项能力的服务端
-        return next;
+        return { ...v, loading: false, next: r.next, pinned, items: items.filter((x) => !x.pinned) };
       });
     } catch (e) {
       if (g !== gen) return;
       store.update((v) => ({ ...v, loading: false, error: errText(e) }));
-    }
-  };
-
-  let loadingUn = false;
-  const moreUnassigned = async () => {
-    const cursor = store.get().unassignedNext ?? 0;
-    if (cursor <= 0 || loadingUn) return;
-    loadingUn = true;
-    const g = moreGen;
-    try {
-      const r = await conn.call("sessions.list", { unassigned: true, cursor, limit, all: store.get().all });
-      if (g !== moreGen) return;
-      store.update((v) => ({ ...v, unassigned: dedupe([...(v.unassigned ?? []), ...(r.items ?? [])]), unassignedNext: r.next }));
-    } finally {
-      loadingUn = false;
     }
   };
 
@@ -239,15 +204,13 @@ export function createSessionsStore(conn: Connection, limit = 50, opts: Sessions
       const n = store.get().next;
       if (n > 0 && !store.get().loading) await page(n);
     },
-    moreUnassigned,
     async setAll(all) {
       store.update((v) => ({ ...v, all }));
       await page(0);
     },
     upsert(info) {
       store.update((v) => {
-        // 已在未归属分组里的行（改名、置顶）留在原处；其余照旧进置顶区或按时间的列表。
-        if (v.unassigned?.some((x) => x.id === info.id)) return { ...v, unassigned: replaceIn(v.unassigned, info) };
+        // 已归档的行留在原处；其余照旧进置顶区或按时间的列表。
         if (v.archived?.items.some((x) => x.id === info.id)) return { ...v, archived: { ...v.archived, items: replaceIn(v.archived.items, info) } };
         return place({ ...v, items: v.items.filter((x) => x.id !== info.id), pinned: v.pinned.filter((x) => x.id !== info.id) }, info);
       });
@@ -273,7 +236,7 @@ export function createSessionsStore(conn: Connection, limit = 50, opts: Sessions
       const known = findIn(store.get(), id);
       store.update((v) => {
         const rest = without(v, id);
-        // 恢复：从已归档里拿掉，回到哪一组（工作区 / 未归属 / 置顶）由下面的重查决定。
+        // 恢复：从已归档里拿掉，回到哪一组（工作区 / 置顶）由下面的重查决定。
         if (!archived) return rest;
         const row: SessionRow = {
           ...(known ?? { id, preview: "", origin: snap.origin, run_state: snap.run_state, updated_at: 0 }),
@@ -321,8 +284,7 @@ export interface ChangedContext {
  * 没有更新时间的新行），调用方应防抖重查第一页。
  *
  * 列表里已有的行：原地更新（全套字段时连 preview、last_end、archived 一起）；归档了就挪进「已归档」（打开时）。
- * 列表里没有的行（只在全套字段时插入）：不是子会话（或开了「含子会话」）、属于当前工作区（或无工作区的进
- * 「未归属」分组）、没归档、更新时间不早于已加载的最后一行（或已到末页）。置顶的不看更新时间。
+ * 列表里没有的行（只在全套字段时插入）：不是子会话（或开了「含子会话」）、属于当前工作区、没归档、更新时间不早于已加载的最后一行（或已到末页）。置顶的不看更新时间。
  */
 export function mergeChanged(v: SessionsView, d: SessionsChanged, ctx: ChangedContext = { full: false }): { view: SessionsView; refresh: boolean } {
   const keep = (view: SessionsView) => ({ view, refresh: false });
@@ -342,8 +304,6 @@ export function mergeChanged(v: SessionsView, d: SessionsChanged, ctx: ChangedCo
       const rest = without(v, d.id);
       return insertNew(rest, row, ctx);
     }
-    // 未归属分组里的行：原地更新（置顶与否都留在这一组），不挪进按工作区的列表。
-    if (v.unassigned?.some((x) => x.id === d.id)) return keep({ ...v, unassigned: replaceIn(v.unassigned, row) });
     if (v.archived?.items.some((x) => x.id === d.id)) return keep({ ...v, archived: { ...v.archived, items: replaceIn(v.archived.items, row) } });
     return keep(place({ ...v, items: v.items.filter((x) => x.id !== d.id), pinned: v.pinned.filter((x) => x.id !== d.id) }, row));
   }
@@ -372,13 +332,7 @@ export function applyChanged(v: SessionsView, d: SessionsChanged, ctx?: ChangedC
 function insertNew(v: SessionsView, row: SessionRow, ctx: ChangedContext): { view: SessionsView; refresh: boolean } {
   if (isChildRow(row) && !v.all) return { view: v, refresh: false };
   const ws = row.workspace ?? "";
-  if (ctx.workspace && ws !== ctx.workspace) {
-    // 没有工作区的会话进「未归属」分组（服务端有这项能力、分组已查过时）；别的工作区的不显示。
-    if (ws || !v.unassigned) return { view: v, refresh: false };
-    if (!row.updated_at) return { view: v, refresh: true };
-    if (!fits(v.unassigned, v.unassignedNext ?? 0, row)) return { view: v, refresh: false };
-    return { view: { ...v, unassigned: sortByUpdated([row, ...v.unassigned]) }, refresh: false };
-  }
+  if (ctx.workspace && ws !== ctx.workspace) return { view: v, refresh: false }; // 别的工作区的不显示
   if (row.pinned) return { view: place(v, row), refresh: false };
   // 改名、置顶这类事件 updated_at = 0：不知道排在哪，重查。
   if (!row.updated_at) return { view: v, refresh: true };
@@ -451,7 +405,6 @@ function place(v: SessionsView, row: SessionRow): SessionsView {
 
 function findIn(v: SessionsView, id: string): SessionRow | undefined {
   return (
-    v.unassigned?.find((x) => x.id === id) ??
     v.pinned.find((x) => x.id === id) ??
     v.items.find((x) => x.id === id) ??
     v.archived?.items.find((x) => x.id === id)
@@ -462,7 +415,6 @@ function findIn(v: SessionsView, id: string): SessionRow | undefined {
 function without(v: SessionsView, id: string): SessionsView {
   const keep = (x: SessionRow) => x.id !== id;
   const out: SessionsView = { ...v, items: v.items.filter(keep), pinned: v.pinned.filter(keep) };
-  if (v.unassigned) out.unassigned = v.unassigned.filter(keep);
   if (v.archived) out.archived = { ...v.archived, items: v.archived.items.filter(keep) };
   return out;
 }
@@ -471,7 +423,6 @@ function without(v: SessionsView, id: string): SessionsView {
 function dropTree(v: SessionsView, id: string): SessionsView {
   const keep = (x: SessionRow) => x.id !== id && !x.id.startsWith(id + "/");
   const out: SessionsView = { ...v, items: v.items.filter(keep), pinned: v.pinned.filter(keep) };
-  if (v.unassigned) out.unassigned = v.unassigned.filter(keep);
   if (v.archived) out.archived = { ...v.archived, items: v.archived.items.filter(keep) };
   return out;
 }
@@ -485,7 +436,7 @@ function errText(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
-/** 当前工作区的左栏顺序：置顶在前，其余按更新时间（不含未归属分组）。 */
+/** 当前工作区的左栏顺序：置顶在前，其余按更新时间。 */
 export function listed(v: SessionsView): SessionRow[] {
   return [...v.pinned, ...v.items];
 }

@@ -89,10 +89,8 @@ func TopLevel(parentID, origin string) bool {
 
 // SessionQuery 会话列表的查询条件（各条件之间是「且」）。
 type SessionQuery struct {
-	// Workspace 非空：只列属于它的会话。Unassigned 为真时忽略。
+	// Workspace 非空：只列属于它的会话。
 	Workspace string
-	// Unassigned 只列 workspace 为空的会话（同 UnassignedLister）。
-	Unassigned bool
 	// Before > 0：只列 updated_at < Before 的（分页游标）。
 	Before int64
 	// Limit 每页条数；<= 0 或 > 500 按 50。
@@ -109,7 +107,7 @@ type SessionQuery struct {
 	// Agent 非空：只列绑定这个定义名的会话（SessionMeta.AgentID）。
 	Agent string
 	// WorkspaceID 非空：只列 WorkspaceID(Workspace) 等于它的会话（工作区稳定 id，Mortise docs/74 W4a）。
-	// 与 Workspace 同时给时两者都要满足；Unassigned 为真时忽略。
+	// 与 Workspace 同时给时两者都要满足。
 	WorkspaceID string
 	// CreatorSession 非空：只列由这个会话创建的会话（创建链，docs/76 C1；session_list 与并发计数用）。
 	CreatorSession string
@@ -124,7 +122,7 @@ func WorkspaceID(key string) string {
 }
 
 // SessionQueryStore 可选：按条件列会话（文本搜索、按 parent、归档）。客户端改进 M7 协议T12。
-// 与 UnassignedLister 一样不加进 Store：第三方存储不实现也照常工作，只是没有这些筛选（hello 不报 sessions.query）。
+// 不加进 Store：第三方存储不实现也照常工作，只是没有这些筛选（hello 不报 sessions.query）。
 type SessionQueryStore interface {
 	// QuerySessions 按更新时间倒序列出满足 q 的未删除会话，最多 q.Limit 条。
 	QuerySessions(ctx context.Context, q SessionQuery) ([]SessionInfo, error)

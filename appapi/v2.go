@@ -276,11 +276,6 @@ func (v *App) capabilities() []string {
 	// last_end（客户端改进 M2）：快照与 session.state_changed 带 last_end、turn.ended 带 at、
 	// 失败时 code 只放错误码。总是有；旧服务端没有这条，客户端据此退回原逻辑。
 	out = append(out, "last_end")
-	// sessions_unassigned（客户端改进 M6 决定 10）：sessions.list {unassigned} 可用。宿主有工作区
-	// （缺省列表按工作区过滤，没有工作区的旧会话看不到）且存储实现了 UnassignedLister 才报。
-	if _, ok := o.DB.(store.UnassignedLister); ok && o.Host != nil && o.Host.Workspace != "" {
-		out = append(out, "sessions_unassigned")
-	}
 	// sessions.query（客户端改进 M7 协议T13）：sessions.list {query, parent, archived} 与 session.update {archived}。
 	// 存储实现了 SessionQueryStore（按条件列）和 SessionMetaStore（写归档标记）才报。
 	if _, ok := o.DB.(store.SessionQueryStore); ok {
@@ -375,21 +370,7 @@ func (v *App) SessionsList(ctx context.Context, in wire.ListArgs) (wire.ListResu
 	if in.Pinned && (query != "" || in.Parent != "") {
 		return wire.ListResult{}, invalid("pinned cannot be combined with query or parent")
 	}
-	if in.Parent != "" && in.Unassigned {
-		return wire.ListResult{}, invalid("parent cannot be combined with unassigned")
-	}
-	// unassigned：只列没有工作区的会话（客户端改进 M6 决定 10，左栏「未归属」分组）。
-	var ul store.UnassignedLister
-	if in.Unassigned {
-		var ok bool
-		if ul, ok = v.o.DB.(store.UnassignedLister); !ok {
-			return wire.ListResult{}, Errorf(wire.CodeUnsupported, "store does not support listing sessions without a workspace")
-		}
-	}
 	inWS := func(s store.SessionInfo) bool {
-		if in.Unassigned {
-			return s.Workspace == ""
-		}
 		return (ws == "" || s.Workspace == ws) && (wsID == "" || wire.WorkspaceID(s.Workspace) == wsID)
 	}
 	if in.Pinned { // 置顶的会话：单独一页，不分页
@@ -413,14 +394,12 @@ func (v *App) SessionsList(ctx context.Context, in wire.ListArgs) (wire.ListResu
 	var items []store.SessionInfo
 	switch {
 	case canQuery:
-		q := store.SessionQuery{Workspace: ws, Unassigned: in.Unassigned, Before: in.Cursor, Limit: limit, TopOnly: !in.All,
+		q := store.SessionQuery{Workspace: ws, Before: in.Cursor, Limit: limit, TopOnly: !in.All,
 			Parent: in.Parent, Text: query, Archived: archived, Agent: in.Agent, WorkspaceID: wsID}
 		if in.Parent != "" { // 子会话跟随父会话的工作区，按 parent 列时不再按工作区、顶层过滤
 			q.Workspace, q.WorkspaceID, q.TopOnly = "", "", false
 		}
 		items, err = qs.QuerySessions(ctx, q)
-	case in.Unassigned:
-		items, err = ul.ListUnassigned(ctx, in.Cursor, limit, !in.All)
 	default:
 		items, err = v.o.DB.ListSessionsIn(ctx, ws, in.Cursor, limit, !in.All)
 	}

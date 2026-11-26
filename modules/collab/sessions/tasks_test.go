@@ -42,7 +42,7 @@ func (failModel) Stream(context.Context, session.Request, func(string)) (session
 func taskHost(t *testing.T, m agent.Model) *host.Host {
 	db := memstore.New()
 	t.Cleanup(func() { db.Close() })
-	return &host.Host{DB: db, New: func(id, def string) (*agent.Agent, *session.Config, error) {
+	return &host.Host{Workspace: "w", DB: db, New: func(id, def string) (*agent.Agent, *session.Config, error) {
 		hub := toolhub.New(toolhub.Options{Store: agent.ToolStore{DB: db}})
 		return &agent.Agent{Store: db, SessionID: id, Model: m, Hub: hub}, &session.Config{Model: "m", Policy: session.DefaultPolicy()}, nil
 	}}

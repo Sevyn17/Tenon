@@ -21,7 +21,7 @@ func creatorRig(t *testing.T) *rig {
 	t.Helper()
 	r := newRig(t, nil, &fakeModel{})
 	if _, err := r.h.open(context.Background(), "s1", "", r.h.New, func(ag *agent.Agent, cfg *session.Config) error {
-		_, err := ag.OpenAs(context.Background(), cfg, store.SessionMeta{ID: "s1", Creator: "u1"})
+		_, err := ag.OpenAs(context.Background(), cfg, store.SessionMeta{Workspace: "w", ID: "s1", Creator: "u1"})
 		return err
 	}); err != nil {
 		t.Fatal(err)

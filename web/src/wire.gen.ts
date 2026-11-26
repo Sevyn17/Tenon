@@ -516,7 +516,6 @@ export interface ListArgs {
   all?: boolean;
   pinned?: boolean;
   all_workspaces?: boolean;
-  unassigned?: boolean;
   query?: string;
   parent?: string;
   archived?: string;

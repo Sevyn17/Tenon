@@ -116,7 +116,7 @@ func TestOutboundCapsFromSenderPermissions(t *testing.T) {
 	t.Cleanup(func() { db.Close() })
 	executed := new(int)
 	// low 只有 read_file；high 有 echo。
-	h := &Host{DB: db, New: func(id, def string) (*agent.Agent, *session.Config, error) {
+	h := &Host{Workspace: "w", DB: db, New: func(id, def string) (*agent.Agent, *session.Config, error) {
 		hub := toolhub.New(toolhub.Options{Store: agent.ToolStore{DB: db}})
 		name := "echo"
 		if id == "low" {
@@ -192,7 +192,7 @@ func TestExternalTurnMarksCtxUntrusted(t *testing.T) {
 	db := memstore.New()
 	t.Cleanup(func() { db.Close() })
 	var seen []bool
-	h := &Host{DB: db, New: func(id, def string) (*agent.Agent, *session.Config, error) {
+	h := &Host{Workspace: "w", DB: db, New: func(id, def string) (*agent.Agent, *session.Config, error) {
 		hub := toolhub.New(toolhub.Options{Store: agent.ToolStore{DB: db}})
 		if err := hub.Register(&toolhub.Tool{Spec: session.ToolSpec{Name: "echo", Schema: json.RawMessage(`{"type":"object"}`)},
 			Risk: toolhub.Read, Call: func(_ context.Context, cx *toolhub.Cx, _ json.RawMessage) (toolhub.Output, error) {
@@ -229,7 +229,7 @@ func capsHost(t *testing.T) (*Host, *int) {
 	db := memstore.New()
 	t.Cleanup(func() { db.Close() })
 	executed := new(int)
-	h := &Host{DB: db, New: func(id, def string) (*agent.Agent, *session.Config, error) {
+	h := &Host{Workspace: "w", DB: db, New: func(id, def string) (*agent.Agent, *session.Config, error) {
 		hub := toolhub.New(toolhub.Options{Store: agent.ToolStore{DB: db}})
 		if err := hub.Register(&toolhub.Tool{Spec: session.ToolSpec{Name: "echo", Schema: json.RawMessage(`{"type":"object"}`)},
 			Risk: toolhub.Read, Call: func(context.Context, *toolhub.Cx, json.RawMessage) (toolhub.Output, error) {

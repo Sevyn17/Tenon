@@ -65,6 +65,9 @@ func listCode(t *testing.T, app *App, a wire.ListArgs) string {
 	return ae.Code
 }
 
+// plainStore 只暴露 store.Store（隐藏可选接口）。
+type plainStore struct{ store.Store }
+
 func storeSession(t *testing.T, app *App, m store.SessionMeta) {
 	t.Helper()
 	hdr := session.New(&session.Config{Model: "m", Policy: session.DefaultPolicy()}).Snapshot().Header
@@ -239,7 +242,7 @@ func TestSessionsListQueryAndParent(t *testing.T) {
 	if got := listIDs(t, app, wire.ListArgs{}); !slices.Equal(got, []string{"a", "b"}) {
 		t.Fatalf("缺省列表不变：%v", got)
 	}
-	for _, a := range []wire.ListArgs{{Pinned: true, Query: "a"}, {Pinned: true, Parent: "w2"}, {Parent: "w2", Unassigned: true},
+	for _, a := range []wire.ListArgs{{Pinned: true, Query: "a"}, {Pinned: true, Parent: "w2"},
 		{Query: strings.Repeat("x", MaxQuery+1)}} {
 		if code := listCode(t, app, a); code != wire.CodeInvalid {
 			t.Fatalf("%+v 应为 invalid，得到 %s", a, code)

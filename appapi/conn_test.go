@@ -168,7 +168,7 @@ func TestConnPollsOtherProcess(t *testing.T) {
 	open := func() (*bus.Bus, *host.Host) {
 		b := bus.New(0)
 		t.Cleanup(func() { b.Close() })
-		h := &host.Host{DB: db, Bus: b}
+		h := &host.Host{Workspace: "w", DB: db, Bus: b}
 		h.New = func(id, def string) (*agent.Agent, *session.Config, error) {
 			hub := toolhub.New(toolhub.Options{Store: agent.ToolStore{DB: db}})
 			return &agent.Agent{Store: db, SessionID: id, Model: fakeModel{}, Hub: hub},

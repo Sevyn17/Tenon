@@ -51,7 +51,7 @@ func TestPermissionCapNeverLoosens(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := a.OpenAs(ctx, cfg, store.SessionMeta{ID: id, AgentID: def}); err != nil {
+		if _, err := a.OpenAs(ctx, cfg, store.SessionMeta{Workspace: "w", ID: id, AgentID: def}); err != nil {
 			t.Fatal(err)
 		}
 		run := a.Hub.ExecuteIn(ctx, a.Toolset, a.Ctx,

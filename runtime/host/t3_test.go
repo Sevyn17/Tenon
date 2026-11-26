@@ -212,7 +212,7 @@ func TestDeliverControlOnlyCreator(t *testing.T) {
 	ctx := context.Background()
 	r := newRig(t, nil, &fakeModel{block: make(chan struct{})})
 	hd, err := r.h.open(ctx, "s1", "", r.h.New, func(ag *agent.Agent, cfg *session.Config) error {
-		_, err := ag.OpenAs(ctx, cfg, store.SessionMeta{ID: "s1", Creator: "u1"})
+		_, err := ag.OpenAs(ctx, cfg, store.SessionMeta{Workspace: "w", ID: "s1", Creator: "u1"})
 		return err
 	})
 	if err != nil {
@@ -255,7 +255,7 @@ func TestControlCloseMidTurnDoesNotBlock(t *testing.T) {
 	ctx := context.Background()
 	r := newRig(t, nil, &fakeModel{block: make(chan struct{})})
 	hd, err := r.h.open(ctx, "s1", "", r.h.New, func(ag *agent.Agent, cfg *session.Config) error {
-		_, err := ag.OpenAs(ctx, cfg, store.SessionMeta{ID: "s1", Creator: "u1"})
+		_, err := ag.OpenAs(ctx, cfg, store.SessionMeta{Workspace: "w", ID: "s1", Creator: "u1"})
 		return err
 	})
 	if err != nil {
@@ -348,7 +348,7 @@ func TestDeliverAgentCreatesAndReusesKey(t *testing.T) {
 	db := memstore.New()
 	t.Cleanup(func() { db.Close() })
 	var defs []string
-	h := &Host{DB: db, New: func(id, def string) (*agent.Agent, *session.Config, error) {
+	h := &Host{Workspace: "w", DB: db, New: func(id, def string) (*agent.Agent, *session.Config, error) {
 		defs = append(defs, def)
 		a := &agent.Agent{Store: db, SessionID: id, Model: &fakeModel{}}
 		cfg := &session.Config{Model: "m", Policy: session.DefaultPolicy()}
@@ -398,7 +398,7 @@ func TestGuardContactAndHop(t *testing.T) {
 	ctx := context.Background()
 	r := newRig(t, nil, &fakeModel{})
 	if _, err := r.h.open(ctx, "s1", "", r.h.New, func(ag *agent.Agent, cfg *session.Config) error {
-		_, err := ag.OpenAs(ctx, cfg, store.SessionMeta{ID: "s1", Creator: "u1"})
+		_, err := ag.OpenAs(ctx, cfg, store.SessionMeta{Workspace: "w", ID: "s1", Creator: "u1"})
 		return err
 	}); err != nil {
 		t.Fatal(err)
@@ -484,7 +484,7 @@ func TestCapsRestrictToolCall(t *testing.T) {
 	t.Cleanup(func() { db.Close() })
 	executed := new(int)
 	m := &fakeModel{}
-	h := &Host{DB: db, New: func(id, def string) (*agent.Agent, *session.Config, error) {
+	h := &Host{Workspace: "w", DB: db, New: func(id, def string) (*agent.Agent, *session.Config, error) {
 		hub := toolhub.New(toolhub.Options{Store: agent.ToolStore{DB: db}})
 		echo := &toolhub.Tool{
 			Spec: session.ToolSpec{Name: "echo", Schema: json.RawMessage(`{"type":"object"}`)},

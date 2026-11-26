@@ -57,7 +57,7 @@ func TestDefinitionToolsAndUsePermissionEnforced(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := b.OpenAs(context.Background(), cfg, store.SessionMeta{ID: "s-capped", AgentID: "capped"}); err != nil {
+	if _, err := b.OpenAs(context.Background(), cfg, store.SessionMeta{Workspace: "w", ID: "s-capped", AgentID: "capped"}); err != nil {
 		t.Fatalf("带 [use.permission] 的会话应能创建: %v", err)
 	}
 	for _, s := range cfg.Tools {

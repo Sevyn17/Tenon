@@ -59,9 +59,9 @@ func callTool(t *testing.T, tool *toolhub.Tool, sid, args string) toolhub.Output
 func TestTurnsStatusAndSearch(t *testing.T) {
 	db := memstore.New()
 	t.Cleanup(func() { db.Close() })
-	h := &host.Host{DB: db}
+	h := &host.Host{Workspace: "w", DB: db}
 	// 三回合各 2 条（下标 0–5），压缩到 4：回合 1、2 已压缩，回合 3 还在上下文里。
-	reviewRig(t, db, store.SessionMeta{ID: "s"}, []string{"部署脚本报错", "换成蓝绿发布", "继续"}, 4)
+	reviewRig(t, db, store.SessionMeta{Workspace: "w", ID: "s"}, []string{"部署脚本报错", "换成蓝绿发布", "继续"}, 4)
 	out := callTool(t, TurnsTool(h), "s", `{}`)
 	txt := contentText(out.Content)
 	if out.Status.State != "ok" {
@@ -89,8 +89,8 @@ func callToolText(t *testing.T, h *host.Host, sid, args string) string {
 func TestReadByEntryKindsAndScope(t *testing.T) {
 	db := memstore.New()
 	t.Cleanup(func() { db.Close() })
-	h := &host.Host{DB: db}
-	c := reviewRig(t, db, store.SessionMeta{ID: "p"}, []string{"第一个问题", "第二个问题"}, 0)
+	h := &host.Host{Workspace: "w", DB: db}
+	c := reviewRig(t, db, store.SessionMeta{Workspace: "w", ID: "p"}, []string{"第一个问题", "第二个问题"}, 0)
 	es := c.Snapshot().Entries
 	// 按条目 id 读，只要用户消息。
 	out := callTool(t, ReadTool(h), "p", `{"entry":"`+es[0].ID+`","kinds":["user"]}`)
@@ -105,7 +105,7 @@ func TestReadByEntryKindsAndScope(t *testing.T) {
 	}
 	// 派出的会话能读；别人的会话、创建者都不能读（第二层不能读创建者）。
 	reviewRig(t, db, store.SessionMeta{ID: "p/sub-1", ParentID: "p", CreatorSession: "p", ChainDepth: 2}, []string{"子任务"}, 0)
-	reviewRig(t, db, store.SessionMeta{ID: "other"}, []string{"别人的"}, 0)
+	reviewRig(t, db, store.SessionMeta{Workspace: "w", ID: "other"}, []string{"别人的"}, 0)
 	if out := callTool(t, TurnsTool(h), "p", `{"session":"p/sub-1"}`); out.Status.State != "ok" {
 		t.Fatalf("应能读本会话派出的会话：%s", contentText(out.Content))
 	}
@@ -120,9 +120,9 @@ func TestReadByEntryKindsAndScope(t *testing.T) {
 func TestReadSegments(t *testing.T) {
 	db := memstore.New()
 	t.Cleanup(func() { db.Close() })
-	h := &host.Host{DB: db}
+	h := &host.Host{Workspace: "w", DB: db}
 	long := strings.Repeat("长文本", 4000) // 约 36 KB
-	reviewRig(t, db, store.SessionMeta{ID: "s"}, []string{long}, 0)
+	reviewRig(t, db, store.SessionMeta{Workspace: "w", ID: "s"}, []string{long}, 0)
 	txt := contentText(callTool(t, ReadTool(h), "s", `{"turn":1,"kinds":["user"]}`).Content)
 	if len(txt) > ReadDefaultBytes+512 || !strings.Contains(txt, "from=") {
 		t.Fatalf("超出缺省上限应分段并提示 from：len=%d", len(txt))
@@ -132,9 +132,9 @@ func TestReadSegments(t *testing.T) {
 func TestRewoundTurnsListedOnRequest(t *testing.T) {
 	db := memstore.New()
 	t.Cleanup(func() { db.Close() })
-	h := &host.Host{DB: db}
+	h := &host.Host{Workspace: "w", DB: db}
 	ctx := context.Background()
-	c := reviewRig(t, db, store.SessionMeta{ID: "s"}, []string{"一", "二"}, 0)
+	c := reviewRig(t, db, store.SessionMeta{Workspace: "w", ID: "s"}, []string{"一", "二"}, 0)
 	to := 2
 	if err := c.Rewind(to); err != nil {
 		t.Fatal(err)

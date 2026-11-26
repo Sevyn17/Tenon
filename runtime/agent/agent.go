@@ -62,6 +62,8 @@ type Agent struct {
 	Hooks     Hooks
 	Store     PersistStore // nil = 不持久化
 	SessionID string
+	// Workspace Open 新建会话时记的工作区（docs/63 W-2：顶层会话必填，空时存储拒绝建会话）。
+	Workspace string
 
 	// Origin 会话来源（store.SessionMeta.Origin）：空 = 顶层会话，非空 = 派生（subagent / member / fork / side）。
 	// 所属树策略按它判断「子会话一轮失败」该怎么处理（02 2.2）。

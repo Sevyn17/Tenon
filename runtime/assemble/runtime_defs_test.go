@@ -72,7 +72,7 @@ func TestBuildRestoresDefinitionFromSession(t *testing.T) {
 	ctx := context.Background()
 	db := memstore.New()
 	core := session.New(&session.Config{Model: "m", Policy: session.DefaultPolicy()})
-	meta := store.SessionMeta{ID: "r1", Origin: "subagent", ParentID: "p", AgentID: "subagent", AgentHash: "h"}
+	meta := store.SessionMeta{Workspace: "w", ID: "r1", Origin: "subagent", ParentID: "p", AgentID: "subagent", AgentHash: "h"}
 	if err := db.CreateSession(ctx, meta, core.Snapshot().Header, nil); err != nil {
 		t.Fatalf("CreateSession：%v", err)
 	}

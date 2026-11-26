@@ -27,7 +27,7 @@ func TestCancelChildrenFindsOldChild(t *testing.T) {
 	// 全库超过 500 个会话、且都比子会话更新：ListSessions 最多返回 500 条，子会话不在其中。
 	for i := 0; i < 510; i++ {
 		c := session.New(&session.Config{Model: "m", Policy: session.DefaultPolicy()})
-		if err := r.db.CreateSession(ctx, store.SessionMeta{ID: fmt.Sprintf("x%03d", i)}, c.Snapshot().Header, nil); err != nil {
+		if err := r.db.CreateSession(ctx, store.SessionMeta{Workspace: "w", ID: fmt.Sprintf("x%03d", i)}, c.Snapshot().Header, nil); err != nil {
 			t.Fatal(err)
 		}
 	}

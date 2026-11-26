@@ -49,7 +49,7 @@ func memSchema(t *testing.T) useconf.Schema {
 func useAgent(t *testing.T, db store.Store, def *agentdef.Agent, schemas []useconf.Schema, src useconf.Source) *Agent {
 	t.Helper()
 	a := &Agent{
-		Model: fakeModel{}, Store: db, SessionID: "s1",
+		Model: fakeModel{}, Store: db, Workspace: "w", SessionID: "s1",
 		Ctx:       callctx.New(callctx.Options{Tenant: store.Tenant, SessionID: "s1"}),
 		Def:       def,
 		Schemas:   schemas,
@@ -71,7 +71,7 @@ func TestOpenAsResolvesUseConfig(t *testing.T) {
 			tenant: map[string]map[string]any{"memory": {"top": 8}},
 			user:   map[string]map[string]any{"memory": {"top": 3}},
 		})
-	if _, err := a.OpenAs(context.Background(), testCfg(), store.SessionMeta{Creator: "u42"}); err != nil {
+	if _, err := a.OpenAs(context.Background(), testCfg(), store.SessionMeta{Workspace: "w", Creator: "u42"}); err != nil {
 		t.Fatalf("OpenAs: %v", err)
 	}
 
@@ -100,7 +100,7 @@ func TestOpenAsResolvesUseConfig(t *testing.T) {
 		t.Fatalf("Ctx.Config = %+v", use)
 	}
 	// 恢复会话时沿用库里那份，不重算。
-	if _, err := a.OpenAs(context.Background(), testCfg(), store.SessionMeta{Creator: "u42"}); err != nil {
+	if _, err := a.OpenAs(context.Background(), testCfg(), store.SessionMeta{Workspace: "w", Creator: "u42"}); err != nil {
 		t.Fatalf("重开：%v", err)
 	}
 	if use2, ok := a.Ctx.Use("memory"); !ok || use2 == nil {
@@ -115,7 +115,7 @@ func TestOpenAsRejectsUserOverride(t *testing.T) {
 		&agentdef.Agent{ID: "support", Use: map[string]map[string]any{"memory": {"store": "memlib"}}},
 		[]useconf.Schema{memSchema(t)},
 		layerSource{user: map[string]map[string]any{"memory": {"store": "/tmp/other"}}})
-	_, err := a.OpenAs(context.Background(), testCfg(), store.SessionMeta{Creator: "u42"})
+	_, err := a.OpenAs(context.Background(), testCfg(), store.SessionMeta{Workspace: "w", Creator: "u42"})
 	if !errors.Is(err, useconf.ErrNotTenant) {
 		t.Fatalf("应当拒绝用户层覆盖 store：%v", err)
 	}
@@ -143,7 +143,7 @@ func TestOpenAsKeepsGivenUseConfig(t *testing.T) {
 	a := useAgent(t, db,
 		&agentdef.Agent{ID: "support", Use: map[string]map[string]any{"memory": {"store": "memlib"}}},
 		nil, nil)
-	if _, err := a.OpenAs(context.Background(), testCfg(), store.SessionMeta{UseConfig: given}); err != nil {
+	if _, err := a.OpenAs(context.Background(), testCfg(), store.SessionMeta{Workspace: "w", UseConfig: given}); err != nil {
 		t.Fatalf("OpenAs: %v", err)
 	}
 	l, err := db.Load(context.Background(), "s1", nil)

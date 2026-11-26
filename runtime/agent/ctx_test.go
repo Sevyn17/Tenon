@@ -41,5 +41,5 @@ func TestBindCtx(t *testing.T) {
 	}
 	// 也不会 panic。
 	nilCtx := &Agent{SessionID: "s3"}
-	nilCtx.bindCtx(store.SessionMeta{ID: "s3"})
+	nilCtx.bindCtx(store.SessionMeta{Workspace: "w", ID: "s3"})
 }

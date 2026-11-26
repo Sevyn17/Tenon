@@ -61,7 +61,7 @@ func TestResidentTwoHostsOneSession(t *testing.T) {
 	defs := residentDefs(t, "bot")
 	r1.h.Definitions = defs
 	// 第二个 Host 共用同一存储。
-	h2 := &Host{DB: r1.db, New: r1.h.New, Definitions: defs}
+	h2 := &Host{Workspace: "w", DB: r1.db, New: r1.h.New, Definitions: defs}
 	_, err := r1.h.DeliverAgent(ctx, mail.Envelope{From: mail.Address{Kind: mail.AddrHuman, ID: "u1"},
 		To: mail.Address{Kind: mail.AddrAgent, ID: "bot"}, Kind: mail.KindRequest, Body: "一"}, nil)
 	if err != nil {

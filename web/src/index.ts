@@ -90,10 +90,8 @@ export function createClient(opts: ClientOptions = {}): Client {
   const conn = connect(opts.transport ?? autoTransport());
   const hello = createStore<HelloResult | null>(null);
   const has = (cap: string) => hello.get()?.capabilities.includes(cap) ?? false;
-  // 未归属分组（Mortise 客户端改进 M6 决定 10）：服务端报 sessions_unassigned 才查；每次查第一页时按当前握手判断。
   // M7：sessions.changed 带全套字段时按工作区插入未知会话；搜索、归档、子会话走 sessions.query。
   const sessions = createSessionsStore(conn, 50, {
-    unassigned: () => has("sessions_unassigned"),
     full: () => has(CAP_CHANGED_FULL),
     workspace: () => workspaceOf(hello.get()),
     query: () => has(CAP_QUERY),

@@ -38,7 +38,7 @@ func seedLong(t *testing.T, db store.Store, id string) map[uint32][2]int {
 	if s.Header.LogLen != 600 {
 		t.Fatalf("应正好 600 条：%d", s.Header.LogLen)
 	}
-	if err := db.CreateSession(context.Background(), store.SessionMeta{ID: id}, s.Header, s.Entries); err != nil {
+	if err := db.CreateSession(context.Background(), store.SessionMeta{Workspace: "w", ID: id}, s.Header, s.Entries); err != nil {
 		t.Fatal(err)
 	}
 	out := map[uint32][2]int{}

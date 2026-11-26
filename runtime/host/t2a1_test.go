@@ -97,7 +97,7 @@ func newT2Rig(t *testing.T, db store.Store, m agent.Model, limit int, call func(
 		}
 	}
 	r := &t2Rig{db: db, runs: runs}
-	r.h = &Host{DB: db, Limit: limit, New: func(id, def string) (*agent.Agent, *session.Config, error) {
+	r.h = &Host{Workspace: "w", DB: db, Limit: limit, New: func(id, def string) (*agent.Agent, *session.Config, error) {
 		hub := toolhub.New(toolhub.Options{Store: agent.ToolStore{DB: db}})
 		echo := &toolhub.Tool{Spec: session.ToolSpec{Name: "echo", Schema: json.RawMessage(`{"type":"object"}`)},
 			Risk: toolhub.Read, Call: func(ctx context.Context, _ *toolhub.Cx, args json.RawMessage) (toolhub.Output, error) {

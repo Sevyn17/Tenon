@@ -19,7 +19,7 @@ func rigHub(t *testing.T) (*Hub, *host.Host, store.Store) {
 	t.Helper()
 	db := memstore.New()
 	t.Cleanup(func() { db.Close() })
-	h := &host.Host{DB: db}
+	h := &host.Host{Workspace: "w", DB: db}
 	h.New = func(id, def string) (*agent.Agent, *session.Config, error) {
 		hub := toolhub.New(toolhub.Options{Store: agent.ToolStore{DB: db}})
 		a := &agent.Agent{Store: db, SessionID: id, Hub: hub}

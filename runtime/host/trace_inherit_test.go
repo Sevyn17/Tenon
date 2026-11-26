@@ -18,7 +18,7 @@ func TestInboxTracePersistsAndApplies(t *testing.T) {
 	ctx := context.Background()
 	db := memstore.New()
 	t.Cleanup(func() { db.Close() })
-	h := &Host{DB: db}
+	h := &Host{Workspace: "w", DB: db}
 	h.New = func(id, def string) (*agent.Agent, *session.Config, error) {
 		a := &agent.Agent{Store: db, SessionID: id, Model: &scriptedModel{}}
 		return a, &session.Config{Model: "m"}, nil
@@ -60,7 +60,7 @@ func TestInboxTracePersistsAndApplies(t *testing.T) {
 	//换一个宿主打开同一份存储。h2的 actor启动时会消化 inbox里残留的 probe（roundtrip回合）。
 	//先等它把 probe消化完，再投新 Send：否则 probe可能与新 Send同批——renderBatchWithTrace
 	//取批次第一个非空 trace，新回合就会拿到 roundtrip而非 parent-tr-2（Linux -race下更易合批，CI检出）。
-	h2 := &Host{DB: db}
+	h2 := &Host{Workspace: "w", DB: db}
 	h2.New = h.New
 	hd2 := mustOpen(t, h2, "child")
 	for i := 0; i < 500; i++ {

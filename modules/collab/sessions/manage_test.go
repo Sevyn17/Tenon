@@ -49,11 +49,11 @@ func manageCall(t *testing.T, tool *toolhub.Tool, sid string, depth int, args st
 func chainRig(t *testing.T) (*host.Host, *memstore.Store) {
 	t.Helper()
 	h, db := chainHost(t)
-	mkSession(t, h, db, store.SessionMeta{ID: "p"})
-	mkSession(t, h, db, store.SessionMeta{ID: "q"})
-	mkSession(t, h, db, store.SessionMeta{ID: "c1", CreatorSession: "p", ChainDepth: 2, ChainRoot: "p"})
+	mkSession(t, h, db, store.SessionMeta{Workspace: "w", ID: "p"})
+	mkSession(t, h, db, store.SessionMeta{Workspace: "w", ID: "q"})
+	mkSession(t, h, db, store.SessionMeta{Workspace: "w", ID: "c1", CreatorSession: "p", ChainDepth: 2, ChainRoot: "p"})
 	mkSession(t, h, db, store.SessionMeta{ID: "c2", CreatorSession: "p", ChainDepth: 2, ChainRoot: "p", ParentID: "p", Origin: Origin})
-	mkSession(t, h, db, store.SessionMeta{ID: "q1", CreatorSession: "q", ChainDepth: 2, ChainRoot: "q"})
+	mkSession(t, h, db, store.SessionMeta{Workspace: "w", ID: "q1", CreatorSession: "q", ChainDepth: 2, ChainRoot: "q"})
 	return h, db
 }
 

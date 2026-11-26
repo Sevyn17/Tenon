@@ -32,7 +32,7 @@ func schemaProps(t *testing.T, tool *toolhub.Tool) map[string]any {
 }
 
 func TestParamsSchema(t *testing.T) {
-	h := &host.Host{}
+	h := &host.Host{Workspace: "w"}
 	// 缺省开关（docs/56 决定 2）：system_prompt 开、model 关、mode 开、tools 开；没有 goal。
 	p := schemaProps(t, ToolWithParams(h, nil, nil, (*PluginConfig)(nil).Params()))
 	for _, k := range []string{"task", "system_prompt", "mode", "tools"} {
@@ -63,7 +63,7 @@ func TestParamsPassedToSpawn(t *testing.T) {
 	db := memstore.New()
 	t.Cleanup(func() { db.Close() })
 	var got []host.SpawnOptions
-	h := &host.Host{DB: db}
+	h := &host.Host{Workspace: "w", DB: db}
 	h.New = func(id, def string) (*agent.Agent, *session.Config, error) {
 		if o, ok := h.SpawnOptionsFor(id); ok {
 			got = append(got, o)

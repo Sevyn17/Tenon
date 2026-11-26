@@ -48,7 +48,7 @@ func (p *fanoutPlug) Start(*component.Scope) error { return nil }
 func openAs(t *testing.T, h *Host, id, creator string) {
 	t.Helper()
 	if _, err := h.open(context.Background(), id, "", h.New, func(ag *agent.Agent, cfg *session.Config) error {
-		_, err := ag.OpenAs(context.Background(), cfg, store.SessionMeta{ID: id, Creator: creator})
+		_, err := ag.OpenAs(context.Background(), cfg, store.SessionMeta{Workspace: "w", ID: id, Creator: creator})
 		return err
 	}); err != nil {
 		t.Fatal(err)

@@ -17,7 +17,7 @@ func testTurnRange(t *testing.T, st store.Store) {
 	}
 	ctx := context.Background()
 	c := newCore()
-	create(t, st, store.SessionMeta{ID: "tr"}, c)
+	create(t, st, store.SessionMeta{Workspace: "w", ID: "tr"}, c)
 	for i, text := range []string{"一", "二", "三", "四"} {
 		// 偶数位是一问一答（2 条），奇数位是只记录的零步回合（1 条），让各回合长度不同。
 		if i%2 == 1 {

@@ -94,7 +94,6 @@ func testWorkspace(t *testing.T, db store.Store) {
 	create(t, db, store.SessionMeta{ID: "a1", Workspace: "wa"}, newCore())
 	create(t, db, store.SessionMeta{ID: "a1/sub", ParentID: "a1", Origin: "subagent"}, newCore())
 	create(t, db, store.SessionMeta{ID: "b1", Workspace: "wb"}, newCore())
-	create(t, db, store.SessionMeta{ID: "none"}, newCore())
 	l, err := db.Load(ctx, "a1/sub", nil)
 	if err != nil || l.Meta.Workspace != "wa" {
 		t.Fatalf("子会话应跟随父会话的工作区：%+v %v", l, err)
@@ -119,39 +118,23 @@ func testWorkspace(t *testing.T, db store.Store) {
 	if m := ids("wb", true); len(m) != 1 || m["b1"] != "wb" {
 		t.Fatalf("wb：%v", m)
 	}
-	if m := ids("", true); len(m) != 3 {
+	if m := ids("", true); len(m) != 2 {
 		t.Fatalf("不过滤：%v", m)
 	}
-	// 可选的 UnassignedLister：只列没有工作区的（客户端改进 M6 决定 10，左栏「未归属」）。
-	ul, ok := db.(store.UnassignedLister)
-	if !ok {
-		return
-	}
-	create(t, db, store.SessionMeta{ID: "none/sub", ParentID: "none", Origin: "subagent"}, newCore())
-	un := func(top bool) map[string]bool {
-		ls, err := ul.ListUnassigned(ctx, 0, 50, top)
-		if err != nil {
-			t.Fatal(err)
+	// docs/63 W-2：会话恒属于某个工作区。顶层会话没给工作区、子会话的父会话不存在（无从继承）都拒绝，且不建行。
+	h := newCore().Snapshot().Header
+	for _, m := range []store.SessionMeta{{ID: "none"}, {ID: "orphan/sub", ParentID: "orphan", Origin: "subagent"}} {
+		if err := db.CreateSession(ctx, m, h, nil); !errors.Is(err, store.ErrNoWorkspace) {
+			t.Fatalf("%s 没有工作区应报 ErrNoWorkspace，得到 %v", m.ID, err)
 		}
-		m := map[string]bool{}
-		for _, x := range ls {
-			m[x.ID] = true
+		if ok, err := db.Exists(ctx, m.ID); err != nil || ok {
+			t.Fatalf("%s 被拒后不应留下会话行：%v %v", m.ID, ok, err)
 		}
-		return m
-	}
-	if m := un(true); len(m) != 1 || !m["none"] {
-		t.Fatalf("未归属顶层应只有 none：%v", m)
-	}
-	if m := un(false); len(m) != 2 || !m["none"] || !m["none/sub"] {
-		t.Fatalf("未归属含子会话应是 none、none/sub：%v", m)
-	}
-	if ls, err := ul.ListUnassigned(ctx, 0, 1, false); err != nil || len(ls) != 1 {
-		t.Fatalf("limit 应生效：%v %v", ls, err)
 	}
 }
 
 // testTopLevelFork 用户分叉的会话（origin=fork，带 parent）在顶层列表里算顶层；subagent / member / side 仍是子会话。
-// 三条列表路径（ListSessionsIn、ListUnassigned、QuerySessions）一致。
+// 两条列表路径（ListSessionsIn、QuerySessions）一致。
 func testTopLevelFork(t *testing.T, db store.Store) {
 	ctx := context.Background()
 	create(t, db, store.SessionMeta{ID: "p", Workspace: "w"}, newCore())
@@ -159,7 +142,7 @@ func testTopLevelFork(t *testing.T, db store.Store) {
 	create(t, db, store.SessionMeta{ID: "p/sub", ParentID: "p", Origin: "subagent"}, newCore())
 	create(t, db, store.SessionMeta{ID: "p/mem", ParentID: "p", Origin: "member"}, newCore())
 	create(t, db, store.SessionMeta{ID: "p/side", ParentID: "p", Origin: "side"}, newCore())
-	create(t, db, store.SessionMeta{ID: "u"}, newCore())
+	create(t, db, store.SessionMeta{ID: "u", Workspace: "w2"}, newCore())
 	create(t, db, store.SessionMeta{ID: "u/fork", ParentID: "u", Origin: store.OriginFork}, newCore())
 	create(t, db, store.SessionMeta{ID: "u/sub", ParentID: "u", Origin: "subagent"}, newCore())
 	set := func(ls []store.SessionInfo, err error) []string {
@@ -189,15 +172,13 @@ func testTopLevelFork(t *testing.T, db store.Store) {
 			t.Errorf("TopLevel(%q, %q) = %v", x.parent, x.origin, got)
 		}
 	}
-	if ul, ok := db.(store.UnassignedLister); ok {
-		eq("ListUnassigned 顶层", set(ul.ListUnassigned(ctx, 0, 50, true)), "u", "u/fork")
-	}
+	eq("ListSessionsIn w2 顶层", set(db.ListSessionsIn(ctx, "w2", 0, 50, true)), "u", "u/fork")
 	qs, ok := db.(store.SessionQueryStore)
 	if !ok {
 		return
 	}
 	eq("QuerySessions 顶层", set(qs.QuerySessions(ctx, store.SessionQuery{Workspace: "w", TopOnly: true})), "p", "p/fork")
-	eq("QuerySessions 未归属顶层", set(qs.QuerySessions(ctx, store.SessionQuery{Unassigned: true, TopOnly: true})), "u", "u/fork")
+	eq("QuerySessions w2 顶层", set(qs.QuerySessions(ctx, store.SessionQuery{Workspace: "w2", TopOnly: true})), "u", "u/fork")
 	eq("QuerySessions 按 parent 仍含分叉", set(qs.QuerySessions(ctx, store.SessionQuery{Parent: "p"})), "p/fork", "p/sub", "p/mem", "p/side")
 	ms, ok := db.(store.SessionMetaStore)
 	if !ok {
@@ -246,7 +227,7 @@ func create(t *testing.T, db store.Store, m store.SessionMeta, c *session.Core) 
 func testRoundTrip(t *testing.T, db store.Store) {
 	ctx := context.Background()
 	c := newCore()
-	create(t, db, store.SessionMeta{ID: "s1"}, c)
+	create(t, db, store.SessionMeta{Workspace: "w", ID: "s1"}, c)
 	if ok, err := db.Exists(ctx, "s1"); err != nil || !ok {
 		t.Fatalf("Exists: %v %v", ok, err)
 	}
@@ -313,7 +294,7 @@ func testRoundTrip(t *testing.T, db store.Store) {
 	if err := db.Commit(ctx, store.Checkpoint{SessionID: "none"}); !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("缺失会话 Commit: %v", err)
 	}
-	if err := db.CreateSession(ctx, store.SessionMeta{ID: "s1"}, c.Snapshot().Header, nil); err == nil {
+	if err := db.CreateSession(ctx, store.SessionMeta{Workspace: "w", ID: "s1"}, c.Snapshot().Header, nil); err == nil {
 		t.Fatal("重复 id 应报错")
 	}
 	ls, _ := db.ListSessions(ctx, 0, 10, false)
@@ -324,7 +305,7 @@ func testRoundTrip(t *testing.T, db store.Store) {
 	c2 := newCore()
 	c2.Record(txt("a"), nil)
 	s2 := c2.Snapshot()
-	if err := db.CreateSession(ctx, store.SessionMeta{ID: "s2"}, s2.Header, s2.Entries); err != nil {
+	if err := db.CreateSession(ctx, store.SessionMeta{Workspace: "w", ID: "s2"}, s2.Header, s2.Entries); err != nil {
 		t.Fatal(err)
 	}
 	if err := db.Commit(ctx, store.Checkpoint{SessionID: "s2", ExpectLogLen: len(s2.Entries), Header: s2.Header}); err != nil {
@@ -335,7 +316,7 @@ func testRoundTrip(t *testing.T, db store.Store) {
 func testConditionalWrite(t *testing.T, db store.Store) {
 	ctx := context.Background()
 	c := newCore()
-	create(t, db, store.SessionMeta{ID: "s"}, c)
+	create(t, db, store.SessionMeta{Workspace: "w", ID: "s"}, c)
 	c.Input(txt("a"), nil)
 	n := commitAll(t, db, "s", c, 0, nil)
 	var got []bus.Envelope
@@ -362,7 +343,7 @@ func testConditionalWrite(t *testing.T, db store.Store) {
 func testTruncate(t *testing.T, db store.Store) {
 	ctx := context.Background()
 	c := newCore()
-	create(t, db, store.SessionMeta{ID: "s"}, c)
+	create(t, db, store.SessionMeta{Workspace: "w", ID: "s"}, c)
 	c.Record(txt("a"), nil)
 	c.Record(txt("b"), nil)
 	n := commitAll(t, db, "s", c, 0, nil)
@@ -416,7 +397,7 @@ func testTruncate(t *testing.T, db store.Store) {
 func testLastEnd(t *testing.T, db store.Store) {
 	ctx := context.Background()
 	c := newCore()
-	create(t, db, store.SessionMeta{ID: "le"}, c)
+	create(t, db, store.SessionMeta{Workspace: "w", ID: "le"}, c)
 	if l, err := db.Load(ctx, "le", nil); err != nil || l.LastEnd != nil {
 		t.Fatalf("新会话 LastEnd 应为空：%+v %v", l, err)
 	}
@@ -498,7 +479,7 @@ func sameLastEnd(a, b *store.LastEnd) bool {
 func testReplayAndList(t *testing.T, db store.Store) {
 	ctx := context.Background()
 	c := newCore()
-	create(t, db, store.SessionMeta{ID: "s1", Title: "一"}, c)
+	create(t, db, store.SessionMeta{Workspace: "w", ID: "s1", Title: "一"}, c)
 	n1, _ := c.Input(txt("你好"), nil)
 	n := commitAll(t, db, "s1", c, 0, nil)
 	_, _ = c.ModelDone(n1.Model.RequestID, n1.ID, session.AssistantItem{Content: txt("嗨")}, session.StopReason{})
@@ -616,7 +597,7 @@ func testDefinitions(t *testing.T, st store.Store) {
 func testInbox(t *testing.T, db store.Store) {
 	ctx := context.Background()
 	c := newCore()
-	create(t, db, store.SessionMeta{ID: "s1"}, c)
+	create(t, db, store.SessionMeta{Workspace: "w", ID: "s1"}, c)
 	ok, err := db.Admit(ctx, "s1", store.InboxItem{ItemID: "i1", Kind: store.InboxInput, Input: `[]`})
 	if err != nil || !ok {
 		t.Fatalf("首次准入: %v %v", ok, err)
@@ -668,7 +649,7 @@ func testUnqueue(t *testing.T, db store.Store) {
 	}
 	ctx := context.Background()
 	c := newCore()
-	create(t, db, store.SessionMeta{ID: "s1"}, c)
+	create(t, db, store.SessionMeta{Workspace: "w", ID: "s1"}, c)
 	_, _ = db.Admit(ctx, "s1", store.InboxItem{ItemID: "in", Kind: store.InboxInput, Input: `[]`})
 	_, _ = db.Admit(ctx, "s1", store.InboxItem{ItemID: "q1", Kind: store.InboxQueued, Input: `[]`})
 	_, _ = db.Admit(ctx, "s1", store.InboxItem{ItemID: "q2", Kind: store.InboxQueued, Input: `[]`})
@@ -851,7 +832,7 @@ func testPendConfirmRefresh(t *testing.T, db store.Store) {
 func testDelete(t *testing.T, db store.Store) {
 	ctx := context.Background()
 	c := newCore()
-	create(t, db, store.SessionMeta{ID: "s1"}, c)
+	create(t, db, store.SessionMeta{Workspace: "w", ID: "s1"}, c)
 	_, _ = c.Input(txt("hi"), nil)
 	commitAll(t, db, "s1", c, 0, nil)
 	_, _ = db.Admit(ctx, "s1", store.InboxItem{ItemID: "i1", Kind: store.InboxInput, Input: `[]`})
@@ -903,7 +884,7 @@ func testDelete(t *testing.T, db store.Store) {
 		t.Fatalf("trace 事件应清理: %+v", evs)
 	}
 	// 删干净后 id 可复用，旧数据不残留
-	create(t, db, store.SessionMeta{ID: "s1"}, newCore())
+	create(t, db, store.SessionMeta{Workspace: "w", ID: "s1"}, newCore())
 	if es, _ := db.Entries(ctx, "s1", 0, -1); len(es) != 0 {
 		t.Fatalf("旧条目残留: %d", len(es))
 	}
@@ -916,7 +897,7 @@ func testDelete(t *testing.T, db store.Store) {
 
 func testMetaRoundTrip(t *testing.T, db store.Store) {
 	ctx := context.Background()
-	m := store.SessionMeta{ID: "s1", AgentID: "a", AgentHash: "abc", Creator: "local", SessionKey: "k1", Title: "t",
+	m := store.SessionMeta{Workspace: "w", ID: "s1", AgentID: "a", AgentHash: "abc", Creator: "local", SessionKey: "k1", Title: "t",
 		ParentID: "p", Origin: "fork", ForkUpto: 3,
 		Meta: json.RawMessage(`{"order":"42"}`), UseConfig: json.RawMessage(`{"permission":{"mode":"ask"}}`)}
 	if err := db.CreateSession(ctx, m, newCore().Snapshot().Header, nil); err != nil {
@@ -932,7 +913,7 @@ func testMetaRoundTrip(t *testing.T, db store.Store) {
 		string(got.Meta) != `{"order":"42"}` || string(got.UseConfig) != `{"permission":{"mode":"ask"}}` {
 		t.Fatalf("Meta 往返: %+v", got)
 	}
-	if err := db.CreateSession(ctx, store.SessionMeta{ID: "s2"}, newCore().Snapshot().Header, nil); err != nil {
+	if err := db.CreateSession(ctx, store.SessionMeta{Workspace: "w", ID: "s2"}, newCore().Snapshot().Header, nil); err != nil {
 		t.Fatal(err)
 	}
 	l2, _ := db.Load(ctx, "s2", nil)
@@ -945,7 +926,7 @@ func testSessionKeyUnique(t *testing.T, db store.Store) {
 	ctx := context.Background()
 	h := newCore().Snapshot().Header
 	mk := func(id, agent, creator, key string) error {
-		return db.CreateSession(ctx, store.SessionMeta{ID: id, AgentID: agent, Creator: creator, SessionKey: key}, h, nil)
+		return db.CreateSession(ctx, store.SessionMeta{Workspace: "w", ID: id, AgentID: agent, Creator: creator, SessionKey: key}, h, nil)
 	}
 	if err := mk("s1", "a", "u", "k"); err != nil {
 		t.Fatal(err)
@@ -965,7 +946,7 @@ func testSessionKeyUnique(t *testing.T, db store.Store) {
 func testStats(t *testing.T, db store.Store) {
 	ctx := context.Background()
 	c := newCore()
-	create(t, db, store.SessionMeta{ID: "s"}, c)
+	create(t, db, store.SessionMeta{Workspace: "w", ID: "s"}, c)
 	now := time.Now()
 	spans := []store.Span{
 		{ID: "a1", Kind: "attempt", Status: "ok", Attrs: json.RawMessage(`{"input":1000,"output":10,"cache_read":800,"usage_source":"Reported"}`)},
@@ -1035,7 +1016,7 @@ func exportKinds(t *testing.T, buf *bytes.Buffer) map[string]int {
 func testExport(t *testing.T, db store.Store) {
 	ctx := context.Background()
 	c := newCore()
-	create(t, db, store.SessionMeta{ID: "s1"}, c)
+	create(t, db, store.SessionMeta{Workspace: "w", ID: "s1"}, c)
 	n1, _ := c.Input(txt("你好"), nil)
 	n := commitAll(t, db, "s1", c, 0, func(cp *store.Checkpoint) {
 		cp.Request = &store.RequestRecord{RequestID: n1.Model.RequestID, ShellHash: "x", PrefixEnd: 1, FinalHash: "f"}
@@ -1061,7 +1042,7 @@ func testExport(t *testing.T, db store.Store) {
 func testLeaseFencing(t *testing.T, db store.Store) {
 	ctx := context.Background()
 	id := "s1"
-	create(t, db, store.SessionMeta{ID: id}, newCore())
+	create(t, db, store.SessionMeta{Workspace: "w", ID: id}, newCore())
 
 	if _, err := db.AcquireLease(ctx, "none", "node-a"); !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("缺失会话抢租约: %v", err)
@@ -1114,7 +1095,7 @@ func testLeaseFencing(t *testing.T, db store.Store) {
 func testSleepStatus(t *testing.T, db store.Store) {
 	ctx := context.Background()
 	id := "s1"
-	create(t, db, store.SessionMeta{ID: id}, newCore())
+	create(t, db, store.SessionMeta{Workspace: "w", ID: id}, newCore())
 
 	if st, err := db.SessionStatus(ctx, id); err != nil || st != store.StatusActive {
 		t.Fatalf("新建会话状态: %q %v", st, err)
@@ -1163,7 +1144,7 @@ func testSleepStatus(t *testing.T, db store.Store) {
 func testPendingCorr(t *testing.T, db store.Store) {
 	ctx := context.Background()
 	c := newCore()
-	create(t, db, store.SessionMeta{ID: "s1"}, c)
+	create(t, db, store.SessionMeta{Workspace: "w", ID: "s1"}, c)
 	p := store.Pending{Corr: "corr-1", SessionID: "s1", ReplyTo: "agent:worker", IssuedIdx: 5, Trace: "t1"}
 	if err := db.IssueCorr(ctx, p); err != nil {
 		t.Fatal(err)
@@ -1229,7 +1210,7 @@ func testFindSessionByKey(t *testing.T, db store.Store) {
 	h := newCore().Snapshot().Header
 	mk := func(id, agent, creator, key string) {
 		t.Helper()
-		if err := db.CreateSession(ctx, store.SessionMeta{ID: id, AgentID: agent, Creator: creator, SessionKey: key}, h, nil); err != nil {
+		if err := db.CreateSession(ctx, store.SessionMeta{Workspace: "w", ID: id, AgentID: agent, Creator: creator, SessionKey: key}, h, nil); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -1255,7 +1236,7 @@ func testOutbox(t *testing.T, db store.Store) {
 	t.Helper()
 	ctx := context.Background()
 	h := newCore().Snapshot().Header
-	if err := db.CreateSession(ctx, store.SessionMeta{ID: "o1"}, h, nil); err != nil {
+	if err := db.CreateSession(ctx, store.SessionMeta{Workspace: "w", ID: "o1"}, h, nil); err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
 	now := int64(1000)
@@ -1302,18 +1283,18 @@ func testOutbox(t *testing.T, db store.Store) {
 func testErrorKinds(t *testing.T, db store.Store) {
 	ctx := context.Background()
 	h := newCore().Snapshot().Header
-	if err := db.CreateSession(ctx, store.SessionMeta{ID: "ek", AgentID: "a", Creator: "u", SessionKey: "k"}, h, nil); err != nil {
+	if err := db.CreateSession(ctx, store.SessionMeta{Workspace: "w", ID: "ek", AgentID: "a", Creator: "u", SessionKey: "k"}, h, nil); err != nil {
 		t.Fatal(err)
 	}
 	// 重复 id / 重复会话键 → ErrConflict（host 并发按 key 建会话时据此重查）。
-	if err := db.CreateSession(ctx, store.SessionMeta{ID: "ek"}, h, nil); !errors.Is(err, store.ErrConflict) {
+	if err := db.CreateSession(ctx, store.SessionMeta{Workspace: "w", ID: "ek"}, h, nil); !errors.Is(err, store.ErrConflict) {
 		t.Fatalf("重复 id 应 ErrConflict，得 %v", err)
 	}
-	if err := db.CreateSession(ctx, store.SessionMeta{ID: "ek2", AgentID: "a", Creator: "u", SessionKey: "k"}, h, nil); !errors.Is(err, store.ErrConflict) {
+	if err := db.CreateSession(ctx, store.SessionMeta{Workspace: "w", ID: "ek2", AgentID: "a", Creator: "u", SessionKey: "k"}, h, nil); !errors.Is(err, store.ErrConflict) {
 		t.Fatalf("重复会话键应 ErrConflict，得 %v", err)
 	}
 	// 空会话键查不到（键为空的会话不参与查找）。
-	if err := db.CreateSession(ctx, store.SessionMeta{ID: "nokey", AgentID: "a", Creator: "u"}, h, nil); err != nil {
+	if err := db.CreateSession(ctx, store.SessionMeta{Workspace: "w", ID: "nokey", AgentID: "a", Creator: "u"}, h, nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := db.FindSessionByKey(ctx, "a", "u", ""); !errors.Is(err, store.ErrNotFound) {
@@ -1371,7 +1352,7 @@ func testPrune(t *testing.T, db store.Store) {
 		t.Skip("存储未实现可选的 PruneStore")
 	}
 	h := newCore().Snapshot().Header
-	if err := db.CreateSession(ctx, store.SessionMeta{ID: "pr"}, h, nil); err != nil {
+	if err := db.CreateSession(ctx, store.SessionMeta{Workspace: "w", ID: "pr"}, h, nil); err != nil {
 		t.Fatal(err)
 	}
 	_ = db.IssueCorr(ctx, store.Pending{Corr: "p-used", SessionID: "pr"})
@@ -1416,7 +1397,7 @@ func testPrune(t *testing.T, db store.Store) {
 func testOutboxClaim(t *testing.T, db store.Store) {
 	ctx := context.Background()
 	h := newCore().Snapshot().Header
-	if err := db.CreateSession(ctx, store.SessionMeta{ID: "oc"}, h, nil); err != nil {
+	if err := db.CreateSession(ctx, store.SessionMeta{Workspace: "w", ID: "oc"}, h, nil); err != nil {
 		t.Fatal(err)
 	}
 	cp := store.Checkpoint{SessionID: "oc", Header: h, RunState: "idle", Outbox: []store.OutboxItem{
@@ -1491,7 +1472,7 @@ func testOutboxClaim(t *testing.T, db store.Store) {
 func testSubStoresAndTx(t *testing.T, db store.Store) {
 	ctx := context.Background()
 	c := newCore()
-	create(t, db, store.SessionMeta{ID: "tx-1"}, c)
+	create(t, db, store.SessionMeta{Workspace: "w", ID: "tx-1"}, c)
 	ok := false
 	err := db.Tx(ctx, func(tx store.Store) error {
 		if admitted, err := tx.Admit(ctx, "tx-1", store.InboxItem{ItemID: "t1", Kind: store.InboxInput, Input: `[]`}); err != nil || !admitted {
@@ -1557,7 +1538,7 @@ func testSleepingWithMail(t *testing.T, db store.Store) {
 	ctx := context.Background()
 	sleep := func(id string) {
 		t.Helper()
-		create(t, db, store.SessionMeta{ID: id}, newCore())
+		create(t, db, store.SessionMeta{Workspace: "w", ID: id}, newCore())
 		ep, err := db.AcquireLease(ctx, id, "n")
 		if err != nil {
 			t.Fatal(err)
@@ -1588,13 +1569,13 @@ func testSleepingWithMail(t *testing.T, db store.Store) {
 func testTxRollback(t *testing.T, db store.Store) {
 	ctx := context.Background()
 	c := newCore()
-	create(t, db, store.SessionMeta{ID: "rb"}, c)
+	create(t, db, store.SessionMeta{Workspace: "w", ID: "rb"}, c)
 	boom := errors.New("回滚")
 	err := db.Tx(ctx, func(tx store.Store) error {
 		if _, err := tx.Admit(ctx, "rb", store.InboxItem{ItemID: "r1", Kind: store.InboxInput, Input: `[]`}); err != nil {
 			return err
 		}
-		if err := tx.CreateSession(ctx, store.SessionMeta{ID: "rb-2"}, c.Snapshot().Header, nil); err != nil {
+		if err := tx.CreateSession(ctx, store.SessionMeta{Workspace: "w", ID: "rb-2"}, c.Snapshot().Header, nil); err != nil {
 			return err
 		}
 		return boom
@@ -1652,7 +1633,7 @@ func testConcurrency(t *testing.T, db store.Store) {
 	ctx := context.Background()
 	const n = 8
 	h := newCore().Snapshot().Header
-	if err := db.CreateSession(ctx, store.SessionMeta{ID: "cc"}, h, nil); err != nil {
+	if err := db.CreateSession(ctx, store.SessionMeta{Workspace: "w", ID: "cc"}, h, nil); err != nil {
 		t.Fatal(err)
 	}
 	// 发件箱：并发认领，每条只被一个认领者拿到，合起来不漏。
@@ -1715,7 +1696,7 @@ func testConcurrency(t *testing.T, db store.Store) {
 	}
 	// 检查点：同一 ExpectLogLen 并发提交，恰好一个成功，其余 ErrConflict。
 	c := newCore()
-	create(t, db, store.SessionMeta{ID: "cc-commit"}, c)
+	create(t, db, store.SessionMeta{Workspace: "w", ID: "cc-commit"}, c)
 	c.Input(txt("a"), nil)
 	s := c.Snapshot()
 	var ok, conflict int32
@@ -1754,7 +1735,7 @@ func lookup(ctx context.Context, db interface {
 func testCheckpointEvents(t *testing.T, db store.Store) {
 	ctx := context.Background()
 	c := newCore()
-	create(t, db, store.SessionMeta{ID: "ev"}, c)
+	create(t, db, store.SessionMeta{Workspace: "w", ID: "ev"}, c)
 	_ = c.Record(txt("a"), nil)
 	var got []bus.Envelope
 	db.OnCommit(func(e bus.Envelope) { got = append(got, e) })
@@ -1798,7 +1779,7 @@ func testEventsCursorExpired(t *testing.T, db store.Store) {
 		t.Skip("存储未实现可选的 PruneStore")
 	}
 	c := newCore()
-	create(t, db, store.SessionMeta{ID: "ex"}, c)
+	create(t, db, store.SessionMeta{Workspace: "w", ID: "ex"}, c)
 	_ = c.Record(txt("a"), nil)
 	_ = c.Record(txt("b"), nil)
 	commitAll(t, db, "ex", c, 0, nil)
@@ -1818,7 +1799,7 @@ func testEventsCursorExpired(t *testing.T, db store.Store) {
 // 只有第一次结束生效，之后返回已有结果；结束后 corr 回信核对不过；未结束的交互能按根会话列出。
 func testInteractions(t *testing.T, db store.Store) {
 	ctx := context.Background()
-	create(t, db, store.SessionMeta{ID: "r"}, newCore())
+	create(t, db, store.SessionMeta{Workspace: "w", ID: "r"}, newCore())
 	create(t, db, store.SessionMeta{ID: "r/c", ParentID: "r", Origin: "subagent"}, newCore())
 	kinds := func(sid string) []string {
 		t.Helper()
@@ -1882,9 +1863,9 @@ func testSessionMetaUpdate(t *testing.T, st store.Store) {
 		t.Skip("存储未实现可选的 SessionMetaStore")
 	}
 	c := newCore()
-	create(t, st, store.SessionMeta{ID: "s1", Title: "旧", Meta: json.RawMessage(`{"client_id":"c"}`)}, c)
+	create(t, st, store.SessionMeta{Workspace: "w", ID: "s1", Title: "旧", Meta: json.RawMessage(`{"client_id":"c"}`)}, c)
 	time.Sleep(2 * time.Millisecond)
-	create(t, st, store.SessionMeta{ID: "s2"}, newCore())
+	create(t, st, store.SessionMeta{Workspace: "w", ID: "s2"}, newCore())
 	before, _ := st.ListSessions(ctx, 0, 10, false)
 	var got []bus.Envelope
 	st.OnCommit(func(e bus.Envelope) { got = append(got, e) })

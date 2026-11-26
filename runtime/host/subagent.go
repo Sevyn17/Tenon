@@ -140,7 +140,8 @@ func (h *Host) spawn(ctx context.Context, parent, id, origin, def string, f Fact
 			}()
 		}
 		hd, err = h.open(ctx, id, def, f, func(ag *agent.Agent, cfg *session.Config) error {
-			meta := store.SessionMeta{ParentID: parent, Origin: origin, Meta: raw,
+			// 工作区：父会话已在本宿主的工作区里（checkWorkspace），直接记本宿主的（docs/63 W-2）。
+			meta := store.SessionMeta{ParentID: parent, Origin: origin, Meta: raw, Workspace: h.Workspace,
 				CreatorSession: parent, ChainDepth: depth, ChainRoot: root, Title: TaskTitle(task)}
 			if ag.Def != nil {
 				meta.AgentID, meta.AgentHash = ag.Def.ID, ag.Def.Version

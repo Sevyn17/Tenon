@@ -34,7 +34,7 @@ func newAppWith(t *testing.T, m agent.Model, withHub bool) *App {
 	db := memstore.New()
 	b := bus.New(0)
 	var app *App
-	h := &host.Host{DB: db, Bus: b}
+	h := &host.Host{Workspace: "w", DB: db, Bus: b}
 	t.Cleanup(func() { h.Close(); b.Close(); db.Close() })
 	echo := session.ToolSpec{Name: "echo", Schema: json.RawMessage(`{"type":"object"}`)}
 	h.New = func(id, def string) (*agent.Agent, *session.Config, error) {

@@ -7,7 +7,7 @@ import (
 
 // 缺省定义运行期可改（U2 G1）：并发读写不竞争（-race），写后读到新值。
 func TestDefaultDefConcurrent(t *testing.T) {
-	h := &Host{}
+	h := &Host{Workspace: "w"}
 	if got := h.DefaultDef(); got != "" {
 		t.Fatalf("零值应为空，得 %q", got)
 	}

@@ -56,7 +56,7 @@ func TestSubagentToolUsesChosenDefinition(t *testing.T) {
 	t.Cleanup(func() { db.Close() })
 	var mu sync.Mutex
 	var defs []string
-	h := &host.Host{DB: db}
+	h := &host.Host{Workspace: "w", DB: db}
 	h.New = func(id, def string) (*agent.Agent, *session.Config, error) {
 		mu.Lock()
 		defs = append(defs, def)

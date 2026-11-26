@@ -23,7 +23,7 @@ func appAt(t *testing.T, wd string) *appapi.App {
 	db := memstore.New()
 	b := bus.New(0)
 	t.Cleanup(func() { b.Close(); db.Close() })
-	app, err := appapi.New(appapi.Options{Host: &host.Host{DB: db, Bus: b}, Bus: b, DB: db, Model: "m", Workdir: wd})
+	app, err := appapi.New(appapi.Options{Host: &host.Host{Workspace: "w", DB: db, Bus: b}, Bus: b, DB: db, Model: "m", Workdir: wd})
 	if err != nil {
 		t.Fatal(err)
 	}

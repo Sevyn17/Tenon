@@ -95,7 +95,7 @@ func newAgent(t *testing.T, db store.Store, o agentOpts) *Agent {
 	if m == nil {
 		m = fakeModel{}
 	}
-	a := &Agent{Model: m, Store: db, SessionID: "s1", crashAt: o.crash}
+	a := &Agent{Model: m, Store: db, Workspace: "w", SessionID: "s1", crashAt: o.crash}
 	opts := toolhub.Options{Store: crashStore{ToolStore{DB: db}, o.crash}, OnSpan: a.HubSpan}
 	if o.ask != nil {
 		opts.Await = a.AwaitFunc(o.ask)

@@ -78,7 +78,7 @@ func WithPackages(ps []*pkgs.Package) Option {
 
 // WithWorkspace 本应用所在工作区的键（如规范化后的项目目录）。新建的会话记上它，会话列表只列它的，
 // 打开属于别的工作区的会话被拒绝（会话的工具在本应用的工作目录里执行）。多个工作区共用一个存储时要设。
-// 空（缺省）= 不区分工作区。
+// 空（缺省）= 用工作目录（绝对路径）作键：会话恒属于某个工作区（docs/63 W-2）。
 func WithWorkspace(key string) Option {
 	return func(c *config) error {
 		c.workspace = key

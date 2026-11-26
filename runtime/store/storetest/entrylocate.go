@@ -17,7 +17,7 @@ func testEntryLocate(t *testing.T, st store.Store) {
 	}
 	ctx := context.Background()
 	c := newCore()
-	create(t, st, store.SessionMeta{ID: "el"}, c)
+	create(t, st, store.SessionMeta{Workspace: "w", ID: "el"}, c)
 	for _, text := range []string{"一", "二", "三"} {
 		n, err := c.Input(txt(text), nil)
 		if err != nil {

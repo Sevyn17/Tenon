@@ -13,7 +13,7 @@ import (
 func testPreview(t *testing.T, db store.Store) {
 	ctx := context.Background()
 	c := newCore()
-	create(t, db, store.SessionMeta{ID: "s"}, c)
+	create(t, db, store.SessionMeta{Workspace: "w", ID: "s"}, c)
 	_ = c.Record(txt("你好"), nil)
 	n := commitAll(t, db, "s", c, 0, func(cp *store.Checkpoint) { cp.Preview = "第一版" })
 	if l, err := db.Load(ctx, "s", nil); err != nil || l.Preview != "第一版" {
@@ -30,7 +30,7 @@ func testPreview(t *testing.T, db store.Store) {
 }
 
 // testSessionQuery 可选的 SessionQueryStore（客户端改进 M7 协议T12）：文本命中标题与任一条用户消息、% _ 按字面、
-// 按 parent、归档三种取值、分页游标、工作区与未归属。
+// 按 parent、归档三种取值、分页游标、工作区。
 func testSessionQuery(t *testing.T, st store.Store) {
 	ctx := context.Background()
 	qs, ok := st.(store.SessionQueryStore)
@@ -62,11 +62,11 @@ func testSessionQuery(t *testing.T, st store.Store) {
 	mk(store.SessionMeta{ID: "und", Workspace: "w"}, "a_b")
 	mk(store.SessionMeta{ID: "plain", Workspace: "w"}, "abc 100 xyz")
 	mk(store.SessionMeta{ID: "other", Workspace: "w2"}, "alpha 别的工作区")
+	mk(store.SessionMeta{ID: "third", Workspace: "w3"}, "alpha 第三个工作区")
 	mk(store.SessionMeta{ID: "arch", Title: "alpha 已归档", Workspace: "w"})
 	mk(store.SessionMeta{ID: "p", Workspace: "w"})
 	mk(store.SessionMeta{ID: "p/c1", ParentID: "p", Origin: "subagent", AgentID: "main"}, "子任务 alpha")
 	mk(store.SessionMeta{ID: "p/c2", ParentID: "p", Origin: "subagent"})
-	mk(store.SessionMeta{ID: "none"}, "alpha 无归属")
 	if err := ms.UpdateSessionMeta(ctx, "arch", nil, map[string]any{store.MetaArchived: true}); err != nil {
 		t.Fatal(err)
 	}
@@ -102,11 +102,9 @@ func testSessionQuery(t *testing.T, st store.Store) {
 	want("0% 按字面", store.SessionQuery{Workspace: "w", Text: "0%"}, "pct")
 	want("_ 按字面", store.SessionQuery{Workspace: "w", Text: "_"}, "und")
 	want(`\ 按字面`, store.SessionQuery{Workspace: "w", Text: `\`})
-	want("不分工作区", store.SessionQuery{TopOnly: true, Text: "alpha"}, "t1", "other", "none")
+	want("不分工作区", store.SessionQuery{TopOnly: true, Text: "alpha"}, "t1", "other", "third")
 	want("parent 的直接子会话", store.SessionQuery{Parent: "p"}, "p/c1", "p/c2")
 	want("parent 与文本", store.SessionQuery{Parent: "p", Text: "alpha"}, "p/c1")
-	want("未归属", store.SessionQuery{Unassigned: true, Text: "alpha"}, "none")
-	want("未归属优先于 Workspace", store.SessionQuery{Unassigned: true, Workspace: "w"}, "none")
 	// 按定义名（docs/72 B1）：与工作区、顶层、parent 叠加；行上带 AgentID。
 	want("按定义名", store.SessionQuery{Agent: "main"}, "t1", "p/c1")
 	want("按定义名只要顶层", store.SessionQuery{Agent: "main", TopOnly: true}, "t1")

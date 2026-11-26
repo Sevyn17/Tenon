@@ -21,7 +21,7 @@ func newHumanRig(t *testing.T, m agent.Model) (*Host, store.Store) {
 	t.Helper()
 	db := memstore.New()
 	t.Cleanup(func() { db.Close() })
-	h := &Host{DB: db, Bus: bus.New(0)}
+	h := &Host{Workspace: "w", DB: db, Bus: bus.New(0)}
 	h.New = func(id, def string) (*agent.Agent, *session.Config, error) {
 		a := &agent.Agent{Store: db, SessionID: id, Model: m}
 		hub := toolhub.New(toolhub.Options{Store: agent.ToolStore{DB: db}, OnSpan: a.HubSpan})

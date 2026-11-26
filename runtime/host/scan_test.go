@@ -17,7 +17,7 @@ func TestScanFindsMailBehindManySleepers(t *testing.T) {
 	sleep := func(id string) {
 		t.Helper()
 		c := session.New(&session.Config{Model: "m", Policy: session.DefaultPolicy()})
-		if err := r.db.CreateSession(ctx, store.SessionMeta{ID: id}, c.Snapshot().Header, nil); err != nil {
+		if err := r.db.CreateSession(ctx, store.SessionMeta{Workspace: "w", ID: id}, c.Snapshot().Header, nil); err != nil {
 			t.Fatal(err)
 		}
 		ep, err := r.db.AcquireLease(ctx, id, "other")

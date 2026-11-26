@@ -58,7 +58,7 @@ func TestTeamStopCancelsMember(t *testing.T) {
 	db := memstore.New()
 	t.Cleanup(func() { db.Close() })
 	m := &blockModel{started: make(chan struct{}, 4)}
-	h := &host.Host{DB: db}
+	h := &host.Host{Workspace: "w", DB: db}
 	var g *Group
 	mk := func(leader bool) host.Factory {
 		return func(id, def string) (*agent.Agent, *session.Config, error) {

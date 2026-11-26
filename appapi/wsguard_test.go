@@ -14,7 +14,7 @@ func TestWorkspaceGuard(t *testing.T) {
 	app := newApp(t)
 	app.o.Host.Workspace = "wa"
 	storeSession(t, app, store.SessionMeta{ID: "other", Title: "别处", Workspace: "wb"})
-	storeSession(t, app, store.SessionMeta{ID: "legacy", Title: "旧数据"})
+	storeSession(t, app, store.SessionMeta{Workspace: "wa", ID: "here", Title: "本处"})
 
 	blocked := []struct{ cmd, args string }{
 		{"session.send", `{"session":"%s","text":"hi","client_id":"c1"}`},
@@ -34,9 +34,9 @@ func TestWorkspaceGuard(t *testing.T) {
 		if e.Details["workspace"] != "wb" || e.Details["workspace_id"] != wire.WorkspaceID("wb") {
 			t.Fatalf("%s 错误应带工作区：%+v", c.cmd, e.Details)
 		}
-		// 旧会话（没记工作区）不按"别的工作区"拒：即使失败也不能是 other_workspace。
-		if _, e := call2(t, app, c.cmd, fmt.Sprintf(c.args, "legacy")); e != nil && e.Details["reason"] == wire.InvalidOtherWorkspace {
-			t.Fatalf("%s 旧会话不应按跨工作区拒：%+v", c.cmd, e)
+		// 本工作区的会话不按"别的工作区"拒：即使失败也不能是 other_workspace。
+		if _, e := call2(t, app, c.cmd, fmt.Sprintf(c.args, "here")); e != nil && e.Details["reason"] == wire.InvalidOtherWorkspace {
+			t.Fatalf("%s 本工作区会话不应按跨工作区拒：%+v", c.cmd, e)
 		}
 	}
 
@@ -57,11 +57,12 @@ func TestWorkspaceGuard(t *testing.T) {
 	}
 }
 
-// 宿主没有工作区（CLI 单目录）时不拦。
+// docs/63 W-2：空工作区不再表示「不区分」，宿主工作区与会话不同就拦。
 func TestWorkspaceGuardNoHostWorkspace(t *testing.T) {
 	app := newApp(t)
 	storeSession(t, app, store.SessionMeta{ID: "other", Workspace: "wb"})
-	if err := app.inWorkspace(t.Context(), "other"); err != nil {
-		t.Fatalf("宿主无工作区时不应拦：%v", err)
+	app.o.Host.Workspace = ""
+	if err := app.inWorkspace(t.Context(), "other"); err == nil {
+		t.Fatal("宿主工作区为空时也应拦别的工作区的会话")
 	}
 }

@@ -266,6 +266,9 @@ func (s *Store) CreateSession(ctx context.Context, m store.SessionMeta, hdr sess
 			m.Workspace = p.meta.Workspace
 		}
 	}
+	if m.Workspace == "" { // docs/63 W-2：会话恒属于某个工作区
+		return fmt.Errorf("%w：会话 %s", store.ErrNoWorkspace, m.ID)
+	}
 	m.Meta, m.UseConfig = cloneRaw(m.Meta), cloneRaw(m.UseConfig)
 	x := &sess{meta: m, header: hb, shellHash: hash, nextSeq: 1, runState: "idle", status: "active",
 		updatedAt: s.now(), entries: map[int]entry{}, requests: map[string]request{}}
@@ -785,18 +788,8 @@ func (s *Store) ListSessions(ctx context.Context, before int64, limit int, topOn
 
 // ListSessionsIn 同 ListSessions，只列属于 workspace 的会话（空 = 不过滤）。
 func (s *Store) ListSessionsIn(ctx context.Context, workspace string, before int64, limit int, topOnly bool) ([]store.SessionInfo, error) {
-	return s.listSessions(workspace, false, before, limit, topOnly)
-}
-
-// ListUnassigned 只列没有工作区的会话（store.UnassignedLister，客户端改进 M6 决定 10）。
-func (s *Store) ListUnassigned(ctx context.Context, before int64, limit int, topOnly bool) ([]store.SessionInfo, error) {
-	return s.listSessions("", true, before, limit, topOnly)
-}
-
-// listSessions ListSessionsIn / ListUnassigned 共用：unassigned 时只要 workspace 为空的，否则 workspace 非空才过滤。
-// 这两个旧方法不看归档（与升级前一致），归档筛选只在 QuerySessions 里。
-func (s *Store) listSessions(workspace string, unassigned bool, before int64, limit int, topOnly bool) ([]store.SessionInfo, error) {
-	return s.query(store.SessionQuery{Workspace: workspace, Unassigned: unassigned, Before: before, Limit: limit, TopOnly: topOnly},
+	// 旧方法不看归档（与升级前一致），归档筛选只在 QuerySessions 里。
+	return s.query(store.SessionQuery{Workspace: workspace, Before: before, Limit: limit, TopOnly: topOnly},
 		store.ArchivedInclude)
 }
 
@@ -823,11 +816,7 @@ func (s *Store) query(q store.SessionQuery, archived store.ArchivedFilter) ([]st
 			(q.CreatorSession != "" && x.meta.CreatorSession != q.CreatorSession) {
 			continue
 		}
-		if q.Unassigned {
-			if x.meta.Workspace != "" {
-				continue
-			}
-		} else if q.Workspace != "" && x.meta.Workspace != q.Workspace {
+		if q.Workspace != "" && x.meta.Workspace != q.Workspace {
 			continue
 		}
 		if a := store.ArchivedOf(x.meta.Meta); (archived == store.ArchivedExclude && a) || (archived == store.ArchivedOnly && !a) {
@@ -942,7 +931,6 @@ func (s *Store) SessionsWithMeta(ctx context.Context, key string, limit int) ([]
 
 var (
 	_ store.SessionMetaStore = (*Store)(nil)
-	_ store.UnassignedLister = (*Store)(nil)
 )
 
 // SpansForTest 返回某会话已写入的 span（测试用：Span 只写不读，没有正式读接口）。

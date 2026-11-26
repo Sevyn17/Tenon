@@ -43,7 +43,7 @@ func noticeText(e wire.Envelope) string { return e.Data.(wire.Notice).Text }
 func TestNoticeReplayAfterHello(t *testing.T) {
 	db := memstore.New()
 	b := bus.New(0)
-	h := &host.Host{DB: db, Bus: b}
+	h := &host.Host{Workspace: "w", DB: db, Bus: b}
 	t.Cleanup(func() { h.Close(); b.Close(); db.Close() })
 	ui := NewUI(b)
 	ui.Warn("MCP", "服务 x 起不来") // 装配期：App 还没建

@@ -111,16 +111,13 @@ type ListArgs struct {
 	Pinned bool `json:"pinned,omitempty"`
 	// AllWorkspaces 列所有工作区的会话；缺省只列当前工作区的（会话库是用户级的，多个工作区共用）。
 	AllWorkspaces bool `json:"all_workspaces,omitempty"`
-	// Unassigned 只列没有工作区的会话（记工作区之前建的旧会话；左栏「未归属」分组，客户端改进 M6 决定 10）。
-	// 优先于 all_workspaces。服务端报能力 sessions_unassigned 才支持；不支持时返回 unsupported。
-	Unassigned bool `json:"unassigned,omitempty"`
 	// 以下三项要服务端报能力 sessions.query（客户端改进 M7）；不支持的服务端返回 unsupported（旧服务端会静默忽略，
 	// 所以先查能力再用）。
 	//
 	// Query 非空：只列标题或任一条用户消息（前 200 字）包含它的会话，不区分 ASCII 大小写，% _ \ 按字面匹配。
 	// 工作区、all、archived 照常生效；不能和 pinned 同用。
 	Query string `json:"query,omitempty"`
-	// Parent 非空：只列这个会话的直接子会话（不看工作区与 all：子会话跟随父会话的工作区）。不能和 pinned、unassigned 同用。
+	// Parent 非空：只列这个会话的直接子会话（不看工作区与 all：子会话跟随父会话的工作区）。不能和 pinned 同用。
 	Parent string `json:"parent,omitempty"`
 	// Archived 已归档的会话：""（缺省）= 排除，"only" = 只要已归档的，"include" = 都要。
 	// 缺省列表、置顶列表都排除已归档的。
@@ -129,7 +126,6 @@ type ListArgs struct {
 	Agent string `json:"agent,omitempty"`
 	// WorkspaceID 非空：只列属于这个工作区（WorkspaceID(workspace) 等于它）的会话，优先于 all_workspaces。
 	// 不是当前工作区时等同跨工作区读，只给 operator（Mortise docs/74 W4a）。找不到对应工作区时返回空列表。
-	// 不能和 unassigned 同用。
 	WorkspaceID string `json:"workspace_id,omitempty"`
 }
 

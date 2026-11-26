@@ -73,7 +73,7 @@ func TestGroupStartsWhenStoreOpensLate(t *testing.T) {
 			ServiceName:  &plug{},
 		},
 		Inject: map[string]any{
-			assemble.ServiceHost: &host.Host{DB: db},
+			assemble.ServiceHost: &host.Host{Workspace: "w", DB: db},
 			assemble.ServiceUI:   nopUI{},
 		},
 		Defaults: assemble.SlotDefaults(),

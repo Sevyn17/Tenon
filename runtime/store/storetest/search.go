@@ -19,7 +19,7 @@ func testEntrySearch(t *testing.T, st store.Store) {
 	}
 	ctx := context.Background()
 	c := newCore()
-	create(t, st, store.SessionMeta{ID: "sr"}, c)
+	create(t, st, store.SessionMeta{Workspace: "w", ID: "sr"}, c)
 	// 回合 1：用户提到 alpha；回合 2：助手调用 echo，工具结果里有 alpha；回合 3：用户提到 beta。
 	n, err := c.Input(txt("请处理 alpha 任务"), nil)
 	if err != nil {

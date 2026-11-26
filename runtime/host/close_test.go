@@ -10,7 +10,7 @@ import (
 // Close 之后不能再起新的派发，否则测试在 t.Cleanup 里关库后它还会访问数据库，
 // 与 t.TempDir 的清理撞上（CI 上偶发 "directory not empty"）。
 func TestHostCloseStopsFlush(t *testing.T) {
-	h := &Host{}
+	h := &Host{Workspace: "w"}
 	h.Close()
 	// 关闭后踢派发不应起协程，也不应 panic。
 	var wg sync.WaitGroup
@@ -38,7 +38,7 @@ func TestHostCloseStopsFlush(t *testing.T) {
 
 // Close 幂等：重复调用不出错。
 func TestHostCloseIdempotent(t *testing.T) {
-	h := &Host{}
+	h := &Host{Workspace: "w"}
 	h.Close()
 	h.Close()
 	h.flushMu.Lock()

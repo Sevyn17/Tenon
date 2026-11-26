@@ -59,7 +59,7 @@ func rig(t *testing.T) (*Group, *host.Host, store.Store, *echoModel) {
 	db := memstore.New()
 	t.Cleanup(func() { db.Close() })
 	m := &echoModel{}
-	h := &host.Host{DB: db}
+	h := &host.Host{Workspace: "w", DB: db}
 	mk := func(id, def string) (*agent.Agent, *session.Config, error) {
 		hub := toolhub.New(toolhub.Options{Store: agent.ToolStore{DB: db}})
 		a := &agent.Agent{Store: db, SessionID: id, Model: m, Hub: hub}

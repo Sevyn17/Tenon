@@ -12,12 +12,12 @@ import (
 // 未记的旧行按第一层、根为自身；SessionQueryStore 能按创建者筛选。
 func testChain(t *testing.T, db store.Store) {
 	ctx := context.Background()
-	create(t, db, store.SessionMeta{ID: "r"}, newCore())
+	create(t, db, store.SessionMeta{Workspace: "w", ID: "r"}, newCore())
 	create(t, db, store.SessionMeta{ID: "r/sub-1", ParentID: "r", Origin: "subagent",
 		CreatorSession: "r", ChainDepth: 2, ChainRoot: "r"}, newCore())
-	create(t, db, store.SessionMeta{ID: "ind", Origin: "agent",
+	create(t, db, store.SessionMeta{Workspace: "w", ID: "ind", Origin: "agent",
 		CreatorSession: "r", ChainDepth: 2, ChainRoot: "r"}, newCore())
-	create(t, db, store.SessionMeta{ID: "other"}, newCore())
+	create(t, db, store.SessionMeta{Workspace: "w", ID: "other"}, newCore())
 
 	l, err := db.Load(ctx, "ind", nil)
 	if err != nil {

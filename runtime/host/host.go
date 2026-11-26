@@ -533,11 +533,9 @@ func (h *Host) open(ctx context.Context, id, def string, f Factory, pre func(*ag
 // ErrOtherWorkspace 会话属于另一个工作区（Host.Workspace）。
 var ErrOtherWorkspace = errors.New("host: 会话属于另一个工作区")
 
-// checkWorkspace 已有会话属于别的工作区时拒绝打开；没记工作区的旧会话、新会话照常。
+// checkWorkspace 已有会话不属于本宿主的工作区时拒绝打开；新会话照常（建行时由存储检查工作区必填）。
+// docs/63 W-2：空工作区不再表示「哪里都能开」。宿主没有工作区时只能打开同样没有工作区的会话（实际不存在）。
 func (h *Host) checkWorkspace(ctx context.Context, id string) error {
-	if h.Workspace == "" {
-		return nil
-	}
 	l, err := h.head(ctx, id)
 	if errors.Is(err, store.ErrNotFound) {
 		return nil
@@ -545,7 +543,7 @@ func (h *Host) checkWorkspace(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	if w := l.Meta.Workspace; w != "" && w != h.Workspace {
+	if w := l.Meta.Workspace; w != h.Workspace {
 		return fmt.Errorf("%w（%s）：切到那个工作区再打开", ErrOtherWorkspace, w)
 	}
 	return nil

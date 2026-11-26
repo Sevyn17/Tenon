@@ -398,7 +398,11 @@ func prepareAssembly(c *config) (*assemblyInput, error) {
 	if err != nil {
 		return nil, err
 	}
-	h := &host.Host{Bus: b, Workspace: c.workspace}
+	ws := c.workspace
+	if ws == "" { // docs/63 W-2：会话恒属于某个工作区，没设时用工作目录
+		ws = workdir
+	}
+	h := &host.Host{Bus: b, Workspace: ws}
 	h.SetDefaultDef(c.defaultAgent)
 	inject := buildInject(c, h, ui, workdir, handle, hasSQL)
 	appDefs, builtin, toolNames, extra, err := resolveDefinitionsAndTools(c)

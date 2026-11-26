@@ -45,7 +45,7 @@ func TestSpawnOverrideNarrows(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := p.OpenAs(ctx, pcfg, store.SessionMeta{ID: "p"}); err != nil {
+	if _, err := p.OpenAs(ctx, pcfg, store.SessionMeta{Workspace: "w", ID: "p"}); err != nil {
 		t.Fatal(err)
 	}
 	run := func(id string, o host.SpawnOptions, tool, args string) (avail []string, sys []session.SystemBlock, notes []string, out string) {

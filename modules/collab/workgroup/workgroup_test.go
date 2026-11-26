@@ -65,7 +65,7 @@ func rig(t *testing.T) (*Group, *host.Host, store.Store, *echoModel) {
 	db := memstore.New()
 	t.Cleanup(func() { db.Close() })
 	m := &echoModel{}
-	h := &host.Host{DB: db}
+	h := &host.Host{Workspace: "w", DB: db}
 	var g *Group
 	mk := func(leader bool) host.Factory {
 		return func(id, def string) (*agent.Agent, *session.Config, error) {
@@ -259,7 +259,7 @@ func TestImportTasks(t *testing.T) {
 		t.Fatal(err)
 	}
 	tasks, runs := openBoards(t, db)
-	g, err := New(ctx, &host.Host{DB: db}, sq, tasks, runs, db, nil)
+	g, err := New(ctx, &host.Host{Workspace: "w", DB: db}, sq, tasks, runs, db, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -355,7 +355,7 @@ func TestImportRuns(t *testing.T) {
 		t.Fatal(err)
 	}
 	tasks, runs := openBoards(t, db)
-	g, err := New(ctx, &host.Host{DB: db}, sq, tasks, runs, db, nil)
+	g, err := New(ctx, &host.Host{Workspace: "w", DB: db}, sq, tasks, runs, db, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

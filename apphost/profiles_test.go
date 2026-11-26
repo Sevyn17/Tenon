@@ -124,7 +124,7 @@ func newPluginsApp(t *testing.T, p *component.Profile, pr Profiles) *appapi.App 
 	t.Helper()
 	b := bus.New(0)
 	t.Cleanup(b.Close)
-	a, err := appapi.New(appapi.Options{Host: &host.Host{}, Bus: b, DB: memstore.New(), Profile: p, Profiles: pr})
+	a, err := appapi.New(appapi.Options{Host: &host.Host{Workspace: "w"}, Bus: b, DB: memstore.New(), Profile: p, Profiles: pr})
 	if err != nil {
 		t.Fatal(err)
 	}

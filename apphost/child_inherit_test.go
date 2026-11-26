@@ -50,7 +50,7 @@ func TestChildInheritsParentLimits(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := p.OpenAs(ctx, pcfg, store.SessionMeta{ID: "p", AgentID: "lead"}); err != nil {
+	if _, err := p.OpenAs(ctx, pcfg, store.SessionMeta{Workspace: "w", ID: "p", AgentID: "lead"}); err != nil {
 		t.Fatal(err)
 	}
 

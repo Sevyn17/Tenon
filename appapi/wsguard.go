@@ -7,7 +7,7 @@ package appapi
 // 只动会话元数据、不触发执行的操作（改标题、置顶、归档、删除、反馈、取消、移出队列、上传附件）照常放行：
 // 数据页"清除全部会话 / 导出"会跨工作区调 session.delete、session.entries，不能被误伤。
 //
-// 判定：会话行 Workspace 非空且不等于 Host.Workspace 时拒绝；会话没记工作区（旧数据）或宿主没有工作区时放行。
+// 判定：会话行 Workspace 不等于 Host.Workspace 时拒绝（docs/63 W-2：会话恒有工作区，空不再表示到处可见）。
 // 错误：invalid，details.reason = other_workspace，details.workspace / workspace_id 供前端提示切换。
 
 import (
@@ -21,7 +21,7 @@ import (
 // 会话不存在时返回 nil，交给命令自己的存在性检查报 not_found。
 func (v *App) inWorkspace(ctx context.Context, id string) error {
 	cur := v.o.Host.Workspace
-	if cur == "" || id == "" {
+	if id == "" {
 		return nil
 	}
 	l, err := host.LoadHead(ctx, v.o.DB, id)
@@ -29,7 +29,7 @@ func (v *App) inWorkspace(ctx context.Context, id string) error {
 		return nil
 	}
 	w := l.Meta.Workspace
-	if w == "" || w == cur {
+	if w == cur {
 		return nil
 	}
 	e := Errorf(wire.CodeInvalid, "session %s belongs to workspace %s; switch to it before this operation", id, w)

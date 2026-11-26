@@ -26,7 +26,7 @@ import (
 // Open 打开会话：存在则恢复（返回 true），不存在则用 cfg 新建。
 // 恢复出的待满足需求留给 Recover 继续驱动。
 func (a *Agent) Open(ctx context.Context, cfg *session.Config) (bool, error) {
-	return a.OpenAs(ctx, cfg, store.SessionMeta{ID: a.SessionID})
+	return a.OpenAs(ctx, cfg, store.SessionMeta{ID: a.SessionID, Workspace: a.Workspace})
 }
 
 // OpenAs 同 Open；新建时用给定的会话行字段（子智能体：ParentID + Origin=subagent）。

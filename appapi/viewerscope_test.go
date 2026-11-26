@@ -17,7 +17,6 @@ func TestViewerScope(t *testing.T) {
 	app.o.Host.Workspace = "wa"
 	storeSession(t, app, store.SessionMeta{ID: "here", Workspace: "wa"})
 	storeSession(t, app, store.SessionMeta{ID: "other", Workspace: "wb"})
-	storeSession(t, app, store.SessionMeta{ID: "legacy"})
 
 	ctx := context.Background()
 	viewer := app.NewConn(ctx, wire.Principal{ID: "v", Role: wire.RoleViewer})
@@ -83,9 +82,6 @@ func TestViewerScope(t *testing.T) {
 		}
 		if err := call(viewer, cmd, `{"session":"here"}`); code(err) == wire.CodeForbidden {
 			t.Fatalf("viewer %s 本工作区会话不应被拒：%v", cmd, err)
-		}
-		if err := call(viewer, cmd, `{"session":"legacy"}`); code(err) == wire.CodeForbidden {
-			t.Fatalf("viewer %s 旧会话（无工作区）不应被拒：%v", cmd, err)
 		}
 		if err := call(op, cmd, `{"session":"other"}`); code(err) == wire.CodeForbidden {
 			t.Fatalf("operator %s 跨工作区读应放行：%v", cmd, err)

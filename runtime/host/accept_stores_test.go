@@ -33,7 +33,7 @@ func acceptStores(t *testing.T) map[string]func() acceptStore {
 
 // acceptHost 每个会话一个工具：id 以 "low" 开头的会话只有 read_file，其余有 echo。
 func acceptHost(db acceptStore, executed *int) *Host {
-	return &Host{DB: db, New: func(id, def string) (*agent.Agent, *session.Config, error) {
+	return &Host{Workspace: "w", DB: db, New: func(id, def string) (*agent.Agent, *session.Config, error) {
 		hub := toolhub.New(toolhub.Options{Store: agent.ToolStore{DB: db}})
 		name := "echo"
 		if strings.HasPrefix(id, "low") {
@@ -73,7 +73,7 @@ func TestT3AcceptanceOnBothStores(t *testing.T) {
 			}
 
 			// ① 低权限调高权限：high 不能执行 low 没有的工具（caps 由内核按发送会话写）。
-			low := open1("low", store.SessionMeta{})
+			low := open1("low", store.SessionMeta{Workspace: "w"})
 			high := open1("high", store.SessionMeta{ParentID: "low"})
 			if err := db.IssueCorr(ctx, store.Pending{Corr: "c-high", SessionID: "high", ReplyTo: "session:low"}); err != nil {
 				t.Fatal(err)
@@ -96,7 +96,7 @@ func TestT3AcceptanceOnBothStores(t *testing.T) {
 			}
 
 			// ② 伪造 / 重放的 corr 被拒。
-			s1 := open1("s1", store.SessionMeta{Creator: "u1"})
+			s1 := open1("s1", store.SessionMeta{Workspace: "w", Creator: "u1"})
 			if err := db.IssueCorr(ctx, store.Pending{Corr: "c1", SessionID: "s1", ReplyTo: "agent:worker"}); err != nil {
 				t.Fatal(err)
 			}

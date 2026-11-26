@@ -15,7 +15,7 @@ import (
 func TestCheckpointWritesStateEvents(t *testing.T) {
 	ctx := context.Background()
 	db := memstore.New()
-	a := &Agent{Store: db, SessionID: "s", Model: fakeModel{}}
+	a := &Agent{Store: db, Workspace: "w", SessionID: "s", Model: fakeModel{}}
 	if _, err := a.Open(ctx, testCfg()); err != nil {
 		t.Fatal(err)
 	}

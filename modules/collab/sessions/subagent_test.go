@@ -28,7 +28,7 @@ func TestSubagentTool(t *testing.T) {
 	ctx := context.Background()
 	db := memstore.New()
 	t.Cleanup(func() { db.Close() })
-	h := &host.Host{DB: db, New: func(id, def string) (*agent.Agent, *session.Config, error) {
+	h := &host.Host{Workspace: "w", DB: db, New: func(id, def string) (*agent.Agent, *session.Config, error) {
 		hub := toolhub.New(toolhub.Options{Store: agent.ToolStore{DB: db}})
 		a := &agent.Agent{Store: db, SessionID: id, Model: echoModel{}, Hub: hub}
 		return a, &session.Config{Model: "m", Policy: session.DefaultPolicy()}, nil
@@ -71,7 +71,7 @@ func TestSessionStartRejectsInvalid(t *testing.T) {
 	ctx := context.Background()
 	db := memstore.New()
 	t.Cleanup(func() { db.Close() })
-	h := &host.Host{DB: db, New: func(id, def string) (*agent.Agent, *session.Config, error) {
+	h := &host.Host{Workspace: "w", DB: db, New: func(id, def string) (*agent.Agent, *session.Config, error) {
 		hub := toolhub.New(toolhub.Options{Store: agent.ToolStore{DB: db}})
 		return &agent.Agent{Store: db, SessionID: id, Model: echoModel{}, Hub: hub}, &session.Config{Model: "m", Policy: session.DefaultPolicy()}, nil
 	}}

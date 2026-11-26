@@ -31,7 +31,7 @@ func lastEndHost(t *testing.T, m agent.Model) (*Host, store.Store, *bus.Sub) {
 	t.Helper()
 	db := memstore.New()
 	b := bus.New(0)
-	h := &Host{DB: db, Bus: b}
+	h := &Host{Workspace: "w", DB: db, Bus: b}
 	t.Cleanup(func() { h.Close(); b.Close(); db.Close() })
 	h.New = func(id, def string) (*agent.Agent, *session.Config, error) {
 		a := &agent.Agent{Store: db, SessionID: id, Model: m}
