@@ -68,6 +68,9 @@ func resolveTarget(ctx context.Context, h *host.Host, cx *toolhub.Cx, target str
 	if id != self && l.Meta.CreatorSession != self {
 		return nil, fmt.Sprintf("只能读本会话和本会话派出的会话；%s 不是本会话派出的", id)
 	}
+	if l.Meta.Workspace != h.Workspace { // docs/63 W-3：智能体工具不能跨工作区读
+		return nil, fmt.Sprintf("会话 %s 不属于当前工作区，不能读", id)
+	}
 	hdr := l.Snapshot.Header
 	if id == self { // 本会话：用最近一次提交的头部（含暂存压缩），存储头部可能晚一步
 		if hd, ok := h.Get(id); ok && hd.Agent() != nil {

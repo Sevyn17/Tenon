@@ -346,6 +346,10 @@ func (v *App) SessionsList(ctx context.Context, in wire.ListArgs) (wire.ListResu
 		limit = 50
 	}
 	ws := v.o.Host.Workspace // 缺省只列当前工作区的会话
+	if (in.AllWorkspaces || (in.WorkspaceID != "" && in.WorkspaceID != wire.WorkspaceID(v.o.Host.Workspace))) && !mayAllWorkspaces(ctx) {
+		// docs/63 W-3：跨工作区列表只给本机操作者连接；扩展命令里的进程内调用不行。
+		return wire.ListResult{}, Errorf(wire.CodeForbidden, "all_workspaces is only available to the local operator")
+	}
 	if in.AllWorkspaces {
 		ws = ""
 	}

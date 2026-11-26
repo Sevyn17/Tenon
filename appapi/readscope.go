@@ -40,8 +40,20 @@ func principalOf(ctx context.Context) wire.Principal {
 	return LocalPrincipal
 }
 
-// mayAllWorkspaces 调用方能否用 all_workspaces 跨工作区读。
+type noAllKey struct{}
+
+// withoutAllWorkspaces 标记 ctx 来自扩展命令（docs/63 W-3）：其中再经 App.Call 进程内调核心命令时，
+// 身份虽是 LocalPrincipal，all_workspaces / 别的工作区 workspace_id 一律不生效。
+func withoutAllWorkspaces(ctx context.Context) context.Context {
+	return context.WithValue(ctx, noAllKey{}, true)
+}
+
+// mayAllWorkspaces 调用方能否用 all_workspaces 跨工作区读：只有本机操作者连接（operator）与
+// 非扩展的进程内调用可以；viewer、插件界面以外的受限身份、扩展命令都不行（docs/63 W-3）。
 func mayAllWorkspaces(ctx context.Context) bool {
+	if no, _ := ctx.Value(noAllKey{}).(bool); no {
+		return false
+	}
 	return principalOf(ctx).Role == wire.RoleOperator
 }
 

@@ -221,7 +221,8 @@ func (a *App) callExt(ctx context.Context, p wire.Principal, cmd string, args js
 	if !ok {
 		return nil, false, nil
 	}
-	out, err = c.Handler(ctx, ExtCall{App: a, Principal: p}, args)
+	// 扩展命令不能跨工作区（docs/63 W-3）：handler 里经 App.Call 调核心命令时 all_workspaces 不生效。
+	out, err = c.Handler(withoutAllWorkspaces(withPrincipal(ctx, p)), ExtCall{App: a, Principal: p}, args)
 	if err != nil {
 		return nil, true, AsError(err)
 	}

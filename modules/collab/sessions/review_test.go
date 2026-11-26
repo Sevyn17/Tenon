@@ -115,6 +115,13 @@ func TestReadByEntryKindsAndScope(t *testing.T) {
 	if out := callTool(t, ReadTool(h), "p/sub-1", `{"session":"p","turn":1}`); out.Status.State == "ok" {
 		t.Fatal("第二层不应能读创建者")
 	}
+	// docs/63 W-3：本会话派出、但属于别的工作区的会话也不能读（智能体工具不能跨工作区）。
+	reviewRig(t, db, store.SessionMeta{Workspace: "w2", ID: "far", CreatorSession: "p", ChainDepth: 1}, []string{"别处"}, 0)
+	for i, tool := range []*toolhub.Tool{TurnsTool(h), ReadTool(h)} {
+		if out := callTool(t, tool, "p", `{"session":"far","turn":1}`); out.Status.State == "ok" {
+			t.Fatalf("工具 %d 不应能读别的工作区的会话", i)
+		}
+	}
 }
 
 func TestReadSegments(t *testing.T) {
