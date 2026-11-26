@@ -114,6 +114,8 @@ type Sessions struct {
 	ModeApproved func(mode Mode, widened []string) bool
 	// UserHome 用户级目录（<home>/modes、<home>/permissions.toml 所在）；空 = 不能在界面里编辑档位（edit.go）。
 	UserHome string
+	// Protected 受保护目录（Setup 恒填应用 home，Mortise docs/63 W-6）：触及即 deny，不可覆盖。
+	Protected []string
 	// Pinned 非空时新会话缺省档位被固定（启动参数强制、受信项目 permissions.toml 设了 mode），
 	// mode.setDefault 只写文件、不改当前进程的缺省档位；值是给人看的原因。
 	Pinned string
@@ -424,7 +426,7 @@ func (s *Sessions) Policy(id string) Policy {
 	rules := append(append([]Rule(nil), s.Rules...), st.rules...)
 	m := st.mode
 	s.mu.Unlock()
-	return Policy{Mode: m, Def: def, Rules: rules, Root: s.Root, Sandbox: s.Fixed}
+	return Policy{Mode: m, Def: def, Rules: rules, Root: s.Root, Sandbox: s.Fixed, Protected: s.Protected}
 }
 
 // AllowsSandbox 实现 toolhub.SandboxApprover：没有 deny / ask 规则命中，且某条带沙箱模式的 allow 规则覆盖本次申请。

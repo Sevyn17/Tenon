@@ -101,6 +101,10 @@ func (*plug) Setup(cx *component.Registrar) error {
 	if lay.user {
 		s.UserHome = userHome()
 	}
+	// 应用 home 恒受保护（会话库、密钥、配置、记忆），与是否可编辑档位无关（Mortise docs/63 W-6）。
+	if h := userHome(); h != "" {
+		s.Protected = []string{h}
+	}
 	switch {
 	case cfg.ForceMode != "":
 		s.Pinned = "启动参数强制了档位 " + cfg.ForceMode
@@ -224,11 +228,11 @@ func (*plug) Setup(cx *component.Registrar) error {
 				caps := capDefs()
 				for i := len(caps) - 1; i >= 0; i-- {
 					d := caps[i]
-					p.Cap = &Policy{Mode: d.ID, Def: d, Rules: p.Rules, Root: p.Root, Sandbox: p.Sandbox, Cap: p.Cap}
+					p.Cap = &Policy{Mode: d.ID, Def: d, Rules: p.Rules, Root: p.Root, Sandbox: p.Sandbox, Cap: p.Cap, Protected: p.Protected}
 				}
 				// Plan 模式（M12，docs/50 5.2）：再叠一层 read-only 上限兜底。只收窄，不改会话自己的档位。
 				if sc.Agent != nil && workmode.Of(sc.Agent.Committed().Header.Ext) == workmode.Plan {
-					p.Cap = &Policy{Mode: ReadOnly, Def: builtinDef(ReadOnly), Rules: p.Rules, Root: p.Root, Sandbox: p.Sandbox, Cap: p.Cap}
+					p.Cap = &Policy{Mode: ReadOnly, Def: builtinDef(ReadOnly), Rules: p.Rules, Root: p.Root, Sandbox: p.Sandbox, Cap: p.Cap, Protected: p.Protected}
 				}
 				return p
 			}

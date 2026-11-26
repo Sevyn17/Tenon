@@ -70,6 +70,8 @@ type Policy struct {
 	Untrusted func(cx *toolhub.Cx) bool
 	// Cap 定义给的权限上限（[use.permission]，08 8.3）；非空时另按它判一次，取两者更严的结论。
 	Cap *Policy
+	// Protected 受保护目录（绝对路径，如应用 home）：触及即 deny，先于一切规则，不可覆盖（protect.go）。
+	Protected []string
 }
 
 func (p Policy) def() *ModeDef {
@@ -142,6 +144,9 @@ func (p Policy) decide(cx *toolhub.Cx, args json.RawMessage) Decision {
 }
 
 func (p Policy) base(cx *toolhub.Cx, args json.RawMessage) Decision {
+	if dir, ok := p.protectedHit(args); ok {
+		return protectedDecision(dir)
+	}
 	name := cx.Tool.Spec.Name
 	rules := p.allRules()
 	q := p
