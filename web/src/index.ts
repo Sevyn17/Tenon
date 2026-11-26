@@ -28,6 +28,8 @@ export interface ClientOptions {
   transport?: Transport;
   /** hello 里上报的客户端名。 */
   client?: string;
+  /** 会话列表（client.sessions）不列的 origin（sessions.list exclude_origins），如产品侧栏排除复盘会话。 */
+  excludeOrigins?: string[];
 }
 
 export interface Client {
@@ -95,6 +97,7 @@ export function createClient(opts: ClientOptions = {}): Client {
     full: () => has(CAP_CHANGED_FULL),
     workspace: () => workspaceOf(hello.get()),
     query: () => has(CAP_QUERY),
+    excludeOrigins: opts.excludeOrigins,
   });
   const interactions = createInteractionsStore(conn);
   const notices = createNoticeFeed(conn);

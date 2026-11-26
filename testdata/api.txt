@@ -466,7 +466,7 @@ github.com/Sevyn17/tenon/appapi/wire: const KindContext untyped string
 github.com/Sevyn17/tenon/appapi/wire: const KindToolResult untyped string
 github.com/Sevyn17/tenon/appapi/wire: const KindUnknown untyped string
 github.com/Sevyn17/tenon/appapi/wire: const KindUser untyped string
-github.com/Sevyn17/tenon/appapi/wire: type ListArgs struct{Cursor int64; Limit int; All bool; Pinned bool; AllWorkspaces bool; Query string; Parent string; Archived string; Agent string; WorkspaceID string}
+github.com/Sevyn17/tenon/appapi/wire: type ListArgs struct{Cursor int64; Limit int; All bool; Pinned bool; AllWorkspaces bool; Query string; Parent string; Archived string; Agent string; WorkspaceID string; ExcludeOrigins []string}
 github.com/Sevyn17/tenon/appapi/wire: type ListResult struct{Items []SessionInfo; Next int64}
 github.com/Sevyn17/tenon/appapi/wire: type Live struct{Turn uint32; Streams []LiveStream; Tools []LiveTool}
 github.com/Sevyn17/tenon/appapi/wire: type LiveStream struct{StreamID string; EntryID string; Part string; Text string}

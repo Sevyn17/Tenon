@@ -130,10 +130,14 @@ type Envelope struct {
 	Hop    int     `json:"hop,omitempty"`
 	Origin Origin  `json:"origin"`
 	// Caps 授权工具范围：nil = 不限，空集 = 一个都不许（不能用 omitempty，否则空集落库后变成不限）。
-	Caps      []string  `json:"caps"`
-	BudgetRef string    `json:"budget_ref,omitempty"`
-	Body      string    `json:"body"`
-	At        time.Time `json:"at,omitempty"`
+	Caps      []string `json:"caps"`
+	BudgetRef string   `json:"budget_ref,omitempty"`
+	// SessionOrigin 投 agent: 新建会话时请求写入会话行的 origin（如 review）。只认本机组件发信
+	// （component.Mailer），且须在宿主白名单 Host.SessionOrigins 里；人、会话、远端发来的一律忽略。
+	// 已有会话不改 origin。
+	SessionOrigin string    `json:"session_origin,omitempty"`
+	Body          string    `json:"body"`
+	At            time.Time `json:"at,omitempty"`
 }
 
 // ErrInvalid 信封不合法。

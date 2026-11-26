@@ -371,8 +371,8 @@ func (v *App) SessionsList(ctx context.Context, in wire.ListArgs) (wire.ListResu
 		return wire.ListResult{}, invalid("query exceeds %d bytes", MaxQuery)
 	}
 	qs, canQuery := v.o.DB.(store.SessionQueryStore)
-	if (query != "" || in.Parent != "" || in.Archived != "" || in.Agent != "" || wsID != "") && !canQuery {
-		return wire.ListResult{}, Errorf(wire.CodeUnsupported, "store does not support search, parent, archive or agent filters")
+	if (query != "" || in.Parent != "" || in.Archived != "" || in.Agent != "" || wsID != "" || len(in.ExcludeOrigins) > 0) && !canQuery {
+		return wire.ListResult{}, Errorf(wire.CodeUnsupported, "store does not support search, parent, archive, agent or origin filters")
 	}
 	if in.Pinned && (query != "" || in.Parent != "") {
 		return wire.ListResult{}, invalid("pinned cannot be combined with query or parent")
@@ -392,7 +392,8 @@ func (v *App) SessionsList(ctx context.Context, in wire.ListArgs) (wire.ListResu
 		out := wire.ListResult{Items: []wire.SessionInfo{}}
 		for _, s := range items {
 			if (in.All || store.TopLevel(s.ParentID, s.Origin)) && inWS(s) && keepArchived(archived, s.Meta) &&
-				(in.Agent == "" || s.AgentID == in.Agent) {
+				(in.Agent == "" || s.AgentID == in.Agent) &&
+				!(store.SessionQuery{ExcludeOrigins: in.ExcludeOrigins}).Excludes(s.Origin) {
 				out.Items = append(out.Items, wireInfo(s))
 			}
 		}
@@ -402,7 +403,8 @@ func (v *App) SessionsList(ctx context.Context, in wire.ListArgs) (wire.ListResu
 	switch {
 	case canQuery:
 		q := store.SessionQuery{Workspace: ws, Before: in.Cursor, Limit: limit, TopOnly: !in.All,
-			Parent: in.Parent, Text: query, Archived: archived, Agent: in.Agent, WorkspaceID: wsID}
+			Parent: in.Parent, Text: query, Archived: archived, Agent: in.Agent, WorkspaceID: wsID,
+			ExcludeOrigins: in.ExcludeOrigins}
 		if in.Parent != "" { // 子会话跟随父会话的工作区，按 parent 列时不再按工作区、顶层过滤
 			q.Workspace, q.WorkspaceID, q.TopOnly = "", "", false
 		}

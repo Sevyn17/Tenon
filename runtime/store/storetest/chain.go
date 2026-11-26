@@ -66,4 +66,28 @@ func testChain(t *testing.T, db store.Store) {
 	if got, _ := qs.QuerySessions(ctx, store.SessionQuery{CreatorSession: "r", TopOnly: true}); len(got) != 1 || got[0].ID != "ind" {
 		t.Fatalf("按创建者且只要顶层：%+v，应只有 ind", got)
 	}
+	// ExcludeOrigins：按来源排除（Mortise docs/77 B1），可多个，与其他条件为「且」。
+	create(t, db, store.SessionMeta{Workspace: "w", ID: "rev", Origin: "review"}, newCore())
+	qids := func(q store.SessionQuery) []string {
+		t.Helper()
+		got, err := qs.QuerySessions(ctx, q)
+		if err != nil {
+			t.Fatal(err)
+		}
+		out := []string{}
+		for _, s := range got {
+			out = append(out, s.ID)
+		}
+		slices.Sort(out)
+		return out
+	}
+	if got := qids(store.SessionQuery{Workspace: "w", TopOnly: true}); !slices.Equal(got, []string{"ind", "other", "r", "rev"}) {
+		t.Fatalf("不排除时：%v", got)
+	}
+	if got := qids(store.SessionQuery{Workspace: "w", TopOnly: true, ExcludeOrigins: []string{"review"}}); !slices.Equal(got, []string{"ind", "other", "r"}) {
+		t.Fatalf("排除 review：%v", got)
+	}
+	if got := qids(store.SessionQuery{Workspace: "w", ExcludeOrigins: []string{"review", "agent"}}); !slices.Equal(got, []string{"other", "r", "r/sub-1"}) {
+		t.Fatalf("排除 review、agent：%v", got)
+	}
 }

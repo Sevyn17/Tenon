@@ -95,6 +95,8 @@ export interface SessionsStoreOptions {
   query?: () => boolean;
   /** 旧服务端收到未知会话后补一次 refresh() 的防抖（毫秒，缺省 1000）。 */
   refreshDelay?: number;
+  /** 列表、置顶、已归档、搜索都不列这些 origin 的会话（sessions.list exclude_origins），sessions.changed 里这些 origin 的会话也不插入。 */
+  excludeOrigins?: string[];
 }
 
 export interface SessionsStore extends ReadStore<SessionsView> {
@@ -126,6 +128,7 @@ export function createSessionsStore(conn: Connection, limit = 50, opts: Sessions
   const store = createStore<SessionsView>({ items: [], pinned: [], next: 0, loading: false, all: false });
   let gen = 0;
   let archGen = 0; // 已归档查询的代次
+  const ex: Pick<ListArgs, "exclude_origins"> = opts.excludeOrigins?.length ? { exclude_origins: opts.excludeOrigins } : {};
 
   const page = async (cursor: number) => {
     const g = ++gen;
@@ -133,8 +136,8 @@ export function createSessionsStore(conn: Connection, limit = 50, opts: Sessions
     try {
       const all = store.get().all;
       const [r, p] = await Promise.all([
-        conn.call("sessions.list", { cursor, limit, all }),
-        cursor === 0 ? conn.call("sessions.list", { pinned: true, limit: 200, all }) : Promise.resolve(null),
+        conn.call("sessions.list", { cursor, limit, all, ...ex }),
+        cursor === 0 ? conn.call("sessions.list", { pinned: true, limit: 200, all, ...ex }) : Promise.resolve(null),
       ]);
       if (g !== gen) return;
       store.update((v) => {
@@ -153,7 +156,7 @@ export function createSessionsStore(conn: Connection, limit = 50, opts: Sessions
     const g = ++archGen;
     store.update((v) => ({ ...v, archived: { items: v.archived?.items ?? [], next: v.archived?.next ?? 0, loading: true } }));
     try {
-      const args: ListArgs = { archived: "only", cursor, limit, all: store.get().all };
+      const args: ListArgs = { archived: "only", cursor, limit, all: store.get().all, ...ex };
       const r = await conn.call("sessions.list", args);
       if (g !== archGen) return;
       const got: SessionRow[] = (r.items ?? []).map((x) => ({ ...x, archived: true }));
@@ -186,6 +189,8 @@ export function createSessionsStore(conn: Connection, limit = 50, opts: Sessions
       return;
     }
     if (ev.kind !== "sessions.changed") return;
+    const d = ev.data as SessionsChanged;
+    if (d.origin && opts.excludeOrigins?.includes(d.origin)) return;
     const ctx: ChangedContext = { full: !!opts.full?.(), workspace: opts.workspace?.() };
     let refresh = false;
     store.update((v) => {
@@ -249,7 +254,7 @@ export function createSessionsStore(conn: Connection, limit = 50, opts: Sessions
       if (!archived) await page(0);
     },
     async search(query, n = 50) {
-      const args: ListArgs = { query: query.trim(), limit: n, all: store.get().all };
+      const args: ListArgs = { query: query.trim(), limit: n, all: store.get().all, ...ex };
       const r = await conn.call("sessions.list", args);
       return r.items ?? [];
     },

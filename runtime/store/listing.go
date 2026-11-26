@@ -111,6 +111,18 @@ type SessionQuery struct {
 	WorkspaceID string
 	// CreatorSession 非空：只列由这个会话创建的会话（创建链，docs/76 C1；session_list 与并发计数用）。
 	CreatorSession string
+	// ExcludeOrigins 非空：不列 origin 在其中的会话（如产品侧栏排除 origin=review 的复盘会话）。
+	ExcludeOrigins []string
+}
+
+// Excludes 报告 origin 是否被 ExcludeOrigins 排除（各存储实现共用）。
+func (q SessionQuery) Excludes(origin string) bool {
+	for _, o := range q.ExcludeOrigins {
+		if o == origin {
+			return true
+		}
+	}
+	return false
 }
 
 // WorkspaceID 工作区键的稳定 id：sha256 前 16 位十六进制（与 wire.WorkspaceID 同一算法）；空键返回空。

@@ -522,6 +522,7 @@ export interface ListArgs {
   archived?: string;
   agent?: string;
   workspace_id?: string;
+  exclude_origins?: string[];
 }
 
 export interface ListResult {

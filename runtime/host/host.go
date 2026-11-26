@@ -158,6 +158,9 @@ type Host struct {
 	// Definitions 智能体定义来源（T5a）：投递 agent:<名> 时查该定义是否常驻。
 	// nil = 不查（按非常驻处理）。
 	Definitions agentdef.Source
+	// SessionOrigins 组件发信可请求的会话 origin 白名单（mail.Envelope.SessionOrigin，如 review）。
+	// 空 = 一律不认，按 agent 建会话。内置 origin（new / fork / side / subagent / member / agent）不应放进来。
+	SessionOrigins []string
 	// defaultDef 新建顶层会话没给定义名时用的定义（Open 新建、Create 的 def 为空）；空 = 无定义会话。
 	// 只作用于新建：已有会话按会话行里记的定义名恢复，不受它影响。运行期可改（用户切换默认智能体），经 DefaultDef / SetDefaultDef 读写。
 	defaultDef atomic.Value // string

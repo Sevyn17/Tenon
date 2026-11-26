@@ -62,7 +62,30 @@ func (h *Host) Deliver(ctx context.Context, env mail.Envelope) error {
 	if env.From.Kind == mail.AddrComponent && env.Origin != mail.OriginExternal {
 		env.Origin = mail.OriginAgent // 组件不能自称 human
 	}
+	env.SessionOrigin = h.sessionOrigin(env)
 	return h.deliver(ctx, env)
+}
+
+// sessionOrigin 入口处裁定信封请求的会话 origin（mail.Envelope.SessionOrigin）：只认本机组件发、
+// 非 external 来源、且在 Host.SessionOrigins 白名单里的值；其余一律清空（不报错，按普通 agent 会话建）。
+func (h *Host) sessionOrigin(env mail.Envelope) string {
+	if env.SessionOrigin == "" || env.From.Kind != mail.AddrComponent || env.Origin == mail.OriginExternal {
+		return ""
+	}
+	for _, o := range h.SessionOrigins {
+		if o == env.SessionOrigin {
+			return o
+		}
+	}
+	return ""
+}
+
+// newSessionOrigin 按定义投递新建会话时会话行的 origin：入口裁定过的 SessionOrigin，否则 agent。
+func newSessionOrigin(env mail.Envelope) string {
+	if env.SessionOrigin != "" {
+		return env.SessionOrigin
+	}
+	return "agent"
 }
 
 // DeliverRemote 入站远端信封的投递入口（T6a，08 8.3 / 8.5）。
@@ -80,6 +103,7 @@ func (h *Host) DeliverRemote(ctx context.Context, env mail.Envelope) error {
 		return fmt.Errorf("%w: 远端不能用 human 身份投递", ErrNotAllowed)
 	}
 	env.Origin = mail.OriginExternal
+	env.SessionOrigin = "" // 远端不能指定会话 origin
 	if env.From.Kind == mail.AddrComponent {
 		// 对端声称的组件身份只作转发方记录，不当作本机组件（联系名单不认）。
 		if env.Via == "" {
@@ -103,6 +127,7 @@ func (h *Host) deliverQueued(ctx context.Context, env mail.Envelope) error {
 	if env.Hop < 0 {
 		env.Hop = 0
 	}
+	env.SessionOrigin = "" // 会话发的信不能指定会话 origin
 	return h.deliver(ctx, env)
 }
 
@@ -230,6 +255,7 @@ func (h *Host) DeliverAgent(ctx context.Context, env mail.Envelope, bizMeta json
 	if env.From.Kind == mail.AddrComponent && env.Origin != mail.OriginExternal {
 		env.Origin = mail.OriginAgent
 	}
+	env.SessionOrigin = h.sessionOrigin(env)
 	if env.To.Kind != mail.AddrAgent {
 		return "", fmt.Errorf("%w：DeliverAgent 只投 agent: 地址，得 %s", mail.ErrInvalid, env.To)
 	}
@@ -291,7 +317,7 @@ func (h *Host) deliverAgentID(ctx context.Context, env mail.Envelope, bizMeta js
 			return "", err
 		}
 	}
-	meta := store.SessionMeta{ID: id, AgentID: env.To.ID, Creator: creator, SessionKey: env.Key, Origin: "agent", Meta: bizMeta, Workspace: h.Workspace}
+	meta := store.SessionMeta{ID: id, AgentID: env.To.ID, Creator: creator, SessionKey: env.Key, Origin: newSessionOrigin(env), Meta: bizMeta, Workspace: h.Workspace}
 	probe := env
 	probe.To = mail.Address{Kind: mail.AddrSession, ID: id}
 	verdict, reason := h.evalGuard(ctx, component.GuardRequest{Point: component.GuardDeliver, Envelope: &probe})
