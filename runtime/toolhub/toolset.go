@@ -23,6 +23,8 @@ package toolhub
 // 不要留一条「形状完整但内部为空」的脚手架。
 
 import (
+	"encoding/json"
+
 	"github.com/Sevyn17/tenon/runtime/session"
 )
 
@@ -30,6 +32,55 @@ import (
 type Toolset struct {
 	available []string // 冻结，按登记顺序
 	exposed   map[string]bool
+	// frozen 会话头里冻结的工具规格（内核 Config.Tools，按名字）；nil = 未注入（Mortise docs/63 F2）。
+	// 可用集按当前定义与登记每次装配重建，frozen 是模型实际看到的那份，用来区分"已移除"与"不存在"、判 schema 漂移。
+	frozen map[string]json.RawMessage
+}
+
+// SetFrozen 注入会话冻结的工具规格（会话头 Config.Tools）。装配方在会话打开（新建 / 恢复 / 分叉）后调用。
+func (ts *Toolset) SetFrozen(specs []session.ToolSpec) {
+	ts.frozen = make(map[string]json.RawMessage, len(specs))
+	for _, s := range specs {
+		ts.frozen[s.Name] = s.Schema
+	}
+}
+
+// frozenSchema 冻结清单里的 schema；ok 报告冻结清单里有没有这个工具。
+func (ts *Toolset) frozenSchema(n string) (json.RawMessage, bool) {
+	if ts == nil || ts.frozen == nil {
+		return nil, false
+	}
+	s, ok := ts.frozen[n]
+	return s, ok
+}
+
+// RewriteHints 按当前登记改写内核"名字未知"的提示（unknown 由内核按冻结清单置位，F2）：
+// 工具当前已登记、在可用集内、档位判为可见——即会话创建后档位放宽了——提示新会话生效。
+// 其余保持原文案。返回新表，不改入参。
+func (h *Hub) RewriteHints(ts *Toolset, calls []session.ToolCall, hints map[string]string, unknown map[string]bool) map[string]string {
+	if len(unknown) == 0 {
+		return hints
+	}
+	out := make(map[string]string, len(hints))
+	for k, v := range hints {
+		out[k] = v
+	}
+	for _, c := range calls {
+		if !unknown[c.ID] {
+			continue
+		}
+		if _, ok := h.tools[c.Name]; !ok {
+			continue
+		}
+		if ts != nil && !ts.isAvailable(c.Name) {
+			continue
+		}
+		if !h.visibleTool(c.Name) {
+			continue
+		}
+		out[c.ID] = "工具 " + c.Name + " 的权限档位已放宽，新会话生效；本会话不可用"
+	}
+	return out
 }
 
 // SpecsFor 展开并冻结可用集。allow 为 nil 表示全部登记工具。

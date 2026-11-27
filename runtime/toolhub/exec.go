@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -117,6 +118,12 @@ func (h *Hub) one(ctx context.Context, ts *Toolset, k *callctx.Ctx, call session
 		}
 	}()
 	if t == nil || (ts != nil && !ts.isAvailable(call.Name)) {
+		// F2：冻结清单里有（模型在会话里见过）但当前登记或当前定义已没有 → 已移除；否则不存在。
+		if _, was := ts.frozenSchema(call.Name); was {
+			res.Output = Failf("工具 %s 已移除（会话创建时可用，当前配置已不提供），不能再调用；可用工具：%s", call.Name, strings.Join(ts.Available(), ", "))
+			ev.Status = "removed"
+			return res
+		}
 		res.Output = Failf("工具 %s 不存在", call.Name)
 		return res
 	}
@@ -169,6 +176,12 @@ func (h *Hub) one(ctx context.Context, ts *Toolset, k *callctx.Ctx, call session
 	}
 	// —— 入口：Schema 校验（最小：必须是 JSON 对象，required 字段存在）——
 	if msg := checkArgs(t.Spec.Schema, call.Args); msg != "" {
+		// F2：冻结 schema 与当前不一致（漂移）→ 回当前 schema 摘要，让模型按新格式改参数重试。
+		if fs, was := ts.frozenSchema(call.Name); was && !sameSchema(fs, t.Spec.Schema) {
+			res.Output = Failf("工具 %s 参数格式已更新（%s）。当前参数：%s。请按当前格式改参数重试", call.Name, msg, schemaSummary(t.Spec.Schema))
+			ev.Status = "drift"
+			return res
+		}
 		res.Output = Failf("工具 %s 参数不合法：%s", call.Name, msg)
 		return res
 	}
@@ -545,8 +558,126 @@ func checkArgs(schema, args json.RawMessage) string {
 		if len(miss) > 0 {
 			return "缺少必填字段 " + strings.Join(miss, ", ")
 		}
+		// 顶层 properties 的 type（F2：漂移判定靠当前校验，只查一层、不递归）。
+		props := schemaProps(schema)
+		for _, p := range props {
+			v, ok := obj[p.name]
+			if !ok || len(p.types) == 0 {
+				continue
+			}
+			if !matchesAny(v, p.types) {
+				return "字段 " + p.name + " 类型应为 " + strings.Join(p.types, "|")
+			}
+		}
 	}
 	return ""
+}
+
+type propInfo struct {
+	name  string
+	types []string
+}
+
+// schemaProps 顶层 properties，按名字排序（摘要稳定）。
+func schemaProps(schema json.RawMessage) []propInfo {
+	var s struct {
+		Properties map[string]struct {
+			Type json.RawMessage `json:"type"`
+		} `json:"properties"`
+	}
+	if json.Unmarshal(schema, &s) != nil {
+		return nil
+	}
+	out := make([]propInfo, 0, len(s.Properties))
+	for n, p := range s.Properties {
+		var types []string
+		var one string
+		if json.Unmarshal(p.Type, &one) == nil {
+			types = []string{one}
+		} else {
+			_ = json.Unmarshal(p.Type, &types)
+		}
+		out = append(out, propInfo{name: n, types: types})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].name < out[j].name })
+	return out
+}
+
+func matchesAny(v json.RawMessage, types []string) bool {
+	for _, t := range types {
+		if matchesType(v, t) {
+			return true
+		}
+	}
+	return false
+}
+
+func matchesType(v json.RawMessage, t string) bool {
+	s := strings.TrimSpace(string(v))
+	if s == "" {
+		return false
+	}
+	switch t {
+	case "string":
+		return s[0] == '"'
+	case "boolean":
+		return s == "true" || s == "false"
+	case "null":
+		return s == "null"
+	case "object":
+		return s[0] == '{'
+	case "array":
+		return s[0] == '['
+	case "number":
+		var f float64
+		return json.Unmarshal(v, &f) == nil
+	case "integer":
+		var f float64
+		if json.Unmarshal(v, &f) != nil {
+			return false
+		}
+		return f == float64(int64(f)) && !strings.ContainsAny(s, ".eE")
+	}
+	return true // 未知类型不拦
+}
+
+// sameSchema 规范化后比较两份 schema。
+func sameSchema(a, b json.RawMessage) bool {
+	var x, y any
+	if json.Unmarshal(a, &x) != nil || json.Unmarshal(b, &y) != nil {
+		return string(a) == string(b)
+	}
+	ma, _ := json.Marshal(x)
+	mb, _ := json.Marshal(y)
+	return string(ma) == string(mb)
+}
+
+// schemaSummary 当前 schema 的一行摘要："file: string（必填）, n: integer"。
+func schemaSummary(schema json.RawMessage) string {
+	var s struct {
+		Required []string `json:"required"`
+	}
+	_ = json.Unmarshal(schema, &s)
+	req := map[string]bool{}
+	for _, r := range s.Required {
+		req[r] = true
+	}
+	var parts []string
+	for _, p := range schemaProps(schema) {
+		t := strings.Join(p.types, "|")
+		if t == "" {
+			t = "any"
+		}
+		x := p.name + ": " + t
+		if req[p.name] {
+			x += "（必填）"
+		}
+		parts = append(parts, x)
+	}
+	if len(parts) == 0 {
+		return "无参数"
+	}
+	return strings.Join(parts, ", ")
 }
 
 type storedOutput struct {

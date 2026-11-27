@@ -162,9 +162,9 @@ func (c *Core) Resumed() *Need {
 		return c.emitNeed(&Need{Kind: NeedModel, Model: &ModelNeed{
 			RequestID: c.hdr.PendingModelRequestID, Turn: c.hdr.Turn.Turn, Step: c.hdr.Turn.Step}})
 	case StatusWaitingTools:
-		hints, _ := c.validateCalls(c.hdr.PendingCalls)
+		hints, unknown, _ := c.validateCalls(c.hdr.PendingCalls)
 		return c.emitNeed(&Need{Kind: NeedTools, Tools: &ToolsNeed{
-			Turn: c.hdr.Turn.Turn, Calls: append([]ToolCall(nil), c.hdr.PendingCalls...), Hints: hints}})
+			Turn: c.hdr.Turn.Turn, Calls: append([]ToolCall(nil), c.hdr.PendingCalls...), Hints: hints, Unknown: unknown}})
 	default:
 		return nil
 	}

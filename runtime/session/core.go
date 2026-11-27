@@ -58,6 +58,9 @@ type ToolsNeed struct {
 	Turn  uint32
 	Calls []ToolCall        // 剩余未回结果的调用（按序，含校验失败的——执行侧按 Hints 短路）
 	Hints map[string]string // callID → 校验失败原因（S3 立即回填的等价形态，保 R14 顺序）
+	// Unknown callID → 工具名不在冻结清单里（Hints 同时给"不存在"文案）。执行侧可按当前登记
+	// 改写文案（如档位放宽后"新会话生效"，Mortise docs/63 F2）；有 Unknown 时内核不走 T13 立即回填。
+	Unknown map[string]bool
 }
 
 // DoneNeed：回合结束。
@@ -757,10 +760,11 @@ func (c *Core) ModelDone(requestID string, needID uint64, reply AssistantItem, s
 	}
 
 	// T12 / T13：校验调用（S3）。
-	hints, allInvalid := c.validateCalls(reply.ToolCalls)
+	hints, unknown, allInvalid := c.validateCalls(reply.ToolCalls)
 	c.hdr.PendingCalls = append([]ToolCall(nil), reply.ToolCalls...)
 	c.hdr.Status = StatusWaitingTools
-	if allInvalid { // T13：全部无效 → 立即按序回填错误结果（顺序安全：无有效调用穿插）
+	if allInvalid && len(unknown) == 0 { // T13：全部无效 → 立即按序回填错误结果（顺序安全：无有效调用穿插）
+		// 有名字未知的调用时不走这里：交执行侧按当前登记改写文案（F2）。
 		for _, call := range reply.ToolCalls {
 			c.appendEntry(c.hdr.Turn.Turn, nil, Item{Kind: KindToolResult, ToolResult: &ToolResultItem{
 				CallID: call.ID, Status: ToolError,
@@ -772,7 +776,7 @@ func (c *Core) ModelDone(requestID string, needID uint64, reply AssistantItem, s
 	}
 	// T12：有效调用 → Need::Tools（校验失败的由执行侧按 Hints 短路回填，保 R14 顺序）。
 	return c.emitNeed(&Need{Kind: NeedTools, Tools: &ToolsNeed{
-		Turn: c.hdr.Turn.Turn, Calls: append([]ToolCall(nil), c.hdr.PendingCalls...), Hints: hints}}), nil
+		Turn: c.hdr.Turn.Turn, Calls: append([]ToolCall(nil), c.hdr.PendingCalls...), Hints: hints, Unknown: unknown}}), nil
 }
 
 // ModelInterrupted 模型流被中断（T14）：正文非空写 interrupted 条目（调用补 Cancelled
@@ -896,9 +900,11 @@ func invalidArgs(a json.RawMessage) bool {
 }
 
 // validateCalls 校验模型请求的工具调用（S3）：工具名、参数 JSON、单步调用数。
-// 返回 callID → 错误提示；allInvalid 报告是否全部无效（T13 立即回填路径）。
-func (c *Core) validateCalls(calls []ToolCall) (map[string]string, bool) {
+// 返回 callID → 错误提示；unknown 标出工具名不在冻结清单里的调用（F2）；
+// allInvalid 报告是否全部无效（T13 立即回填路径）。
+func (c *Core) validateCalls(calls []ToolCall) (map[string]string, map[string]bool, bool) {
 	hints := map[string]string{}
+	var unknown map[string]bool
 	known := map[string]bool{}
 	if c.hdr.Config != nil {
 		for _, t := range c.hdr.Config.Tools {
@@ -919,13 +925,17 @@ func (c *Core) validateCalls(calls []ToolCall) (map[string]string, bool) {
 			hints[call.ID] = "单步最多 " + strconv.Itoa(limit) + " 个工具调用，请减少并行调用数量"
 		case !known[call.Name]:
 			hints[call.ID] = "工具 " + call.Name + " 不存在，可用工具：" + c.toolNames()
+			if unknown == nil {
+				unknown = map[string]bool{}
+			}
+			unknown[call.ID] = true
 		case invalidArgs(call.Args):
 			hints[call.ID] = "工具 " + call.Name + " 的参数不是合法 JSON，请修正后重试"
 		default:
 			allInvalid = false
 		}
 	}
-	return hints, allInvalid
+	return hints, unknown, allInvalid
 }
 
 func (c *Core) toolNames() string {

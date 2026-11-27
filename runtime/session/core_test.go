@@ -367,7 +367,8 @@ func TestT8_EmptyReply(t *testing.T) {
 func TestT13_AllInvalidCalls(t *testing.T) {
 	h := newHarness(t, 8)
 	n1, _ := h.core.Input(txt("问"), nil)
-	bad := []ToolCall{{Name: "ghost", Args: json.RawMessage(`{}`)}, {Name: "echo", Args: json.RawMessage(`broken`)}}
+	// F2（Mortise docs/63）：名字未知的调用改交执行侧（见 f2_test.go），T13 立即回填只覆盖其余无效情形。
+	bad := []ToolCall{{Name: "echo", Args: json.RawMessage(`{bad`)}, {Name: "echo", Args: json.RawMessage(`broken`)}}
 	n2, err := h.core.ModelDone(n1.Model.RequestID, n1.ID, AssistantItem{ToolCalls: bad}, StopReason{})
 	if err != nil {
 		t.Fatalf("T13: %v", err)

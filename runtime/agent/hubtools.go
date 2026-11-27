@@ -95,7 +95,15 @@ func (a *Agent) runToolsHub(ctx context.Context, tn *session.ToolsNeed) (*sessio
 			a.Hooks.OnToolCall(c)
 		}
 	}
-	run := a.Hub.ExecuteIn(ctx, a.Toolset, a.toolCtx(), tn.Calls, tn.Hints)
+	// F2：执行视图带上会话头冻结的工具规格（新建 / 恢复 / 分叉都从会话头取，免装配方各自注入）。
+	if a.Toolset != nil {
+		if cfg := a.Core.Context().Config; cfg != nil {
+			a.Toolset.SetFrozen(cfg.Tools)
+		}
+	}
+	// 内核按冻结清单判为名字未知的调用，按当前登记改写文案（档位放宽 → 新会话生效）。
+	hints := a.Hub.RewriteHints(a.Toolset, tn.Calls, tn.Hints, tn.Unknown)
+	run := a.Hub.ExecuteIn(ctx, a.Toolset, a.toolCtx(), tn.Calls, hints)
 	// 先收齐结果（toolhub 内部并行、按调用顺序产出），再按序提交：
 	// 最后一个结果触发步边界，下一步请求用新的显露集。
 	var results []toolhub.Result
